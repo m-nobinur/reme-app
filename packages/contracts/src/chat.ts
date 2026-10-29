@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { TimeZone, Uuid } from "./common.ts"
+import { ActionEvidence, TimeZone, Uuid } from "./common.ts"
 import { ConversationMessage } from "./conversation.ts"
 import { SectionVariant } from "./design.ts"
 import { ToolCallId } from "./ids.ts"
@@ -508,7 +508,11 @@ export const ReviewQuoteFormOutput = z.discriminatedUnion("answer", [
  * SDK's `output-denied`, with no output.
  */
 export const RequestChangeOutput = z.discriminatedUnion("outcome", [
-  z.strictObject({ outcome: z.literal("started"), build: BuildSummary }),
+  z.strictObject({
+    outcome: z.literal("started"),
+    build: BuildSummary,
+    evidence: ActionEvidence,
+  }),
   Refused,
 ])
 

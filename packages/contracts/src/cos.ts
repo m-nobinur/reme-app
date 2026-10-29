@@ -1,7 +1,14 @@
 import { z } from "zod"
 import { InformationRequest } from "./assignment.ts"
 import { ChatRequest, RequestChangeOutput } from "./chat.ts"
-import { JsonObject, Timestamp, TimeZone, Ulid, Uuid } from "./common.ts"
+import {
+  ActionEvidence,
+  JsonObject,
+  Timestamp,
+  TimeZone,
+  Ulid,
+  Uuid,
+} from "./common.ts"
 import { ConversationMessage, MessageRating } from "./conversation.ts"
 import {
   DnsRecord,
@@ -300,7 +307,11 @@ export const AnswerQuestionCall = z.strictObject({
 
 /** `answer_question`'s output once the owner said yes. A no is `output-denied`. */
 export const AnswerQuestionOutput = z.discriminatedUnion("outcome", [
-  z.strictObject({ outcome: z.literal("answered"), request_id: Uuid }),
+  z.strictObject({
+    outcome: z.literal("answered"),
+    request_id: Uuid,
+    evidence: ActionEvidence,
+  }),
   Refused,
 ])
 
@@ -330,6 +341,7 @@ export const CreateReminderOutput = z.discriminatedUnion("outcome", [
     due_at: Timestamp.nullable(),
     time_zone: TimeZone.nullable().optional(),
     replaced: z.boolean().optional(),
+    evidence: ActionEvidence,
   }),
   Refused,
 ])
@@ -353,6 +365,7 @@ export const UpdateReminderOutput = z.discriminatedUnion("outcome", [
     title: Reminder.shape.title,
     due_at: Timestamp.nullable(),
     time_zone: TimeZone.nullable(),
+    evidence: ActionEvidence,
   }),
   Refused,
 ])
@@ -366,6 +379,7 @@ export const DeleteReminderOutput = z.discriminatedUnion("outcome", [
     outcome: z.literal("deleted"),
     reminder_id: Uuid,
     title: Reminder.shape.title,
+    evidence: ActionEvidence,
   }),
   Refused,
 ])
@@ -383,6 +397,7 @@ export const SetTimeZoneOutput = z.discriminatedUnion("outcome", [
     outcome: z.literal("set"),
     time_zone: TimeZone,
     now: z.string().max(40),
+    evidence: ActionEvidence,
   }),
   Refused,
 ])
@@ -399,7 +414,11 @@ export const RecordReviewInput = z.strictObject({
 
 /** `record_review`'s output once the owner said yes. A no is `output-denied`. */
 export const RecordReviewOutput = z.discriminatedUnion("outcome", [
-  z.strictObject({ outcome: z.literal("recorded"), slot: z.literal([1, 2]) }),
+  z.strictObject({
+    outcome: z.literal("recorded"),
+    slot: z.literal([1, 2]),
+    evidence: ActionEvidence,
+  }),
   Refused,
 ])
 
@@ -465,6 +484,7 @@ export const ConnectDomainOutput = z.discriminatedUnion("outcome", [
       .max(2000)
       .regex(/^https:\/\/[^\s]+$/)
       .optional(),
+    evidence: ActionEvidence,
   }),
   Refused,
 ])
@@ -477,7 +497,7 @@ export const RemoveDomainInput = z.strictObject({ name: DomainName })
  * The site is back on its own address.
  */
 export const RemoveDomainOutput = z.discriminatedUnion("outcome", [
-  z.strictObject({ outcome: z.literal("removed") }),
+  z.strictObject({ outcome: z.literal("removed"), evidence: ActionEvidence }),
   Refused,
 ])
 

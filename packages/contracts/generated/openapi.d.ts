@@ -838,6 +838,31 @@ export interface components {
           outcome: "answered"
           /** Format: uuid */
           request_id: string
+          evidence?: (
+            | {
+                /** @constant */
+                kind: "url"
+                url: string
+                status: number
+                /** Format: date-time */
+                checked_at: string
+              }
+            | {
+                /** @constant */
+                kind: "job"
+                /** Format: uuid */
+                job_id: string
+                /** Format: date-time */
+                runs_at: string
+              }
+            | {
+                /** @constant */
+                kind: "record"
+                table: string
+                /** Format: uuid */
+                id: string
+              }
+          )[]
         }
       | {
           /** @constant */
@@ -3379,6 +3404,31 @@ export interface components {
             settings_url?: string
           }
           apply_url?: string
+          evidence?: (
+            | {
+                /** @constant */
+                kind: "url"
+                url: string
+                status: number
+                /** Format: date-time */
+                checked_at: string
+              }
+            | {
+                /** @constant */
+                kind: "job"
+                /** Format: uuid */
+                job_id: string
+                /** Format: date-time */
+                runs_at: string
+              }
+            | {
+                /** @constant */
+                kind: "record"
+                table: string
+                /** Format: uuid */
+                id: string
+              }
+          )[]
         }
       | {
           /** @constant */
@@ -5438,6 +5488,31 @@ export interface components {
             settings_url?: string
           }
           apply_url?: string
+          evidence?: (
+            | {
+                /** @constant */
+                kind: "url"
+                url: string
+                status: number
+                /** Format: date-time */
+                checked_at: string
+              }
+            | {
+                /** @constant */
+                kind: "job"
+                /** Format: uuid */
+                job_id: string
+                /** Format: date-time */
+                runs_at: string
+              }
+            | {
+                /** @constant */
+                kind: "record"
+                table: string
+                /** Format: uuid */
+                id: string
+              }
+          )[]
         }
       | {
           /** @constant */
@@ -7491,6 +7566,31 @@ export interface components {
                   /** Format: date-time */
                   updated_at: string
                 }
+                evidence?: (
+                  | {
+                      /** @constant */
+                      kind: "url"
+                      url: string
+                      status: number
+                      /** Format: date-time */
+                      checked_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "job"
+                      /** Format: uuid */
+                      job_id: string
+                      /** Format: date-time */
+                      runs_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "record"
+                      table: string
+                      /** Format: uuid */
+                      id: string
+                    }
+                )[]
               }
             | {
                 /** @constant */
@@ -7522,6 +7622,31 @@ export interface components {
                 outcome: "answered"
                 /** Format: uuid */
                 request_id: string
+                evidence?: (
+                  | {
+                      /** @constant */
+                      kind: "url"
+                      url: string
+                      status: number
+                      /** Format: date-time */
+                      checked_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "job"
+                      /** Format: uuid */
+                      job_id: string
+                      /** Format: date-time */
+                      runs_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "record"
+                      table: string
+                      /** Format: uuid */
+                      id: string
+                    }
+                )[]
               }
             | {
                 /** @constant */
@@ -7556,6 +7681,31 @@ export interface components {
                 due_at: string | null
                 time_zone?: string | null
                 replaced?: boolean
+                evidence?: (
+                  | {
+                      /** @constant */
+                      kind: "url"
+                      url: string
+                      status: number
+                      /** Format: date-time */
+                      checked_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "job"
+                      /** Format: uuid */
+                      job_id: string
+                      /** Format: date-time */
+                      runs_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "record"
+                      table: string
+                      /** Format: uuid */
+                      id: string
+                    }
+                )[]
               }
             | {
                 /** @constant */
@@ -7590,6 +7740,31 @@ export interface components {
                 title: string
                 due_at: string | null
                 time_zone: string | null
+                evidence?: (
+                  | {
+                      /** @constant */
+                      kind: "url"
+                      url: string
+                      status: number
+                      /** Format: date-time */
+                      checked_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "job"
+                      /** Format: uuid */
+                      job_id: string
+                      /** Format: date-time */
+                      runs_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "record"
+                      table: string
+                      /** Format: uuid */
+                      id: string
+                    }
+                )[]
               }
             | {
                 /** @constant */
@@ -7622,6 +7797,31 @@ export interface components {
                 /** Format: uuid */
                 reminder_id: string
                 title: string
+                evidence?: (
+                  | {
+                      /** @constant */
+                      kind: "url"
+                      url: string
+                      status: number
+                      /** Format: date-time */
+                      checked_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "job"
+                      /** Format: uuid */
+                      job_id: string
+                      /** Format: date-time */
+                      runs_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "record"
+                      table: string
+                      /** Format: uuid */
+                      id: string
+                    }
+                )[]
               }
             | {
                 /** @constant */
@@ -7653,6 +7853,31 @@ export interface components {
                 outcome: "set"
                 time_zone: string
                 now: string
+                evidence?: (
+                  | {
+                      /** @constant */
+                      kind: "url"
+                      url: string
+                      status: number
+                      /** Format: date-time */
+                      checked_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "job"
+                      /** Format: uuid */
+                      job_id: string
+                      /** Format: date-time */
+                      runs_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "record"
+                      table: string
+                      /** Format: uuid */
+                      id: string
+                    }
+                )[]
               }
             | {
                 /** @constant */
@@ -7684,6 +7909,31 @@ export interface components {
                 outcome: "recorded"
                 /** @enum {number} */
                 slot: 1 | 2
+                evidence?: (
+                  | {
+                      /** @constant */
+                      kind: "url"
+                      url: string
+                      status: number
+                      /** Format: date-time */
+                      checked_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "job"
+                      /** Format: uuid */
+                      job_id: string
+                      /** Format: date-time */
+                      runs_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "record"
+                      table: string
+                      /** Format: uuid */
+                      id: string
+                    }
+                )[]
               }
             | {
                 /** @constant */
@@ -7803,6 +8053,31 @@ export interface components {
                   settings_url?: string
                 }
                 apply_url?: string
+                evidence?: (
+                  | {
+                      /** @constant */
+                      kind: "url"
+                      url: string
+                      status: number
+                      /** Format: date-time */
+                      checked_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "job"
+                      /** Format: uuid */
+                      job_id: string
+                      /** Format: date-time */
+                      runs_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "record"
+                      table: string
+                      /** Format: uuid */
+                      id: string
+                    }
+                )[]
               }
             | {
                 /** @constant */
@@ -7832,6 +8107,31 @@ export interface components {
             | {
                 /** @constant */
                 outcome: "removed"
+                evidence?: (
+                  | {
+                      /** @constant */
+                      kind: "url"
+                      url: string
+                      status: number
+                      /** Format: date-time */
+                      checked_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "job"
+                      /** Format: uuid */
+                      job_id: string
+                      /** Format: date-time */
+                      runs_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "record"
+                      table: string
+                      /** Format: uuid */
+                      id: string
+                    }
+                )[]
               }
             | {
                 /** @constant */
@@ -8285,6 +8585,31 @@ export interface components {
                   settings_url?: string
                 }
                 apply_url?: string
+                evidence?: (
+                  | {
+                      /** @constant */
+                      kind: "url"
+                      url: string
+                      status: number
+                      /** Format: date-time */
+                      checked_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "job"
+                      /** Format: uuid */
+                      job_id: string
+                      /** Format: date-time */
+                      runs_at: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "record"
+                      table: string
+                      /** Format: uuid */
+                      id: string
+                    }
+                )[]
               }
             | {
                 /** @constant */
@@ -8823,6 +9148,31 @@ export interface components {
           due_at: string | null
           time_zone?: string | null
           replaced?: boolean
+          evidence?: (
+            | {
+                /** @constant */
+                kind: "url"
+                url: string
+                status: number
+                /** Format: date-time */
+                checked_at: string
+              }
+            | {
+                /** @constant */
+                kind: "job"
+                /** Format: uuid */
+                job_id: string
+                /** Format: date-time */
+                runs_at: string
+              }
+            | {
+                /** @constant */
+                kind: "record"
+                table: string
+                /** Format: uuid */
+                id: string
+              }
+          )[]
         }
       | {
           /** @constant */
@@ -8863,6 +9213,31 @@ export interface components {
           /** Format: uuid */
           reminder_id: string
           title: string
+          evidence?: (
+            | {
+                /** @constant */
+                kind: "url"
+                url: string
+                status: number
+                /** Format: date-time */
+                checked_at: string
+              }
+            | {
+                /** @constant */
+                kind: "job"
+                /** Format: uuid */
+                job_id: string
+                /** Format: date-time */
+                runs_at: string
+              }
+            | {
+                /** @constant */
+                kind: "record"
+                table: string
+                /** Format: uuid */
+                id: string
+              }
+          )[]
         }
       | {
           /** @constant */
@@ -10845,6 +11220,31 @@ export interface components {
           outcome: "recorded"
           /** @enum {number} */
           slot: 1 | 2
+          evidence?: (
+            | {
+                /** @constant */
+                kind: "url"
+                url: string
+                status: number
+                /** Format: date-time */
+                checked_at: string
+              }
+            | {
+                /** @constant */
+                kind: "job"
+                /** Format: uuid */
+                job_id: string
+                /** Format: date-time */
+                runs_at: string
+              }
+            | {
+                /** @constant */
+                kind: "record"
+                table: string
+                /** Format: uuid */
+                id: string
+              }
+          )[]
         }
       | {
           /** @constant */
@@ -10938,6 +11338,31 @@ export interface components {
       | {
           /** @constant */
           outcome: "removed"
+          evidence?: (
+            | {
+                /** @constant */
+                kind: "url"
+                url: string
+                status: number
+                /** Format: date-time */
+                checked_at: string
+              }
+            | {
+                /** @constant */
+                kind: "job"
+                /** Format: uuid */
+                job_id: string
+                /** Format: date-time */
+                runs_at: string
+              }
+            | {
+                /** @constant */
+                kind: "record"
+                table: string
+                /** Format: uuid */
+                id: string
+              }
+          )[]
         }
       | {
           /** @constant */
@@ -11644,6 +12069,31 @@ export interface components {
             /** Format: date-time */
             updated_at: string
           }
+          evidence?: (
+            | {
+                /** @constant */
+                kind: "url"
+                url: string
+                status: number
+                /** Format: date-time */
+                checked_at: string
+              }
+            | {
+                /** @constant */
+                kind: "job"
+                /** Format: uuid */
+                job_id: string
+                /** Format: date-time */
+                runs_at: string
+              }
+            | {
+                /** @constant */
+                kind: "record"
+                table: string
+                /** Format: uuid */
+                id: string
+              }
+          )[]
         }
       | {
           /** @constant */
@@ -12442,6 +12892,31 @@ export interface components {
           outcome: "set"
           time_zone: string
           now: string
+          evidence?: (
+            | {
+                /** @constant */
+                kind: "url"
+                url: string
+                status: number
+                /** Format: date-time */
+                checked_at: string
+              }
+            | {
+                /** @constant */
+                kind: "job"
+                /** Format: uuid */
+                job_id: string
+                /** Format: date-time */
+                runs_at: string
+              }
+            | {
+                /** @constant */
+                kind: "record"
+                table: string
+                /** Format: uuid */
+                id: string
+              }
+          )[]
         }
       | {
           /** @constant */
@@ -12610,6 +13085,31 @@ export interface components {
           title: string
           due_at: string | null
           time_zone: string | null
+          evidence?: (
+            | {
+                /** @constant */
+                kind: "url"
+                url: string
+                status: number
+                /** Format: date-time */
+                checked_at: string
+              }
+            | {
+                /** @constant */
+                kind: "job"
+                /** Format: uuid */
+                job_id: string
+                /** Format: date-time */
+                runs_at: string
+              }
+            | {
+                /** @constant */
+                kind: "record"
+                table: string
+                /** Format: uuid */
+                id: string
+              }
+          )[]
         }
       | {
           /** @constant */
