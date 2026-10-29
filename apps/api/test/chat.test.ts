@@ -375,6 +375,15 @@ const answerFor = (card: ToolPart): unknown => {
   return fact ? { answer: "stated", fact } : { answer: "skipped" }
 }
 
+/**
+ * The two optional questions after the quote question, as an owner answered
+ * them. Not in `FACTS`, so the whole script skips their cards.
+ */
+const DAY_TO_DAY: FactValue[] = [
+  { key: "business.prices", value: { text: "Regular clean from 60." } },
+  { key: "business.enquiries", value: { text: "Calls and texts." } },
+]
+
 /** What the owner types for the steps asked in words: what the business does, then what a quote needs. */
 const IN_WORDS = ["Regular cleaning, Deep cleans", "The address and how often"]
 
@@ -386,6 +395,7 @@ const UP_TO_PHOTOS: FactValue[] = [
     value: { name: "Cleaning and home services", category: "cleaning" },
   },
   ...Object.values(FACTS),
+  ...DAY_TO_DAY,
   ...(DETAILS.contact as FactValue[]),
   ...(DETAILS.assistant as FactValue[]),
   { key: "site.build_mode", value: { mode: "assistant" } },
@@ -545,8 +555,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       turn(conversationId, { turn: { kind: "message", message_id, text } })
     /**
      * The onboarding conversation at the industry card: where the business
-     * works and for whom already held, the quote form too, and the opener
-     * answered in words.
+     * works and for whom already held, the quote form and the questions after
+     * it too, and the opener answered in words.
      */
     const atIndustry = async () => {
       const set = await who.call(stubOrchestrator(), "/facts", {
@@ -558,6 +568,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
             FACTS["business.audience"],
             FACTS["business.proof"],
             QUOTE_FORM,
+            ...DAY_TO_DAY,
           ],
         }),
       })
@@ -1086,6 +1097,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         listed.facts.map((f) => [f.key, f.value, f.provenance.source]).sort()
       ).toEqual([
         ["business.audience", expect.any(Object), "owner_stated"],
+        ["business.enquiries", expect.any(Object), "owner_stated"],
         [
           "business.industry",
           { name: "Cleaning and home services", category: "cleaning" },
@@ -1097,6 +1109,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           { items: ["Regular cleaning", "Deep cleans"] },
           "owner_stated",
         ],
+        ["business.prices", expect.any(Object), "owner_stated"],
         ["business.proof", expect.any(Object), "owner_stated"],
         ["owner.preferred_name", { name: "Probe" }, "owner_stated"],
         ["quote.form", expect.any(Object), "owner_stated"],
@@ -1258,6 +1271,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
             FACTS["business.proof"],
             FACTS["service_area.text"],
             QUOTE_FORM,
+            ...DAY_TO_DAY,
           ],
         }),
       })
