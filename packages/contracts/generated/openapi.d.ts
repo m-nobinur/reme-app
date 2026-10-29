@@ -6174,6 +6174,11 @@ export interface components {
               title: string
               due: string | null
             }[]
+            waiting?: {
+              title: string
+              /** Format: date-time */
+              since: string
+            }[]
             expected_seconds?: {
               full: {
                 p50: number
@@ -8568,6 +8573,11 @@ export interface components {
         reminder_id: string
         title: string
         due: string | null
+      }[]
+      waiting?: {
+        title: string
+        /** Format: date-time */
+        since: string
       }[]
       expected_seconds?: {
         full: {
@@ -13684,6 +13694,7 @@ export interface components {
           }
         }[]
       }
+      time_zone?: string | null
     }
   }
   responses: never

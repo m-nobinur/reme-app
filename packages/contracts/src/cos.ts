@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { InformationRequest } from "./assignment.ts"
-import { ChatRequest, RequestChangeOutput, TimeZone } from "./chat.ts"
-import { JsonObject, Timestamp, Ulid, Uuid } from "./common.ts"
+import { ChatRequest, RequestChangeOutput } from "./chat.ts"
+import { JsonObject, Timestamp, TimeZone, Ulid, Uuid } from "./common.ts"
 import { ConversationMessage, MessageRating } from "./conversation.ts"
 import {
   DnsRecord,
@@ -187,6 +187,14 @@ export const CosWorkspace = z.strictObject({
         due: z.string().max(40).nullable(),
       })
     )
+    .max(20)
+    .optional(),
+  /**
+   * What waits on the owner, the one list the panel, Notifications and Tasks
+   * show: what to do as a heading, and since when. Optional, as `reminders`.
+   */
+  waiting: z
+    .array(z.strictObject({ title: Text(120), since: Timestamp }))
     .max(20)
     .optional(),
   /** How long each lane usually takes, so the CoS quotes the measured wait. */
