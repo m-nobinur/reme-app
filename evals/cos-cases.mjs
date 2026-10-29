@@ -384,6 +384,26 @@ const clock24 = (said) =>
   )
 
 /**
+ * What this turn's tools returned, as a fact a reply may repeat, such as a
+ * domain's yearly price: a `price_gbp…` number reads as pounds, since the
+ * gates trace a price only by its currency sign.
+ */
+function toolSaid(parts) {
+  const said = []
+  const walk = (value, key = "") => {
+    if (typeof value === "number" && key.startsWith("price_gbp"))
+      said.push(`£${value}`)
+    else if (typeof value === "string") said.push(value)
+    else if (value && typeof value === "object")
+      for (const [k, v] of Object.entries(value)) walk(v, k)
+  }
+  for (const call of callsOf(parts)) walk(call.output)
+  return said.length
+    ? [{ key: "tool.said", value: { text: said.join("\n") } }]
+    : []
+}
+
+/**
  * What the CoS asserted that no fact supports. Its replies are read for
  * prices, phones, emails, times and postcodes; an act tool's input, which
  * can reach the site, is read for those and for marketing claims too.
@@ -391,7 +411,7 @@ const clock24 = (said) =>
  * owner's ask back.
  */
 export function fabrications(parts, facts) {
-  const known = records(facts)
+  const known = records([...facts, ...toolSaid(parts)])
   const found = contentFindings(
     [parsePage("reply", clock24(text(parts)))],
     known
