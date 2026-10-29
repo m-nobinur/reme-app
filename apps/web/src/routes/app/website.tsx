@@ -23,6 +23,7 @@ import { StatusIcon, StatusLine } from "@workspace/ui/components/status-line"
 import { segmentKind, workLine } from "@workspace/ui/lib/activity-copy"
 import { cn } from "@workspace/ui/lib/utils"
 import { useEffect, useRef, useState } from "react"
+import { lastChat } from "@/chat/history"
 import { SiteReadyCard } from "@/chat/site-ready"
 import { getSiteMedia } from "@/lib/api/server"
 import type { Workspace, WriteOutcome } from "@/lib/api/types"
@@ -87,6 +88,7 @@ function RowMark({ row }: { row: CheckRow }) {
 }
 
 function RowActionLink({ action }: { action: RowAction }) {
+  const { conversations } = frame.useLoaderData()
   switch (action.kind) {
     case "visit":
       return (
@@ -102,6 +104,18 @@ function RowActionLink({ action }: { action: RowAction }) {
           {action.label}
         </Link>
       )
+    case "google": {
+      // Straight to Google's sign-in, never a line in the owner's voice.
+      // Back in the owner's current conversation, where the result is said.
+      const chat = lastChat(conversations)
+      const back = chat ? `?returnTo=/app/c/${chat.id}` : ""
+      return (
+        // A document load: the route answers with a redirect to Google.
+        <a className={LINK} href={`/api/google/start${back}`}>
+          {action.label}
+        </a>
+      )
+    }
     case "ask":
       return (
         <Link

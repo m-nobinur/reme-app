@@ -1404,6 +1404,7 @@ export const PAGE_WORDS = {
   notPublished: "Not published yet",
   notConnected: "Not connected",
   afterLive: "Connect it once your website is live",
+  afterDomain: "Connect it once your own domain is live",
 } as const
 
 type PageExtras = {
@@ -1484,13 +1485,7 @@ export function workLine(segment: ActivitySegment): string | null {
   )
 }
 
-export type PageActionKey =
-  | "own"
-  | "dns"
-  | "pay"
-  | "google"
-  | "signin"
-  | "failed"
+export type PageActionKey = "own" | "dns" | "pay" | "google" | "failed"
 
 /**
  * A row's one next action: the button, and what the owner says to the
@@ -1516,8 +1511,6 @@ export function pageAction(key: PageActionKey, subject?: string | null) {
       }
     case "google":
       return { label: "Connect Google", ask: "Connect Google to my website" }
-    case "signin":
-      return { label: "Sign in again", ask: "Connect Google again" }
     case "failed":
       return { label: "Ask what happened", ask: `What happened with ${what}?` }
   }
