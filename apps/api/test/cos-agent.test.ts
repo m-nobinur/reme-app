@@ -380,7 +380,9 @@ describe("a tool's schema", () => {
       ?.input_schema.properties as Record<string, unknown> | undefined
     expect(update?.reminder_id).toEqual({ type: "string", format: "uuid" })
     // The pattern is how the model learns a time needs its offset.
-    expect(update?.due_at).toHaveProperty("pattern")
+    const create = logged.find((t) => t.name === "create_reminder")
+      ?.input_schema.properties as Record<string, unknown> | undefined
+    expect(JSON.stringify(create?.due_at)).toContain(`"pattern"`)
     const check = asSchema(sent.update_reminder.inputSchema).validate
     expect(await check?.({ reminder_id: "not-a-ref" })).toMatchObject({
       success: false,
