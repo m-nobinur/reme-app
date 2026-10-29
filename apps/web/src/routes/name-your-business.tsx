@@ -1,14 +1,10 @@
-import { StorefrontIcon } from "@phosphor-icons/react"
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
-import { Alert } from "@workspace/ui/components/alert"
-import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
-import { Field } from "@workspace/ui/components/field"
+import { AuthCard } from "@workspace/ui/components/auth-card"
 import { Logo } from "@workspace/ui/components/logo"
-import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { hasBusiness } from "@/lib/api/server"
-import { nameBusiness } from "@/lib/auth/actions"
+import { sessionRefreshes } from "@/lib/auth/actions"
+import { NameBusinessForm } from "@/lib/auth/name-business-form"
 import { safeReturnTo } from "@/lib/auth/redirect-target"
-import { useSubmit } from "@/lib/auth/use-submit"
 import { requireOwner } from "@/lib/tenant"
 
 /**
@@ -23,6 +19,14 @@ export const Route = createFileRoute("/name-your-business")({
   loaderDeps: ({ search }) => ({ returnTo: safeReturnTo(search.returnTo) }),
   loader: async ({ location, deps }) => {
     const owner = await requireOwner(location.href)
+    // A session that cannot refresh would fail only on Continue, after the
+    // owner typed a name: send them to sign in now instead.
+    if (!(await sessionRefreshes())) {
+      throw redirect({
+        to: "/sign-in",
+        search: { returnTo: location.href, error: "ended" },
+      })
+    }
     // One already: nothing to name. Asked of the api, since a WorkOS
     // organization alone is not a business we hold.
     if (await hasBusiness()) throw redirect({ href: deps.returnTo })
@@ -35,8 +39,6 @@ export const Route = createFileRoute("/name-your-business")({
 function NameYourBusiness() {
   const { email } = Route.useLoaderData()
   const returnTo = safeReturnTo(Route.useSearch().returnTo)
-  const { run, pending, result, setResult } = useSubmit(nameBusiness)
-  const failure = result?.status === "failed" ? result.failure : undefined
 
   return (
     <AuthCard
@@ -64,36 +66,7 @@ function NameYourBusiness() {
       }
       title="What's your business called?"
     >
-      {/* An error goes as soon as the owner types or tries again. */}
-      <AuthForm
-        onInput={() => setResult(null)}
-        onSubmit={async (values) => {
-          setResult(null)
-          const outcome = await run({
-            data: { businessName: values.businessName, returnTo },
-          })
-          if (outcome.status !== "failed") {
-            window.location.assign(outcome.redirectTo)
-          }
-        }}
-      >
-        {failure ? <Alert variant="error">{failure.message}</Alert> : null}
-        <Field
-          autoComplete="organization"
-          autoFocus
-          icon={StorefrontIcon}
-          id="business-name"
-          label="Business name"
-          maxLength={120}
-          name="businessName"
-          placeholder="Sparkle Cleaning Co."
-          // Not `required`: an empty name gets the same message, in the same
-          // place, as one of spaces, rather than the browser's own bubble.
-        />
-        <SubmitButton pending={pending} pendingLabel="Setting up…">
-          Continue
-        </SubmitButton>
-      </AuthForm>
+      <NameBusinessForm returnTo={returnTo} />
     </AuthCard>
   )
 }

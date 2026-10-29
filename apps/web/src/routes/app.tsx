@@ -40,6 +40,7 @@ import { lastChat } from "@/chat/history"
 import { getWorkspaceFrame, pollWorkspace } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
 import { retryOrgWrite } from "@/lib/auth/actions"
+import { NameBusinessForm } from "@/lib/auth/name-business-form"
 import { useAutoPanel } from "@/lib/auto-panel"
 import {
   laterSeen,
@@ -406,7 +407,21 @@ function AppLayout() {
             </>
           }
         >
-          {conversation ? (
+          {conversation && !id && !active && !orgPending ? (
+            // No business yet: naming it comes before any chat, here
+            // rather than by a redirect, since the e2e probe signs in with
+            // no organisation and has to keep reaching /app.
+            <WorkspacePage className="max-w-md pt-16">
+              <h1 className="font-medium text-2xl">
+                What's your business called?
+              </h1>
+              <p className="mt-2 mb-8 text-muted-foreground">
+                Your assistant sets up your workspace and website under this
+                name, then asks about your work. You can change it later.
+              </p>
+              <NameBusinessForm returnTo="/app" />
+            </WorkspacePage>
+          ) : conversation ? (
             <Outlet />
           ) : (
             <WorkspacePage>

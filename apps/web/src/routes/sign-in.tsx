@@ -20,6 +20,7 @@ const CALLBACK_ERROR_TEXT = {
   cancelled: "That sign-in was cancelled. Nothing was changed.",
   callback: "We could not finish that sign-in. Start it again from this page.",
   provider: "That sign-in method is not available here.",
+  ended: "Your session has ended. Sign in again to carry on.",
 } as const
 
 type CallbackError = keyof typeof CALLBACK_ERROR_TEXT
