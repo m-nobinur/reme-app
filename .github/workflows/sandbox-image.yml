@@ -34,9 +34,9 @@ jobs:
       IMAGE: reme-sandbox
       TAG: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       # Containers run linux/amd64. The base image is single-arch and pinned
       # by digest in the Dockerfile, so the platform is stated here once.
@@ -54,7 +54,7 @@ jobs:
       # build. A finding is read by a person; the image is rebuilt weekly so
       # the base and the toolchain pick up fixes on their own cadence.
       - name: Scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
           format: table
@@ -72,10 +72,10 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         if: github.event_name != 'pull_request'
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         if: github.event_name != 'pull_request'
         with:
           node-version-file: .nvmrc
