@@ -49,7 +49,7 @@ describe("an onboarding status part", () => {
 })
 
 describe("the waiting line as a turn goes on", () => {
-  const ellie = { orgId: "", assistant: "Ellie" }
+  const ellie = { seed: "", assistant: "Ellie" }
   let container: HTMLDivElement
   let root: Root
 
@@ -91,31 +91,33 @@ describe("the waiting line as a turn goes on", () => {
     expect(line()).toBe("Ellie is still working on it")
     await wait(18)
     expect(line()).toBe("Ellie is taking longer than usual")
+    // The planner's own line is model text: the catalogue words it.
     await send({ kind: "doing", text: "Checking your number" })
-    expect(line()).toBe("Checking your number")
+    expect(line()).toBe("Working on your answer")
     await wait(12)
     expect(line()).toBe("Ellie is still working on it")
   })
 
-  it("shows each thought's heading as it comes, after the step, until the planner's own line", async () => {
+  it("words each status from the catalogue, in the order the work comes", async () => {
     await send({ kind: "step", step: "business.offerings", answered: false })
     expect(line()).toBe("Looking at your services")
     await send({ kind: "thinking", text: "Evaluating service models" })
-    expect(line()).toBe("Evaluating service models")
-    await wait(5)
-    await send({ kind: "thinking", text: "Prioritising recurring revenue" })
-    expect(line()).toBe("Prioritising recurring revenue")
+    expect(line()).toBe("Thinking it through")
     await wait(12)
     expect(line()).toBe("Ellie is still working on it")
     await send({ kind: "doing", text: "Checking your services" })
-    await send({ kind: "thinking", text: "Weighing the options" })
-    expect(line()).toBe("Checking your services")
+    expect(line()).toBe("Working on your answer")
+    // A fact noted after the planner's line follows it, never hidden by it.
+    await send({ kind: "fact", key: "business.offerings" })
+    expect(line()).toBe("Noting your services")
   })
 
   it("with no status, goes from reading to longer than usual, never thinking", async () => {
     expect(line()).toBe("Ellie is reading your message")
     await wait(4)
-    expect(line()).toBe("Ellie is putting a reply together")
+    expect(line()).toMatch(
+      /^Ellie is (looking into it|working on it|working out what to do)$/
+    )
     await wait(8)
     expect(line()).toBe("Ellie is still working on it")
     await wait(18)

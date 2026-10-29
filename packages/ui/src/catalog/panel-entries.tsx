@@ -211,7 +211,7 @@ const photo = (
   alt: string | null = "A bright room after a clean"
 ) => ({ slot_id, state, alt, thumbnail })
 
-const CTX = { orgId: "brightclean", assistant: "Ellie" }
+const CTX = { seed: "brightclean", assistant: "Ellie" }
 
 /** A step as the api sends it. */
 const stepAt = (
@@ -323,30 +323,25 @@ type Note = {
   due: string | null
   soon?: boolean
   overdue?: boolean
-  byAssistant: boolean
 }
 const NOTES: Record<"owner" | "assistant" | "undated" | "overdue", Note> = {
   owner: {
     title: "Call the supplier about eco sprays",
     due: "Today, 2:00 pm",
     soon: true,
-    byAssistant: false,
   },
   assistant: {
     title: "Send the Hartley Road quote",
     due: "Sat 3 Oct, 9:30 AM",
-    byAssistant: true,
   },
   undated: {
     title: "Order more microfibre cloths",
     due: null,
-    byAssistant: false,
   },
   overdue: {
     title: "Restock the van with mop heads",
     due: "Mon 28 Sep, 9:00 am",
     overdue: true,
-    byAssistant: false,
   },
 }
 

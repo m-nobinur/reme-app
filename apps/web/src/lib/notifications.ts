@@ -1,4 +1,24 @@
-import type { AttentionItem } from "./api/types"
+import { type OwnerWait, ownerWaits } from "@workspace/ui/lib/activity-copy"
+import type { AttentionItem, Workspace } from "./api/types"
+
+/**
+ * The jobs waiting on the owner that no notification already stands for: a
+ * DNS change, a payment, a sign-in, a setup question. From `ownerWaits`, the
+ * list the panel's Waiting on you reads, so the bell never says nothing waits
+ * while the panel lists something. A version to publish and a build's
+ * question are notifications of their own, so they are left out here.
+ */
+export const jobWaits = (workspace: Workspace | null): OwnerWait[] =>
+  ownerWaits(workspace?.activity).filter(
+    (wait) =>
+      wait.kind !== "golive" &&
+      wait.kind !== "review" &&
+      wait.kind !== "question"
+  )
+
+/** Where a waiting job is done: setup in the chat, the rest on the Website page. */
+export const waitPage = (wait: OwnerWait) =>
+  wait.kind === "onboarding" ? "/app" : "/app/website"
 
 /**
  * The owner's notifications: the five §7.3 kinds, newest first. Questions,

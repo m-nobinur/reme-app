@@ -3,6 +3,7 @@ import type {
   FactValueKey,
   Reminder,
 } from "@workspace/contracts"
+import { reminderTitle } from "@workspace/ui/lib/activity-copy"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { formatTime } from "@workspace/ui/lib/format"
 import type { AttentionItem } from "./api/types"
@@ -80,11 +81,10 @@ export const noteOf = (
   const due = zone && note.due_at ? dueLine(note.due_at, zone, now) : null
   const left = Date.parse(note.due_at ?? "") - now.getTime()
   return {
-    title: note.title,
+    title: reminderTitle(note.title),
     due,
     soon: due !== null && left > 0 && left <= HOUR,
     overdue: due !== null && left <= 0,
-    byAssistant: note.source === "assistant",
   }
 }
 

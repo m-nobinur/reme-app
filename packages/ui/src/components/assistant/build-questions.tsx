@@ -212,7 +212,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
   const open = !answer && phase === "asking"
 
   return (
-    <Docked many={questions.length > 1} name="build-questions">
+    <Docked name="build-questions">
       <TrayFrame
         collapsed={collapsed}
         onBack={index > 0 ? () => go(index - 1) : undefined}

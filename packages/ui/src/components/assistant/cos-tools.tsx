@@ -27,8 +27,8 @@ import {
   RemoveDomain,
 } from "@workspace/ui/components/assistant/domain"
 import { ConnectGoogle } from "@workspace/ui/components/assistant/google"
-import { StatusLine, ToolStatus } from "@workspace/ui/components/status-line"
-import { type ToolArgs, toolKind } from "@workspace/ui/lib/activity-copy"
+import { ToolStatus } from "@workspace/ui/components/status-line"
+import { reminderTitle, type ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -51,54 +51,49 @@ import { createContext, useContext } from "react"
 /* Reads ----------------------------------------------------------------- */
 
 /**
- * The few words the model wrote for what a read is doing, which the api
- * cleaned before the call was stored.
+ * One read: the copy table's line while it runs, then nothing, since the
+ * reply says what it found. A read the owner's new message cancelled says it
+ * stopped; one its stream left without a result says it did not finish,
+ * never that the work behind it stopped.
  */
-const stepOf = ({ args }: { args: unknown }) => {
-  const { step } = (args ?? {}) as { step?: unknown }
-  return typeof step === "string" ? step : undefined
-}
-
-/** One read: its own few words, or the copy table's, while it runs, then nothing, since the reply says what it found. */
 function Read<O>({
   view,
   tool,
   args,
-  step,
   slot,
 }: {
   view: ReadView<O>
   tool: string
   args?: ToolArgs
-  step?: string | undefined
   slot: string
 }) {
-  // A read the stream left running is over once its message is.
   const running = useAuiState((s) => s.message.status?.type === "running")
+  const seed = useAuiState((s) => s.message.id)
   if (view.state === "done") return null
   const state =
-    view.state === "working" && running
-      ? "working"
-      : view.state === "failed"
-        ? "failed"
-        : "stopped"
-  const line = {
-    className: "flex px-1 py-1.5 text-chat-step",
-    "data-slot": slot,
-    delay: state === "working" ? undefined : 0,
-    state,
-  } as const
-  return step && state === "working" ? (
-    <StatusLine {...line} kind={toolKind(tool)} label={step} />
-  ) : (
-    <ToolStatus {...line} args={args} tool={tool} />
+    view.state === "working"
+      ? running
+        ? "working"
+        : "cut"
+      : view.state === "cancelled"
+        ? "stopped"
+        : "failed"
+  return (
+    <ToolStatus
+      args={args}
+      className="flex px-1 py-1.5 text-chat-step"
+      copy={{ seed }}
+      data-slot={slot}
+      delay={state === "working" ? undefined : 0}
+      state={state}
+      tool={tool}
+    />
   )
 }
 
 const WorkspaceRead: ToolCallMessagePartComponent = (props) => (
   <Read
     slot="cos-read-workspace"
-    step={stepOf(props)}
     tool="get_workspace"
     view={readView(props, CosWorkspace)}
   />
@@ -107,7 +102,6 @@ const WorkspaceRead: ToolCallMessagePartComponent = (props) => (
 const FactsRead: ToolCallMessagePartComponent = (props) => (
   <Read
     slot="cos-read-facts"
-    step={stepOf(props)}
     tool="get_facts"
     view={readView(props, CosFacts)}
   />
@@ -116,7 +110,6 @@ const FactsRead: ToolCallMessagePartComponent = (props) => (
 const PreviewRead: ToolCallMessagePartComponent = (props) => (
   <Read
     slot="cos-read-preview"
-    step={stepOf(props)}
     tool="get_preview"
     view={readView(props, GetPreviewOutput)}
   />
@@ -128,7 +121,8 @@ const PreviewRead: ToolCallMessagePartComponent = (props) => (
  */
 const DomainRead: ToolCallMessagePartComponent = (props) => {
   const view = readView(props, CheckDomainOutput)
-  // The step is not part of the question the owner asked.
+  // A call stored before lines came from the catalogue carries the model's
+  // `step`, which is not part of the question the owner asked.
   const { step: _step, ...asking } = props.args
   const asked = CheckDomainInput.safeParse(asking).data?.name
   const name = asked ?? "Your domain"
@@ -151,7 +145,6 @@ const DomainRead: ToolCallMessagePartComponent = (props) => {
     <Read
       args={asked ? { domain: asked } : {}}
       slot="cos-read-domain"
-      step={stepOf(props)}
       tool="check_domain"
       view={view}
     />
@@ -247,7 +240,7 @@ const CreateReminder: ToolCallMessagePartComponent = (props) => {
       }
       props={props}
       slot="create-reminder"
-      title={(input) => input.title}
+      title={(input) => reminderTitle(input.title)}
       view={decisionView(props, CreateReminderRequest, CreateReminderOutput)}
       yes="Add reminder"
     />

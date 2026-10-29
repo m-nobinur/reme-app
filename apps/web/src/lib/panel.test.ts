@@ -363,14 +363,14 @@ describe("the first run", () => {
     ]).toContain(website?.title)
     expect(website?.line).toBe("4 minutes so far, about 6 to 10 minutes")
     expect(website?.steps.map((each) => [each.label, each.state])).toEqual([
+      // Photos never applied, so they are not listed.
       ["Planning", "done"],
-      ["Photos", "skipped"],
       ["3 pages are done, 3 to go", "now"],
       ["Polishing", "next"],
       ["Checking", "next"],
       ["Ready", "next"],
     ])
-    expect(website?.steps[2]?.kind).toBe("writing")
+    expect(website?.steps[1]?.kind).toBe("writing")
     expect(website?.build?.assignment_id).toBe("build-first")
     expect(panel?.line).toEqual({
       tone: "working",
@@ -656,7 +656,7 @@ describe("completedOf", () => {
     const rows = completedOf(
       live({ activity: activity({ standing: [open] }) }),
       {
-        orgId: ORG,
+        seed: ORG,
         assistant: "Ellie",
       }
     )
@@ -681,7 +681,7 @@ describe("completedOf", () => {
           ],
         }),
       }),
-      { orgId: ORG, assistant: "Ellie" }
+      { seed: ORG, assistant: "Ellie" }
     )
     expect(done.map((row) => [row.text, row.brief])).toEqual([
       [
@@ -704,7 +704,7 @@ describe("completedOf", () => {
           standing: [published("published")],
         }),
       }),
-      { orgId: ORG, assistant: "Ellie" }
+      { seed: ORG, assistant: "Ellie" }
     )
     expect(rows.map((row) => row.text)).toEqual(["Website published"])
   })
@@ -718,7 +718,7 @@ describe("completedOf", () => {
           standing: [segment("domain", "done", [], { id: "domain:1", names })],
         }),
       }),
-      { orgId: ORG, assistant: "Ellie" }
+      { seed: ORG, assistant: "Ellie" }
     )
     expect(rows.map((row) => row.text)).toEqual([
       "spark.example.invalid connected",

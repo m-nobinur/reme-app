@@ -95,7 +95,8 @@ export type StepWrite = {
 /**
  * One step written. A new state moves `changed_at` to now unless the write
  * gives it, and a state other than `blocked` clears `blocked_on` and the note
- * unless the write gives them, since both say why a step waits.
+ * unless the write gives them, since both say why a step waits. A step that
+ * leaves none open closes its task.
  */
 export async function setStep(
   db: OrgScopedDb,
@@ -128,6 +129,15 @@ export async function setStep(
     .update(taskSteps)
     .set(set)
     .where(and(eq(taskSteps.taskId, taskId), eq(taskSteps.step, step)))
+  // The write that finishes the last step closes the task, so nothing reads
+  // it open in between (a live domain's task stayed open ten minutes).
+  if (state === "done" || state === "skipped") {
+    await db.execute(sql`
+      update owner_tasks t set state = 'done', done_at = coalesce(t.done_at, now())
+      where t.id = ${taskId} and t.state = 'active'
+        and not exists (select 1 from task_steps s where s.task_id = t.id
+          and s.state not in ('done', 'skipped'))`)
+  }
 }
 
 const iso = (at: string | null) => (at ? new Date(at).toISOString() : null)

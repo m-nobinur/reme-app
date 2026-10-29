@@ -6,8 +6,8 @@ import { useRef, useState } from "react"
 import { decideApproval } from "@/lib/api/server"
 import { DECISION_REFUSED } from "@/lib/decision"
 import {
+  type Approved,
   awaitsReadyLine,
-  type ReadyReview,
   readyCard,
   readyForReview,
   versionMeta,
@@ -35,34 +35,39 @@ const frame = getRouteApi("/app")
 export function SiteReadyCard({
   className,
   sentAt = null,
+  saidAt,
   row = false,
 }: {
   className?: string
   sentAt?: string | null
+  /** In a chat, when the assistant last wrote: its live message ends the publishing line. */
+  saidAt?: string | null | undefined
   row?: boolean
 }) {
   const live = useLiveWorkspace()
   const { active } = frame.useLoaderData()
   const zone = useBrowserZone()
   const requestChanges = useRequestChanges()
-  const [approved, setApproved] = useState<ReadyReview | null>(null)
+  const [approved, setApproved] = useState<Approved | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const card = readyCard(
     readyForReview(live.workspace),
     approved,
-    live.workspace?.live ?? null
+    live.workspace?.live ?? null,
+    saidAt
   )
   const review = card?.kind === "review" ? card.review : null
   const [preview, retryPreview] = usePreview(review?.assignmentId ?? null)
   if (!card) return null
   const title = versionTitle(active?.name)
-  const at = review?.at ?? approved?.at
+  const at = review?.at ?? approved?.review.at
   const docked = !!sentAt && !!at && Date.parse(sentAt) > Date.parse(at)
   if (!review) {
     return (
       <SiteReady
         approved
+        published={card.kind === "approved" && card.published}
         className={className}
         docked={docked}
         row={row}
@@ -88,7 +93,7 @@ export function SiteReadyCard({
         },
       })
       if (outcome.recorded) {
-        setApproved(review)
+        setApproved({ review, at: new Date().toISOString() })
         await live.refresh()
       } else {
         setError(DECISION_REFUSED[outcome.reason])
@@ -157,6 +162,6 @@ export function ChatSiteReadyCard() {
     now
   )
   return empty || waiting ? null : (
-    <SiteReadyCard className="mx-2" sentAt={sentAt} />
+    <SiteReadyCard className="mx-2" saidAt={saidAt} sentAt={sentAt} />
   )
 }

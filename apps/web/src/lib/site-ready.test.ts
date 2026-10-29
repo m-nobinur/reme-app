@@ -64,13 +64,15 @@ it("asks, then says approved, then asks again for a newer version", () => {
   }
   expect(readyCard(null, null, null)).toBeNull()
   expect(readyCard(v2, null, 1)).toEqual({ kind: "review", review: v2 })
-  // Approved here: quiet, whether or not the poll has caught up.
-  expect(readyCard(v2, v2, 1)).toEqual({ kind: "approved", version: 2 })
-  expect(readyCard(null, v2, 1)).toEqual({ kind: "approved", version: 2 })
-  expect(readyCard(v3, v2, 1)).toEqual({ kind: "review", review: v3 })
+  // Approved here: a publishing line, whether or not the poll has caught up.
+  const here = { review: v2, at: "2026-10-28T22:01:42Z" }
+  const publishing = { kind: "approved", version: 2, published: false }
+  expect(readyCard(v2, here, 1)).toEqual(publishing)
+  expect(readyCard(null, here, 1)).toEqual(publishing)
+  expect(readyCard(v3, here, 1)).toEqual({ kind: "review", review: v3 })
 })
 
-it("drops the approved line once that version is live", () => {
+it("holds the publishing line until the assistant says it is live", () => {
   const v1 = {
     approvalId: "a",
     revisionId: "rev-a",
@@ -78,8 +80,21 @@ it("drops the approved line once that version is live", () => {
     assignmentId: null,
     at: "",
   }
-  expect(readyCard(null, v1, null)).toEqual({ kind: "approved", version: 1 })
-  expect(readyCard(null, v1, 1)).toBeNull()
+  const here = { review: v1, at: "2026-10-28T22:01:42Z" }
+  expect(readyCard(null, here, null, null)).toEqual({
+    kind: "approved",
+    version: 1,
+    published: false,
+  })
+  // Off the chat, it goes once the version is live.
+  expect(readyCard(null, here, 1)).toBeNull()
+  // Live in under ten seconds, the live message 70 s later: no gap between.
+  expect(readyCard(null, here, 1, "2026-10-28T22:00:00Z")).toEqual({
+    kind: "approved",
+    version: 1,
+    published: true,
+  })
+  expect(readyCard(null, here, 1, "2026-10-28T22:02:52Z")).toBeNull()
 })
 
 describe("awaitsReadyLine", () => {

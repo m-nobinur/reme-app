@@ -7,7 +7,13 @@ import {
 } from "@workspace/ui/components/notification-list"
 import { useEffect } from "react"
 import type { AttentionItem } from "@/lib/api/types"
-import { markSeen, notificationsOf, unreadCount } from "@/lib/notifications"
+import {
+  jobWaits,
+  markSeen,
+  notificationsOf,
+  unreadCount,
+  waitPage,
+} from "@/lib/notifications"
 import { anchorOf } from "@/lib/reminders"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { useBrowserZone } from "@/panel/workspace-panel"
@@ -98,7 +104,32 @@ function Notifications() {
         description="Questions and approvals waiting on you, and what happened to your site in the last 30 days."
         title="Notifications"
       />
-      <NotificationList error={error} items={items.map(toRow)} zone={zone} />
+      <NotificationList
+        error={error}
+        items={[
+          // What waits on the owner, as the panel lists it, then the news.
+          ...jobWaits(workspace).map(
+            (wait): NotificationItem => ({
+              id: wait.id,
+              kind: "wait",
+              title: wait.title,
+              detail: `Waiting for ${wait.what}.`,
+              at: wait.since,
+              expiresAt: wait.until,
+              onExpiry: "",
+              action: (
+                <Link className={ACTION} to={waitPage(wait)}>
+                  {wait.kind === "onboarding"
+                    ? "Open the chat"
+                    : "Open Website"}
+                </Link>
+              ),
+            })
+          ),
+          ...items.map(toRow),
+        ]}
+        zone={zone}
+      />
     </>
   )
 }

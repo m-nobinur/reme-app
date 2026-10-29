@@ -419,6 +419,23 @@ describe("owner tasks", () => {
     expect(done[0]).toMatchObject({ state: "done", at: ago(5) })
   })
 
+  it("is done once every step is, before the task row catches up, dated by the last step", () => {
+    const { done, now, upcoming } = groups(
+      task([
+        step("find_out", "done", { changed_at: ago(40) }),
+        step("purchase", "skipped"),
+        step("records", "done", { changed_at: ago(20) }),
+        step("loads", "done", { changed_at: ago(10) }),
+      ])
+    )
+    expect([...now, ...upcoming]).toEqual([])
+    expect(done[0]).toMatchObject({
+      id: `address:${ID(30)}`,
+      state: "done",
+      at: ago(10),
+    })
+  })
+
   it("counts the records step by the changes the connect card listed", () => {
     const [waiting] = groups(
       task([step("records", "blocked", { blocked_on: "owner_action" })], {

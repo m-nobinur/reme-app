@@ -24,7 +24,7 @@ import type { ToolPart } from "./chat.ts"
 
 export const JEV = {
   url: "https://openrouter.ai/api/alpha/decisions",
-  model: "typesafe/jev-1.13",
+  model: "typesafe/jev-1.14",
   timeoutMs: 1_000,
   /** A message's reading is never waited for: it only fills the line until a real one comes. */
   readingMs: 3_000,

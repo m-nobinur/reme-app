@@ -25,7 +25,7 @@ export type Spent = {
 }
 
 export const GATE = {
-  model: "typesafe/jev-1.13",
+  model: "typesafe/jev-1.14",
   /**
    * "Is any of this worth interrupting the owner for now?", asked as the
    * three reasons it could be; the beat goes on when any is likely. One

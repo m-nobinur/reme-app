@@ -38,6 +38,7 @@ import {
   useFocusWhenIdle,
   useRevealWaiting,
 } from "@workspace/ui/hooks/use-reveal-waiting"
+import { trayItem, trayOthers } from "@workspace/ui/lib/activity-copy"
 import { OPTION, OPTION_TILE } from "@workspace/ui/lib/card"
 import {
   faceStack as face,
@@ -137,7 +138,7 @@ export function ShowFoldedQuestion({ className }: { className?: string }) {
  * hidden, so what was typed into them is kept. Kept by the tray's slot, so
  * two threads on a page each have their own.
  */
-type Stacked = { key: string; mark: Element; standing: boolean }
+type Stacked = { key: string; name: string; mark: Element; standing: boolean }
 type Stack = { items: Stacked[]; shown: string | null }
 const EMPTY: Stack = { items: [], shown: null }
 const stacks = new WeakMap<Element, Stack>()
@@ -164,10 +165,16 @@ const earlier = (a: Stacked, b: Stacked) =>
       : 1
 
 /** Puts an item in its tray's stack and shows the newest; the return takes it out. */
-function enlist(slot: Element, key: string, mark: Element, standing: boolean) {
+function enlist(
+  slot: Element,
+  key: string,
+  name: string,
+  mark: Element,
+  standing: boolean
+) {
   const items = [
     ...(stacks.get(slot) ?? EMPTY).items.filter((each) => each.key !== key),
-    { key, mark, standing },
+    { key, name, mark, standing },
   ].sort(earlier)
   setStack(slot, { items, shown: items.at(-1)?.key ?? null })
   return () => {
@@ -189,25 +196,35 @@ function useStacked(slot: Element | null, key: string) {
     const next = items[to]
     if (slot && next) setStack(slot, { items, shown: next.key })
   }
+  const nameAt = (i: number) => items[i]?.name
   return {
     shown: at !== -1 && shown === key,
     place: items.length - at,
     total: items.length,
+    /** What else waits, by its tray's name. */
+    others: items.filter((each) => each.key !== key).map((each) => each.name),
     newer: at < items.length - 1 ? () => show(at + 1) : undefined,
+    newerName: nameAt(at + 1),
     older: at > 0 ? () => show(at - 1) : undefined,
+    olderName: nameAt(at - 1),
   }
 }
 
-/** "1 of 3" over the tray, newest first, with a step to each side. */
+/**
+ * "1 of 2, also a reminder" over the tray, newest first, with a step to
+ * each side that names where it goes.
+ */
 function StackSteps(steps: ReturnType<typeof useStacked>) {
   return (
     <div className="flex items-center justify-end gap-1 px-2 text-muted-foreground text-xs">
       <span aria-live="polite" className="px-1 tabular-nums">
         <span className="sr-only">Waiting on you: </span>
-        {`${steps.place} of ${steps.total}`}
+        {`${steps.place} of ${steps.total}, ${trayOthers(steps.others)}`}
       </span>
       <Button
-        aria-label="Newer"
+        aria-label={
+          steps.newerName ? `Newer: ${trayItem(steps.newerName)}` : "Newer"
+        }
         className={ACCENT_RING}
         disabled={!steps.newer}
         onClick={steps.newer}
@@ -218,7 +235,9 @@ function StackSteps(steps: ReturnType<typeof useStacked>) {
         <CaretLeftIcon aria-hidden />
       </Button>
       <Button
-        aria-label="Older"
+        aria-label={
+          steps.olderName ? `Older: ${trayItem(steps.olderName)}` : "Older"
+        }
         className={ACCENT_RING}
         disabled={!steps.older}
         onClick={steps.older}
@@ -242,7 +261,6 @@ function StackSteps(steps: ReturnType<typeof useStacked>) {
  */
 function Docked({
   name,
-  many = false,
   settled = false,
   standing = false,
   children,
@@ -250,8 +268,6 @@ function Docked({
   name: string
   /** Drawn outside the transcript, so it never counts as the newest. */
   standing?: boolean
-  /** The tray asks more than one question. */
-  many?: boolean
   /**
    * Nothing is asked where it stands: every answer is in, or it docked
    * after the owner moved on. No waiting line, the keyboard stays put, and
@@ -273,20 +289,19 @@ function Docked({
   const steps = useStacked(slot, key)
   useLayoutEffect(() => {
     if (!slot || away || !mark.current) return
-    return enlist(slot, key, mark.current, standing)
-  }, [slot, away, key, standing])
+    return enlist(slot, key, name, mark.current, standing)
+  }, [slot, away, key, name, standing])
   useFocusWhenIdle(!settled && steps.shown, running, ref)
   if (!slot) return null
   return (
     <>
       {/* Its place in the transcript, which orders the stack. */}
       <span hidden ref={mark} />
-      {/* Drawn with the call as it streams in, so the reply has its full
-          height before the turn ends and nothing under it moves then. */}
-      {settled ? null : (
-        <p className="flex flex-wrap items-baseline gap-x-2 pt-3 text-muted-foreground text-sm">
-          {many ? "Waiting for your answers" : "Waiting for your answer"}
-          {steps.shown ? <ShowFoldedQuestion /> : null}
+      {/* No "waiting for your answer" line: the tray right below and the
+          panel already say so. Only the way back to a folded question. */}
+      {settled || !steps.shown ? null : (
+        <p className="pt-3 text-sm empty:hidden">
+          <ShowFoldedQuestion />
         </p>
       )}
       {away
