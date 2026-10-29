@@ -1,0 +1,92 @@
+import type { ActivitySegment } from "@workspace/contracts"
+import { expect, it } from "vitest"
+import type { Workspace } from "./api/types"
+import { EMPTY_WORKSPACE } from "./attention"
+import { groupsOf } from "./tasks"
+
+const segment = (
+  kind: ActivitySegment["kind"],
+  state: ActivitySegment["state"],
+  steps: ActivitySegment["steps"] = []
+): ActivitySegment => ({
+  id: kind,
+  kind,
+  state,
+  steps,
+  at: "2026-10-29T09:00:00.000Z",
+})
+
+const ONBOARDED = segment("onboarding", "done")
+
+/** The Website setup row for a workspace with this journey. */
+const websiteSetup = (
+  journey: ActivitySegment[],
+  over: Partial<Workspace> = {}
+) =>
+  groupsOf(
+    {
+      ...EMPTY_WORKSPACE,
+      ...over,
+      activity: { journey, now: [], waiting: [], upcoming: [], done: [] },
+    },
+    "Wren"
+  )
+    .find((group) => group.id === "website")
+    ?.tasks.find((task) => task.title === "Website setup")
+
+it("says Waiting on you, and what for, while going live waits on the owner", () => {
+  const task = websiteSetup([
+    ONBOARDED,
+    segment("website", "done"),
+    segment("golive", "waiting", [{ id: "publish", state: "waiting" }]),
+  ])
+  expect(task).toMatchObject({
+    status: "yours",
+    detail: "Publish your website",
+  })
+})
+
+it("says In progress while the build is at work and nothing waits on the owner", () => {
+  const task = websiteSetup([
+    ONBOARDED,
+    segment("website", "now", [{ id: "pages", state: "now" }]),
+  ])
+  expect(task).toMatchObject({
+    status: "active",
+    detail: "Wren builds your first version and you publish it.",
+  })
+})
+
+it("names the first stage that waits, when more than one does", () => {
+  const task = websiteSetup([
+    ONBOARDED,
+    segment("website", "waiting", [{ id: "choose", state: "waiting" }]),
+    segment("golive", "waiting", [{ id: "publish", state: "waiting" }]),
+  ])
+  expect(task).toMatchObject({
+    status: "yours",
+    detail: "Choose a name for your website",
+  })
+})
+
+it("is done once the site is live, whatever a later change waits on", () => {
+  const task = websiteSetup(
+    [
+      ONBOARDED,
+      segment("change", "waiting", [{ id: "publish", state: "waiting" }]),
+    ],
+    { live: 2 }
+  )
+  expect(task).toMatchObject({
+    status: "done",
+    detail: "Wren builds your first version and you publish it.",
+  })
+})
+
+it("is up next after onboarding, and says so, before any stage has begun", () => {
+  const task = websiteSetup([
+    segment("onboarding", "now"),
+    segment("website", "upcoming"),
+  ])
+  expect(task).toMatchObject({ status: "waiting", after: "Onboarding" })
+})
