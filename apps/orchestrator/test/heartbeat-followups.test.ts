@@ -27,8 +27,11 @@ import { freshOrg, kit } from "./fixture.ts"
 
 const url = process.env.DATABASE_URL
 const HOUR = 3_600_000
-/** Tuesday 2026-10-20, 01:00 in London. */
-const START = new Date("2026-10-20T00:00:00Z")
+/**
+ * Tuesday 2037-10-20, 01:00 in London. Ahead of the real clock, so no scan in
+ * a suite alongside finds a beat due; 2037 has 2026's weekdays and clock change.
+ */
+const START = new Date("2037-10-20T00:00:00Z")
 const at = (hours: number) => new Date(START.getTime() + hours * HOUR)
 const SPENT: Spent = {
   model: "stand-in",
@@ -119,8 +122,8 @@ describe.skipIf(!url)("heartbeat follow-ups over a week", () => {
         }
       }
     )
-    // The week ends in the past, so the job would stay due on the shared
-    // database and read as the earliest due time in the schedule suite.
+    // Paused at the end, so the job never reads as the earliest due time in
+    // the schedule suite on the shared database.
     onTestFinished(async () => {
       await kit.withOrg({ orgId }, (db) =>
         db
@@ -169,7 +172,7 @@ describe.skipIf(!url)("heartbeat follow-ups over a week", () => {
         db
           .update(scheduledJobs)
           // Claimed by the real clock and paused between beats, so a scan in
-          // a suite running alongside never finds this past week's job due.
+          // a suite running alongside never finds this job due.
           .set({ nextRunAt: now.at, claimedAt: new Date(), pausedAt: null })
           .where(eq(scheduledJobs.id, jobId))
       )
