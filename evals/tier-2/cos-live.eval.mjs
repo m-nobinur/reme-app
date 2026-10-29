@@ -10,7 +10,15 @@ import {
   reapProbeOrgs,
   staleProbeUsers,
 } from "../../qa/e2e/workos.ts"
-import { CASES, callsOf, FACTS, partsOf, passed, score } from "../cos-cases.mjs"
+import {
+  CASES,
+  callsOf,
+  FACTS,
+  GATED,
+  partsOf,
+  passed,
+  score,
+} from "../cos-cases.mjs"
 
 /**
  * Tier 2 (§16.3), live: the Chief of Staff on staging, through `/chat` as the
@@ -192,23 +200,65 @@ function api(base, cookie) {
   }
 }
 
-/** Every UI message chunk of an SSE response. */
-async function chunksOf(response) {
-  const body = await response.text()
-  return body
-    .split("\n\n")
-    .filter((frame) => frame.startsWith("data: {"))
-    .map((frame) => JSON.parse(frame.slice("data: ".length)))
+/**
+ * Every UI message chunk of an SSE response. With `cutAt`, the connection is
+ * dropped as that chunk type arrives, as a client that went away would.
+ */
+async function chunksOf(response, cutAt) {
+  const chunks = []
+  let rest = ""
+  const decoder = new TextDecoder()
+  for await (const bytes of response.body) {
+    rest += decoder.decode(bytes, { stream: true })
+    const frames = rest.split("\n\n")
+    rest = frames.pop()
+    for (const frame of frames.filter((f) => f.startsWith("data: {"))) {
+      const chunk = JSON.parse(frame.slice("data: ".length))
+      chunks.push(chunk)
+      if (chunk.type === cutAt) {
+        await response.body.cancel()
+        return chunks
+      }
+    }
+  }
+  return chunks
 }
 
 const startedBuilds = (turns) =>
   turns
-    .flatMap((t) => t.chunks)
+    .flatMap((t) => t.chunks ?? [])
     .filter(
       (c) =>
         c.type === "tool-output-available" && c.output?.outcome === "started"
     )
     .map((c) => c.output.build.assignment_id)
+
+/** Waits until the org holds no running build, for at most `minutes`. */
+async function buildSettled(call, minutes = 10) {
+  for (let i = 0; i < minutes * 6; i++) {
+    if ((await builds(call)).running.length === 0) return
+    await sleep(10_000)
+  }
+}
+
+/** The assistant's parts in a stored conversation, shaped as `partsOf` gives a stream's. */
+async function storedParts(call, id) {
+  const { messages } = await read(call, `/conversations/${id}/messages`)
+  return messages
+    .filter((m) => m.content.role === "assistant")
+    .flatMap((m) => m.content.parts)
+    .map((p) =>
+      p.type.startsWith("tool-")
+        ? {
+            type: "tool",
+            toolName: p.type.slice("tool-".length),
+            input: p.input,
+            output: p.output,
+            approval: p.state === "approval-requested" ? p.approval : undefined,
+          }
+        : p
+    )
+}
 
 /** One case in a new conversation: each owner turn, what came back, and how it ended. */
 async function runCase(call, kase) {
@@ -218,6 +268,16 @@ async function runCase(call, kase) {
   const { id } = await made.json()
   const turns = []
   for (const owner of kase.turns) {
+    if (owner.read) {
+      await sleep(owner.wait * 1000)
+      turns.push({
+        owner,
+        parts: await storedParts(call, id),
+        outcome: "answered",
+      })
+      continue
+    }
+    if (owner.after === "build") await buildSettled(call)
     let turn
     if (owner.deny !== undefined) {
       const last = turns.at(-1)?.chunks ?? []
@@ -251,8 +311,15 @@ async function runCase(call, kase) {
       mode: owner.mode,
       turn,
     })
-    const chunks = response.status === 200 ? await chunksOf(response) : []
-    turns.push({ owner, chunks, outcome: outcomeOf(chunks, response.status) })
+    const chunks =
+      response.status === 200
+        ? await chunksOf(response, owner.cut ? "tool-input-start" : undefined)
+        : []
+    turns.push({
+      owner,
+      chunks,
+      outcome: owner.cut ? "answered" : outcomeOf(chunks, response.status),
+    })
   }
   return turns
 }
@@ -261,7 +328,7 @@ async function runCase(call, kase) {
  * Signs up a throwaway owner, runs every case and deletes the owner. Returns
  * what each turn streamed, for scoring here and for `pnpm record`.
  */
-export async function liveRun() {
+export async function liveRun({ pending = false } = {}) {
   const base = (process.env.COS_API_URL ?? "").replace(/\/$/, "")
   if (!base) throw new Error("COS_API_URL names no api")
   if (new URL(base).hostname === "api.remeai.co.uk")
@@ -332,21 +399,27 @@ export async function liveRun() {
     if (start.count !== 0)
       throw new Error(`the new org already holds ${start.count} build(s)`)
 
-    for (const kase of CASES) {
-      const spent = (await keyUsage()) - before
-      if (spent > SPEND_CAP_USD) {
-        run.stopped = `spend cap: $${spent.toFixed(4)} before ${kase.name}`
-        break
-      }
-      const turns = await runCase(call, kase)
-      run.cases.push({ name: kase.name, turns })
-      for (const id of startedBuilds(turns)) {
-        const res = await call("POST", `/builds/${id}/cancel`, {})
-        if (!res.ok) throw new Error(`POST /builds/${id}/cancel: ${res.status}`)
+    const runCases = async (cases) => {
+      for (const kase of cases) {
+        const spent = (await keyUsage()) - before
+        if (spent > SPEND_CAP_USD) {
+          run.stopped = `spend cap: $${spent.toFixed(4)} before ${kase.name}`
+          return
+        }
+        const turns = await runCase(call, kase)
+        run.cases.push({ name: kase.name, turns })
+        for (const id of startedBuilds(turns)) {
+          const res = await call("POST", `/builds/${id}/cancel`, {})
+          if (!res.ok)
+            throw new Error(`POST /builds/${id}/cancel: ${res.status}`)
+        }
       }
     }
-    // The run approved nothing, so every one of these is unapproved.
+    await runCases(GATED)
+    // The run approved nothing, so every one of these is unapproved. Counted
+    // before the pending cases, whose builds settle and are cancelled.
     run.builds = (await builds(call)).count
+    if (pending && !run.stopped) await runCases(CASES.filter((c) => c.pending))
     run.spentUsd = await spentSince(before)
     // biome-ignore lint/suspicious/noUndeclaredEnvVars: not read by any turbo task
     const url = process.env.E2E_DATABASE_URL
@@ -375,17 +448,17 @@ export async function liveRun() {
   return run
 }
 
-export default async function cosLive() {
+export default async function cosLive(given) {
   if (!process.env.COS_API_URL) {
     console.log("      skipped: COS_API_URL names no api")
     return
   }
-  const run = await liveRun()
-  const rows = CASES.map((kase) => {
+  const run = given ?? (await liveRun())
+  const rows = GATED.map((kase) => {
     const ran = run.cases.find((c) => c.name === kase.name)
     const turns = (ran?.turns ?? []).map((t) => ({
       outcome: t.outcome,
-      parts: partsOf(t.chunks),
+      parts: t.parts ?? partsOf(t.chunks),
     }))
     return { kase, turns, ...score(kase, turns, FACTS) }
   })
@@ -403,7 +476,7 @@ export default async function cosLive() {
   const lines = [
     "## Tier 2: Chief of Staff on staging",
     "",
-    `${green.length} of ${CASES.length} cases, ${fabrications.length} fabrications, ${run.builds ?? "unknown"} unapproved builds, key usage moved $${run.spentUsd.toFixed(4)} (cap $${SPEND_CAP_USD.toFixed(2)}).`,
+    `${green.length} of ${GATED.length} cases, ${fabrications.length} fabrications, ${run.builds ?? "unknown"} unapproved builds, key usage moved $${run.spentUsd.toFixed(4)} (cap $${SPEND_CAP_USD.toFixed(2)}).`,
     run.bill.line,
     "",
     "| Case | Tools per turn | Result |",
@@ -424,8 +497,8 @@ export default async function cosLive() {
   }
   const failures = [
     run.stopped,
-    green.length < CASES.length &&
-      `${green.length} of ${CASES.length} cases passed`,
+    green.length < GATED.length &&
+      `${green.length} of ${GATED.length} cases passed`,
     fabrications.length > 0 && `${fabrications.length} fabrication(s)`,
     run.builds !== 0 && `${run.builds ?? "unknown"} unapproved build(s)`,
     run.bill.off && "the logged sum is not within 5% of the bill",
