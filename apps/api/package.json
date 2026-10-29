@@ -29,6 +29,6 @@
     "iron-webcrypto": "2.0.0",
     "typescript": "^6",
     "vitest": "^5.0.5",
-    "wrangler": "4.151.1"
+    "wrangler": "4.155.0"
   }
 }

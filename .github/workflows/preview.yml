@@ -165,10 +165,15 @@ jobs:
       # Hyperdrive as the api, for the same reason.
       - run: pnpm --filter orchestrator build
 
+      # Without `containers`, because Cloudflare serves no version URL for a
+      # Worker with Durable Objects, and the container application lookup that
+      # `versions upload` makes for them answers 500.
       - name: Upload the orchestrator version
         run: >
+          jq 'del(.containers)' apps/orchestrator/dist/reme_orchestrator/wrangler.json
+          > apps/orchestrator/dist/reme_orchestrator/wrangler.preview.json &&
           pnpm --filter orchestrator exec wrangler versions upload
-          --config dist/reme_orchestrator/wrangler.json
+          --config dist/reme_orchestrator/wrangler.preview.json
           --preview-alias "$PREVIEW_ALIAS"
           --message "pull request ${{ github.event.number }}, ${{ github.sha }}"
 
