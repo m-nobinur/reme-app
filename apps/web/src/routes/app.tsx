@@ -426,7 +426,9 @@ function AppLayout() {
             // No business yet: naming it comes before any chat, here
             // rather than by a redirect, since the e2e probe signs in with
             // no organisation and has to keep reaching /app.
-            <WorkspacePage className="max-w-md pt-16">
+            // A narrow centred column, clear of the open panel on its own:
+            // WorkspacePage's room for the panel would squeeze it to 220 px.
+            <div className="mx-auto w-full max-w-md px-4 pt-16 pb-10">
               <h1 className="font-medium text-2xl">
                 What's your business called?
               </h1>
@@ -435,7 +437,7 @@ function AppLayout() {
                 name, then asks about your work. You can change it later.
               </p>
               <NameBusinessForm returnTo="/app" />
-            </WorkspacePage>
+            </div>
           ) : conversation ? (
             <Outlet />
           ) : (
