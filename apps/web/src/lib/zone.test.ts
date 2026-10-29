@@ -7,19 +7,19 @@ import { expect, it } from "vitest"
 // the owner's zone before the yes, and the stored instant in it after.
 
 it("shows the digits a due time was written with, whatever its offset", () => {
-  expect(wallText("2026-10-02T08:00:00+10:00")).toBe("2 Oct 2026, 08:00")
-  expect(wallText("2026-10-02T08:00:00-04:00")).toBe("2 Oct 2026, 08:00")
-  expect(wallText("2026-10-02T08:00:00Z")).toBe("2 Oct 2026, 08:00")
+  expect(wallText("2026-10-02T08:00:00+10:00")).toBe("2 Oct 2026, 8:00 AM")
+  expect(wallText("2026-10-02T08:00:00-04:00")).toBe("2 Oct 2026, 8:00 AM")
+  expect(wallText("2026-10-02T08:00:00Z")).toBe("2 Oct 2026, 8:00 AM")
   expect(wallText("not a time")).toBeNull()
 })
 
 it("shows a stored instant on the owner's own clock", () => {
   // 08:00 in Sydney (UTC+10 on 2 Oct) and 08:00 in New York (UTC-4).
   expect(formatDateTime("2026-10-01T22:00:00.000Z", "Australia/Sydney")).toBe(
-    "2 Oct 2026, 08:00"
+    "2 Oct 2026, 8:00 AM"
   )
   expect(formatDateTime("2026-10-02T12:00:00.000Z", "America/New_York")).toBe(
-    "2 Oct 2026, 08:00"
+    "2 Oct 2026, 8:00 AM"
   )
 })
 

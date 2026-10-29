@@ -4,6 +4,7 @@ import type {
   Reminder,
 } from "@workspace/contracts"
 import { factLabel } from "@workspace/ui/lib/facts"
+import { formatTime } from "@workspace/ui/lib/format"
 import type { AttentionItem } from "./api/types"
 import { leading } from "./briefing"
 
@@ -45,7 +46,7 @@ export const questionOf = (
 export const dayOf = (at: Date, zone: string) =>
   Date.parse(at.toLocaleDateString("en-CA", { timeZone: zone })) / 86_400_000
 
-/** `Today, 4:30 pm`, `Tomorrow, 9:00 am`, else `Fri 3 Oct, 9:00 am`, in `zone`. */
+/** `Today, 4:30 PM`, `Tomorrow, 9:00 AM`, else `Fri 3 Oct, 9:00 AM`, in `zone`. */
 export function dueLine(at: string, zone: string, now = new Date()): string {
   const date = new Date(at)
   const days = dayOf(date, zone) - dayOf(now, zone)
@@ -60,13 +61,7 @@ export function dueLine(at: string, zone: string, now = new Date()): string {
             month: "short",
             timeZone: zone,
           })
-  const time = date.toLocaleTimeString("en-GB", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: zone,
-  })
-  return `${day}, ${time}`
+  return `${day}, ${formatTime(date, zone)}`
 }
 
 const HOUR = 3_600_000

@@ -12,7 +12,7 @@ import type { Handler } from "./jobs.ts"
 /** A run later than this says when the reminder was due. */
 const LATE_MS = 5 * 60_000
 
-/** "Tuesday 20 October at 09:00 BST", in the org's zone (UTC when it has none). */
+/** "Tuesday 20 October at 9:00 AM BST", in the org's zone (UTC when it has none). */
 function whenOf(at: Date, zone: string | null): string {
   const timeZone = zone ?? "UTC"
   const day = new Intl.DateTimeFormat("en-GB", {
@@ -21,12 +21,16 @@ function whenOf(at: Date, zone: string | null): string {
     day: "numeric",
     month: "long",
   }).format(at)
+  // en-GB for BST rather than GMT+1, with its "am" in capitals as the app writes it.
   const time = new Intl.DateTimeFormat("en-GB", {
     timeZone,
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
+    hour12: true,
     timeZoneName: "short",
-  }).format(at)
+  })
+    .format(at)
+    .replace(/\b(am|pm)\b/, (period) => period.toUpperCase())
   return `${day} at ${time}`
 }
 

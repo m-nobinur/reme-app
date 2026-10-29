@@ -62,6 +62,7 @@ import {
   waitingLine,
   writingBack,
 } from "@workspace/ui/lib/activity-copy"
+import { formatTime } from "@workspace/ui/lib/format"
 import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
   SESSION_ENDED,
@@ -1501,12 +1502,6 @@ const AssistantActionBar: FC = () => {
 const sentAt = (message: MessageData): string =>
   createdAt(message) ?? message.createdAt.toISOString()
 
-const LOCAL_TIME = new Intl.DateTimeFormat("en-GB", {
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-})
-
 const MessageTime: FC = () => {
   const at = useAuiState((s) => sentAt(s.message))
   return (
@@ -1514,7 +1509,7 @@ const MessageTime: FC = () => {
       className="text-[0.6875rem] text-muted-foreground tabular-nums"
       dateTime={at}
     >
-      {LOCAL_TIME.format(new Date(at))}
+      {formatTime(new Date(at))}
     </time>
   )
 }

@@ -334,7 +334,7 @@ const NOTES: Record<"owner" | "assistant" | "undated" | "overdue", Note> = {
   },
   assistant: {
     title: "Send the Hartley Road quote",
-    due: "Sat 3 Oct, 9:30 am",
+    due: "Sat 3 Oct, 9:30 AM",
     byAssistant: true,
   },
   undated: {

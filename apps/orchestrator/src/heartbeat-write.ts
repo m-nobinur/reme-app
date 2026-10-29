@@ -298,13 +298,23 @@ export function replyOf(raw: string, items: DigestItem[] = []): Reply {
     : { kind: "error", detail: "unsourced_contact" }
 }
 
-/** "Monday, 19 October 2026 at 14:00", in `zone` (UTC when null). */
+/**
+ * "Monday, 19 October 2026 at 2:00 PM", in `zone` (UTC when null): the writer
+ * copies the times it reads, so they are in the app's 12-hour form.
+ */
 export const localTime = (at: Date, zone: string | null) =>
   new Intl.DateTimeFormat("en-GB", {
     timeZone: zone ?? "UTC",
-    dateStyle: "full",
-    timeStyle: "short",
-  }).format(at)
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+    .format(at)
+    .replace(/\b(am|pm)\b/, (period) => period.toUpperCase())
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
 

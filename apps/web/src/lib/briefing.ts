@@ -1,4 +1,5 @@
 import { factLabel } from "@workspace/ui/lib/facts"
+import { formatTime } from "@workspace/ui/lib/format"
 import { localMidnight } from "@workspace/ui/lib/zone"
 import type { OrgSummary, Workspace } from "./api/types"
 import { factsNeeded, questionOf } from "./reminders"
@@ -16,12 +17,8 @@ export type Briefing = {
 
 const NOTHING: Briefing = { line: null, suggestions: [] }
 
-/** `15:00`, on the browser's clock. */
-const clock = (date: Date) =>
-  date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-
 /**
- * `today at 15:00`, `tomorrow at 09:00`, in the browser's time zone: the
+ * `today at 3:00 PM`, `tomorrow at 9:00 AM`, in the browser's time zone: the
  * chat renders only in the browser, and the panel says it only once the
  * browser's clock is known, so this is where the owner reads it.
  */
@@ -36,7 +33,7 @@ function due(at: string, now: Date): string {
       : days === 1
         ? "tomorrow"
         : `on ${date.toLocaleDateString("en-GB", { weekday: "long" })}`
-  return `${when} at ${clock(date)}`
+  return `${when} at ${formatTime(date)}`
 }
 
 /**

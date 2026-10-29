@@ -1,5 +1,5 @@
 import { AVATARS, type FactValueKey } from "@workspace/contracts"
-import { formatMoney } from "@workspace/ui/lib/format"
+import { formatMoney, formatTime } from "@workspace/ui/lib/format"
 
 /** What each fact an owner can state is called on their screens. */
 const LABEL: Record<FactValueKey, string> = {
@@ -50,6 +50,12 @@ export function factLabel(key: string): string {
  * shows the raw value. It never invents a sentence around a shape it does not
  * recognise: an unreadable fact is a fact to fix, not to paper over (R8).
  */
+/** A stored `08:00` as the app writes a time: `8:00 AM`. */
+const clockOf = (hhmm: string): string => {
+  const [h = 0, m = 0] = hhmm.split(":").map(Number)
+  return formatTime(new Date(Date.UTC(2000, 0, 1, h, m)), "UTC")
+}
+
 export function factText(key: string, raw: unknown): string {
   if (!raw || typeof raw !== "object") {
     return String(raw)
@@ -92,7 +98,7 @@ export function factText(key: string, raw: unknown): string {
       .join(", ")
   }
   if (typeof value.open === "string" && typeof value.close === "string") {
-    return `${value.open} to ${value.close}`
+    return `${clockOf(value.open)} to ${clockOf(value.close)}`
   }
   if (typeof value.centre === "string" && typeof value.radius_km === "number") {
     return `${value.centre}, within ${value.radius_km} km`

@@ -26,7 +26,7 @@ const SHAPES: [FactValue, string, string][] = [
   [
     { key: "hours.weekday", value: { open: "08:00", close: "17:00" } },
     "Weekday hours",
-    "08:00 to 17:00",
+    "8:00 AM to 5:00 PM",
   ],
   [
     {

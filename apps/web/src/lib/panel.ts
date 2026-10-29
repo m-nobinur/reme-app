@@ -180,7 +180,7 @@ export const currentBuild = (builds: BuildSummary[]) =>
 const timeOf = (at: string, zone: string, now: Date) =>
   dueLine(at, zone, now).split(", ").at(-1) ?? ""
 
-/** `Today, 9:30 am` mid-sentence: `today, 9:30 am`. A weekday keeps its capital. */
+/** `Today, 9:30 AM` mid-sentence: `today, 9:30 AM`. A weekday keeps its capital. */
 const midSentence = (when: string) =>
   when.replace(/^(Today|Tomorrow)/, (day) => day.toLowerCase())
 

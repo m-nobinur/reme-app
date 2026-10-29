@@ -1281,7 +1281,7 @@ it("shows every Chief of Staff tool in the owner's words, and nothing of its wir
   for (const text of [
     "You have started as many builds as a day allows. Try again tomorrow.",
     "We could not confirm this went through.",
-    "Weekday hours: 08:00 to 18:00",
+    "Weekday hours: 8:00 AM to 6:00 PM",
     "Sent. Your build carries on.",
     "Call the window supplier",
     "No date set. It shows under Reminders.",
@@ -1345,7 +1345,7 @@ for (const [zone, written, kept, label] of [
         ),
       ],
     })
-    expect(asking.textContent).toContain(`Due 2 Oct 2026, 08:00 ${label}`)
+    expect(asking.textContent).toContain(`Due 2 Oct 2026, 8:00 AM ${label}`)
 
     const added = await open({
       messages: [
@@ -1361,7 +1361,7 @@ for (const [zone, written, kept, label] of [
       ],
     })
     expect(added.textContent).toContain(
-      `Added to Reminders. Due 2 Oct 2026, 08:00 ${label}.`
+      `Added to Reminders. Due 2 Oct 2026, 8:00 AM ${label}.`
     )
   })
 }

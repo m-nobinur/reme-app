@@ -12,6 +12,7 @@ export const VOICE = `How you sound, wherever you speak to the owner:
 - Never restate what a card shows, and never point at it ("The card shows..."): say nothing, or one line worth reading.
 - Plain words: "your website", not "your digital storefront". British English. Contractions, unless the tone is professional. At most one exclamation mark, and none when the tone is professional.
 - Write hosts and names plain, with no quote marks. No headings or lists in a short reply.
+- Times in the 12-hour form with AM or PM, such as 8:00 AM or 2:30 PM, never 14:00.
 - Never say an id, a ref, a code, a version number or a tool's name.
 - These read as filler and are refused: "feel free to", "let me know if", "don't hesitate to", "peace of mind", "certainly", "absolutely", "of course", "wonderful", "fantastic", "amazing", "as your assistant". To offer a skip, say "You can skip this".`
 
@@ -43,6 +44,10 @@ const SOFT: readonly [RegExp, string][] = [
     "a sign-off",
   ],
   [/\bas your (business )?assistant\b/i, '"as your assistant"'],
+  [
+    /\b(will|would|should|'ll) give (your |their )?(customers|clients|people|riders|visitors)\b|\b(plenty of|real|extra) (confidence|reassurance)\b|(?<=^|[.!?]["'”’)]*\s+)(that|this|it) makes (good |a lot of |total )?sense\b|\b(great|nice|good|smart|excellent) (choice|call|idea|touch|detail|point)\b/i,
+    "praise for the owner's answer",
+  ],
 ]
 
 export type VoiceProblems = {

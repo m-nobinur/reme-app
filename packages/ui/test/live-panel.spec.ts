@@ -239,7 +239,7 @@ test("each written reminder has its own Done, named for it", async ({
     page.getByRole("button", { name: "Done: Send the Hartley Road quote" })
   ).toBeVisible()
   await expect(page.getByText("Set by your assistant")).toHaveCount(1)
-  await expect(page.getByText("Due Sat 3 Oct, 9:30 am")).toBeVisible()
+  await expect(page.getByText("Due Sat 3 Oct, 9:30 AM")).toBeVisible()
   // One due within the hour is marked, and only that one.
   await expect(page.locator('[data-soon="true"]')).toHaveCount(1)
   await expect(page.locator('[data-soon="true"]')).toContainText(

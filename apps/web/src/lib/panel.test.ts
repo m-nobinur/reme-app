@@ -576,7 +576,7 @@ describe("later jobs", () => {
       ["Site loads on the new address", "next"],
     ])
     expect(purchase?.title).toMatch(/fixtureclean\.example\.invalid$/)
-    expect(purchase?.line).toBe("Pay by 11:50 am to keep the name")
+    expect(purchase?.line).toBe("Pay by 11:50 AM to keep the name")
     expect(purchase?.steps.map((each) => each.label)).toEqual([
       "Your details",
       "Payment",
@@ -837,10 +837,10 @@ describe("on the Reminders page", () => {
         note("a", "Call the supplier", "2026-10-01T13:00:00.000Z"),
         note("b", "Send the quote", "2026-10-01T15:30:00.000Z"),
       ])
-    ).toBe("2 reminders today, the next at 2:00 pm")
+    ).toBe("2 reminders today, the next at 2:00 PM")
     expect(
       line([note("a", "Call the supplier", "2026-10-03T08:30:00.000Z")])
-    ).toBe("Nothing due today. The next reminder is Sat 3 Oct, 9:30 am")
+    ).toBe("Nothing due today. The next reminder is Sat 3 Oct, 9:30 AM")
     expect(line([note("a", "Order cloths", null)])).toBe(
       "One reminder, with no time set"
     )

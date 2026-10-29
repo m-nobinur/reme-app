@@ -392,11 +392,11 @@ describe.skipIf(!url)("the heartbeat", () => {
       const [system, data] = models.write.mock.calls[0] ?? []
       expect(system).toMatch(/\[quiet\]/)
       expect(data).toMatchObject({
-        now: "Tuesday, 20 October 2026 at 12:00",
+        now: "Tuesday, 20 October 2026 at 12:00 PM",
         items: expect.arrayContaining([
           expect.objectContaining({
             kind: "reminder",
-            since: "Wednesday, 21 October 2026 at 08:00",
+            since: "Wednesday, 21 October 2026 at 8:00 AM",
           }),
           expect.objectContaining({ kind: "alert", host: "www.example.test" }),
         ]),
