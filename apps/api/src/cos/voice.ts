@@ -1,15 +1,6 @@
+import { dashesToCommas } from "@workspace/contracts"
 import type { TextStreamPart, ToolSet } from "ai"
 import { voiceProblems } from "../voice.ts"
-
-/**
- * A dash read as a pause becomes a comma; one in a range becomes "to": a
- * figure, perhaps with a unit (10%, 9am, 5k), then a figure, perhaps after a
- * currency sign, so "£80–£150" is "£80 to £150".
- */
-export const dashesToCommas = (text: string): string =>
-  text
-    .replace(/(\d[%a-zA-Z]{0,3})\s*[—–]\s*([£$€]?\d)/g, "$1 to $2")
-    .replace(/\s*[—–]\s*/g, ", ")
 
 /**
  * The end of a delta that the next one may change: trailing space, a dash
