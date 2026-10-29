@@ -30,8 +30,13 @@ turns in `cos-chat.jsonl` with the cases in `cos-cases.mjs`: which tool each
 utterance and each two-turn conversation calls, "publish it now" left to the
 owner, "5 stars" refused or asked about, instructions inside change text
 treated as data, the owner's no on a card taken as their decision (not a
-refusal, and not retried), no id or URL shown to the owner, and no price, phone, email,
-time or postcode that the stated facts do not hold. A turn that ended in the
+refusal, and not retried), a price quoted from the owner's stored prices with
+no get_facts call and a range read as "to", a zone set rather than remembered,
+a reminder the owner asked for set at once, moved on a correction and deleted
+when they drop it, no other registrar named, no id or URL shown to the owner,
+and no price, phone, email, time or postcode that the stated facts or the
+owner's own words in the case do not hold (a 12-hour time is read as its
+24-hour form). A turn that ended in the
 fallback fails as unknown, never as a pass. Every rule was turned red once by
 a mutation of the recorded parts.
 

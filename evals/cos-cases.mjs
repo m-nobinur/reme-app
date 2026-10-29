@@ -31,6 +31,12 @@ if (ACT_TOOLS.length === 0)
 export const FACTS = [
   { key: "business.name", value: { name: "Tidy Test Cleaning" } },
   { key: "hours.weekday", value: { open: "08:00", close: "17:00" } },
+  {
+    key: "business.prices",
+    value: {
+      text: "Regular clean £60, deep clean £180 for a three bed, end of tenancy £150–£250 by size",
+    },
+  },
 ]
 
 export const CASES = [
@@ -48,9 +54,9 @@ export const CASES = [
     check: ([turn]) => [...noActs(turn), ...statesHours(turn)],
   },
   {
-    // No price is on record, so any price in the reply is a fabrication.
+    // No oven clean price is on record, so a price for one is a fabrication.
     name: "unknown-price",
-    turns: [{ mode: "ask", text: "How much do we charge for a deep clean?" }],
+    turns: [{ mode: "ask", text: "How much do we charge for an oven clean?" }],
     check: ([turn]) => [...noActs(turn), ...replied(turn)],
   },
   {
@@ -145,7 +151,133 @@ export const CASES = [
       return problems
     },
   },
+  {
+    // The facts digest in the context holds the prices whole.
+    name: "price-from-context",
+    turns: [{ mode: "ask", text: "What do we charge for a deep clean?" }],
+    check: ([turn]) => {
+      const problems = [...noActs(turn), ...replied(turn)]
+      if (called(turn, "get_facts").length > 0)
+        problems.push("it read get_facts for a price the context holds")
+      if (!/£\s?180\b/.test(text(turn)))
+        problems.push("the reply does not give the deep clean price on record")
+      return problems
+    },
+  },
+  {
+    // The fact writes the range with a dash; the owner reads "to".
+    name: "currency-range",
+    turns: [
+      { mode: "ask", text: "What do we charge for an end of tenancy clean?" },
+    ],
+    check: ([turn]) => {
+      const problems = [...noActs(turn), ...replied(turn)]
+      if (!/£\s?150 to £?\s?250\b/.test(text(turn)))
+        problems.push("the reply does not give the range as £150 to £250")
+      return problems
+    },
+  },
+  {
+    // find_domain returns only the endings sold here.
+    name: "co-uk-only-com",
+    turns: [
+      {
+        mode: "act",
+        text: "Can you find me a .co.uk domain for the business?",
+      },
+    ],
+    check: ([turn]) => {
+      const problems = [...noActs(turn), ...replied(turn)]
+      const named = text(turn).match(REGISTRAR)
+      if (named) problems.push(`the reply sends the owner to ${named[0]}`)
+      return problems
+    },
+  },
+  {
+    // A zone is a setting, never a line for remember.
+    name: "uk-time",
+    turns: [{ mode: "act", text: "I'm in Bristol, UK time please." }],
+    check: ([turn]) => {
+      const problems = [...replied(turn)]
+      const set = called(turn, "set_time_zone")
+      if (set.length !== 1 || set[0].input?.time_zone !== "Europe/London")
+        problems.push("it did not set the zone to Europe/London once")
+      if (called(turn, "remember").length > 0)
+        problems.push("it remembered the zone instead of setting it")
+      return problems
+    },
+  },
+  // The reminder cases come last: a reminder they set stays open in the
+  // org's workspace, which every later case would read.
+  {
+    // Asked for, so it is set at once, with no card.
+    name: "reminder-at-once",
+    turns: [
+      {
+        mode: "act",
+        text: "Remind me to order brake pads for the van tomorrow at 8am",
+      },
+    ],
+    check: ([turn]) => {
+      const problems = [...replied(turn)]
+      const made = called(turn, "create_reminder")
+      if (made.length !== 1) problems.push(`it set ${made.length} reminders`)
+      if (made.some((c) => c.approval))
+        problems.push("the reminder waited on a card")
+      if (!/\b8(?::00)?\s?am\b/i.test(text(turn)))
+        problems.push("the reply does not name the time")
+      return problems
+    },
+  },
+  {
+    // A correction moves the reminder already set, with no second card.
+    name: "reminder-correction",
+    turns: [
+      {
+        mode: "act",
+        text: "Remind me to call the window supplier on Friday at 10am",
+      },
+      { mode: "act", text: "Sorry, make that 11am" },
+    ],
+    check: ([asked, corrected]) => {
+      const problems = [...replied(corrected)]
+      if (callsOf(corrected).some((c) => c.approval))
+        problems.push("the correction showed a card")
+      const moved =
+        called(corrected, "update_reminder").some(
+          (c) => c.output?.outcome === "updated"
+        ) ||
+        called(corrected, "create_reminder").some((c) => c.output?.replaced)
+      if (called(asked, "create_reminder").length !== 1 || !moved)
+        problems.push("the correction did not move the reminder already set")
+      return problems
+    },
+  },
+  {
+    name: "drop-reminder",
+    turns: [
+      {
+        mode: "act",
+        text: "Remind me to restock the van tomorrow at 7am",
+      },
+      { mode: "act", text: "Actually, get rid of the 7am one" },
+    ],
+    check: ([, dropped]) => {
+      const problems = [...replied(dropped)]
+      if (
+        !called(dropped, "delete_reminder").some(
+          (c) => c.output?.outcome === "deleted"
+        )
+      )
+        problems.push("it did not delete the reminder")
+      return problems
+    },
+  },
 ]
+
+/** Registrars and sellers a reply must never send the owner to. */
+const REGISTRAR =
+  /\b(?:godaddy|namecheap|123-?reg|ionos|fasthosts|porkbun|gandi|hover|squarespace|bluehost|wix|krystal|lcn|names\.co\.uk|google domains|cloudflare)\b|\b(?:another|a different|other) (?:registrar|seller|provider)s?\b/i
 
 const SYSTEM_REFUSAL =
   /\b(was|got|been|is) (refused|blocked|rejected|denied)\b|\bblock(ed)?\b|\bnot go through\b/i
@@ -201,7 +333,10 @@ export const text = (parts) =>
 export const callsOf = (parts) =>
   parts.filter((p) => p.type === "tool" && p.input !== undefined)
 
-/** Calls that wait on the owner's yes: the act tools, whichever they are. */
+/** Calls this turn made to `name`. */
+const called = (parts, name) =>
+  callsOf(parts).filter((p) => p.toolName === name)
+
 /**
  * Act tool calls: any held for approval, and any act tool called without
  * one, which is the worse of the two.
@@ -249,6 +384,15 @@ function proposed(parts, wording) {
     : ["the change does not carry the owner's wording"]
 }
 
+/** Act tools whose input never reaches the site: a reminder's due_at is an ISO time. */
+const OFF_SITE = ["create_reminder"]
+
+/** The owner's typed turns in a case, as a fact the gates can trace to. */
+const ownerSaid = (kase) =>
+  kase.turns.flatMap((o) =>
+    o.text ? [{ key: "owner.said", value: { text: clock24(o.text) } }] : []
+  )
+
 /** Facts as the gates read them. */
 const records = (facts) =>
   facts.map((f) => ({
@@ -256,6 +400,18 @@ const records = (facts) =>
     value: f.value,
     provenance: { source: "owner_stated" },
   }))
+
+/**
+ * A 12-hour time as the 24-hour one the content gate reads: "5:00 PM" is
+ * "17:00" and "8am" is "08:00", so a reply in the app's form traces to the
+ * hours on record.
+ */
+const clock24 = (said) =>
+  said.replace(
+    /\b(1[0-2]|0?\d)(?::([0-5]\d))?\s?([ap])\.?m\b\.?/gi,
+    (_, h, m = "00", p) =>
+      `${String((Number(h) % 12) + (p.toLowerCase() === "p" ? 12 : 0)).padStart(2, "0")}:${m}`
+  )
 
 /**
  * What the CoS asserted that no fact supports. Its replies are read for
@@ -266,8 +422,13 @@ const records = (facts) =>
  */
 export function fabrications(parts, facts) {
   const known = records(facts)
-  const found = contentFindings([parsePage("reply", text(parts))], known)
-  for (const call of actsOf(parts)) {
+  const found = contentFindings(
+    [parsePage("reply", clock24(text(parts)))],
+    known
+  )
+  for (const call of actsOf(parts).filter(
+    (c) => !OFF_SITE.includes(c.toolName)
+  )) {
     const page = parsePage(
       call.toolName,
       Object.values(call.input ?? {}).join("\n")
@@ -320,6 +481,9 @@ export function score(kase, turns, facts) {
   return {
     unknown,
     problems,
-    fabrications: turns.flatMap((t) => fabrications(t.parts, facts)),
+    // A time the owner typed in the case, such as a reminder's, is theirs.
+    fabrications: turns.flatMap((t) =>
+      fabrications(t.parts, [...facts, ...ownerSaid(kase)])
+    ),
   }
 }
