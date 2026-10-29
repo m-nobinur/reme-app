@@ -125,7 +125,6 @@ describe("routeChange, row by row", () => {
 
   it("refuses a build that is settling on its own", () => {
     for (const state of [
-      "queued",
       "preview_ready",
       "release_candidate",
       "paused",
@@ -134,6 +133,19 @@ describe("routeChange, row by row", () => {
         routeChange(site({ builds: [{ assignment_id: A, state }] }))
       ).toEqual({ route: "refuse", reason: "build_busy", assignment_id: A })
     }
+  })
+
+  it("steers a queued build when none is working", () => {
+    expect(
+      routeChange(
+        site({
+          builds: [
+            { assignment_id: A, state: "preview_ready" },
+            { assignment_id: B, state: "queued" },
+          ],
+        })
+      )
+    ).toEqual({ route: "steer", assignment_id: B })
   })
 
   it("steers the working build when a newer one is queued behind it", () => {

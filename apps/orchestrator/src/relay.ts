@@ -393,3 +393,24 @@ export function heldSteers(db: OrgScopedDb, assignmentId: string) {
       and e.event_id < ${move(sql``)}
     order by e.event_id`)
 }
+
+/**
+ * The steers sent before the build's Developer was admitted, oldest first:
+ * the steer route logs them `early` and the admission delivers them. Read
+ * under the assignment's row lock, which the route holds while it looks for
+ * the Developer, so every steer that found none is logged before this read.
+ */
+export async function earlySteers(db: OrgScopedDb, assignmentId: string) {
+  await db
+    .select({ id: assignments.id })
+    .from(assignments)
+    .where(eq(assignments.id, assignmentId))
+    .for("update")
+  return db.execute<{ event_id: string; message: string; owner: boolean }>(sql`
+    select e.event_id, e.payload->>'message' as message,
+      'untrusted_input' = any(e.taint) as owner
+    from ${events} e
+    where e.assignment_id = ${assignmentId} and e.type = 'assignment.steered'
+      and e.payload->>'early' = 'true'
+    order by e.event_id`)
+}

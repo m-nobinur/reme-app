@@ -296,8 +296,9 @@ const STEERABLE: readonly AssignmentState[] = [
  * parked) is replaced: its review is turned down, or before the site is
  * live the change revises that draft instead. A
  * build parked on its budget is replaced by cancelling it. A working build
- * takes the change as a steer. A build settling on its own (queued,
- * previewed, publishing, paused from the console, or a review that expired
+ * takes the change as a steer, and with none a queued one does, which gets
+ * it with its brief. A build settling on its own (previewed, publishing,
+ * paused from the console, or a review that expired
  * and waits up to an hour for the sweep to park it) is refused until it
  * settles. With nothing running, a live site is revised and an unpublished
  * one built.
@@ -331,7 +332,9 @@ export function routeChange(site: ChangeInput): ChangeRoute {
       }
     }
   }
-  const working = site.builds.find((b) => STEERABLE.includes(b.state))
+  const working =
+    site.builds.find((b) => STEERABLE.includes(b.state)) ??
+    site.builds.find((b) => b.state === "queued")
   if (working) return { route: "steer", assignment_id: working.assignment_id }
   const [busy] = site.builds
   if (busy) {

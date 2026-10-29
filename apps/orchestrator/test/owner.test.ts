@@ -90,7 +90,7 @@ const { OwnerApi } = await import("../src/cloudflare.ts")
 const { default: consoleApp } = await import("../src/app.ts")
 const { requestReview } = await import("../src/publish.ts")
 const { advance, cancel } = await import("../src/state.ts")
-const { heldSteers } = await import("../src/relay.ts")
+const { earlySteers, heldSteers } = await import("../src/relay.ts")
 const { kit, previewed, stateOf } = await import("./site.ts")
 
 /**
@@ -348,24 +348,85 @@ live("an owner starting a build", () => {
     ])
   })
 
-  it("refuses a steer with no Developer to reach, and never makes one", async () => {
+  it("keeps a steer sent before the Developer is admitted, for the admission to deliver", async () => {
     const { orgId } = await ownerOrg(kit)
     const ids = await newAssignment(kit, orgId)
-    for (const to of ["briefing", "planning", "implementing"] as const) {
+    for (const to of ["briefing", "planning"] as const) {
       await advance(kit, ids, to)
     }
     dispatched.length = 0
     developer.exists = false
     try {
       const steered = await owner(orgId, `/${ids.assignmentId}/steer`, {
-        message: "Make the header green",
+        message: "We also clean ovens",
       })
-      expect(steered.status).toBe(409)
-      expect(await steered.json()).toMatchObject({ code: "steer.not_running" })
+      expect(steered.status).toBe(202)
+      expect(await steered.json()).toEqual({
+        assignment_id: ids.assignmentId,
+        submission_id: null,
+      })
     } finally {
       developer.exists = true
     }
     expect(dispatched).toHaveLength(0)
+    // Admitted now, so the next steer goes straight to it and is not kept.
+    expect(
+      (
+        await owner(orgId, `/${ids.assignmentId}/steer`, {
+          message: "Make the header green",
+        })
+      ).status
+    ).toBe(202)
+    const early = await kit.withOrg({ orgId }, (db) =>
+      earlySteers(db, ids.assignmentId)
+    )
+    expect(early).toEqual([
+      expect.objectContaining({ message: "We also clean ovens", owner: true }),
+    ])
+  })
+
+  it("refuses a steer to an ended build or a one-call edit, saying which", async () => {
+    const { orgId } = await ownerOrg(kit)
+    const ended = await newAssignment(kit, orgId)
+    await cancel(kit, ended)
+    const quick = await newAssignment(kit, orgId, "site.revise")
+    await kit.withOrg({ orgId }, (db) =>
+      appendEvent(db, {
+        orgId,
+        assignmentId: quick.assignmentId,
+        staffId: null,
+        type: "assignment.created",
+        payload: { kind: "site.revise", lane: "quick", change_kind: "copy" },
+      })
+    )
+    for (const to of ["briefing", "planning", "implementing"] as const) {
+      await advance(kit, quick, to)
+    }
+    dispatched.length = 0
+    developer.exists = false
+    try {
+      const refused = async (assignmentId: string) => {
+        const res = await owner(orgId, `/${assignmentId}/steer`, {
+          message: "Make the header green",
+        })
+        expect(res.status).toBe(409)
+        return res.json()
+      }
+      expect(await refused(ended.assignmentId)).toMatchObject({
+        code: "steer.not_running",
+        message: expect.stringMatching(/^This build has ended/),
+      })
+      expect(await refused(quick.assignmentId)).toMatchObject({
+        code: "steer.not_running",
+        message: expect.stringMatching(
+          /^This quick change is made in one edit/
+        ),
+      })
+    } finally {
+      developer.exists = true
+    }
+    expect(dispatched).toHaveLength(0)
+    const ids = quick
     const logged = await kit.withOrg({ orgId }, (db) =>
       db
         .select()
