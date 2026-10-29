@@ -38,7 +38,7 @@ const KIND_LABELS: Record<StatusKind, string> = {
   reminder: "Setting a reminder",
   payment: "Getting the purchase ready",
   publishing: "Putting your website live",
-  waiting: "Waiting for your answer",
+  waiting: "Waiting for your payment",
 }
 
 const Stack = ({ children }: { children: ReactNode }) => (

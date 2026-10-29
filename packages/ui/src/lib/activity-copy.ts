@@ -1,4 +1,5 @@
 import type {
+  Activity,
   ActivitySegment,
   ActivityStep,
   BuildActivity,
@@ -8,6 +9,7 @@ import type {
   OnboardingStep,
   PlanFactKey,
 } from "@workspace/contracts"
+import type { StatusState } from "@workspace/ui/lib/status-line"
 
 /**
  * Every line the owner reads about work in progress, in one place: a CoS
@@ -24,6 +26,36 @@ import type {
  * `cleanArg`. The words are the owner's: "your website", "your DNS", never
  * "assignment", "revision" or "blueprint". The assistant's name is the one
  * the owner chose, Reme included: without one a line is written bare.
+ *
+ * Robustness. A status line is a total function: every tool or kind, in
+ * every state the thread can see, has a line, so behaviour no one planned
+ * for still reads as a sentence.
+ * - The catalogue is the only source. No model writes a line: a tool's
+ *   `step`, the planner's `doing` and a reasoning heading are never shown.
+ *   A line comes from the tool or kind, its state and its cleaned argument.
+ * - Layered fallback, never empty, never raw. The specific line with its
+ *   argument; the same line without it when `cleanArg` refuses the argument
+ *   or there is none; the kind's line; one universal line per state ("Working
+ *   on it", "Done", "Couldn't finish that", "Stopped"). Never a tool name, an
+ *   id, a snake_case word or an empty string. A name the table does not know
+ *   (the api a deploy ahead, a new tool, segment or stage) lands on the kind
+ *   or universal line.
+ * - States. Every AI SDK tool part state (`PartState`) and every way a turn
+ *   ends (`TurnEnd`) maps to one `Phase` in `partPhase`. Once the turn is
+ *   over no part is working: it is done, failed or stopped. A cancelled part
+ *   (the owner sent a new message) says "Stopped"; one the stream left
+ *   without a result says "Didn't finish", never that the work itself
+ *   stopped, since it may have run on.
+ * - Liveness. A working line past `STILL_AFTER` seconds says "Still ...". A
+ *   line belongs to its turn: variants are seeded by the turn's id, and the
+ *   thread clears a turn's status when the next one is sent.
+ * - Variety. Common lines have two to four variants, picked by a hash of the
+ *   seed (a message id in chat, the org and segment in the panel), so a line
+ *   is stable within a turn and differs across turns; given the previous
+ *   turn's seed it never repeats that turn's variant.
+ * - Observability. A known name that falls below its own line, and a name
+ *   the table does not know, are reported by `reportCopyGap` (a console
+ *   warning in development; the tests catch every known case).
  */
 
 /** What an icon is drawn for, so the status line picks its icon from the copy's own kind. */
@@ -48,8 +80,18 @@ export type StatusKind =
 
 export type LineState = "working" | "done" | "failed"
 
-/** Who is speaking and for which business: `orgId` only picks a variant, so a title never changes between polls. */
-export type CopyContext = { orgId: string; assistant?: string | null }
+/**
+ * Who is speaking, and what picks a variant: `seed` is a message id in chat
+ * and the org in the panel (a segment adds its own id), so a line never
+ * changes within a turn or between polls. `earlier` holds the seeds of the
+ * conversation's earlier turns, oldest first, so a line never reads the same
+ * as the turn before.
+ */
+export type CopyContext = {
+  seed: string
+  earlier?: readonly string[] | undefined
+  assistant?: string | null
+}
 
 /** Collapses whitespace and swaps dashes, which no line carries, for a comma. */
 const tidy = (text: string) =>
@@ -78,7 +120,7 @@ const is = (assistant: string | null, rest: string) =>
 const askAgain = (assistant: string | null) =>
   `Ask ${assistant ?? "your assistant"} to try again`
 
-/** A stable 32 bit hash (FNV-1a), so the same org always reads the same variant. */
+/** A stable 32 bit hash (FNV-1a), so the same seed always reads the same variant. */
 function hash(text: string) {
   let h = 0x811c9dc5
   for (const char of text) {
@@ -88,8 +130,31 @@ function hash(text: string) {
   return h >>> 0
 }
 
-const pick = <T>(ctx: CopyContext, key: string, variants: readonly T[]) =>
-  variants[hash(`${ctx.orgId}:${key}`) % variants.length] as T
+/**
+ * A variant by the seed. Each earlier turn's pick is worked out in order, and
+ * a turn that would read as the one before moves to the next variant, so no
+ * two turns in a row read alike.
+ */
+const pick = <T>(ctx: CopyContext, key: string, variants: readonly T[]) => {
+  const n = variants.length
+  let at = -1
+  for (const seed of [...(ctx.earlier ?? []), ctx.seed]) {
+    const raw = hash(`${seed}:${key}`) % n
+    at = raw === at ? (raw + 1) % n : raw
+  }
+  return variants[at] as T
+}
+
+/**
+ * Where a gap in the catalogue is reported: a name the table does not know,
+ * or a known one that fell below its own line. A warning in development, so
+ * gaps are found; silent in production, where the fallback line is enough.
+ */
+export function reportCopyGap(where: string, name: string) {
+  if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) {
+    console.warn(`[copy] no line for ${where} "${name}"`)
+  }
+}
 
 const ARG_MAX = 32
 // What must never reach the owner as an argument: ids, hashes, enums, staff codes.
@@ -172,26 +237,35 @@ export const turnKind = (elapsedSeconds: number): StatusKind =>
       : "reading"
 
 /**
- * A turn with no news: reading, putting a reply together, still working,
- * then longer than usual, never a time. Never "thinking": most turns run
- * with no reasoning, and a real one shows its own line.
+ * A turn with no news: reading, working on it, still working, then longer
+ * than usual, never a time. Never "thinking": most turns run with no
+ * reasoning, and a real one shows its own line. Never "putting a reply
+ * together" either: a tool's line may still follow, and the reply line
+ * would then read backwards; `writingBack` says it once tools have run.
  */
+const MOMENTS = {
+  reading: ["reading your message", "looking at your message"],
+  working: ["looking into it", "working on it", "working out what to do"],
+  still: ["still working on it", "still on it"],
+  late: ["taking longer than usual", "taking a little longer than usual"],
+} as const
+
 export function turnMoment(elapsedSeconds: number, ctx: CopyContext) {
-  const rest =
+  const moment =
     elapsedSeconds >= LATE_AFTER
-      ? "taking longer than usual"
+      ? "late"
       : elapsedSeconds >= STILL_AFTER
-        ? "still working on it"
+        ? "still"
         : elapsedSeconds >= WORKING_AFTER
-          ? "putting a reply together"
-          : "reading your message"
-  return is(named(ctx.assistant), rest)
+          ? "working"
+          : "reading"
+  return is(named(ctx.assistant), pick(ctx, `turn:${moment}`, MOMENTS[moment]))
 }
 
 /**
  * A turn's line before its first word: its latest status (an onboarding
- * step, or the heading of the thought the model is on) while it is fresh, then how long it has stood, so the words change only when
- * something did.
+ * step, a fact noted, the next move) while it is fresh, then how long it
+ * has stood, so the words change only when something did.
  */
 export const waitingLine = (
   on: OnboardingStatus["on"] | null,
@@ -206,9 +280,16 @@ export const waitingLine = (
 export const resumingLine = (ctx: CopyContext) =>
   is(named(ctx.assistant), "still on your last message")
 
-/** Writing a reply after tools ran. */
+/** Writing a reply after tools ran, so it follows their lines in order. */
 export const writingBack = (ctx: CopyContext) =>
-  is(named(ctx.assistant), "writing back")
+  is(
+    named(ctx.assistant),
+    pick(ctx, "turn:writing", [
+      "writing back",
+      "putting a reply together",
+      "writing your reply",
+    ])
+  )
 
 /** The first line of a long job in Now, before the bare stages. */
 export const planningLine = (ctx: CopyContext) =>
@@ -233,13 +314,23 @@ export const CHANGE_ASKED_NEXT =
 export const reasoningLine = (working: boolean) =>
   working ? "Thinking it through" : "Thought it through"
 
+/**
+ * The version card once the owner said publish, held until the assistant's
+ * live message lands: at work at once, then published while the load check
+ * runs, so the chat is never silent in between.
+ */
+export const publishLine = (published: boolean) =>
+  published
+    ? "Published, checking your website loads"
+    : "Approved, publishing your website"
+
 /** Several quiet reads folded into one line. */
 export const groupLine = (count: number, working: boolean) =>
   `${working ? "Checking" : "Checked"} ${plural(count, "thing")}`
 
 // ---------------------------------------------------------------------------
-// CoS tools: three forms each, from one table. The set is closed, so the
-// model writes none of these.
+// CoS tools: each line from one table, in every state a tool part can be
+// in. The set is closed and the model writes none of them.
 
 export type ToolArgs = {
   /** A domain or a URL; shown as a domain. */
@@ -249,219 +340,420 @@ export type ToolArgs = {
   /** A time, already formatted in the business zone. */
   when?: string
   count?: number
-  /** A change's own line, written by the model and cleaned here (SL3). */
-  step?: string
 }
 
 type Cleaned = {
   domain: string | null
   query: string | null
   when: string | null
-  count?: number
-  step: string | null
+  count?: number | undefined
 }
+
+/**
+ * One way to say a line: plain words, or words around the call's argument,
+ * which give null without it so the line falls back to the plain ones.
+ */
+type Say = string | ((a: Cleaned) => string | null)
 
 type ToolCopy = {
   kind: StatusKind
-  working: (a: Cleaned) => string
-  done: (a: Cleaned) => string
+  /** While it runs. "Still", "Stopped" and "Didn't finish" are made from these. */
+  working: readonly Say[]
+  done: readonly Say[]
   /** What failed, after "Couldn't". */
-  fail: (a: Cleaned) => string
+  fail: readonly Say[]
+  /** Overrides for a phase whose made line would mislead. */
+  stopped?: readonly Say[]
+  cut?: readonly Say[]
 }
 
-const withDomain = (
-  a: Cleaned,
-  withName: (d: string) => string,
-  bare: string
-) => (a.domain ? withName(a.domain) : bare)
+const withArg =
+  (field: "domain" | "query", line: (arg: string) => string) =>
+  (a: Cleaned) => {
+    const arg = a[field]
+    return arg ? line(arg) : null
+  }
+const onDomain = (line: (d: string) => string) => withArg("domain", line)
 
 const TOOLS: Record<CosToolName, ToolCopy> = {
   get_workspace: {
     kind: "checking",
-    working: () => "Checking where things stand",
-    done: () => "Checked where things stand",
-    fail: () => "check where things stand",
+    working: [
+      "Checking where things stand",
+      "Looking over where things stand",
+      "Catching up on where things are",
+    ],
+    done: ["Checked where things stand"],
+    fail: ["check where things stand"],
   },
   get_facts: {
     kind: "checking",
-    working: () => "Looking up your details",
-    done: () => "Found your details",
-    fail: () => "look up your details",
+    working: [
+      "Looking up your details",
+      "Checking your business details",
+      "Going over your details",
+    ],
+    done: ["Found your details"],
+    fail: ["look up your details"],
   },
   get_preview: {
     kind: "checking",
-    working: () => "Checking the preview",
-    done: () => "Checked the preview",
-    fail: () => "check the preview",
+    working: ["Checking the preview", "Looking at your preview"],
+    done: ["Checked the preview"],
+    fail: ["check the preview"],
   },
   request_change: {
     kind: "building",
-    working: (a) => a.step ?? "Passing on your change",
-    done: () => "Passed on your change",
-    fail: () => "pass on your change",
+    working: [
+      "Passing on your change",
+      "Getting your change started",
+      "Sending your change to be made",
+    ],
+    done: ["Passed on your change", "Started your change"],
+    fail: ["pass on your change"],
   },
   answer_question: {
     kind: "building",
-    working: () => "Passing on your answer",
-    done: () => "Passed on your answer",
-    fail: () => "pass on your answer",
+    working: ["Passing on your answer", "Sending your answer on"],
+    done: ["Passed on your answer"],
+    fail: ["pass on your answer"],
   },
   create_reminder: {
     kind: "reminder",
-    working: () => "Setting a reminder",
-    done: (a) => (a.when ? `Reminder set for ${a.when}` : "Reminder set"),
-    fail: () => "set the reminder",
+    working: ["Setting a reminder", "Adding a reminder"],
+    done: [
+      (a) => (a.when ? `Reminder set for ${a.when}` : null),
+      "Reminder set",
+    ],
+    fail: ["set the reminder"],
   },
   record_review: {
     kind: "building",
-    working: () => "Adding the review",
-    done: () => "Added the review",
-    fail: () => "add the review",
+    working: ["Adding the review", "Saving the review"],
+    done: ["Added the review"],
+    fail: ["add the review"],
   },
   domain_bought: {
     kind: "domain",
-    working: (a) =>
-      withDomain(a, (d) => `Looking for ${d}`, "Looking for your domain"),
-    done: (a) =>
-      withDomain(a, (d) => `Looked for ${d}`, "Looked for your domain"),
-    fail: (a) => withDomain(a, (d) => `look for ${d}`, "look for your domain"),
+    working: [onDomain((d) => `Looking for ${d}`), "Looking for your domain"],
+    done: [onDomain((d) => `Looked for ${d}`), "Looked for your domain"],
+    fail: [onDomain((d) => `look for ${d}`), "look for your domain"],
   },
   inspect_domain: {
     kind: "domain",
-    working: (a) =>
-      withDomain(a, (d) => `Looking up ${d}`, "Looking up your domain"),
-    done: (a) =>
-      withDomain(a, (d) => `Looked up ${d}`, "Looked up your domain"),
-    fail: (a) => withDomain(a, (d) => `look up ${d}`, "look up your domain"),
+    working: [
+      onDomain((d) => `Looking up ${d}`),
+      onDomain((d) => `Finding out about ${d}`),
+      "Looking up your domain",
+    ],
+    done: [onDomain((d) => `Looked up ${d}`), "Looked up your domain"],
+    fail: [onDomain((d) => `look up ${d}`), "look up your domain"],
   },
   check_domain: {
     kind: "domain",
-    working: (a) =>
-      withDomain(a, (d) => `Checking DNS for ${d}`, "Checking your DNS"),
-    done: (a) =>
-      withDomain(a, (d) => `Checked DNS for ${d}`, "Checked your DNS"),
-    fail: (a) => withDomain(a, (d) => `check DNS for ${d}`, "check your DNS"),
+    working: [
+      onDomain((d) => `Checking ${d}`),
+      onDomain((d) => `Checking the records for ${d}`),
+      "Checking your domain",
+      "Checking your DNS",
+    ],
+    done: [onDomain((d) => `Checked ${d}`), "Checked your domain"],
+    fail: [onDomain((d) => `check ${d}`), "check your domain"],
+    // This one check, never the watch on the domain, which goes on.
+    stopped: [
+      onDomain((d) => `Stopped this check of ${d}`),
+      "Stopped this check of your domain",
+    ],
+    cut: [
+      onDomain((d) => `Didn't finish this check of ${d}`),
+      "Didn't finish this check of your domain",
+    ],
   },
   connect_domain: {
     kind: "domain",
-    working: (a) =>
-      withDomain(a, (d) => `Connecting ${d}`, "Connecting your domain"),
-    done: (a) =>
-      withDomain(
-        a,
-        (d) => `Started connecting ${d}`,
-        "Started connecting your domain"
-      ),
-    fail: (a) => withDomain(a, (d) => `connect ${d}`, "connect your domain"),
+    working: [
+      onDomain((d) => `Connecting ${d}`),
+      onDomain((d) => `Getting ${d} connected`),
+      "Connecting your domain",
+    ],
+    done: [
+      onDomain((d) => `Started connecting ${d}`),
+      "Started connecting your domain",
+    ],
+    fail: [onDomain((d) => `connect ${d}`), "connect your domain"],
   },
   remove_domain: {
     kind: "domain",
-    working: (a) =>
-      withDomain(a, (d) => `Removing ${d}`, "Removing your domain"),
-    done: (a) => withDomain(a, (d) => `Removed ${d}`, "Removed your domain"),
-    fail: (a) => withDomain(a, (d) => `remove ${d}`, "remove your domain"),
+    working: [onDomain((d) => `Removing ${d}`), "Removing your domain"],
+    done: [onDomain((d) => `Removed ${d}`), "Removed your domain"],
+    fail: [onDomain((d) => `remove ${d}`), "remove your domain"],
   },
   find_domain: {
     kind: "domain",
-    working: (a) =>
-      a.query ? `Searching for ${a.query}` : "Searching for a domain",
-    done: (a) =>
-      a.count === undefined
-        ? "Found some names"
-        : a.count === 0
-          ? "Found no free names"
-          : `Found ${plural(a.count, "name")}`,
-    fail: () => "search for names",
+    working: [
+      withArg("query", (q) => `Searching for ${q}`),
+      withArg("query", (q) => `Looking for names like ${q}`),
+      "Searching for a domain",
+      "Looking for a free name",
+    ],
+    done: [
+      (a) =>
+        a.count === undefined
+          ? null
+          : a.count === 0
+            ? "Found no free names"
+            : `Found ${plural(a.count, "name")}`,
+      "Found some names",
+    ],
+    fail: ["search for names"],
   },
   buy_domain: {
     kind: "payment",
-    working: (a) =>
-      withDomain(
-        a,
-        (d) => `Getting ${d} ready to buy`,
-        "Getting the domain ready to buy"
-      ),
-    done: (a) =>
-      withDomain(
-        a,
-        (d) => `Got ${d} ready for payment`,
-        "Got the domain ready for payment"
-      ),
-    fail: (a) => withDomain(a, (d) => `get ${d} ready`, "get the domain ready"),
+    working: [
+      onDomain((d) => `Getting ${d} ready to buy`),
+      "Getting the domain ready to buy",
+    ],
+    done: [
+      onDomain((d) => `Got ${d} ready for payment`),
+      "Got the domain ready for payment",
+    ],
+    fail: [onDomain((d) => `get ${d} ready`), "get the domain ready"],
   },
   connect_google: {
     kind: "google",
-    working: () => "Connecting Google",
-    done: () => "Opened Google sign-in",
-    fail: () => "connect Google",
+    working: ["Connecting Google", "Getting Google connected"],
+    done: ["Opened Google sign-in"],
+    fail: ["connect Google"],
   },
   get_search_performance: {
     kind: "google",
-    working: () => "Checking your Google results",
-    done: () => "Checked your Google results",
-    fail: () => "check your Google results",
+    working: ["Checking your Google results", "Looking at your Google numbers"],
+    done: ["Checked your Google results"],
+    fail: ["check your Google results"],
   },
   get_indexing: {
     kind: "google",
-    working: () => "Checking your pages on Google",
-    done: () => "Checked your pages on Google",
-    fail: () => "check your pages on Google",
+    working: ["Checking your pages on Google", "Seeing which pages Google has"],
+    done: ["Checked your pages on Google"],
+    fail: ["check your pages on Google"],
   },
   remember: {
     kind: "thinking",
-    working: () => "Noting that down",
-    done: () => "Noted that down",
-    fail: () => "note that down",
+    working: ["Noting that down", "Making a note of that"],
+    done: ["Noted that down"],
+    fail: ["note that down"],
   },
   put_off: {
     kind: "thinking",
-    working: () => "Noting that for later",
-    done: () => "Noted that for later",
-    fail: () => "note that for later",
+    working: ["Noting that for later", "Keeping that for later"],
+    done: ["Noted that for later"],
+    fail: ["note that for later"],
   },
 }
 
-/** Any other tool: a plain line, never the tool's name. */
-const ANY_TOOL: ToolCopy = {
-  kind: "thinking",
-  working: () => "Working on it",
-  done: () => "Finished that",
-  fail: () => "finish that",
+/** What a tool's line says, whatever the part's state, the turn's end or the time. */
+export type Phase =
+  | "working"
+  /** Working past `STILL_AFTER`. */
+  | "still"
+  /** A card waiting on the owner's yes. */
+  | "waiting"
+  | "done"
+  | "failed"
+  /** Cancelled: the owner sent a new message first. */
+  | "stopped"
+  /** The stream ended without its result: it may have run on. */
+  | "cut"
+  /** The owner said no. */
+  | "denied"
+
+/** How deep the line had to fall, for `reportCopyGap` and the tests. */
+export type Level = "specific" | "plain" | "kind" | "universal"
+
+/** The last line of all, one per phase. */
+const UNIVERSAL: Record<Phase, string> = {
+  working: "Working on it",
+  still: "Still working on it",
+  waiting: "Ready for your yes",
+  done: "Done",
+  failed: "Couldn't finish that",
+  stopped: "Stopped",
+  cut: "Stopped",
+  denied: "Left as it was",
 }
+
+/**
+ * A kind's own line where a tool has none of its own: a card waiting on the
+ * owner's yes, or their no. Every other phase is the tool's own. A tool the
+ * table does not know has no kind either, so it reads the universal line.
+ */
+const KIND_LINES: Partial<Record<StatusKind, Partial<Record<Phase, string>>>> =
+  {
+    reminder: {
+      waiting: "Reminder ready to add",
+      denied: "Reminder not added",
+    },
+    domain: {
+      waiting: "Ready for your yes on your domain",
+      denied: "Left your domain as it was",
+    },
+    payment: {
+      waiting: "Ready for your payment",
+      denied: "Didn't buy the domain",
+    },
+    google: {
+      waiting: "Ready to connect Google",
+      denied: "Left Google unconnected",
+    },
+    building: { denied: "Left your website as it was" },
+  }
 
 const FAIL_TOOL = "try again in a moment"
 const FAIL_STAGE = "You can try again from here."
+
+/** Each line of a list turned into another phase's. */
+const remade = (says: readonly Say[], line: (text: string) => string) =>
+  says.map((say) =>
+    typeof say === "string"
+      ? line(say)
+      : (a: Cleaned) => {
+          const text = say(a)
+          return text && line(text)
+        }
+  )
+
+/** A phase's lines from a tool's table row; null where the row has none. */
+const sayings = (copy: ToolCopy, phase: Phase): readonly Say[] | null => {
+  switch (phase) {
+    case "working":
+    case "done":
+      return copy[phase]
+    case "still":
+      return remade(copy.working, (t) => `Still ${uncap(t)}`)
+    case "failed":
+      return remade(copy.fail, (t) => `Couldn't ${t}, ${FAIL_TOOL}`)
+    case "stopped":
+      return copy.stopped ?? remade(copy.working, (t) => `Stopped ${uncap(t)}`)
+    case "cut":
+      return (
+        copy.cut ?? remade(copy.working, (t) => `Didn't finish ${uncap(t)}`)
+      )
+    default:
+      return null
+  }
+}
 
 const clean = (a: ToolArgs): Cleaned => ({
   domain: cleanArg(a.domain, "domain"),
   query: cleanArg(a.query),
   when: cleanArg(a.when, "text", 40),
   count: a.count,
-  step: cleanArg(a.step, "text", 60),
 })
 
-const toolCopy = (tool: string) =>
-  Object.hasOwn(TOOLS, tool) ? TOOLS[tool as CosToolName] : ANY_TOOL
+const known = (tool: string): tool is CosToolName => Object.hasOwn(TOOLS, tool)
 
 /**
- * A tool's line in one of its three forms, or "Stopped ..." when the owner's
- * message ended it first. A tool outside the table reads "Working on it".
+ * A tool's line in a phase, falling through its argument, its plain words,
+ * its kind and the universal line. Never empty, never the tool's name.
  */
-export function toolLine(
+export function toolSay(
   tool: string,
-  state: LineState | "stopped",
-  args: ToolArgs = {}
-) {
-  const copy = toolCopy(tool)
+  phase: Phase,
+  args: ToolArgs = {},
+  ctx: CopyContext = { seed: "" }
+): { text: string; level: Level } {
+  const copy = known(tool) ? TOOLS[tool] : null
+  const says = copy && sayings(copy, phase)
   const a = clean(args)
-  return state === "working"
-    ? copy.working(a)
-    : state === "done"
-      ? copy.done(a)
-      : state === "stopped"
-        ? `Stopped ${uncap(copy.working(a))}`
-        : `Couldn't ${copy.fail(a)}, ${FAIL_TOOL}`
+  // The same pick for every phase, so a line and its "Still" agree.
+  const key = `tool:${tool}`
+  if (says) {
+    const argued = says.flatMap((say) =>
+      typeof say === "function" ? (say(a) ?? []) : []
+    )
+    if (argued.length)
+      return { text: pick(ctx, key, argued), level: "specific" }
+    const plain = says.filter((say): say is string => typeof say === "string")
+    if (plain.length) return { text: pick(ctx, key, plain), level: "plain" }
+  }
+  // Waiting and denied read as the kind's: the card says the rest. Anything
+  // else here is a gap: a name the table does not know.
+  if (!copy || (phase !== "waiting" && phase !== "denied"))
+    reportCopyGap("tool", tool)
+  const kind = copy && KIND_LINES[copy.kind]?.[phase]
+  return kind
+    ? { text: kind, level: "kind" }
+    : { text: UNIVERSAL[phase], level: "universal" }
 }
+
+/** A tool's line: `toolSay`'s words alone. */
+export const toolLine = (
+  tool: string,
+  phase: Phase,
+  args: ToolArgs = {},
+  ctx?: CopyContext
+) => toolSay(tool, phase, args, ctx).text
+
+/** Every state the AI SDK gives a tool part. */
+export const PART_STATES = [
+  "input-streaming",
+  "input-available",
+  "approval-requested",
+  "approval-responded",
+  "output-available",
+  "output-error",
+  "output-denied",
+] as const
+export type PartState = (typeof PART_STATES)[number]
+
+/**
+ * Where the turn stands: still running, or how it ended. `cancelled` is the
+ * owner sending a new message, `aborted` the stream ending early (a reload,
+ * Stop, a dropped connection).
+ */
+export const TURN_ENDS = [
+  "running",
+  "finished",
+  "cancelled",
+  "aborted",
+  "errored",
+  "timeout",
+] as const
+export type TurnEnd = (typeof TURN_ENDS)[number]
+
+/**
+ * The phase a part's line is in. A result or a no is final; a card waiting
+ * on the owner waits until they answer or move on; anything else is at work
+ * only while the turn runs, and once it is over it is stopped, failed or
+ * left without its result. Nothing works after its turn.
+ */
+export function partPhase(
+  state: PartState,
+  turn: TurnEnd,
+  elapsedSeconds = 0
+): Phase {
+  if (state === "output-available") return "done"
+  if (state === "output-error") return "failed"
+  if (state === "output-denied") return "denied"
+  if (turn === "cancelled") return "stopped"
+  if (state === "approval-requested") return "waiting"
+  if (turn === "running")
+    return elapsedSeconds >= STILL_AFTER ? "still" : "working"
+  if (turn === "errored" || turn === "timeout") return "failed"
+  return "cut"
+}
+
+/** The state a status line draws for a phase: its icon and motion. */
+export const phaseState = (phase: Phase): StatusState =>
+  phase === "still"
+    ? "working"
+    : phase === "cut" || phase === "denied"
+      ? "stopped"
+      : phase
+
+/** The kind a tool's icon is drawn for. */
+export const toolKind = (tool: string): StatusKind =>
+  known(tool) ? TOOLS[tool].kind : "thinking"
 
 // ---------------------------------------------------------------------------
 // Build stages: the six every full build lists, from its first event.
@@ -633,8 +925,11 @@ const SAVED: readonly OnboardingStep[] = [
 ]
 
 /** "Noting your services" once given, "Looking at your services" while a reply about them is read. */
-const stepLine = (step: OnboardingStep, given: boolean) =>
-  `${!given || step === "upload" ? "Looking at" : SAVED.includes(step) ? "Saving" : "Noting"} ${TOPIC[step]}`
+const stepLine = (step: OnboardingStep, given: boolean) => {
+  const topic = TOPIC[step]
+  if (!topic) reportCopyGap("onboarding step", step)
+  return `${!given || step === "upload" ? "Looking at" : SAVED.includes(step) ? "Saving" : "Noting"} ${topic ?? "your answer"}`
+}
 
 const NEXT_LINE: Record<
   Extract<OnboardingStatus["on"], { kind: "next" }>["next"],
@@ -658,16 +953,22 @@ const READING_LINE: Record<MessageReading, string> = {
   question: "Looking into your question",
 }
 
+/**
+ * A status's line. The planner's `doing` and a reasoning heading carry model
+ * text, which is never shown: they read as the catalogue's own lines.
+ */
 export const onboardingLine = (on: OnboardingStatus["on"]) =>
-  on.kind === "doing" || on.kind === "thinking"
-    ? on.text
-    : on.kind === "step"
-      ? stepLine(on.step, on.answered)
-      : on.kind === "reading"
-        ? READING_LINE[on.about]
-        : on.kind === "fact"
-          ? stepLine(on.key, true)
-          : NEXT_LINE[on.next]
+  on.kind === "doing"
+    ? NEXT_LINE.answer_only
+    : on.kind === "thinking"
+      ? reasoningLine(true)
+      : on.kind === "step"
+        ? stepLine(on.step, on.answered)
+        : on.kind === "reading"
+          ? READING_LINE[on.about]
+          : on.kind === "fact"
+            ? stepLine(on.key, true)
+            : (NEXT_LINE[on.next] ?? UNIVERSAL.working)
 
 const NEXT_KIND: Record<
   Extract<OnboardingStatus["on"], { kind: "next" }>["next"],
@@ -717,6 +1018,8 @@ type Names = {
   domain: string | null
   /** The DNS host the owner changes records at. */
   provider: string | null
+  /** The step at work or waiting, the furthest along: what the title is about now. */
+  step: string | null
 }
 
 type JobCopy = {
@@ -775,10 +1078,15 @@ const JOBS: Record<JobKind, JobCopy> = {
     pill: (n) => `updating ${n.change ?? "your website"}`,
   },
   address: {
+    // By the step it is on, so a name being picked is not a domain going on.
     title: (n) =>
-      n.domain
-        ? [`Putting your website on ${n.domain}`, `Setting up ${n.domain}`]
-        : ["Getting your own web address", "Setting up your web address"],
+      n.step === "find_out" || n.step === "choose"
+        ? ["Choosing your web address", "Picking a name for your website"]
+        : n.step === "purchase" && n.domain
+          ? [`Buying ${n.domain}`, `Getting ${n.domain}`]
+          : n.domain
+            ? [`Putting your website on ${n.domain}`, `Setting up ${n.domain}`]
+            : ["Getting your own web address", "Setting up your web address"],
     next: () => ["Your own web address comes next", "Next, your own address"],
     done: (n) => [`${startDomain(n)} is live`, `${startDomain(n)} is working`],
     noun: "address setup",
@@ -865,11 +1173,22 @@ const STEP_WAITING: Readonly<Record<string, string>> = {
   verify: "your help with Google",
 }
 
+/**
+ * The step a segment is on: the furthest one at work or waiting. A step
+ * further along proves an earlier one that still waits is past, so a name
+ * chosen long ago never stands in for the DNS change waited on now.
+ */
+const currentStep = (segment: ActivitySegment) =>
+  segment.steps
+    .filter((s) => s.state === "now" || s.state === "waiting")
+    .at(-1) ?? null
+
 /** The step a task segment waits on, else null; other kinds name theirs by kind. */
-const waitingStep = (segment: ActivitySegment) =>
-  segment.kind === "address" || segment.kind === "google"
-    ? (segment.steps.find((s) => s.state === "waiting") ?? null)
-    : null
+const waitingStep = (segment: ActivitySegment) => {
+  if (segment.kind !== "address" && segment.kind !== "google") return null
+  const step = currentStep(segment)
+  return step?.state === "waiting" ? step : null
+}
 
 const waitsFor = (segment: ActivitySegment) => {
   const step = waitingStep(segment)
@@ -891,6 +1210,7 @@ const namesOf = (segment: ActivitySegment, ctx: CopyContext): Names => {
     change: cleanArg(n?.change, "text", 40),
     domain: cleanArg(n?.domain, "domain"),
     provider: cleanArg(n?.provider),
+    step: currentStep(segment)?.id ?? null,
   }
 }
 
@@ -905,10 +1225,10 @@ export function segmentTitle(segment: ActivitySegment, ctx: CopyContext) {
   const n = namesOf(segment, ctx)
   if (segment.state === "failed") return `The ${copy.noun} stopped`
   if (segment.state === "upcoming" && copy.next) {
-    return pick(ctx, `${segment.kind}:next`, copy.next(n))
+    return pick(ctx, `${segment.id}:next`, copy.next(n))
   }
   if (segment.state === "waiting" && copy.waiting) {
-    return pick(ctx, `${segment.kind}:waiting`, copy.waiting(n))
+    return pick(ctx, `${segment.id}:waiting`, copy.waiting(n))
   }
   const done = segment.state === "done"
   const stage =
@@ -917,11 +1237,11 @@ export function segmentTitle(segment: ActivitySegment, ctx: CopyContext) {
       : null
   const now = stage ? WEBSITE_NOW[stage] : undefined
   if (now) {
-    return is(n.assistant, pick(ctx, `website:${stage}`, now))
+    return is(n.assistant, pick(ctx, `${segment.id}:${stage}`, now))
   }
   return pick(
     ctx,
-    `${segment.kind}:${done ? "done" : "title"}`,
+    `${segment.id}:${done ? "done" : "title"}`,
     done ? copy.done(n) : copy.title(n)
   )
 }
@@ -1076,6 +1396,98 @@ export function waitingRow(segment: ActivitySegment, until?: string) {
   if (!what) return null
   const by = cleanArg(until, "text", 40)
   return `Waiting for ${what}${by ? `, until ${by}` : ""}`
+}
+
+// ---------------------------------------------------------------------------
+// Waiting on the owner: one list, from the workspace frame's activity, that
+// the panel, Notifications, Tasks and the assistant's own view all read, so
+// no two of them disagree about what needs the owner.
+
+/** One thing waiting on the owner. A stable shape: the assistant's view reads it. */
+export type OwnerWait = {
+  /** The segment's id. */
+  id: string
+  kind: ActivitySegment["kind"]
+  /** The step waited on, for a task (`records`, `purchase`, `sign_in`), else null. */
+  step: string | null
+  domain: string | null
+  /** What it waits for, after "waiting for": "your DNS change". */
+  what: string
+  /** What to do, as a heading: "Make the DNS change for pebblewick.co.uk". */
+  title: string
+  since: string
+  until: string | null
+}
+
+/** What the owner does, by the step that waits, as a heading. */
+const WAIT_TITLES: Readonly<Record<string, (d: string | null) => string>> = {
+  find_out: () => "Say which web address you want",
+  choose: () => "Choose a name for your website",
+  purchase: (d) => (d ? `Pay for ${d}` : "Pay for your domain"),
+  payment: (d) => (d ? `Pay for ${d}` : "Pay for your domain"),
+  records: (d) => (d ? `Make the DNS change for ${d}` : "Make your DNS change"),
+  ownership: (d) =>
+    d ? `Make the DNS change for ${d}` : "Make your DNS change",
+  dns: (d) => (d ? `Make the DNS change for ${d}` : "Make your DNS change"),
+  sign_in: () => "Sign in to Google",
+  permissions: () => "Give Google the permission it asks for",
+  verify: () => "Help Google check your website",
+}
+
+/** The same by kind, for a wait with no step of its own. */
+const WAIT_KIND_TITLES: Partial<Record<ActivitySegment["kind"], string>> = {
+  onboarding: "Answer the setup question",
+  golive: "Publish your website",
+  review: "Review your changes",
+  question: "Answer a question about your website",
+}
+
+/** A wait the tables have no title for: reported, and said plainly. */
+const gapTitle = (kind: string, step: string | null) => {
+  reportCopyGap("wait", `${kind}:${step}`)
+  return "Something needs you"
+}
+
+/**
+ * Every job waiting on the owner, the first run's included, each once and
+ * oldest first: a version to publish, a question, a DNS change, a payment,
+ * a sign-in. Due reminders are not here: they are due, not waited on.
+ */
+export function ownerWaits(activity: Activity | null | undefined): OwnerWait[] {
+  if (!activity) return []
+  const segments = [...activity.journey, ...activity.waiting].filter(
+    (segment, i, all) =>
+      segment.state === "waiting" &&
+      all.findIndex((other) => other.id === segment.id) === i
+  )
+  return segments
+    .map((segment): OwnerWait => {
+      const waited =
+        segment.kind === "address" || segment.kind === "google"
+          ? waitingStep(segment)
+          : segment.steps.find((s) => s.state === "waiting")
+      const step = waited?.id ?? null
+      const host = cleanArg(segment.names?.domain, "domain")
+      // Buying it elsewhere waits on the owner's own purchase, not a payment here.
+      const elsewhere =
+        step === "purchase" && waited?.note?.startsWith("buying ")
+      const title =
+        (elsewhere ? `Buy ${host ?? "your domain"}` : null) ??
+        WAIT_TITLES[step ?? ""]?.(host) ??
+        WAIT_KIND_TITLES[segment.kind] ??
+        gapTitle(segment.kind, step)
+      return {
+        id: segment.id,
+        kind: segment.kind,
+        step,
+        domain: host,
+        what: waitsFor(segment) ?? "you",
+        title,
+        since: segment.at,
+        until: segment.deadline ?? null,
+      }
+    })
+    .sort((a, b) => Date.parse(a.since) - Date.parse(b.since))
 }
 
 // ---------------------------------------------------------------------------
@@ -1300,7 +1712,7 @@ export function rowLine(
   }
   switch (segment.kind) {
     case "reminder":
-      return title ? tidy(title) : "A reminder"
+      return title?.trim() ? reminderTitle(tidy(title)) : "A reminder"
     case "checkin": {
       if (segment.state === "upcoming") {
         return assistant ? `${assistant}'s next check-in` : "Next check-in"
@@ -1326,6 +1738,45 @@ export function rowLine(
       return segmentTitle(segment, ctx)
   }
 }
+
+/** What waits in the tray, by the name its card docks under. */
+const TRAY_ITEMS: Readonly<Record<string, string>> = {
+  "ask-fact": "a question",
+  "ask-details": "a question",
+  "ask-choice": "a question",
+  "ask-upload": "your photos",
+  "ask-design": "your design questions",
+  "build-questions": "your build's questions",
+  "buy-domain": "your domain payment",
+  "site-ready-tray": "your website to publish",
+  "approval-request": "an approval",
+  "answer-question": "an answer to send",
+  "create-reminder": "a reminder",
+  "record-review": "a review to save",
+  "connect-domain": "a domain to connect",
+  "remove-domain": "a domain to remove",
+}
+
+/** One item in the tray, in a few words: "a reminder". */
+export function trayItem(name: string) {
+  const item = TRAY_ITEMS[name]
+  if (!item) reportCopyGap("tray item", name)
+  return item ?? "something else"
+}
+
+/** What else waits in the tray beside the item shown: "also a reminder", "also a question and 2 more". */
+export function trayOthers(names: readonly string[]) {
+  const items = names.map(trayItem)
+  const [first, second] = items
+  if (!first) return "nothing else"
+  if (items.length === 1) return `also ${first}`
+  return items.length === 2
+    ? `also ${first} and ${second}`
+    : `also ${first} and ${items.length - 1} more`
+}
+
+/** A reminder's title as shown: the owner's words, with a capital to start. */
+export const reminderTitle = (title: string) => cap(title.trim())
 
 /** "Services, service area and customers", or "…, customers and 4 more". */
 const listed = (labels: string[]) => {
@@ -1443,8 +1894,12 @@ export function standingLine(
     return (
       (kind === "domain" && step && DOMAIN_NOW[step.id]) ||
       segmentLine(segment, ctx) ||
-      "Working on it"
+      UNIVERSAL.working
     )
+  }
+  // Begun and paused between steps: what is proved so far, never "Live".
+  if (state === "upcoming") {
+    return proofOf(segment, ctx)?.text ?? "Not started yet"
   }
   switch (kind) {
     case "golive":

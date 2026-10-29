@@ -311,7 +311,7 @@ export function panelFor(input: PanelInput): Panel | null {
   const page = pageOf(input.route, input.conversation, onboarding)
   const fresh = live === null && builds.length === 0
   const ctx: CopyContext = {
-    orgId: input.orgId ?? "",
+    seed: input.orgId ?? "",
     assistant: workspace.assistantName,
   }
 
@@ -347,6 +347,9 @@ export function panelFor(input: PanelInput): Panel | null {
         ...(doing ? { doing } : {}),
       }),
       steps: segment.steps.flatMap((step) => {
+        // A step that never applied (buying, for a domain the owner has)
+        // is not listed; a question the owner skipped in onboarding is.
+        if (step.state === "skipped" && segment.kind !== "onboarding") return []
         const label = stepLabel(
           segment,
           step,

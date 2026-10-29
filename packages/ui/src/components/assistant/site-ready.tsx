@@ -16,7 +16,8 @@ import {
   SiteIcon,
   type VersionPictures,
 } from "@workspace/ui/components/live-panel"
-import { DoneIcon } from "@workspace/ui/components/status-line"
+import { StatusLine } from "@workspace/ui/components/status-line"
+import { publishLine } from "@workspace/ui/lib/activity-copy"
 import { cn, META } from "@workspace/ui/lib/utils"
 import { useId, useLayoutEffect, useState } from "react"
 import { createPortal } from "react-dom"
@@ -40,6 +41,7 @@ export function SiteReady({
   preview,
   onRetryPreview,
   approved = false,
+  published = false,
   pending = false,
   error = null,
   onApprove,
@@ -56,6 +58,8 @@ export function SiteReady({
   onRetryPreview?: (() => Promise<void>) | undefined
   /** The owner approved it here and the server recorded it. */
   approved?: boolean
+  /** That version is live; the assistant's live message is still to come. */
+  published?: boolean
   /** The approval is on its way to the server. */
   pending?: boolean
   /** Why the last approval did not go through, in the owner's words. */
@@ -94,14 +98,10 @@ export function SiteReady({
   useLayoutEffect(() => () => void host?.remove(), [host])
   const done = (
     <p
-      className={cn(
-        "flex items-center gap-2 text-muted-foreground text-sm",
-        inTray || row ? "p-3" : className
-      )}
+      className={cn("flex text-sm", inTray || row ? "p-3" : className)}
       data-slot="site-ready"
     >
-      <DoneIcon />
-      Approved. Your website is being published.
+      <StatusLine delay={0} label={publishLine(published)} state="working" />
     </p>
   )
   // A heading cannot sit inside the docked row's button.

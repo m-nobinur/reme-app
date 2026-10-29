@@ -55,9 +55,13 @@ it("lists only reminders still ahead, undated ones after, in the api's order", (
   ).toEqual(["next", "later", "undated"])
 })
 
-it("names the Chief of Staff only on its own reminders", () => {
-  expect(noteOf(note({ source: "assistant" }), null).byAssistant).toBe(true)
-  expect(noteOf(note(), null).byAssistant).toBe(false)
+it("starts a title with a capital and keeps the owner's words, with no byline", () => {
+  const shown = noteOf(
+    note({ source: "assistant", title: "order brake pads" }),
+    null
+  )
+  expect(shown.title).toBe("Order brake pads")
+  expect(shown).not.toHaveProperty("byAssistant")
 })
 
 it("marks a reminder overdue once its time has passed, never also soon", () => {

@@ -297,14 +297,22 @@ const STEP_STATE: Record<TaskStepState, Step["state"]> = {
 export function taskSegment(task: OwnerTask): Segment | null {
   if (task.state !== "active" && task.state !== "done") return null
   const blocked = task.steps.find((s) => s.state === "blocked")
-  const state =
-    task.state === "done"
-      ? "done"
-      : blocked
-        ? "waiting"
-        : task.steps.some((s) => s.state === "in_progress")
-          ? "now"
-          : "upcoming"
+  // Every step through is done, whether or not the task row has caught up:
+  // the panel, the Website page and Tasks read the same facts.
+  const finished =
+    task.state === "done" ||
+    task.steps.every((s) => s.state === "done" || s.state === "skipped")
+  const lastMoved = task.steps
+    .flatMap((s) => (s.changed_at ? [s.changed_at] : []))
+    .sort()
+    .at(-1)
+  const state = finished
+    ? "done"
+    : blocked
+      ? "waiting"
+      : task.steps.some((s) => s.state === "in_progress")
+        ? "now"
+        : "upcoming"
   const detail: AddressDetail = task.kind === "address" ? task.detail : {}
   const names = {
     ...(detail.name && { domain: detail.name }),
@@ -326,7 +334,9 @@ export function taskSegment(task: OwnerTask): Segment | null {
           count: { done: s.state === "done" ? changes : 0, total: changes },
         }),
     })),
-    at: iso((state === "done" && task.done_at) || task.created_at),
+    at: iso(
+      (state === "done" && (task.done_at ?? lastMoved)) || task.created_at
+    ),
     ...(blocked?.deadline && { deadline: blocked.deadline }),
     ...(Object.keys(names).length > 0 && { names }),
   }

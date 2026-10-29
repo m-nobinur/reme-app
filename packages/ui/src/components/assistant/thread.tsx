@@ -53,7 +53,6 @@ import {
 import { LogoMark } from "@workspace/ui/components/logo"
 import { StateIcon, StatusLine } from "@workspace/ui/components/status-line"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
-import { useCycle } from "@workspace/ui/hooks/use-cycle"
 import { useOnboardingWait } from "@workspace/ui/hooks/use-onboarding-status"
 import { waitingLine, writingBack } from "@workspace/ui/lib/activity-copy"
 import { formatTime } from "@workspace/ui/lib/format"
@@ -143,8 +142,6 @@ export type ThreadProps = {
   stored?: string | undefined
   autoFocus?: boolean | undefined
   placeholder?: string | undefined
-  /** Other things to ask, which the placeholder rotates through after `placeholder`. */
-  placeholderIdeas?: readonly string[] | undefined
   /** The composer's placeholder while a question is open in the tray above it. */
   questionPlaceholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
@@ -275,7 +272,6 @@ export const Thread: FC<ThreadProps> = ({
   autoFocus = true,
   stored,
   placeholder,
-  placeholderIdeas,
   questionPlaceholder,
   briefing,
   quickActions,
@@ -303,21 +299,12 @@ export const Thread: FC<ThreadProps> = ({
     () => ({
       stored,
       placeholder,
-      placeholderIdeas,
       questionPlaceholder,
       briefing,
       quickActions,
       mode,
     }),
-    [
-      stored,
-      placeholder,
-      placeholderIdeas,
-      questionPlaceholder,
-      briefing,
-      quickActions,
-      mode,
-    ]
+    [stored, placeholder, questionPlaceholder, briefing, quickActions, mode]
   )
   // Held by its parts, so a caller's inline object does not redraw every
   // message on each of its renders, such as each workspace poll.
@@ -945,14 +932,11 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
 }) => {
   const {
     placeholder = "Send a message",
-    placeholderIdeas,
     questionPlaceholder,
     mode,
   } = useContext(ThreadSettingsContext)
   const input = useContext(ComposerInputContext)
   const aui = useAui()
-  const idea =
-    useCycle([placeholder, ...(placeholderIdeas ?? [])], 5000).item ?? ""
   // A question or an approval waits in the tray, in any message since a
   // post may land after it: what the owner types instead is an ordinary
   // turn, and the placeholder says so.
@@ -992,7 +976,7 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
           ref={input}
           placeholder={
             mode?.placeholder ??
-            (asking && questionPlaceholder ? questionPlaceholder : idea)
+            (asking && questionPlaceholder ? questionPlaceholder : placeholder)
           }
           className={cn(
             "aui-composer-input max-h-48 min-w-0 resize-none bg-transparent px-1.5 py-1.25 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60",
@@ -1243,8 +1227,20 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
   const toolsRan = useAuiState((s) =>
     s.message.parts.some((part) => part.type === "tool-call")
   )
+  // Seeded by this turn and the ones before, so the words vary between
+  // turns and never read as the last turn's. Joined, so the read is stable.
+  const seed = useAuiState((s) => s.message.id)
+  const earlier = useAuiState((s) => {
+    const all = s.thread.messages
+    const at = all.findIndex((m) => m.id === s.message.id)
+    return all
+      .slice(0, at)
+      .filter((m) => m.role === "assistant")
+      .map((m) => m.id)
+      .join(" ")
+  })
   if (shown) return null
-  const ctx = { orgId: "", assistant }
+  const ctx = { seed, earlier: earlier ? earlier.split(" ") : [], assistant }
   const { label } =
     !status && (immediate || toolsRan)
       ? { label: writingBack(ctx) }

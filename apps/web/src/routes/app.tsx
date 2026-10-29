@@ -42,10 +42,12 @@ import type { WorkspacePoll } from "@/lib/api/types"
 import { retryOrgWrite } from "@/lib/auth/actions"
 import { useAutoPanel } from "@/lib/auto-panel"
 import {
+  jobWaits,
   laterSeen,
   markSeen,
   notificationsOf,
   unreadCount,
+  waitPage,
 } from "@/lib/notifications"
 import { onboardingFor, settingUp } from "@/lib/onboarding"
 import { OwnerSettings } from "@/lib/owner-settings"
@@ -234,7 +236,19 @@ function AppLayout() {
   useEffect(() => {
     if (arrived) setPress(arrived)
   }, [arrived])
-  const entries = notifications.slice(0, MENU_ITEMS).map(
+  // What waits on the owner first, as the panel lists it, then the newest
+  // notifications. A wait is not news, so it never counts as unread.
+  const waits = jobWaits(live.workspace).map(
+    (wait): NotificationEntry => ({
+      id: wait.id,
+      kind: "wait",
+      title: wait.title,
+      at: wait.since,
+      unread: false,
+      link: <Link to={waitPage(wait)} />,
+    })
+  )
+  const entries = notifications.map(
     (item): NotificationEntry => ({
       id: item.id,
       kind: item.kind,
@@ -254,6 +268,7 @@ function AppLayout() {
         : { link: <Link to="/app/notifications" /> }),
     })
   )
+  const menu = [...waits, ...entries].slice(0, MENU_ITEMS)
   // The clock's list at the top right: every open chat, newest first.
   const history = (conversations ?? [])
     .filter((each) => !each.archived_at)
@@ -390,7 +405,7 @@ function AppLayout() {
               </nav>
               <div className="mt-auto flex flex-col gap-2">
                 <NotificationMenu
-                  items={entries}
+                  items={menu}
                   onOpenChange={markMenuSeen}
                   unread={unread}
                   viewAll={<Link to="/app/notifications" />}

@@ -1547,7 +1547,6 @@ function ReminderNote({
   due,
   soon = false,
   overdue = false,
-  byAssistant,
   onDone,
   pending: busy = false,
   error = null,
@@ -1556,8 +1555,6 @@ function ReminderNote({
   due: string | null
   soon?: boolean
   overdue?: boolean
-  /** Set by the assistant (Reme to the owner) rather than by the owner. */
-  byAssistant: boolean
   onDone: () => void
   pending?: boolean
   error?: string | null
@@ -1594,9 +1591,6 @@ function ReminderNote({
             </span>
             {due}
           </span>
-        ) : null}
-        {byAssistant ? (
-          <span className={META}>Set by your assistant</span>
         ) : null}
         {error ? (
           <p className="text-[0.8125rem] text-destructive" role="alert">

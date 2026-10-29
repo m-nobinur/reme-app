@@ -1,4 +1,8 @@
 import {
+  type CopyContext,
+  type Phase,
+  phaseState,
+  STILL_AFTER,
   type StatusKind,
   type ToolArgs,
   toolLine,
@@ -230,25 +234,42 @@ function StatusLine({
   )
 }
 
+/** True once `active` has held for `ms`, so a line that runs long can say so. */
+function useLongerThan(active: boolean, ms: number) {
+  const [over, setOver] = useState(false)
+  useEffect(() => {
+    setOver(false)
+    if (!active) return
+    const timer = setTimeout(() => setOver(true), ms)
+    return () => clearTimeout(timer)
+  }, [active, ms])
+  return active && over
+}
+
 /**
- * A tool's line in the thread, in the copy table's words for that tool. A
- * tool outside the table reads "Working on it", never its name.
+ * A tool's line in the thread, in the copy table's words for that tool,
+ * for its phase (`partPhase`). A working line that runs long says "Still".
+ * A tool outside the table reads as its kind or "Working on it", never its
+ * name. `copy` seeds the variant with the turn.
  */
 function ToolStatus({
   tool,
   args,
   state,
+  copy,
   ...props
 }: Omit<ComponentProps<typeof StatusLine>, "label" | "state"> & {
   tool: string
   args?: ToolArgs
-  state: StatusState
+  state: Phase
+  copy?: CopyContext
 }) {
+  const still = useLongerThan(state === "working", STILL_AFTER * 1000)
+  const phase = still ? "still" : state
   return (
     <StatusLine
-      // A tool waiting on the owner still says what it is doing.
-      label={toolLine(tool, state === "waiting" ? "working" : state, args)}
-      state={state}
+      label={toolLine(tool, phase, args, copy)}
+      state={phaseState(phase)}
       {...props}
     />
   )

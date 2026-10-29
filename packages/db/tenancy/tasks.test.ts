@@ -119,8 +119,13 @@ describe("owner tasks", () => {
         evidence: { status: 200 },
       })
     )
+    // The write that finishes the last step closes the task, with no sync.
+    const [closed] = await tasks()
+    expect(closed).toMatchObject({ id: first?.id, state: "done" })
+    expect(closed?.done_at).not.toBeNull()
     await sync()
     const [live] = await tasks()
+    expect(live?.done_at).toBe(closed?.done_at)
     expect(live).toMatchObject({ id: first?.id, state: "done" })
     expect(live?.done_at).not.toBeNull()
     // A second sync neither moves the done step back nor the finish time.

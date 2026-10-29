@@ -12,7 +12,7 @@ export function StillWorking() {
     <StatusLine
       delay={0}
       label={resumingLine({
-        orgId: "",
+        seed: "",
         assistant: live.workspace?.assistantName ?? null,
       })}
     />
