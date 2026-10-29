@@ -2,6 +2,7 @@ import { streamText, tool } from "ai"
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
+import { contextOf } from "../src/cos/agent.ts"
 import {
   type Check,
   CLAIMS_NOTE,
@@ -155,15 +156,14 @@ describe("the promise gate", () => {
  */
 const PRICES = "Facts: business.prices: Regular clean £60, deep clean £180"
 
-const shown = (
-  context: string,
-  ...results: { before?: boolean; value: unknown }[]
-): Prompt => {
-  const exchange = (value: unknown, i: number) => [
+type Result = { before?: boolean; tool?: string; value: unknown }
+
+const shown = (context: string, ...results: Result[]): Prompt => {
+  const exchange = ({ tool: name = "t", value }: Result, i: number) => [
     {
       role: "assistant",
       content: [
-        { type: "tool-call", toolCallId: `c${i}`, toolName: "t", input: {} },
+        { type: "tool-call", toolCallId: `c${i}`, toolName: name, input: {} },
       ],
     },
     {
@@ -172,7 +172,7 @@ const shown = (
         {
           type: "tool-result",
           toolCallId: `c${i}`,
-          toolName: "t",
+          toolName: name,
           output: { type: "json", value },
         },
       ],
@@ -180,12 +180,19 @@ const shown = (
   ]
   return [
     { role: "system", content: "You are the Chief of Staff. A clean is £99." },
-    ...results.flatMap((r, i) => (r.before ? exchange(r.value, i) : [])),
+    ...results.flatMap((r, i) => (r.before ? exchange(r, i) : [])),
     { role: "user", content: [{ type: "text", text: context }] },
     { role: "user", content: [{ type: "text", text: "Go on then" }] },
-    ...results.flatMap((r, i) => (r.before ? [] : exchange(r.value, i))),
+    ...results.flatMap((r, i) => (r.before ? [] : exchange(r, i))),
   ] as Prompt
 }
+
+/** A context whose workspace block holds `labels`, as `contextOf` writes it. */
+const withWorkspace = (labels: object, facts = "") =>
+  `Mode: ask.\n${facts}\n<data source="workspace" taint="none">\n${JSON.stringify(labels)}\n</data>`
+
+const UNPUBLISHED = { site: { address: "tidy.reme.site", live: false } }
+const PUBLISHED = { site: { address: "tidy.reme.site", live: true } }
 
 const SET = {
   outcome: "created",
@@ -247,6 +254,98 @@ describe("the claims gate", () => {
     expect(
       await claimsGate(unsure)(reply, shown("Hi", { value: page(200) }))
     ).toBe(null)
+  })
+
+  it("takes the workspace the turn read as backing for what already stands", async () => {
+    const reply = "Your website is live."
+    const { asked, unsure } = jev(true)
+    // An org with no published site: the unchecked live claim is caught.
+    expect(
+      await claimsGate(unsure)(reply, shown(withWorkspace(UNPUBLISHED)))
+    ).toBe(`${CLAIMS_NOTE} "is live".`)
+    expect(
+      await claimsGate(unsure)(reply, shown(withWorkspace(PUBLISHED)))
+    ).toBe(null)
+    // A connected domain, or a get_workspace since the owner's message, backs it too.
+    const domain = {
+      ...UNPUBLISHED,
+      domains: [{ name: "tidy.co.uk", state: "connected" }],
+    }
+    expect(
+      await claimsGate(unsure)(
+        "tidy.co.uk is connected.",
+        shown(withWorkspace(domain))
+      )
+    ).toBe(null)
+    expect(
+      await claimsGate(unsure)(
+        reply,
+        shown(withWorkspace(UNPUBLISHED), {
+          tool: "get_workspace",
+          value: PUBLISHED,
+        })
+      )
+    ).toBe(null)
+    // A reminder the workspace lists is set.
+    const reminder = {
+      ...UNPUBLISHED,
+      reminders: [{ ref: "r1", title: "Call the supplier", due: "8:00 AM" }],
+    }
+    expect(
+      await claimsGate(unsure)(
+        "Your reminder to call the supplier is set for 8am.",
+        shown(withWorkspace(reminder))
+      )
+    ).toBe(null)
+    expect(asked).toEqual([])
+  })
+
+  it("reads the workspace block the agent's context writes, labels and all", async () => {
+    const context = (live: boolean, domain: "active" | "verifying") =>
+      contextOf("ask", {
+        site: { host: "tidy.reme.site", live_version: live ? 3 : null },
+        builds: [],
+        questions: [],
+        approvals: [],
+        missing_facts: [],
+        domains: [{ name: "tidy.co.uk", state: domain, last_check: null }],
+        expected_seconds: {
+          quick: { p50: 15, p95: 45 },
+          full: { p50: 180, p95: 330 },
+        },
+        expected_range: { quick: "about a minute", full: "a few minutes" },
+      }).text
+    const { unsure } = jev(false)
+    const gate = (reply: string, text: string) =>
+      claimsGate(unsure)(reply, shown(text))
+    expect(
+      await gate("Your website is live.", context(true, "verifying"))
+    ).toBe(null)
+    expect(
+      await gate("Your website is live.", context(false, "verifying"))
+    ).not.toBeNull()
+    expect(
+      await gate("tidy.co.uk is connected.", context(false, "active"))
+    ).toBe(null)
+    expect(
+      await gate("tidy.co.uk is connected.", context(false, "verifying"))
+    ).not.toBeNull()
+  })
+
+  it("reads a value that is set to something as a fact, not a done state", async () => {
+    const hours = withWorkspace(
+      UNPUBLISHED,
+      'Facts: hours.weekday: {"open":"09:00","close":"17:00"}'
+    )
+    for (const reply of [
+      "Your hours are set to 9 to 5.",
+      "Your hours are all set to 9 to 5 on weekdays.",
+    ]) {
+      const { asked, unsure } = jev(false)
+      expect(await claimsGate(unsure)(reply, shown(hours))).toBe(null)
+      // Hours are the decision model's to match, never a done state.
+      expect(asked).toEqual([reply])
+    }
   })
 
   it("passes the owner's stored price without asking Jev", async () => {

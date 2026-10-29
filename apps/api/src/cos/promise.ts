@@ -167,9 +167,12 @@ export const gated = (model: LanguageModel, checks: readonly Check[]) =>
 /** An evidence entry as the model reads it, its ids dropped. */
 type Shown = { kind?: unknown; status?: unknown }
 
-/** A done state: "it's live", "I've booked", "you're all set". */
+/**
+ * A done state: "it's live", "I've booked", "you're all set". "Set to" names
+ * a value ("your hours are set to 9 to 5"), which the facts check reads.
+ */
 const DONE =
-  /\b(?:it['’]?s|it is|that['’]?s|that is|is|are|now|i['’]?ve|i have|has been|have been|all)\s+(?:now\s+)?(live|set|booked|published|connected)\b/i
+  /\b(?:it['’]?s|it is|that['’]?s|that is|is|are|now|i['’]?ve|i have|has been|have been|all)\s+(?:now\s+)?(live|set(?!\s+to\b)|booked|published|connected)\b/i
 
 /** Words before a done state that make it a condition, a future or a no. */
 const NOT_DONE =
@@ -177,7 +180,7 @@ const NOT_DONE =
 
 /** Opening hours or a service area, which only the decision model can match. */
 const HOURS_OR_AREA =
-  /\b(?:opening hours|open (?:from|until|till|between|on|at|\d)|closed on|service area|we (?:cover|serve)|areas? (?:we|you) (?:cover|serve))\b/i
+  /\b(?:opening hours|hours (?:are|is)|open (?:from|until|till|between|on|at|\d)|closed on|service area|we (?:cover|serve)|areas? (?:we|you) (?:cover|serve))\b/i
 
 /** Every done state `said` states as done: questions, conditions and futures aside. */
 export function doneClaims(said: string): string[] {
@@ -190,35 +193,80 @@ export function doneClaims(said: string): string[] {
     })
 }
 
-/** Whether this turn's evidence backs a done state: live and published need a page that answered 2xx. */
-const backs = (claim: string, evidence: readonly Shown[]) =>
-  /live|published/i.test(claim)
-    ? evidence.some(
+/** The workspace as `workspaceLabels` shows it, as far as a done state reads it. */
+type Workspace = {
+  site?: { live?: unknown }
+  domains?: { state?: unknown }[]
+  reminders?: unknown[]
+}
+
+/** The workspace block of the turn's context, which `contextOf` writes. */
+const WORKSPACE_DATA = /<data source="workspace"[^>]*>\n([\s\S]*?)\n<\/data>/
+
+const workspaceIn = (text: string): Workspace | null => {
+  const block = WORKSPACE_DATA.exec(text)?.[1]
+  if (!block) return null
+  try {
+    return JSON.parse(block) as Workspace
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Whether the turn backs a done state. A new action is backed by its
+ * evidence since the owner's latest message; what already stands, by the
+ * workspace the turn read from the database. Live and published need a page
+ * that answered 2xx, a site the workspace shows live, or a connected domain
+ * ("connected" is `labels.ts`'s word for an active one); set and booked, a
+ * reminder it lists.
+ */
+const backs = (
+  claim: string,
+  evidence: readonly Shown[],
+  workspace: Workspace | null
+) => {
+  const connected =
+    workspace?.domains?.some((d) => d.state === "connected") ?? false
+  if (/live|published/i.test(claim))
+    return (
+      workspace?.site?.live === true ||
+      connected ||
+      evidence.some(
         (e) =>
           e.kind === "url" &&
           typeof e.status === "number" &&
           e.status >= 200 &&
           e.status < 300
       )
-    : evidence.length > 0
+    )
+  if (/connected/i.test(claim)) return connected || evidence.length > 0
+  return evidence.length > 0 || (workspace?.reminders?.length ?? 0) > 0
+}
 
 /**
  * What the turn was shown, out of `prompt`: the owner's messages, the
- * turn's context and every tool result's value, and the evidence in the
- * tool results since the owner's latest message. The model's own words and
- * the instructions say nothing about the business.
+ * turn's context and every tool result's value; the evidence in the tool
+ * results since the owner's latest message; and the newest workspace, from
+ * the context or a get_workspace since that message. The model's own words
+ * and the instructions say nothing about the business.
  */
 export function shownIn(prompt: Prompt): {
   seen: unknown[]
   evidence: Shown[]
+  workspace: Workspace | null
 } {
   const owner = prompt.map((m) => m.role).lastIndexOf("user")
   const seen: unknown[] = []
   const evidence: Shown[] = []
+  let workspace: Workspace | null = null
   prompt.forEach((message, at) => {
     if (message.role === "user") {
-      for (const part of message.content)
-        if (part.type === "text") seen.push(part.text)
+      for (const part of message.content) {
+        if (part.type !== "text") continue
+        seen.push(part.text)
+        workspace = workspaceIn(part.text) ?? workspace
+      }
     }
     if (message.role !== "tool") return
     for (const part of message.content) {
@@ -235,9 +283,11 @@ export function shownIn(prompt: Prompt): {
           : null
       if (at > owner && Array.isArray(listed))
         evidence.push(...(listed as Shown[]))
+      if (at > owner && part.toolName === "get_workspace")
+        workspace = output.value as Workspace
     }
   })
-  return { seen, evidence }
+  return { seen, evidence, workspace }
 }
 
 /**
@@ -269,8 +319,10 @@ export function readClaims(
   said: string,
   prompt: Prompt
 ): { unbacked: string[]; unclear: string[]; seen: unknown[] } {
-  const { seen, evidence } = shownIn(prompt)
-  const unbacked = doneClaims(said).filter((c) => !backs(c, evidence))
+  const { seen, evidence, workspace } = shownIn(prompt)
+  const unbacked = doneClaims(said).filter(
+    (c) => !backs(c, evidence, workspace)
+  )
   const unclear: string[] = []
   const shown = new Set(
     contentClaimsIn(JSON.stringify(seen)).map((c) => `${c.kind}:${c.key}`)
