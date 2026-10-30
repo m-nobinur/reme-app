@@ -27,7 +27,7 @@ import {
   saveProfile,
   writeReview,
 } from "./memory.ts"
-import { withinCap } from "./turns.ts"
+import { reserveSpend, settleSpend } from "./turns.ts"
 
 /**
  * Reflection (ADR-042): after a conversation has gone quiet, or every few
@@ -394,16 +394,17 @@ export async function reflectAfterTurn(
     async (db) => (await readProfile(db)).lines
   )
   const prompt = promptOf(window, held)
-  if (
-    !(await kit.withOrg(at, (db) =>
-      withinCap(db, job.orgId, worstCall(prompt))
-    ))
-  ) {
-    return log("budgetary")
-  }
+  const reservation = await kit.withOrg(at, (db) =>
+    reserveSpend(db, job.orgId, "reflection", worstCall(prompt))
+  )
+  if (!reservation) return log("budgetary")
   const made = await reflect(model, prompt)
   // Recorded before anything can fail or be superseded, so the cap counts it.
-  await insertPass(kit, job, null, made.problem ?? "called", {
+  await settleSpend(kit, job, reservation, {
+    job: "reflection",
+    session_id: job.sessionId,
+    turn_id: job.turnId,
+    outcome: made.problem ?? "called",
     model: REFLECTION.model,
     usage: made.usage,
     cost_usd: made.cost,

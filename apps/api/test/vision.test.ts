@@ -277,10 +277,12 @@ describe("POST /palettes/from-image", () => {
     await paletteFromImage(send(PNG), env, books.kit, owner, {
       model: model({ name: "x" }),
     })
-    expect(books.rows).toHaveLength(1)
-    expect(books.rows[0]?.type).toBe("cos.background_step")
-    expect(books.rows[0]?.payload).toMatchObject({ job: "vision_palette" })
-    const cost = Number(books.rows[0]?.payload.cost_usd)
+    expect(books.rows.map((r) => r.type)).toEqual([
+      "cos.background_reserve",
+      "cos.background_step",
+    ])
+    expect(books.rows[1]?.payload).toMatchObject({ job: "vision_palette" })
+    const cost = Number(books.rows[1]?.payload.cost_usd)
     expect(cost).toBeGreaterThan(0)
     expect(cost).toBeLessThan(0.01)
   })

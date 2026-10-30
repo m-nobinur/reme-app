@@ -24,7 +24,12 @@ import {
   vi,
 } from "vitest"
 import type { Owner } from "../src/changes.ts"
-import { DAILY_CAP_USD, withinCap } from "../src/cos/turns.ts"
+import {
+  DAILY_CAP_USD,
+  reserveSpend,
+  settleSpend,
+  withinCap,
+} from "../src/cos/turns.ts"
 import {
   DRAW_DEADLINE_MS,
   DRAW_RESERVE_USD,
@@ -32,7 +37,6 @@ import {
   drawRound,
   hasAlpha,
   LOGO_MODELS,
-  logSpend,
   nextRoundAt,
   readLogos,
   roundView,
@@ -522,9 +526,10 @@ describe("drawing a round in the queue", () => {
     const asked = images((model) => model === LOGO_MODELS[0].id)
     const books = ledger()
     await drawRound(env, books.kit, job, { director: null })
-    expect(books.rows).toHaveLength(asked.length)
-    expect(books.rows.every((r) => r.type === "cos.background_step")).toBe(true)
-    const costs = books.rows.map((r) => r.payload.cost_usd)
+    const steps = books.rows.filter((r) => r.type === "cos.background_step")
+    expect(steps).toHaveLength(asked.length)
+    expect(books.rows).toHaveLength(2 * asked.length)
+    const costs = steps.map((r) => r.payload.cost_usd)
     expect(costs.filter((c) => c === 0.01)).toHaveLength(LOGO_VARIANTS)
     expect(costs.filter((c) => c === DRAW_RESERVE_USD)).toHaveLength(
       LOGO_VARIANTS
@@ -571,9 +576,9 @@ describe("drawing a round in the queue", () => {
     )
     const books = ledger()
     await drawRound(env, books.kit, job)
-    expect(books.rows[0]?.payload).toMatchObject({
-      job: "logo_director",
-      cost_usd: 0.002,
+    expect(books.rows[1]).toMatchObject({
+      type: "cos.background_step",
+      payload: { job: "logo_director", cost_usd: 0.002 },
     })
   })
 })
@@ -877,7 +882,14 @@ describe.skipIf(!url)("POST /logos/:id/keep, on a live connection", () => {
         withinCap(db, who.orgId, amount)
       )
     expect(await room(DAILY_CAP_USD)).toBe(true)
-    await logSpend(kit, who.orgId, "logo", "m", DAILY_CAP_USD)
+    const reservation = await kit.withOrg({ orgId: who.orgId }, (db) =>
+      reserveSpend(db, who.orgId, "logo", 1)
+    )
+    await settleSpend(kit, who, reservation as string, {
+      job: "logo",
+      model: "m",
+      cost_usd: DAILY_CAP_USD,
+    })
     expect(await room(0.01)).toBe(false)
   })
 
