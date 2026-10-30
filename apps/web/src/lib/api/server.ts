@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start"
 import { getCookie } from "@tanstack/react-start/server"
 import type { Conversation } from "@workspace/contracts"
 import {
+  ApprovalGrantSwitch,
+  type ApprovalGrants,
   ChangeKind,
   DomainName,
   type DomainPurchaseStatus,
@@ -393,6 +395,18 @@ export const reviewMemory = createServerFn({ method: "POST" })
   .handler(
     async ({ data }): Promise<MemoryView | "stale" | null> =>
       await source.reviewMemory(data)
+  )
+
+export const getGrants = createServerFn({ method: "GET" }).handler(
+  async (): Promise<ApprovalGrants | null> => await source.grants()
+)
+
+/** The owner's switch on "Done without asking", for one kind. */
+export const setGrant = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ApprovalGrantSwitch.parse(record(input)))
+  .handler(
+    async ({ data }): Promise<ApprovalGrants | null> =>
+      await source.setGrant(data)
   )
 
 /** The key a browser subscribes to push with; null where push is off. */

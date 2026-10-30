@@ -1023,8 +1023,8 @@ type TrayFrameProps = {
   onBack?: (() => void) | undefined
   onForward?: (() => void) | undefined
   skip?: { label: string; onSkip: () => void; disabled?: boolean } | undefined
-  /** Pick for me: the tray finishes at once, on its defaults for what is left. */
-  pick?: { onPick: () => void; disabled?: boolean } | undefined
+  /** Pick for me: the tray finishes at once, on its defaults for what is left. Another label makes it any second action. */
+  pick?: { onPick: () => void; disabled?: boolean; label?: string } | undefined
   /**
    * The primary button. With `form` it submits that form, so Enter in a
    * field submits too; without, Enter in a field presses it. A step that
@@ -1317,7 +1317,7 @@ function TrayFrame({
                   type="button"
                   variant="secondary"
                 >
-                  {PICK_FOR_ME}
+                  {pick.label ?? PICK_FOR_ME}
                 </Button>
               ) : null}
               {submit ? (

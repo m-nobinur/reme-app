@@ -1,5 +1,7 @@
 import type {
   Activity,
+  ApprovalGrantSwitch,
+  ApprovalGrants,
   ApprovalRequest,
   AvatarId,
   BoughtElsewhereOutput,
@@ -266,6 +268,10 @@ export type OwnerDataSource = {
   reviewMemory: (
     action: MemoryReviewAction
   ) => Promise<MemoryView | "stale" | null>
+  /** What the owner lets the assistant do with no card, or null where the session has no organisation. */
+  grants: () => Promise<ApprovalGrants | null>
+  /** The owner's switch for one kind, read on the assistant's next action. */
+  setGrant: (change: ApprovalGrantSwitch) => Promise<ApprovalGrants | null>
   /** Reports and alerts from the last 30 days, newest first as listed. */
   activity: () => Promise<AttentionItem[]>
   /**

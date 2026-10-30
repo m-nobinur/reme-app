@@ -24,6 +24,13 @@ import {
 } from "ai"
 import type { ChatMessage } from "./message"
 
+/**
+ * The approval ids the owner answered with a tap on Always allow, or on an
+ * offer card's yes: their yes goes to the api as `always`. A typed yes is
+ * never in it.
+ */
+export const alwaysTapped = new Set<string>()
+
 /** What the owner typed in a message. */
 export const textOf = (message: ChatMessage) =>
   message.parts
@@ -134,6 +141,7 @@ function ownerResults(last: ChatMessage | undefined): ChatResult[] {
           kind: "approval",
           approval_id: id,
           approved,
+          ...(approved && alwaysTapped.has(id) ? { always: true } : {}),
           ...(reason ? { reason } : {}),
         },
       ]

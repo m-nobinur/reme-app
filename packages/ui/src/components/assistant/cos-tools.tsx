@@ -12,6 +12,9 @@ import {
   CreateReminderInput,
   CreateReminderOutput,
   GetPreviewOutput,
+  type GrantKind,
+  OfferGrantInput,
+  OfferGrantOutput,
   RecordReviewInput,
   RecordReviewOutput,
 } from "@workspace/contracts"
@@ -290,6 +293,7 @@ const CreateReminder: ToolCallMessagePartComponent = (props) => {
       }
       done={(output) => <ReminderSet output={output} zone={zone} />}
       props={props}
+      always="beside"
       slot="create-reminder"
       title={(input) => reminderTitle(input.title)}
       view={decisionView(props, CreateReminderInput, CreateReminderOutput)}
@@ -313,10 +317,38 @@ const RecordReview: ToolCallMessagePartComponent = (props) => (
       <Done>Saved. Your website can show it from its next update.</Done>
     )}
     props={props}
+    always="beside"
     slot="record-review"
     title={(input) => `"${input.quote}"`}
     view={decisionView(props, RecordReviewInput, RecordReviewOutput)}
     yes="They agreed, save it"
+  />
+)
+
+/** What a kind's grant lets the assistant do, as the owner reads it. */
+export const GRANT_TEXT: Record<GrantKind, string> = {
+  create_reminder: "Add reminders you didn't ask for in so many words",
+  record_review: "Save a customer's review to your website",
+  connect_domain: "Connect a domain you have to your website",
+}
+
+// The yes is the tap that saves the grant, so the button says what it does.
+const OfferGrant: ToolCallMessagePartComponent = (props) => (
+  <Decision
+    always="yes"
+    busy="Saving"
+    cancelled="Not changed. I'll still ask first."
+    detail={() =>
+      "You won't see a card for these from now on. You can turn it off any time under Memory."
+    }
+    done={() => <Done>Done. I won't ask first for these.</Done>}
+    no="Keep asking"
+    props={props}
+    refused="Not changed. I'll still ask first."
+    slot="offer-grant"
+    title={(input) => `${GRANT_TEXT[input.kind]} without asking?`}
+    view={decisionView(props, OfferGrantInput, OfferGrantOutput)}
+    yes="Don't ask me"
   />
 )
 
@@ -344,6 +376,7 @@ export const COS_CARDS: Record<string, ToolCallMessagePartComponent> = {
   record_review: RecordReview,
   connect_domain: ConnectDomain,
   remove_domain: RemoveDomain,
+  offer_grant: OfferGrant,
   domain_bought: DomainBought,
   connect_google: ConnectGoogle,
   find_domain: FindDomain,
