@@ -301,24 +301,22 @@ function Elsewhere({
 }) {
   const links = buyElsewhereLinks(name)
   return (
-    <>
-      <ConnectRows heading={`Search for ${name}`}>
-        <ConnectRow
-          href={links.cloudflare}
-          line="cloudflare.com"
-          name="Cloudflare"
-          newTab
-          onClick={onFollow}
-        />
-        <ConnectRow
-          href={links.godaddy}
-          line="godaddy.com"
-          name="GoDaddy"
-          newTab
-          onClick={onFollow}
-        />
-      </ConnectRows>
-    </>
+    <ConnectRows heading={`Search for ${name}`}>
+      <ConnectRow
+        href={links.cloudflare}
+        line="cloudflare.com"
+        name="Cloudflare"
+        newTab
+        onClick={onFollow}
+      />
+      <ConnectRow
+        href={links.godaddy}
+        line="godaddy.com"
+        name="GoDaddy"
+        newTab
+        onClick={onFollow}
+      />
+    </ConnectRows>
   )
 }
 

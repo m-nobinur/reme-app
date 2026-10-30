@@ -28,7 +28,7 @@ const workspace = (
     live: 3,
     host: "spark.example.com",
     url: "https://spark.example.com",
-    assistantName: "Ellie",
+    assistantName: "Reme",
     activity: {
       journey,
       now: [],

@@ -90,7 +90,7 @@ it("groups written reminders by the reader's calendar, around midnight", () => {
     note({ id: "undated", due_at: null }),
   ]
   expect(
-    ids(groupReminders(notes, [], [], "Australia/Sydney", "Ellie", NOW))
+    ids(groupReminders(notes, [], [], "Australia/Sydney", "Reme", NOW))
   ).toEqual([
     ["overdue", ["past"]],
     ["today", ["tonight"]],
@@ -99,7 +99,7 @@ it("groups written reminders by the reader's calendar, around midnight", () => {
   ])
   // In London the same instants all fall on the same day, 30 June.
   expect(
-    ids(groupReminders(notes, [], [], "Europe/London", "Ellie", NOW))
+    ids(groupReminders(notes, [], [], "Europe/London", "Reme", NOW))
   ).toEqual([
     ["overdue", ["past"]],
     ["today", ["tonight", "midnight"]],
@@ -113,14 +113,14 @@ it("keeps dated reminders in one group until the zone is known", () => {
     note({ id: "later" }),
     note({ id: "undated", due_at: null }),
   ]
-  expect(ids(groupReminders(notes, [], [], null, "Ellie", NOW))).toEqual([
+  expect(ids(groupReminders(notes, [], [], null, "Reme", NOW))).toEqual([
     ["dated", ["past", "later"]],
     ["undated", ["undated"]],
   ])
 })
 
 it("has no groups at all with nothing to show", () => {
-  expect(groupReminders([], [], [], "Europe/London", "Ellie", NOW)).toEqual({
+  expect(groupReminders([], [], [], "Europe/London", "Reme", NOW)).toEqual({
     needed: [],
     groups: [],
   })
@@ -155,7 +155,7 @@ it("words each rule and points it where it is acted on", () => {
     derived,
     attention,
     "Europe/London",
-    "Ellie",
+    "Reme",
     NOW
   )
   expect(needed).toEqual([
@@ -170,7 +170,7 @@ it("words each rule and points it where it is acted on", () => {
     },
     {
       key: `question-${REQUEST}`,
-      title: "Ellie asked about weekday hours",
+      title: "Reme asked about weekday hours",
       detail: "Waiting for over 12 hours.",
       action: { label: "Show the question", focus: `question-${REQUEST}` },
     },
@@ -182,9 +182,9 @@ it("words each rule and points it where it is acted on", () => {
     },
     {
       key: "facts",
-      title: "Ellie still needs your phone number",
+      title: "Reme still needs your phone number",
       detail: "Your website shows these.",
-      action: { label: "Tell Ellie", chat: true },
+      action: { label: "Tell Reme", chat: true },
     },
   ])
   // An owner who has not named the assistant is told "your assistant".
@@ -206,7 +206,7 @@ it("words each rule and points it where it is acted on", () => {
     derived.slice(0, 2),
     [],
     null,
-    "Ellie",
+    "Reme",
     NOW
   ).needed
   expect(bare.map((each) => [each.title, each.detail])).toEqual([

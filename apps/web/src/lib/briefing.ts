@@ -43,7 +43,7 @@ function due(at: string, now: Date): string {
 export const assistantOf = (workspace: Workspace | null) =>
   workspace?.assistantName?.trim() || "your assistant"
 
-/** `assistantOf` opening a sentence: "Ellie", or "Your assistant". */
+/** `assistantOf` opening a sentence: "Reme", or "Your assistant". */
 export const leading = (assistant: string) =>
   assistant.charAt(0).toUpperCase() + assistant.slice(1)
 

@@ -293,7 +293,7 @@ const RECONNECT = {
   action: { kind: "connect", service: "google" },
 } as const
 
-/** What Ellie says, once, for each way the grant can fail. */
+/** What Reme says, once, for each way the grant can fail. */
 const LOST = {
   revoked:
     "Google no longer lets me see your site, because the access I was given was taken away. Connect again and I'll pick up where I left off.",
@@ -309,7 +309,7 @@ const LOST = {
  * Google's refresh answer) and the Owner role on every verified property.
  * Anything less blocks the step with a note, moves the connection to
  * `needs_reauth` or `needs_permission` (so the pull stops and the panel,
- * which read those rows, agree) and Ellie says so once: the evidence carries
+ * which read those rows, agree) and Reme says so once: the evidence carries
  * the grant's own connect time, so a second loss after a reconnect is a new
  * message. A property Google refuses outright counts as lost Owner access;
  * its outage throws, for the step's retries.

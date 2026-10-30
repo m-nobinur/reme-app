@@ -85,7 +85,7 @@ const HINT: Partial<Record<string, string>> = {
  */
 const nameIdeas = (written: readonly string[] | undefined) => [
   "Reme",
-  ...(written?.length ? written : ["Ava", "Ellie", "Marcus"]),
+  ...(written?.length ? written : ["Ava", "Reme", "Marcus"]),
 ]
 
 /** Name ideas, a tap each to fill the name field. */

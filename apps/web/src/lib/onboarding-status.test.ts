@@ -49,7 +49,7 @@ describe("an onboarding status part", () => {
 })
 
 describe("the waiting line as a turn goes on", () => {
-  const ellie = { seed: "", assistant: "Ellie" }
+  const reme = { seed: "", assistant: "Reme" }
   let container: HTMLDivElement
   let root: Root
 
@@ -60,7 +60,7 @@ describe("the waiting line as a turn goes on", () => {
     root = createRoot(container)
     const Line = () => {
       const { status, seconds } = useOnboardingWait()
-      return waitingLine(status, seconds, ellie).label
+      return waitingLine(status, seconds, reme).label
     }
     await act(async () => root.render(createElement(Line)))
   })
@@ -88,14 +88,14 @@ describe("the waiting line as a turn goes on", () => {
     await wait(11.9)
     expect(line()).toBe("Noting your phone and email")
     await wait(0.1)
-    expect(line()).toBe("Ellie is still working on it")
+    expect(line()).toBe("Reme is still working on it")
     await wait(18)
-    expect(line()).toBe("Ellie is taking longer than usual")
+    expect(line()).toBe("Reme is taking longer than usual")
     // The planner's own line is model text: the catalogue words it.
     await send({ kind: "doing", text: "Checking your number" })
     expect(line()).toBe("Working on your answer")
     await wait(12)
-    expect(line()).toBe("Ellie is still working on it")
+    expect(line()).toBe("Reme is still working on it")
   })
 
   it("words each status from the catalogue, in the order the work comes", async () => {
@@ -104,7 +104,7 @@ describe("the waiting line as a turn goes on", () => {
     await send({ kind: "thinking", text: "Evaluating service models" })
     expect(line()).toBe("Thinking it through")
     await wait(12)
-    expect(line()).toBe("Ellie is still working on it")
+    expect(line()).toBe("Reme is still working on it")
     await send({ kind: "doing", text: "Checking your services" })
     expect(line()).toBe("Working on your answer")
     // A fact noted after the planner's line follows it, never hidden by it.
@@ -113,14 +113,14 @@ describe("the waiting line as a turn goes on", () => {
   })
 
   it("with no status, goes from reading to longer than usual, never thinking", async () => {
-    expect(line()).toBe("Ellie is reading your message")
+    expect(line()).toBe("Reme is reading your message")
     await wait(4)
     expect(line()).toMatch(
-      /^Ellie is (looking into it|working on it|working out what to do)$/
+      /^Reme is (looking into it|working on it|working out what to do)$/
     )
     await wait(8)
-    expect(line()).toBe("Ellie is still working on it")
+    expect(line()).toBe("Reme is still working on it")
     await wait(18)
-    expect(line()).toBe("Ellie is taking longer than usual")
+    expect(line()).toBe("Reme is taking longer than usual")
   })
 })

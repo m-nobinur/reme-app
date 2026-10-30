@@ -49,7 +49,7 @@ const QUOTE = {
   },
 } as const satisfies FactValue
 const ASSISTANT = [
-  { key: "assistant.name", value: { name: "Ellie" } },
+  { key: "assistant.name", value: { name: "Reme" } },
   { key: "assistant.pronouns", value: { id: "she_her" } },
   { key: "assistant.tone", value: { id: "friendly" } },
 ] as const satisfies FactValue[]

@@ -88,7 +88,7 @@ it("words a question without naming who on the staff asked", () => {
       ORG,
       workspace({
         live: 3,
-        assistantName: "Ellie",
+        assistantName: "Reme",
         attention: [question("The Developer")],
       })
     ).line
