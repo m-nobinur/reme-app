@@ -570,3 +570,25 @@ describe("CosCompaction", () => {
     expect(verdict("CosCompaction", CosCompaction, value)).toEqual(REFUSED)
   })
 })
+
+describe("a slow read's step", () => {
+  const STEPPED = {
+    find_domain: samples.FindDomainInput,
+    check_domain: samples.CheckDomainInput,
+    inspect_domain: samples.InspectDomainInput,
+    get_search_performance: samples.GetSearchPerformanceInput,
+    get_indexing: samples.GetIndexingInput,
+  } as const
+
+  it.each(Object.entries(STEPPED))(
+    "%s takes a step of 60 characters and refuses 61",
+    (tool, sample) => {
+      const { input } = COS_TOOLS[tool as keyof typeof STEPPED]
+      const stepped = (step: string) =>
+        input.safeParse({ ...(sample as object), step })
+      expect(stepped("a".repeat(60)).success).toBe(true)
+      expect(stepped("a".repeat(61)).success).toBe(false)
+      expect(input.safeParse(sample).success).toBe(true)
+    }
+  )
+})

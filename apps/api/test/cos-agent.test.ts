@@ -351,15 +351,25 @@ describe("the CoS's instructions", () => {
 })
 
 describe("a tool's schema", () => {
-  it("asks no tool for a step line, which comes from the web's own copy", async () => {
-    const { tools, instructions } = await cosPrefix()
+  const STEPPED = [
+    "find_domain",
+    "check_domain",
+    "inspect_domain",
+    "get_search_performance",
+    "get_indexing",
+  ]
+
+  it("asks only the slow reads for a step line, at most 60 characters", async () => {
+    const { tools } = await cosPrefix()
     for (const { name, input_schema } of tools) {
-      expect(
-        Object.keys((input_schema.properties ?? {}) as object),
-        name
-      ).not.toContain("step")
+      const props = (input_schema.properties ?? {}) as Record<string, unknown>
+      if (STEPPED.includes(name)) {
+        expect(props.step, name).toEqual({ type: "string", maxLength: 60 })
+        expect(input_schema.required ?? [], name).not.toContain("step")
+      } else {
+        expect(Object.keys(props), name).not.toContain("step")
+      }
     }
-    expect(instructions).not.toMatch(/takes an optional step/)
     const change = tools.find((t) => t.name === "request_change")
     // The panel's alone: it posts the owner's words in a conversation.
     expect(Object.keys(change?.input_schema.properties ?? {})).not.toContain(

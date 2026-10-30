@@ -78,7 +78,11 @@ export const ConversationMessage = z.strictObject({
     role: z.enum(["user", "assistant"]),
     parts: z.array(z.looseObject({ type: z.string().min(1) })).min(1),
     metadata: z.strictObject({
-      custom: z.strictObject({ createdAt: Timestamp }),
+      custom: z.strictObject({
+        createdAt: Timestamp,
+        /** The turn hit its limit with work left; its continuation is queued. */
+        partial: z.literal(true).optional(),
+      }),
     }),
   }),
   /**

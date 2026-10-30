@@ -49,7 +49,7 @@ import {
   GetSearchPerformanceOutput,
 } from "./search.ts"
 import { OwnerTask, TaskKind } from "./task.ts"
-import { Text } from "./text.ts"
+import { Text, ToolStep } from "./text.ts"
 
 // The Chief of Staff's tools and its event log (ADR-034). A tool's output is
 // what the model reads, so none carries an org id, a staff id or a signed
@@ -431,7 +431,10 @@ export const RecordReviewOutput = z.discriminatedUnion("outcome", [
 export const DomainBoughtInput = z.strictObject({ name: DomainName })
 
 /** `inspect_domain`'s input: a name the owner says they have, not yet connected. */
-export const InspectDomainInput = z.strictObject({ name: DomainName })
+export const InspectDomainInput = z.strictObject({
+  name: DomainName,
+  step: ToolStep,
+})
 
 /**
  * `inspect_domain`'s output: what the registry and public DNS say about the
@@ -447,7 +450,10 @@ export const InspectDomainOutput = z.discriminatedUnion("outcome", [
 ])
 
 /** `check_domain`'s input; it also wakes the domain's workflow to look now. */
-export const CheckDomainInput = z.strictObject({ name: DomainName })
+export const CheckDomainInput = z.strictObject({
+  name: DomainName,
+  step: ToolStep,
+})
 
 /** `check_domain`'s output: where the domain is, the latest check, and what to tell the owner to do next. */
 export const CheckDomainOutput = z.discriminatedUnion("outcome", [
@@ -509,6 +515,7 @@ export const FindDomainInput = z.strictObject({
     .describe(
       "Words the owner wants in the name. Omit it to start from the business name."
     ),
+  step: ToolStep,
 })
 
 /**

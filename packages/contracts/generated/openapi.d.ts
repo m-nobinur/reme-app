@@ -5344,6 +5344,7 @@ export interface components {
     }
     CheckDomainInput: {
       name: string
+      step?: string
     }
     CheckDomainOutput:
       | {
@@ -5595,6 +5596,8 @@ export interface components {
             custom: {
               /** Format: date-time */
               createdAt: string
+              /** @constant */
+              partial?: true
             }
           }
         }
@@ -5632,6 +5635,8 @@ export interface components {
           custom: {
             /** Format: date-time */
             createdAt: string
+            /** @constant */
+            partial?: true
           }
         }
       }
@@ -10337,6 +10342,7 @@ export interface components {
     FindDomainInput: {
       /** @description Words the owner wants in the name. Omit it to start from the business name. */
       query?: string
+      step?: string
     }
     FindDomainOutput:
       | (
@@ -10437,6 +10443,7 @@ export interface components {
     }
     GetIndexingInput: {
       url?: string
+      step?: string
     }
     GetIndexingOutput:
       | {
@@ -10520,6 +10527,7 @@ export interface components {
       days: 7 | 28 | 90
       /** @enum {string} */
       by: "none" | "query" | "page"
+      step?: string
     }
     GetSearchPerformanceOutput:
       | {
@@ -10728,6 +10736,7 @@ export interface components {
     }
     InspectDomainInput: {
       name: string
+      step?: string
     }
     InspectDomainOutput:
       | {

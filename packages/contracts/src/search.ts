@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { Timestamp } from "./common.ts"
 import { Refused } from "./refused.ts"
-import { Text } from "./text.ts"
+import { Text, ToolStep } from "./text.ts"
 
 // Search Console (the owner connects their own Google account). Nothing here
 // carries a refresh token, an access token, an org id or a Google account id:
@@ -147,6 +147,7 @@ export const ConnectGoogleOutput = z.union([
 export const GetSearchPerformanceInput = z.strictObject({
   days: z.literal([7, 28, 90]),
   by: z.enum(["none", "query", "page"]),
+  step: ToolStep,
 })
 
 /**
@@ -174,6 +175,7 @@ export const GetIndexingInput = z.strictObject({
     .max(2048)
     .regex(/^https:\/\/\S+$/)
     .optional(),
+  step: ToolStep,
 })
 
 /**
