@@ -133,7 +133,12 @@ async function ownerSays(persona, lines, shown) {
       `owner simulator: ${res.status} ${JSON.stringify(body).slice(0, 200)}`
     )
   spent += body.usage?.cost ?? 0
-  return String(body.choices?.[0]?.message?.content ?? "").trim() || "ok"
+  // The api takes at most 1000 characters of an open answer.
+  return (
+    String(body.choices?.[0]?.message?.content ?? "")
+      .trim()
+      .slice(0, 1000) || "ok"
+  )
 }
 
 const counter = (prefix) => {
@@ -301,7 +306,8 @@ async function onboard(persona, spec) {
 
   /** Every line the owner reads, planner or script, checked against the voice. */
   const spoken = (parts) => {
-    const assistantNamed = sim.facts.some((f) => f.key === "assistant.name")
+    const name = factOf(sim.facts, "assistant.name")?.name
+    const assistantNamed = Boolean(name) && name.toLowerCase() !== "reme"
     for (const part of parts) {
       if (part.type !== "text") continue
       heard.push({ text: part.text, named: assistantNamed })
