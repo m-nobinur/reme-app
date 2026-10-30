@@ -537,7 +537,7 @@ async function onboard(persona, spec) {
       !lines().some(
         (l) =>
           l.from === "Assistant" &&
-          /not (yet )?(in|part of) the app|not ready in the app|isn't (in the app|ready|available)|not (ready|available) yet|doesn't exist yet|not built yet/i.test(
+          /not (yet )?(in|part of) the app|not ready in the app|isn't (in the app|ready|available)|not (ready|available) yet|doesn't exist yet|not built yet|on its way|coming soon|\bnot\b[^.!?]{0,40}\byet/i.test(
             l.text
           )
       )
