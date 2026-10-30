@@ -74,7 +74,7 @@ import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
 import { eventSink } from "../sink.ts"
 import { assignmentCost, turnCount } from "../state.ts"
 import { checksOf, finishRevision, GIT, SEAL_PHOTOS } from "../tail.ts"
-import { LEAD_TURN_MS, since } from "../timing.ts"
+import { LEAD_TURN_MS, LEAD_TURNS, since } from "../timing.ts"
 import {
   createWarmer,
   followPhotos,
@@ -299,6 +299,9 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
     // knows what to send again.
     onCancel: (taskId, reason) =>
       tee.emit("developer.task_cancelled", { task_id: taskId, reason }),
+    // The partial marker: a report after this one says what it left undone.
+    turnCap: LEAD_TURNS,
+    onCapped: (turns) => tee.emit("developer.turn_capped", { turns }),
   })
   const budget = createBudgetGuard({
     capUsd: runtime.budget.model_usd_cap,
