@@ -30,6 +30,8 @@ const AXE_OUT = "/tmp/axe.json"
 /** The browser pass over every page, run from /tmp beside axe so the site cannot edit it. */
 const INTERACTION_SCRIPT = "/tmp/interaction.mjs"
 const INTERACTION_OUT = "/tmp/interaction.json"
+/** About 12 s for nine pages; a hung browser is killed well inside the exec's 180 s. */
+const INTERACTION_LIMIT_S = 90
 const INTERACTION = Object.values(
   import.meta.glob("../sandbox/interaction.mjs", {
     query: "?raw",
@@ -504,8 +506,20 @@ export async function runInteraction(
   const started = Date.now()
   await sandbox.writeFile(INTERACTION_SCRIPT, INTERACTION)
   const r = await sandbox.exec(
-    `rm -f ${INTERACTION_OUT}; node ${INTERACTION_SCRIPT} dist ${INTERACTION_OUT}`
+    `rm -f ${INTERACTION_OUT} ${INTERACTION_OUT}.log; timeout -k 5 ${INTERACTION_LIMIT_S} node ${INTERACTION_SCRIPT} dist ${INTERACTION_OUT}`
   )
+  // 124 is timeout's own code, 137 its KILL after the grace period.
+  if (r.exitCode === 124 || r.exitCode === 137) {
+    const log = await sandbox
+      .readFileBuffer(`${INTERACTION_OUT}.log`)
+      .catch(() => null)
+    const last = log
+      ? new TextDecoder().decode(log).trim().split("\n").at(-1)
+      : "none"
+    throw new Error(
+      `interaction check ran past ${INTERACTION_LIMIT_S} s; last stage: ${last}`
+    )
+  }
   const json = await sandbox.readFileBuffer(INTERACTION_OUT).catch(() => null)
   if (!json)
     return { exit_code: r.exitCode || 2, key: null, ms: since(started) }

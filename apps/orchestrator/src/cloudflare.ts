@@ -888,7 +888,16 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                     }),
                 })
               ),
-              axeOf().catch(() => undefined),
+              axeOf().catch((error) => {
+                console.error(
+                  JSON.stringify({
+                    type: "a11y.failed",
+                    assignment_id: ids.assignmentId,
+                    error: String(error),
+                  })
+                )
+                return undefined
+              }),
             ])
             return {
               ...result,
