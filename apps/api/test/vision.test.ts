@@ -7,6 +7,8 @@ import {
 import { MockLanguageModelV4 } from "ai/test"
 import { describe, expect, it } from "vitest"
 import type { Owner } from "../src/changes.ts"
+import { DAILY_CAP_USD } from "../src/cos/turns.ts"
+import { worstCall } from "../src/onboarding-agent.ts"
 import { contrast, paletteRoles, readableStops } from "../src/palette.ts"
 import {
   logoPalettesOf,
@@ -15,6 +17,7 @@ import {
   paletteFromImage,
   paletteOf,
 } from "../src/vision.ts"
+import { ledger } from "./spend-ledger.ts"
 
 /** `#rrggbb` from channels, so no colour literal sits in the code. */
 const hex = (r: number, g: number, b: number) =>
@@ -240,15 +243,21 @@ describe("POST /palettes/from-image", () => {
   }
 
   it("answers a readable palette with its name and stores no picture", async () => {
-    const response = await paletteFromImage(send(PNG), env, owner, {
-      model: model({
-        name: "Harbour blue",
-        paper: hex(245, 247, 250),
-        tint: hex(230, 236, 242),
-        primary: hex(120, 170, 220),
-        ink: hex(15, 27, 42),
-      }),
-    })
+    const response = await paletteFromImage(
+      send(PNG),
+      env,
+      ledger().kit,
+      owner,
+      {
+        model: model({
+          name: "Harbour blue",
+          paper: hex(245, 247, 250),
+          tint: hex(230, 236, 242),
+          primary: hex(120, 170, 220),
+          ink: hex(15, 27, 42),
+        }),
+      }
+    )
     expect(response.status).toBe(200)
     const palette = PaletteFromImage.parse(await response.json())
     expect(palette.name).toBe("Harbour blue")
@@ -263,17 +272,51 @@ describe("POST /palettes/from-image", () => {
     ).toBe(true)
   })
 
+  it("counts the call as spend, at its cost under what it reserved", async () => {
+    const books = ledger()
+    await paletteFromImage(send(PNG), env, books.kit, owner, {
+      model: model({ name: "x" }),
+    })
+    expect(books.rows).toHaveLength(1)
+    expect(books.rows[0]?.type).toBe("cos.background_step")
+    expect(books.rows[0]?.payload).toMatchObject({ job: "vision_palette" })
+    const cost = Number(books.rows[0]?.payload.cost_usd)
+    expect(cost).toBeGreaterThan(0)
+    expect(cost).toBeLessThan(0.01)
+  })
+
+  it("reserves a call at the output cap it sets, the planner's when it sets none", () => {
+    const price = { input: 0, output: 1_000_000, cacheRead: 0 }
+    expect(worstCall(price, 0, 3_000)).toBe(3_000)
+    expect(worstCall(price, 0)).toBe(2_500)
+  })
+
+  it("answers 429 and calls no model once the day's cap has no room", async () => {
+    const books = ledger(DAILY_CAP_USD)
+    const asked = model({ name: "x" })
+    const response = await paletteFromImage(send(PNG), env, books.kit, owner, {
+      model: asked,
+    })
+    expect(response.status).toBe(429)
+    expect(ErrorEnvelope.parse(await response.json()).code).toBe(
+      "vision.daily_cap"
+    )
+    expect(asked.doGenerateCalls).toHaveLength(0)
+    expect(books.rows).toHaveLength(0)
+  })
+
   it("refuses what is not an image, and a palette with no colours in it", async () => {
     const svg = await paletteFromImage(
       send(new TextEncoder().encode("<svg/>")),
       env,
+      ledger().kit,
       owner,
       {
         model: model({}),
       }
     )
     expect(svg.status).toBe(415)
-    const empty = await paletteFromImage(send(PNG), env, owner, {
+    const empty = await paletteFromImage(send(PNG), env, ledger().kit, owner, {
       model: model({ name: "x" }),
     })
     expect(empty.status).toBe(422)

@@ -1713,11 +1713,14 @@ const usageOf = (usage: LanguageModelUsage | undefined): Usage =>
       }
     : NO_USAGE
 
-/** The most a call can bill: its prompt over-counted, and the output cap. */
-export function worstCall(price: Price, promptChars: number): number {
+/** The most a call can bill: its prompt over-counted, and the output cap, the planner's unless the call sets its own. */
+export function worstCall(
+  price: Price,
+  promptChars: number,
+  outputTokens: number = PLANNER.maxOutputTokens
+): number {
   return (
-    (tokensIn(promptChars) * price.input +
-      PLANNER.maxOutputTokens * price.output) /
+    (tokensIn(promptChars) * price.input + outputTokens * price.output) /
     1_000_000
   )
 }
