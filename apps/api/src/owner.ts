@@ -73,7 +73,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|approval-grants|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(check|checkout|registrant|elsewhere|bought))?|google\/(connect|disconnect|result)|time-zone|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review|corrections\/[^/]+))?|approval-grants|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(check|checkout|registrant|elsewhere|bought))?|google\/(connect|disconnect|result)|time-zone|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()

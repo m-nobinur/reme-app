@@ -38,6 +38,7 @@ import { settleCard } from "../src/build-questions.ts"
 import { grantedKinds, offerGrant, saveGrant } from "../src/cos/grants.ts"
 import { remember } from "../src/cos/memory.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
+import { readSkill, saveCorrection, scheduleSkill } from "../src/cos/skills.ts"
 import { wallToUtc } from "../src/cos/time.ts"
 import {
   answerQuestion as answerTool,
@@ -2814,6 +2815,51 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       )
       expect(COS_TOOLS.remember.output.parse(output)).toEqual(output)
       expect(output).toMatchObject({ outcome: "saved" })
+    })
+  })
+
+  describe("skills", () => {
+    it("reads a procedure, saves a quoted correction and schedules the weekly review", async () => {
+      const read = kept(
+        "read_skill",
+        await readSkill(context(me), { name: "quote-reply" })
+      )
+      expect(read).toMatchObject({ outcome: "skill", name: "quote-reply" })
+      const said = "Always show the van photo on the home page."
+      const saved = kept(
+        "save_correction",
+        await saveCorrection(
+          context(me),
+          { staff: "developer", quote: said },
+          "",
+          await turnOf(me, [said])
+        )
+      )
+      expect(saved).toMatchObject({ outcome: "saved" })
+      const on = kept(
+        "schedule_skill",
+        await scheduleSkill(context(me), { name: "weekly-review", on: true })
+      )
+      expect(on).toMatchObject({ outcome: "on" })
+      // Already on, it keeps its time rather than moving it.
+      expect(
+        await scheduleSkill(context(me), { name: "weekly-review", on: true })
+      ).toEqual(on)
+      expect(
+        kept(
+          "schedule_skill",
+          await scheduleSkill(context(me), { name: "quote-reply", on: true })
+        )
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "skill.not_scheduled" },
+      })
+      expect(
+        kept(
+          "schedule_skill",
+          await scheduleSkill(context(me), { name: "weekly-review", on: false })
+        )
+      ).toEqual({ outcome: "off" })
     })
   })
 

@@ -1194,6 +1194,14 @@ export const samples: Record<ContractName, unknown> = {
     ],
     ask_first: false,
     proposals: [],
+    corrections: [
+      {
+        id: CONVERSATION,
+        staff: "developer",
+        text: "Never use stock photos on my site.",
+        at: NOW,
+      },
+    ],
   },
   MemoryProposal: {
     id: CONVERSATION,

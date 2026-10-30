@@ -85,6 +85,9 @@ importers:
       '@workspace/gates':
         specifier: workspace:*
         version: link:../../packages/gates
+      '@workspace/skills':
+        specifier: workspace:*
+        version: link:../../packages/skills
       '@workspace/starter-site':
         specifier: workspace:*
         version: link:../../packages/starter-site
@@ -140,6 +143,9 @@ importers:
       '@workspace/gates':
         specifier: workspace:*
         version: link:../../packages/gates
+      '@workspace/skills':
+        specifier: workspace:*
+        version: link:../../packages/skills
       '@workspace/starter-site':
         specifier: workspace:*
         version: link:../../packages/starter-site
@@ -426,6 +432,22 @@ importers:
       parse5:
         specifier: 8.0.1
         version: 8.0.1
+    devDependencies:
+      '@types/node':
+        specifier: ^24
+        version: 24.19.2
+      typescript:
+        specifier: ^6
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@opentelemetry/api@1.9.0)(@types/node@24.19.2)(happy-dom@21.0.4)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/skills:
+    dependencies:
+      '@workspace/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       '@types/node':
         specifier: ^24

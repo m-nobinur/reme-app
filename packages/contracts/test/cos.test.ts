@@ -56,7 +56,7 @@ function walk(node: unknown, found: Found) {
 
 describe("COS_TOOLS", () => {
   // A tool added or dropped is a decision, so the list is written out.
-  it("has exactly the twenty-two tools, in order", () => {
+  it("has exactly the twenty-five tools, in order", () => {
     const all = [
       "get_workspace",
       "get_facts",
@@ -81,6 +81,9 @@ describe("COS_TOOLS", () => {
       "inspect_domain",
       "domain_bought",
       "offer_grant",
+      "read_skill",
+      "save_correction",
+      "schedule_skill",
     ]
     expect(Object.keys(COS_TOOLS)).toStrictEqual(all)
     expect(CosToolName.options).toStrictEqual(all)

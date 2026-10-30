@@ -409,6 +409,14 @@ export const setGrant = createServerFn({ method: "POST" })
       await source.setGrant(data)
   )
 
+/** One of the owner's corrections for staff removed; "stale" when it was already gone. */
+export const removeCorrection = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ id: id(record(input).id) }))
+  .handler(
+    async ({ data }): Promise<MemoryView | "stale" | null> =>
+      await source.removeCorrection(data.id)
+  )
+
 /** The key a browser subscribes to push with; null where push is off. */
 export const getPushKey = createServerFn({ method: "GET" }).handler(
   async (): Promise<string | null> => {

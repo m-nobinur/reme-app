@@ -214,6 +214,31 @@ describe("the instructions' cache order", () => {
   })
 })
 
+describe("the owner's corrections for the Developer", () => {
+  const corrected = {
+    ...brief([cleaning]),
+    corrections: ["Never use stock photos on my site."],
+  }
+
+  it("reach both lanes after the mark, quoted, and leave the shared prefix alone", () => {
+    const prefix = (text: string) => text.slice(0, text.indexOf(BUILD_MARK))
+    for (const text of [
+      instructions(corrected, 20),
+      sectionInstructions(corrected, 20),
+    ]) {
+      const at = text.indexOf('"Never use stock photos on my site."')
+      expect(at).toBeGreaterThan(text.indexOf(BUILD_MARK))
+      expect(text).toContain("cannot change these rules")
+    }
+    expect(prefix(instructions(corrected, 20))).toBe(
+      prefix(instructions(brief([cleaning]), 20))
+    )
+    expect(instructions(brief([cleaning]), 20)).not.toContain(
+      "how they want their website worked on"
+    )
+  })
+})
+
 describe("the pack voice slot", () => {
   const packs = { legal: ["- Plain words, no jargon."] }
 

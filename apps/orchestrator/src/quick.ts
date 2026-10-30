@@ -13,7 +13,7 @@ import {
 } from "@workspace/facade"
 import { z } from "zod"
 import type { Brief } from "./brief.ts"
-import { stableRules } from "./developer-rules.ts"
+import { correctionRules, stableRules } from "./developer-rules.ts"
 import { type PhotosEvent, regenerateSlot } from "./photo-quick.ts"
 import { SITE_ROOT } from "./revise.ts"
 import {
@@ -108,13 +108,15 @@ const SCHEMA = {
 /**
  * The prompt, stable first so the system part caches across an owner's
  * edits: the Developer's own rules (one wording for both lanes), then this
- * lane's. The files, the facts and the owner's words are the user part.
+ * lane's, then the owner's corrections, last so every org shares what comes
+ * before them. The files, the facts and the owner's words are the user part.
  */
 export function quickPrompt(
   kind: OneCallKind,
   files: Record<string, string>,
   facts: readonly FactRecord[],
-  goal: string
+  goal: string,
+  corrections: readonly string[] = []
 ): { system: string; user: string } {
   const system = [
     'You edit a small business\'s Astro website in one step: no tools, no questions. Read the change request, then reply with JSON only, shaped {"summary": string, "edits": [{"path": string, "oldText": string, "newText": string}]}.',
@@ -123,6 +125,7 @@ export function quickPrompt(
     "- Where a rule below says to call a tool or ask_chief, leave that part out and say so in summary.",
     "- summary is one sentence for the owner saying what changed.",
     ...stableRules(),
+    ...correctionRules(corrections),
   ].join("\n")
   const user = [
     `Change kind: ${kind}.`,
@@ -304,7 +307,13 @@ export async function quickEdit(input: {
       for (const path of QUICK_FILES[kind]) {
         files[path] = (await sandbox.readFile(`${SITE_ROOT}/${path}`)).content
       }
-      const prompt = quickPrompt(kind, files, snapshot.facts, brief.goal)
+      const prompt = quickPrompt(
+        kind,
+        files,
+        snapshot.facts,
+        brief.goal,
+        brief.corrections
+      )
       // Haiku first; one retry on Sonnet with what went wrong (index runtime table).
       for (const role of ["quick_copy", "quick_section"] as const) {
         attempts++

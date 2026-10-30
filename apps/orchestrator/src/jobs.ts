@@ -13,6 +13,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
+import { scheduledBy } from "@workspace/skills"
 import { withKit } from "./domain-flow.ts"
 import { heartbeatJob } from "./heartbeat.ts"
 import { redriveQueued } from "./publish.ts"
@@ -117,10 +118,33 @@ export const wakeJob: Handler = async ({ env, job }) => {
   return undefined
 }
 
+/**
+ * A procedure's schedule (`weekly_report`) is a proactive CoS turn that
+ * follows the procedure, handed to the api as a `cos_wake` naming it.
+ */
+export const skillJob: Handler = async ({ env, job }) => {
+  const skill = scheduledBy(job.kind)
+  if (!skill) return { outcome: "no_change", detail: "no procedure" }
+  try {
+    await env.AFTER_TURN.send({
+      kind: "cos_wake",
+      orgId: job.orgId,
+      jobId: job.id,
+      slot: job.nextRunAt.toISOString(),
+      skill: skill.name,
+    })
+  } catch (error) {
+    // A send that threw may still have been accepted.
+    throw new OutcomeUnknown(failureCode(error))
+  }
+  return undefined
+}
+
 /** One handler per kind, added by the story that adds the kind. */
 export const HANDLERS: Handlers = {
   reminder: reminderJob,
   heartbeat: heartbeatJob,
+  weekly_report: skillJob,
   cos_continue: continueJob,
   cos_wake: wakeJob,
 }

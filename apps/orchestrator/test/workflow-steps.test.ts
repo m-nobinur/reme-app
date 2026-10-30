@@ -120,6 +120,7 @@ vi.mock("@workspace/db", () => ({
   },
   failureCode: () => "unknown",
   takeWake: () => null,
+  readCorrections: async () => ({ lines: [] }),
   toFactRecord: (row: unknown) => ({
     ...(row as object),
     key: "business.phone",

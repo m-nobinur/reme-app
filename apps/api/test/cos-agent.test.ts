@@ -31,6 +31,7 @@ import {
   memberships,
   postAssistantMessage,
   postOwnerEmail,
+  readCorrections,
   reminders,
   serverMessageId,
   sql,
@@ -1566,7 +1567,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await shownAsStored(me, id, done.chunks)
   })
 
-  it("gives Ask mode the read tools, remember and put_off", async () => {
+  it("gives Ask mode the read tools, remember, save_correction and put_off", async () => {
     const id = await conversation(me)
     const { model, sent } = scripted(said("Here is what I can see."))
     await turn(me, typed(id, "What can you do?", "ask"), { model })
@@ -1584,8 +1585,116 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "get_workspace",
       "inspect_domain",
       "put_off",
+      "read_skill",
       "remember",
+      "save_correction",
     ])
+  })
+
+  describe("skills and corrections", () => {
+    const outputsOf = async (id: string, tool: string) =>
+      (await logOf(id))
+        .filter((e) => e.type === "cos.tool_result" && e.payload.tool === tool)
+        .map((e) => e.payload.output)
+
+    it("given a review, lists review-reply in read_skill and reads its body", async () => {
+      const id = await conversation(me)
+      const { model, sent } = scripted(
+        calls({
+          id: "call_skill_1",
+          tool: "read_skill",
+          input: { name: "review-reply" },
+        }),
+        said(
+          "Here's a draft: Thanks so much, Priya, we're glad the oven shines."
+        )
+      )
+      await turn(
+        me,
+        typed(
+          id,
+          'A customer left this review: "Spotless oven, thanks!" Priya. Draft me a reply?'
+        ),
+        { model }
+      )
+      const tools = (sent[0]?.tools ?? []) as {
+        name: string
+        description?: string
+      }[]
+      expect(tools.find((t) => t.name === "read_skill")?.description).toContain(
+        "review-reply: Draft the owner's public reply to a customer review"
+      )
+      expect(await outputsOf(id, "read_skill")).toEqual([
+        expect.objectContaining({ outcome: "skill", name: "review-reply" }),
+      ])
+      expect(wire(sent.slice(1))).toContain("Review reply: a draft")
+    })
+
+    it("saves a Developer correction only in the owner's whole sentence, for the Developer and never the CoS's prompt", async () => {
+      const id = await conversation(me)
+      const sentence = "Never put a carousel on my home page."
+      const saving = (quote: string) =>
+        scripted(
+          calls({
+            id: `call_${crypto.randomUUID().slice(0, 8)}`,
+            tool: "save_correction",
+            input: { staff: "developer", quote },
+          }),
+          said("Noted for the next build.")
+        ).model
+      await turn(me, typed(id, `Looks good. ${sentence}`, "ask"), {
+        model: saving("No sliders on the homepage."),
+      })
+      await turn(me, typed(id, "Please note it properly.", "ask"), {
+        model: saving(sentence),
+      })
+      expect(
+        (await outputsOf(id, "save_correction")).map((o) => o.outcome)
+      ).toEqual(["refused", "saved"])
+      expect((await outputsOf(id, "save_correction"))[0]).toMatchObject({
+        error: { code: "correction.not_quoted" },
+      })
+      const kept = await kit.withOrg({ orgId: me.orgId }, readCorrections)
+      expect(kept.lines).toEqual([
+        expect.objectContaining({ staff: "developer", text: sentence }),
+      ])
+      // A new conversation's prompt holds no trace of it: not the prefix,
+      // the facts or the context.
+      const next = scripted(said("Hello."))
+      await turn(me, typed(await conversation(me), "Hi.", "ask"), {
+        model: next.model,
+      })
+      expect(wire(next.sent)).not.toContain("carousel")
+    })
+
+    it("turns the weekly review on in the owner's words and off again", async () => {
+      const id = await conversation(me)
+      const scheduling = (start: boolean) =>
+        scripted(
+          calls({
+            id: `call_${crypto.randomUUID().slice(0, 8)}`,
+            tool: "schedule_skill",
+            input: { name: "weekly-review", on: start },
+          }),
+          said(start ? "Done, every Monday morning." : "Stopped.")
+        ).model
+      const weekly = () =>
+        admin<{ rule: string; next_run_at: Date }[]>`
+          select rule, next_run_at from scheduled_jobs
+          where org_id = ${me.orgId} and kind = 'weekly_report'`
+      await turn(me, typed(id, "Send me a weekly round-up please."), {
+        model: scheduling(true),
+      })
+      const [on] = await outputsOf(id, "schedule_skill")
+      expect(on).toMatchObject({ outcome: "on" })
+      expect(await weekly()).toEqual([
+        { rule: "0 8 * * 1", next_run_at: new Date(on.next_run_at) },
+      ])
+      await turn(me, typed(id, "Stop the weekly round-up."), {
+        model: scheduling(false),
+      })
+      expect(await weekly()).toEqual([])
+    })
   })
 
   it("asks the owner before a change and an answer that set a phone, and before a reminder they did not ask for", async () => {

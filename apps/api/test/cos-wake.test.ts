@@ -14,6 +14,7 @@ import { DEFAULT_MODEL, WAKE_LINE } from "../src/cos/agent.ts"
 import { SessionBusy } from "../src/cos/turns.ts"
 import {
   isQuiet,
+  SKILL_RETRY_MS,
   WAKE_POSTS_PER_DAY,
   type WakeJob,
   wakeTurn,
@@ -255,6 +256,53 @@ describe.skipIf(!url)("a proactive turn", () => {
     await admin`update conversation_messages
       set created_at = now() - interval '3 minutes' where id = ${hi}`
     expect(await wake(replying("Hello.").model)).toBe("ran")
+  }, 30_000)
+
+  it("tries a scheduled procedure again soon when the owner is typing, not a week on", async () => {
+    await clearPosts()
+    const id = await chatWithResult()
+    const hi = crypto.randomUUID()
+    await admin`
+      insert into conversation_messages (conversation_id, id, org_id, format, content)
+      values (${id}, ${hi}, ${me.orgId}, 'ai-sdk/v6',
+        ${admin.json({ role: "user", parts: [{ type: "text", text: "hi" }] })})`
+    const slot = new Date().toISOString()
+    const [job] = await admin<{ id: string }[]>`
+      insert into scheduled_jobs (org_id, kind, rule, next_run_at)
+      values (${me.orgId}, 'weekly_report', '0 8 * * 1', ${slot})
+      returning id`
+    const jobId = job?.id as string
+    try {
+      await admin`insert into job_runs (job_id, org_id, run_at, outcome, detail)
+        values (${jobId}, ${me.orgId}, ${slot}, 'done', 'handed')`
+      const before = Date.now()
+      const typing = replying("Hello.")
+      expect(
+        await wakeTurn(
+          bindings(),
+          kit,
+          {
+            kind: "cos_wake",
+            orgId: me.orgId,
+            jobId,
+            slot,
+            skill: "weekly-review",
+          },
+          { model: typing.model }
+        )
+      ).toBe("owner_active")
+      expect(typing.sent).toEqual([])
+      const [moved] = await admin<{ next_run_at: Date }[]>`
+        select next_run_at from scheduled_jobs where id = ${jobId}`
+      const wait = (moved?.next_run_at.getTime() ?? 0) - before
+      expect(wait).toBeGreaterThanOrEqual(SKILL_RETRY_MS)
+      expect(wait).toBeLessThan(SKILL_RETRY_MS + 60_000)
+    } finally {
+      await admin`delete from scheduled_jobs where id = ${jobId}`
+      // The owner is away again for the cases after.
+      await admin`update conversation_messages
+        set created_at = now() - interval '3 minutes' where id = ${hi}`
+    }
   }, 30_000)
 
   it("takes a heartbeat's one unprompted message only when it posts, and emails when asked", async () => {
