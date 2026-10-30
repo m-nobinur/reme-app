@@ -9,7 +9,7 @@ const hits = (text: string, assistantNamed = false) => {
 describe("voiceProblems", () => {
   // Before (seen or likely) and after, from the plan's VO3 table.
   const BEFORE = [
-    "Ellie, reporting for duty! Let's make our partnership official.",
+    "Reme, reporting for duty! Let's make our partnership official.",
     "Offering eco-friendly products will certainly give clients peace of mind!",
     "Build ead99cb0 is ready for your review.",
     "Your site is live — spark.mnobinur.dev",
@@ -26,7 +26,7 @@ describe("voiceProblems", () => {
     "Got it, chasing unpaid jobs and handling quote requests will take a lot off your hands.",
   ]
   const AFTER = [
-    "I'm Ellie. Now a few questions about the website.",
+    "I'm Reme. Now a few questions about the website.",
     "Eco-friendly products, noted.",
     "Your changes are ready. Have a look in the panel.",
     "Your website is live at spark.mnobinur.dev.",

@@ -51,7 +51,7 @@ const title = () => container.querySelector("h3")?.textContent
 const caret = () => container.querySelector("button[aria-expanded]")
 
 it("ticks every step, holds, then folds to one line with no caret", async () => {
-  await show({ line: "One more, then Ellie starts on your website" })
+  await show({ line: "One more, then Reme starts on your website" })
   expect(caret()?.getAttribute("aria-expanded")).toBe("true")
   expect(container.textContent).toContain("What you do")
   expect(container.textContent).not.toContain("·")

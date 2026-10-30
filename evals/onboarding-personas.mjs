@@ -494,13 +494,13 @@ export const SKIPS_EVERYTHING = {
 export const CORRECTS_TWICE = {
   id: "corrects-twice",
   signIn: { orgName: "Fresh Start Cleaning", ownerName: "Adaeze Obi" },
-  sheet: `You are Adaeze, you run Fresh Start Cleaning in Bristol, UK, with 4 cleaners. Services: regular home cleans, deep cleans, end of tenancy cleans, office cleans. Customers: families, landlords and small offices. A job: a short call, a quote, same team each visit. Area: Bristol and Bath. Phone 0117 496 0321. Email hello@freshstart.invalid. No slogan. Assistant: Ellie, she/her, friendly. Call you Adaeze. To quote you need the number of bedrooms, how often, and whether it is a home or an office. What sets you apart: insured and vetted cleaners, and eco-friendly products.`,
+  sheet: `You are Adaeze, you run Fresh Start Cleaning in Bristol, UK, with 4 cleaners. Services: regular home cleans, deep cleans, end of tenancy cleans, office cleans. Customers: families, landlords and small offices. A job: a short call, a quote, same team each visit. Area: Bristol and Bath. Phone 0117 496 0321. Email hello@freshstart.invalid. No slogan. Assistant: Reme, she/her, friendly. Call you Adaeze. To quote you need the number of bedrooms, how often, and whether it is a home or an office. What sets you apart: insured and vetted cleaners, and eco-friendly products.`,
   style: "Warm and a little scattered; changes her mind.",
   truth: {
     name: /fresh start/i,
     phone: "+441174960321",
     email: "hello@freshstart.invalid",
-    assistant: /ellie/i,
+    assistant: /reme/i,
   },
   turns: {
     5: "Sorry, that email is wrong. Please use bookings@freshstart.invalid instead.",

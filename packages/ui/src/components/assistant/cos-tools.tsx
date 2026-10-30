@@ -347,7 +347,7 @@ const OfferGrant: ToolCallMessagePartComponent = (props) => (
 
 /**
  * Tools with no card and no working line: what was remembered is a chip in
- * the same turn, and Ellie's own words say an offer is put off.
+ * the same turn, and Reme's own words say an offer is put off.
  */
 export const COS_QUIET: Record<string, ToolCallMessagePartComponent> = {
   remember: Remembered,

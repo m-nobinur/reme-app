@@ -1277,7 +1277,7 @@ export async function boughtElsewhere(
 
 /**
  * The hold's daily look: whether the registry shows the name, or the owner
- * has a claim already. Registered and unclaimed, Ellie offers to connect it
+ * has a claim already. Registered and unclaimed, Reme offers to connect it
  * once; a look the owner's done woke finds the claim and says nothing.
  */
 export async function lookElsewhere(

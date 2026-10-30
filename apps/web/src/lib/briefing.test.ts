@@ -88,11 +88,11 @@ it("says the assistant asks, never who on the staff did", () => {
       ORG,
       workspace({
         live: 3,
-        assistantName: "Ellie",
+        assistantName: "Reme",
         attention: [question("The Developer")],
       })
     ).line
-  ).toBe("Your website is live. Ellie has a question for you.")
+  ).toBe("Your website is live. Reme has a question for you.")
   expect(prompts(briefing)).toEqual([
     "What do you need from me?",
     "What's on my website now?",

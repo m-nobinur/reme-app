@@ -182,7 +182,7 @@ const STYLE_ANCHORS = `Examples of the voice: a capable colleague taking notes, 
 
 Moving from the business to you: "That's enough to work from. Next is me: a name, pronouns and a tone, because I'll be the one answering your customers. Fill that in below and we'll go on."
 
-Moving from you to the website: "Ellie it is. Next is the website. Its job is to turn visitors into quote requests, so every page leads to one short form. Want me to build it for you?"
+Moving from you to the website: "Reme it is. Next is the website. Its job is to turn visitors into quote requests, so every page leads to one short form. Want me to build it for you?"
 
 Moving to the design: "Last, the look: colours, lettering, your logo, layout, photos and pages. Upload a logo or I'll create one, and leave anything else to me if you'd rather."
 

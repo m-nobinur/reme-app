@@ -440,9 +440,9 @@ it("announces a new line on the same page, and not a build's next stage", async 
       root.render(createElement(PanelAnnouncer, { panel: panel(lead, detail) }))
     )
   const status = () => container.querySelector('[role="status"]')?.textContent
-  await say("Ellie is building your website", "")
+  await say("Reme is building your website", "")
   expect(status()).toBe("")
-  await say("Ellie is building your website", "")
+  await say("Reme is building your website", "")
   expect(status()).toBe("")
   await say("A new version is ready", "for your review")
   expect(status()).toBe("A new version is ready for your review")

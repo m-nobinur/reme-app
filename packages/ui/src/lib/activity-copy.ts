@@ -112,7 +112,7 @@ const named = (assistant?: string | null) => {
   return name || null
 }
 
-/** "Ellie is building your website", or "Building your website" when there is no name. */
+/** "Reme is building your website", or "Building your website" when there is no name. */
 const is = (assistant: string | null, rest: string) =>
   assistant ? `${assistant} is ${rest}` : cap(rest)
 
@@ -1434,7 +1434,7 @@ const payBy = (extras: LineExtras) => {
   return by ? `Pay by ${by} to keep the name` : "Pay soon to keep the name"
 }
 
-/** The panel pill: "Ellie is building your website", or "Ellie is waiting for your payment". Null when nothing runs or waits. */
+/** The panel pill: "Reme is building your website", or "Reme is waiting for your payment". Null when nothing runs or waits. */
 export function pillLine(segment: ActivitySegment, ctx: CopyContext) {
   const assistant = named(ctx.assistant)
   if (segment.state === "failed") {
