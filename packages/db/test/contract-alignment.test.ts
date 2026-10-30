@@ -10,6 +10,7 @@ import {
   EventEnvelope,
   FactProvenance,
   FactRecord,
+  GrantKind,
   JobKind,
   JobRun,
   Org,
@@ -56,6 +57,7 @@ import {
   domainOrigin,
   domainState,
   factSource,
+  grantKind,
   jobKind,
   jobOutcome,
   proactivity,
@@ -160,6 +162,10 @@ describe("scheduler enums match the contract", () => {
   it("job kinds and outcomes", () => {
     expect(jobKind.enumValues).toEqual(JobKind.options)
     expect(jobOutcome.enumValues).toEqual(JobRun.shape.outcome.options)
+  })
+
+  it("grant kinds", () => {
+    expect(grantKind.enumValues).toEqual(GrantKind.options)
   })
 
   it("delivery channels and states", () => {

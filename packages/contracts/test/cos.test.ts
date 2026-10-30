@@ -80,6 +80,7 @@ describe("COS_TOOLS", () => {
       "put_off",
       "inspect_domain",
       "domain_bought",
+      "offer_grant",
     ]
     expect(Object.keys(COS_TOOLS)).toStrictEqual(all)
     expect(CosToolName.options).toStrictEqual(all)

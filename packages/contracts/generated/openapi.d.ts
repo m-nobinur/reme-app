@@ -934,6 +934,19 @@ export interface components {
       /** Format: date-time */
       decided_at: string
     }
+    ApprovalGrantSwitch: {
+      /** @enum {string} */
+      kind: "create_reminder" | "record_review" | "connect_domain"
+      on: boolean
+    }
+    ApprovalGrants: {
+      grants: {
+        /** @enum {string} */
+        kind: "create_reminder" | "record_review" | "connect_domain"
+        on: boolean
+        granted_at: string | null
+      }[]
+    }
     ApprovalRequest: {
       /** Format: uuid */
       approval_id: string
@@ -5333,6 +5346,8 @@ export interface components {
                   kind: "approval"
                   approval_id: string
                   approved: boolean
+                  /** @constant */
+                  always?: true
                   reason?: string
                 }
             )[]
@@ -5699,6 +5714,7 @@ export interface components {
         | "put_off"
         | "inspect_domain"
         | "domain_bought"
+        | "offer_grant"
       )[]
       text: string
       reserved_usd: number
@@ -6162,6 +6178,7 @@ export interface components {
           | "put_off"
           | "inspect_domain"
           | "domain_bought"
+          | "offer_grant"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -8676,6 +8693,37 @@ export interface components {
                 name: string
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "offer_grant"
+          output:
+            | {
+                /** @constant */
+                outcome: "granted"
+                /** @enum {string} */
+                kind: "create_reminder" | "record_review" | "connect_domain"
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosToolStarted: {
       tool_call_id: string
       approval_id: string
@@ -8721,6 +8769,7 @@ export interface components {
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
+            | "offer_grant"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8763,6 +8812,7 @@ export interface components {
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
+            | "offer_grant"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8803,6 +8853,7 @@ export interface components {
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
+            | "offer_grant"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8843,6 +8894,7 @@ export interface components {
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
+            | "offer_grant"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8883,6 +8935,7 @@ export interface components {
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
+            | "offer_grant"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8923,6 +8976,7 @@ export interface components {
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
+            | "offer_grant"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -10925,6 +10979,35 @@ export interface components {
       /** @enum {string} */
       rating: "up" | "down"
     }
+    OfferGrantInput: {
+      /** @enum {string} */
+      kind: "create_reminder" | "record_review" | "connect_domain"
+    }
+    OfferGrantOutput:
+      | {
+          /** @constant */
+          outcome: "granted"
+          /** @enum {string} */
+          kind: "create_reminder" | "record_review" | "connect_domain"
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     OnboardingStatus: {
       on:
         | {

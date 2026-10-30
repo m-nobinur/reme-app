@@ -1821,3 +1821,45 @@ export const taskFollowups = pgTable(
     orgIsolation("task_followups"),
   ]
 )
+
+/** `GrantKind`. */
+export const grantKind = pgEnum("grant_kind", [
+  "create_reminder",
+  "record_review",
+  "connect_domain",
+])
+
+/**
+ * A kind of action the owner lets the Chief of Staff do with no card. Written
+ * only by the owner's tap on a card or their switch in settings, never by a
+ * tool, so nothing the model reads can raise what it may do alone. Taking a
+ * grant back deletes its row. `source_approval` is the card's approval id,
+ * null for a switch.
+ */
+export const approvalGrants = pgTable(
+  "approval_grants",
+  {
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    kind: grantKind("kind").notNull(),
+    grantedByStaffId: uuid("granted_by_staff_id").notNull(),
+    grantedAt: timestamp("granted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    sourceApproval: text("source_approval"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.kind] }),
+    foreignKey({
+      name: "approval_grants_granted_by_fk",
+      columns: [t.grantedByStaffId, t.orgId],
+      foreignColumns: [staff.id, staff.orgId],
+    }),
+    check(
+      "approval_grants_source_approval_length",
+      sql`char_length(source_approval) between 1 and 255`
+    ),
+    orgIsolation("approval_grants"),
+  ]
+)

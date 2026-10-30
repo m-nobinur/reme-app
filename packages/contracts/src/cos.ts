@@ -600,6 +600,47 @@ export const PutOffOutput = z.discriminatedUnion("outcome", [
 ])
 
 /**
+ * The kinds of action the owner may let the Chief of Staff do with no card,
+ * named by the tool that does each. Paying money and a new phone or email on
+ * the website are never one of them.
+ */
+export const GrantKind = z.enum([
+  "create_reminder",
+  "record_review",
+  "connect_domain",
+])
+
+/** `offer_grant`'s input: the kind the owner may let run with no card from now on. */
+export const OfferGrantInput = z.strictObject({ kind: GrantKind })
+
+/**
+ * `offer_grant`'s output once the owner tapped its card: the grant the tap
+ * saved. A yes that saved none, as a typed one, is refused.
+ */
+export const OfferGrantOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({ outcome: z.literal("granted"), kind: GrantKind }),
+  Refused,
+])
+
+/** One kind on the owner's "Done without asking" list. `granted_at` is null while it still asks. */
+export const ApprovalGrant = z.strictObject({
+  kind: GrantKind,
+  on: z.boolean(),
+  granted_at: Timestamp.nullable(),
+})
+
+/** `GET /approval-grants`: every grantable kind, in `GrantKind` order. */
+export const ApprovalGrants = z.strictObject({
+  grants: z.array(ApprovalGrant).max(GrantKind.options.length),
+})
+
+/** `POST /approval-grants`: the owner's switch for one kind, read on the next action. */
+export const ApprovalGrantSwitch = z.strictObject({
+  kind: GrantKind,
+  on: z.boolean(),
+})
+
+/**
  * The CoS's tools, by name. Every input is an object at its root, which
  * provider tool APIs require. The reads run in both modes; each act tool
  * waits for the owner's approval.
@@ -630,6 +671,7 @@ export const COS_TOOLS = {
   put_off: { input: PutOffInput, output: PutOffOutput },
   inspect_domain: { input: InspectDomainInput, output: InspectDomainOutput },
   domain_bought: { input: DomainBoughtInput, output: BoughtElsewhereOutput },
+  offer_grant: { input: OfferGrantInput, output: OfferGrantOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -845,6 +887,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     tool: z.literal("domain_bought"),
     output: COS_TOOLS.domain_bought.output,
   }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("offer_grant"),
+    output: COS_TOOLS.offer_grant.output,
+  }),
 ])
 
 /** The `cos.step` payload: a step's response messages as the SDK holds them. Model-written, so `inferred`. */
@@ -970,6 +1017,12 @@ export type InspectDomainInput = z.infer<typeof InspectDomainInput>
 export type InspectDomainOutput = z.infer<typeof InspectDomainOutput>
 export type PutOffInput = z.infer<typeof PutOffInput>
 export type PutOffOutput = z.infer<typeof PutOffOutput>
+export type GrantKind = z.infer<typeof GrantKind>
+export type OfferGrantInput = z.infer<typeof OfferGrantInput>
+export type OfferGrantOutput = z.infer<typeof OfferGrantOutput>
+export type ApprovalGrant = z.infer<typeof ApprovalGrant>
+export type ApprovalGrants = z.infer<typeof ApprovalGrants>
+export type ApprovalGrantSwitch = z.infer<typeof ApprovalGrantSwitch>
 export type FindDomainInput = z.infer<typeof FindDomainInput>
 export type FindDomainOutput = z.infer<typeof FindDomainOutput>
 export type BoughtElsewhereOutput = z.infer<typeof BoughtElsewhereOutput>

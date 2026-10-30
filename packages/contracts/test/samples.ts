@@ -1229,6 +1229,16 @@ export const samples: Record<ContractName, unknown> = {
     dns_host: { name: "GoDaddy", settings_url: "https://dcc.godaddy.com/" },
     in_use: false,
   },
+  OfferGrantInput: { kind: "record_review" },
+  OfferGrantOutput: { outcome: "granted", kind: "record_review" },
+  ApprovalGrants: {
+    grants: [
+      { kind: "create_reminder", on: false, granted_at: null },
+      { kind: "record_review", on: true, granted_at: NOW },
+      { kind: "connect_domain", on: false, granted_at: null },
+    ],
+  },
+  ApprovalGrantSwitch: { kind: "record_review", on: false },
   PutOffInput: { kind: "google", days: 7 },
   PutOffOutput: { outcome: "put_off", until: "2026-11-03T08:00:00.000Z" },
   RememberInput: {
