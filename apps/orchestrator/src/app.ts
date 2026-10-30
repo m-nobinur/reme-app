@@ -97,7 +97,7 @@ import { pickLane } from "./quick.ts"
 import { recordAnswer } from "./relay.ts"
 import { holdDraft, publishedSource } from "./revise.ts"
 import { endSandbox, endSite, probe } from "./sandbox.ts"
-import { REDRIVE_DELAYS_S, type RedriveMessage } from "./schedule.ts"
+import { passWake, REDRIVE_DELAYS_S, type RedriveMessage } from "./schedule.ts"
 import { connectGoogle } from "./search.ts"
 import { liveInspect, livePerformance } from "./search-read.ts"
 import { disconnectSearch } from "./search-sync.ts"
@@ -269,6 +269,7 @@ const openKit: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
   c.set("kit", kit)
   try {
     await next()
+    await passWake(c.env)
   } finally {
     // Outside a Worker (the route test) there is no execution context.
     let ctx: { waitUntil: (promise: Promise<unknown>) => void } | null = null

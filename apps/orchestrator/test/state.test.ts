@@ -5,12 +5,23 @@ import {
   conversations,
   eq,
   events,
+  scheduledJobs,
   sql,
   staff,
+  takeWake,
+  WAKE_WINDOW_MS,
 } from "@workspace/db"
 import fc from "fast-check"
 import { ulid } from "ulid"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import {
   advance,
   assignmentCost,
@@ -631,5 +642,61 @@ live("the handoff result", () => {
     expect(await cancel(kit, later)).toBe("cancelled")
     expect(await resultOf(later)).toMatchObject({ outcome: "failed" })
     expect(await logged(ids.orgId, session)).toEqual([])
+  })
+
+  describe("waking the CoS", () => {
+    afterEach(() => vi.useRealTimers())
+
+    const wakes = (orgId: string) =>
+      kit.withOrg({ orgId }, (db) =>
+        db
+          .select({
+            at: scheduledJobs.nextRunAt,
+            paused: scheduledJobs.pausedAt,
+          })
+          .from(scheduledJobs)
+          .where(eq(scheduledJobs.kind, "cos_wake"))
+      )
+
+    it("gathers two results 10 seconds apart into one wake a minute after the first", async () => {
+      const first = await newAssignment(await freshOrg())
+      const second = await newAssignment(first.orgId)
+      await chat(first.orgId)
+      const start = new Date()
+      vi.useFakeTimers({ now: start, toFake: ["Date"] })
+      takeWake()
+      await cancel(kit, first)
+      vi.setSystemTime(start.getTime() + 10_000)
+      await cancel(kit, second)
+      const due = new Date(start.getTime() + WAKE_WINDOW_MS)
+      expect(await wakes(first.orgId)).toEqual([{ at: due, paused: null }])
+      expect(takeWake()).toEqual(due)
+      expect(takeWake()).toBeNull()
+
+      // Once its turn has run the row is paused, and the next result opens a new window.
+      await kit.withOrg({ orgId: first.orgId }, (db) =>
+        db
+          .update(scheduledJobs)
+          .set({ pausedAt: new Date() })
+          .where(eq(scheduledJobs.kind, "cos_wake"))
+      )
+      vi.setSystemTime(start.getTime() + 120_000)
+      await cancel(kit, await newAssignment(first.orgId))
+      expect(await wakes(first.orgId)).toEqual([
+        { at: new Date(start.getTime() + 180_000), paused: null },
+      ])
+    })
+
+    it("does not wake for a build the owner replaced", async () => {
+      const ids = await newAssignment(await freshOrg())
+      const session = await chat(ids.orgId)
+      await cancel(kit, ids, "superseded")
+      expect(await logged(ids.orgId, session)).toEqual([
+        expect.objectContaining({
+          payload: expect.objectContaining({ wake: false }),
+        }),
+      ])
+      expect(await wakes(ids.orgId)).toEqual([])
+    })
   })
 })

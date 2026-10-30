@@ -144,6 +144,12 @@ type StreamTurn = {
   reading: Promise<MessageReading | null> | null
   rows: Rows
   waitUntil: (promise: Promise<unknown>) => void
+  /**
+   * For a turn the owner did not start, which only reads: its reply's text
+   * goes here in the closing transaction instead of being stored as the
+   * turn's message, and it is never continued.
+   */
+  post?: (db: OrgScopedDb, text: string) => Promise<void>
 }
 
 /** A transient status chunk: the waiting line, never stored. */
@@ -200,14 +206,16 @@ export async function streamTurn(
     settleEnd = resolve
   })
   const chunks = await createAgentUIStream({
-    agent: cosAgent(run, input.model, input.mode),
+    agent: cosAgent(run, input.model, input.mode, input.post !== undefined),
     uiMessages: input.uiMessages,
     abortSignal: run.abort.signal,
     timeout: { totalMs: LIMITS.totalMs, firstChunkMs: LIMITS.firstChunkMs },
     experimental_transform: voiced(run.turn.turnId),
     // A history ending on an assistant message is continued in that message,
     // which a continuation must not do: the owner's chat follows a new one.
-    originalMessages: (input.attempt ? [] : input.uiMessages) as never,
+    originalMessages: (input.attempt || input.post
+      ? []
+      : input.uiMessages) as never,
     generateMessageId: input.newMessageId,
     onError: (error) => {
       // The SDK reports each error chunk a second time, as an Error holding
@@ -312,6 +320,23 @@ export async function streamTurn(
     const partial =
       outcome === "stopped" ||
       (outcome === "answered" && run.state.steps >= LIMITS.steps)
+    const { post } = input
+    if (post) {
+      // The last word only: a reply a gate ran again streams after the first.
+      const text = parts
+        .flatMap((p) => (p.type === "text" && p.text.trim() ? [p.text] : []))
+        .at(-1)
+      await closeTurn(
+        run,
+        ranTurn(run, input.modelId, outcome, firstChunkMs),
+        null,
+        input.rows,
+        outcome === "answered"
+          ? (db) => post(db, text?.trim() ?? "")
+          : undefined
+      )
+      return true
+    }
     const attempt = (input.attempt ?? 0) + 1
     const queue = partial && attempt <= MAX_CONTINUATIONS
     // Only what a stored message holds: the SDK's may carry `metadata`.
@@ -542,7 +567,9 @@ export async function closeTurn(
   run: AgentTurn,
   payload: CosTurn,
   message: UIMessage | null,
-  rows: Rows
+  rows: Rows,
+  /** Whatever else commits with the close. */
+  also?: (db: OrgScopedDb) => Promise<void>
 ): Promise<void> {
   await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) => {
     await writeAsTurn(db, run.turn, [
@@ -558,5 +585,6 @@ export async function closeTurn(
       { type: "cos.turn" as const, payload },
     ])
     if (message) await rows(db, message)
+    await also?.(db)
   })
 }

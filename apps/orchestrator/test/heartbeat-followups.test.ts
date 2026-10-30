@@ -12,6 +12,7 @@ import {
   setStep,
   staff,
   taskFollowups,
+  unpromptedKey,
 } from "@workspace/db"
 import { afterAll, describe, expect, it, onTestFinished, vi } from "vitest"
 import { heartbeatWith, type Models, SOURCES } from "../src/heartbeat.ts"
@@ -44,17 +45,50 @@ describe.skipIf(!url)("heartbeat follow-ups over a week", () => {
   afterAll(() => kit.close())
 
   it("never repeats a fingerprint, never speaks mid-turn, and a dismissed one never returns", async () => {
+    const orgId = await freshOrg(kit)
+    const now = { at: START }
+    let turnDuringGate = false
+    let looked: unknown[] = []
+    const delivered: { hour: number; waiting: string[] }[] = []
+    let hour = 0
+    // The proactive turn posts, which takes the day's one unprompted message
+    // and records the follow-ups it asked about.
+    const handOver = async (message: { beat: { follow_ups: string[] } }) => {
+      delivered.push({
+        hour,
+        waiting: (looked as { waiting_for?: string }[]).flatMap((item) =>
+          item.waiting_for ? [item.waiting_for] : []
+        ),
+      })
+      const day = now.at.toLocaleDateString("en-CA", {
+        timeZone: "Europe/London",
+      })
+      await kit.withOrg({ orgId }, async (db) => {
+        await db.insert(deliveries).values({
+          orgId,
+          key: unpromptedKey(orgId, day),
+          channel: "in_app",
+          state: "sent",
+        })
+        const asked = message.beat.follow_ups
+        if (asked.length > 0)
+          await db.insert(taskFollowups).values(
+            asked.map((fingerprint) => ({
+              orgId,
+              fingerprint,
+              sentAt: now.at,
+            }))
+          )
+      })
+    }
     const env = {
       SCHEDULE: {
         get: async () => ({ next: null, scanned: 0 }),
         put: async () => undefined,
       },
       DELIVERIES: { send: vi.fn(), sendBatch: vi.fn() },
+      AFTER_TURN: { send: handOver },
     } as unknown as Env
-    const orgId = await freshOrg(kit)
-    const now = { at: START }
-    let turnDuringWrite = false
-    let written: unknown[] = []
     const cosContext = (when: Date) =>
       kit.withOrg({ orgId }, (db) =>
         db.insert(events).values({
@@ -67,12 +101,11 @@ describe.skipIf(!url)("heartbeat follow-ups over a week", () => {
         })
       )
     const models: Models = {
-      gate: async () => ({ probability: 1, spent: SPENT }),
-      write: async (_system, data) => {
-        written = (data as { items: unknown[] }).items
-        // The owner opens the chat while the writer is still drafting.
-        if (turnDuringWrite) await cosContext(now.at)
-        return { text: "Your change is still waiting on you.", spent: SPENT }
+      gate: async (state) => {
+        looked = (state as { items: unknown[] }).items
+        // The owner opens the chat while Jev is still looking.
+        if (turnDuringGate) await cosContext(now.at)
+        return { probability: 1, spent: SPENT }
       },
     }
     const handlers = {
@@ -134,14 +167,13 @@ describe.skipIf(!url)("heartbeat follow-ups over a week", () => {
     })
 
     // Wednesday 08:00 to 10:00 in London are inside a turn, and at 11:00 a
-    // turn starts while the writer drafts.
+    // turn starts while Jev looks.
     const inTurn = new Set([31, 32, 33])
-    const midWrite = 34
-    const delivered: { hour: number; waiting: string[] }[] = []
-    for (let hour = 0; hour < 7 * 24; hour++) {
+    const midGate = 34
+    for (hour = 0; hour < 7 * 24; hour++) {
       now.at = at(hour)
-      written = []
-      turnDuringWrite = hour === midWrite
+      looked = []
+      turnDuringGate = hour === midGate
       if (inTurn.has(hour))
         await cosContext(new Date(now.at.getTime() - 300_000))
       // Wednesday 13:30: the owner answers the first follow-up.
@@ -185,17 +217,6 @@ describe.skipIf(!url)("heartbeat follow-ups over a week", () => {
           .set({ pausedAt: new Date() })
           .where(eq(scheduledJobs.id, jobId))
       )
-      const key = `heartbeat:${orgId}:${jobId}:${now.at.toISOString()}`
-      const [sent] = await kit.withOrg({ orgId }, (db) =>
-        db.select().from(deliveries).where(eq(deliveries.key, key))
-      )
-      if (sent)
-        delivered.push({
-          hour,
-          waiting: (written as { waiting_for?: string }[]).flatMap((item) =>
-            item.waiting_for ? [item.waiting_for] : []
-          ),
-        })
     }
 
     // The DNS change waits a day, so Wednesday 12:00 after the turns; signing

@@ -4,7 +4,6 @@ import {
   overLimit,
   readReply,
   replyOf,
-  writerPrompt,
 } from "../src/heartbeat-write.ts"
 
 const item = (
@@ -149,26 +148,5 @@ describe("the message's limits", () => {
     expect(overLimit("Is it done? Shall I move it?")).toBe("questions")
     expect(overLimit("a".repeat(LIMITS.chars + 1))).toBe("chars")
     expect(overLimit("a".repeat(LIMITS.chars))).toBeNull()
-  })
-})
-
-describe("the writer's instructions", () => {
-  it("change the bar with the dial and always allow quiet", () => {
-    const low = writerPrompt("low")
-    const high = writerPrompt("high")
-    expect(low).toMatch(/finished/)
-    expect(high).toMatch(/on track/)
-    expect(low).not.toEqual(high)
-    for (const prompt of [low, writerPrompt("default"), high])
-      expect(prompt).toMatch(/\[quiet\]/)
-  })
-
-  it("speaks as the name the owner chose, and as no name before that", () => {
-    expect(writerPrompt("default", "Ellie")).toMatch(
-      /^You are Ellie, the assistant/
-    )
-    expect(writerPrompt("default")).toMatch(/^You are the assistant/)
-    expect(writerPrompt("default", "Ellie")).not.toMatch(/Reme/)
-    expect(writerPrompt("default")).not.toMatch(/Reme/)
   })
 })

@@ -1,6 +1,6 @@
 import {
+  CosEvent,
   OwnerProfile,
-  type Proactivity,
   profileText,
   type TaskBlockedOn,
   type TaskStepName,
@@ -14,29 +14,25 @@ import {
   facts,
   failureCode,
   inQuiet,
+  logEvent,
   type OrgScopedDb,
   orgs,
   readTasks,
   reminders,
-  serverMessageId,
   sql,
+  surfacedKey,
   type Tenancy,
   taskFollowups,
+  unpromptedKey,
   waitedOn,
 } from "@workspace/db"
-import { assistantName } from "./assistant.ts"
-import { deliverIn } from "./deliveries.ts"
 import {
   askGate,
   GATE,
   type Look,
   logSpend,
   modelInput,
-  type Reply,
-  replyOf,
-  type Spent,
-  writerPrompt,
-  writeText,
+  trustedContacts,
 } from "./heartbeat-write.ts"
 import type { Handler, Settled } from "./jobs.ts"
 import { weeklyItem } from "./search-sync.ts"
@@ -300,10 +296,6 @@ export async function digest(
   return items.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
 }
 
-/** The ledger row that says an item was surfaced. */
-export const surfacedKey = (orgId: string, key: string) =>
-  `heartbeat-item:${orgId}:${key}`
-
 /** The items the ledger has not seen. */
 async function unsurfaced(
   db: OrgScopedDb,
@@ -406,30 +398,20 @@ async function ownerProfile(db: OrgScopedDb): Promise<string | null> {
     : null
 }
 
-/** The last heartbeat the owner was shown, for the writer's continuity. */
+/** When the owner was last shown a heartbeat. */
 async function lastHeartbeat(
   db: OrgScopedDb,
   orgId: string
-): Promise<{ text: string; at: Date } | null> {
+): Promise<Date | null> {
   const [sent] = await db
-    .select({ key: deliveries.key, at: deliveries.sentAt })
+    .select({ at: deliveries.sentAt })
     .from(deliveries)
     .where(
       sql`starts_with(${deliveries.key}, ${`heartbeat:${orgId}:`}) and ${deliveries.channel} = 'in_app' and ${deliveries.state} = 'sent'`
     )
     .orderBy(sql`${deliveries.sentAt} desc`)
     .limit(1)
-  if (!sent?.at) return null
-  const [message] = await db
-    .select({ content: conversationMessages.content })
-    .from(conversationMessages)
-    .where(eq(conversationMessages.id, serverMessageId(sent.key)))
-  const content = message?.content as
-    | { parts?: { type: string; text?: string }[] }
-    | undefined
-  const parts = content?.parts ?? []
-  const text = parts.flatMap((p) => (p.type === "text" ? [p.text] : []))
-  return text.length > 0 ? { text: text.join(" "), at: sent.at } : null
+  return sent?.at ?? null
 }
 
 /** Whether the owner typed in any conversation at or after `since`. */
@@ -447,15 +429,13 @@ async function typedSince(db: OrgScopedDb, since: Date) {
 const localDate = (at: Date, zone: string | null) =>
   at.toLocaleDateString("en-CA", { timeZone: zone ?? "UTC" })
 
-/** The two model calls, apart from the key, so a test can stand in for them. */
+/** Jev's call, apart from the key, so a test can stand in for it. */
 export type Models = {
   gate: (state: Parameters<typeof askGate>[1]) => ReturnType<typeof askGate>
-  write: (system: string, data: unknown) => ReturnType<typeof writeText>
 }
 
 const liveModels = (env: Env): Models => ({
   gate: (state) => askGate(env.OPENROUTER_API_KEY, state),
-  write: (system, data) => writeText(env.OPENROUTER_API_KEY, system, data),
 })
 
 /** What the model step needs, read inside the run's transaction. */
@@ -464,18 +444,18 @@ type Beat = Look & {
   jobId: string
   /** The run's `run_at`, the slot its delivery is keyed on. */
   slot: Date
-  level: Exclude<Proactivity, "off">
   /** The owner typed since the last heartbeat, so the app is enough. */
   typed: boolean
 }
 
 /**
  * The model step, after the run has committed its ledger rows. Jev looks
- * first and costs nothing to the day's cap; on a yes the beat takes the
- * day's one unprompted message (`unprompted:<org>:<local date>`) before the
- * writer runs, and gives it back when the writer stays quiet or fails, so a
- * later beat that day can still speak. Every model call is logged as a
- * `cos.background_step` so the CoS's daily cap counts it.
+ * first. On a yes, while the day's one unprompted message is still free and
+ * the owner is not in the chat, the items go in the CoS log as a `schedule`
+ * event and a proactive CoS turn is handed to the api (`wake.ts` there). The
+ * turn may stay `[quiet]`; it takes the day's message
+ * (`unprompted:<org>:<local date>`) only when it posts. Jev's call is
+ * logged as a `cos.background_step` so the CoS's daily cap counts it.
  */
 async function speak(
   kit: Tenancy,
@@ -488,14 +468,12 @@ async function speak(
     outcome,
     detail,
   })
-  const spend = (job: string, outcome: string, spent: Spent) =>
-    logSpend(kit, orgId, job, outcome, spent)
   // A follow-up that a failure, the cap or a turn kept back is asked about on
-  // a later beat; one Jev or the writer turned down is not.
+  // a later beat; one Jev or the turn turned down is not.
   const putBack = () =>
     kit.withOrg({ orgId }, (db) => giveBack(db, orgId, beat.items))
 
-  const { state, data } = modelInput(beat)
+  const { state, summary } = modelInput(beat)
   let gate: Awaited<ReturnType<Models["gate"]>>
   try {
     gate = await models.gate(state)
@@ -504,103 +482,60 @@ async function speak(
     return record("failed", `gate_error:${failureCode(error)}`)
   }
   const pass = gate.probability >= GATE.floor
-  await spend("heartbeat_gate", pass ? "pass" : "stop", gate.spent)
+  await logSpend(
+    kit,
+    orgId,
+    "heartbeat_gate",
+    pass ? "pass" : "stop",
+    gate.spent
+  )
   if (!pass) return record("no_change", `gate:${gate.probability.toFixed(2)}`)
 
-  const cap = `unprompted:${orgId}:${localDate(beat.now, beat.zone)}`
-  const took = await kit.withOrg({ orgId }, (db) =>
-    db
-      .insert(deliveries)
-      .values({ orgId, key: cap, channel: "in_app", state: "sent" })
-      .onConflictDoNothing()
-      .returning({ key: deliveries.key })
-  )
-  if (took.length === 0) {
-    await putBack()
-    return record("no_change", "capped")
-  }
-
-  let reply: Reply
-  try {
-    const name = await kit.withOrg({ orgId }, assistantName)
-    const written = await models.write(writerPrompt(beat.level, name), data)
-    reply = replyOf(written.text, beat.items)
-    await spend("heartbeat_writer", reply.kind, written.spent)
-  } catch (error) {
-    reply = { kind: "error", detail: `writer_error:${failureCode(error)}` }
-  }
-  const release = () =>
-    kit.withOrg({ orgId }, (db) =>
-      db.delete(deliveries).where(eq(deliveries.key, cap))
+  const handed = await kit.withOrg({ orgId }, async (db) => {
+    const cap = unpromptedKey(orgId, localDate(beat.now, beat.zone))
+    const [taken] = await db
+      .select({ key: deliveries.key })
+      .from(deliveries)
+      .where(eq(deliveries.key, cap))
+    if (taken) return "capped"
+    // A turn may have begun while Jev looked; then the chat is the place.
+    if (await ownerActive(db, orgId, beat.now)) return "owner_active"
+    const logged = await logEvent(
+      db,
+      { orgId, staffId: null, assignmentId: null },
+      {
+        type: "cos.event",
+        payload: CosEvent.parse({
+          source: "schedule",
+          summary,
+          evidence: [],
+          wake: false,
+        }),
+        taint: ["inferred", "untrusted_input"],
+      }
     )
-  if (reply.kind !== "message") {
-    await release()
-    if (reply.kind === "quiet")
-      return record("no_change", `quiet: ${reply.reason}`)
-    await putBack()
-    return record("failed", reply.detail)
-  }
-  // A turn may have begun while the models ran; then the chat is the place.
-  if (await kit.withOrg({ orgId }, (db) => ownerActive(db, orgId, beat.now))) {
-    await release()
-    await putBack()
-    return record("no_change", "owner_active")
-  }
-
-  const { text } = reply
-  const chip = beat.items.find((item) => item.facts.chip)?.facts.chip
-  const key = `heartbeat:${orgId}:${jobId}:${slot.toISOString()}`
-  const sends = await kit.withOrg({ orgId }, async (db) => {
-    const from = await assistantName(db)
-    const out = [
-      await deliverIn(db, env, {
-        orgId,
-        key,
-        channel: "in_app",
-        message: {
-          text: [text],
-          ...(chip && {
-            button: {
-              label: chip,
-              // The report's Google chip starts the sign-in from the row itself.
-              action:
-                chip === "Connect Google"
-                  ? { kind: "connect", service: "google" }
-                  : { kind: "ask", text: chip },
-            },
-          }),
-        },
-      }),
-    ]
-    // At most one a day, since the cap above holds the day's one message.
-    if (!beat.typed)
-      out.push(
-        await deliverIn(db, env, {
-          orgId,
-          key: `${key}:email`,
-          channel: "email",
-          subject: from
-            ? `An update from ${from}`
-            : "An update on your business",
-          text,
-        })
-      )
-    const asked = beat.items.filter(isFollowUp)
-    if (asked.length > 0)
-      await db
-        .insert(taskFollowups)
-        .values(
-          asked.map((item) => ({
-            orgId,
-            fingerprint: item.key,
-            sentAt: beat.now,
-          }))
-        )
-        .onConflictDoNothing()
-    return out
+    if (logged !== "logged") return logged
+    return "handed"
   })
-  await Promise.all(sends.map((send) => send?.()))
-  return record("done", sends.length > 1 ? "sent:in_app,email" : "sent:in_app")
+  if (handed !== "handed") {
+    await putBack()
+    return record("no_change", handed)
+  }
+  const chip = beat.items.find((item) => item.facts.chip)?.facts.chip
+  await env.AFTER_TURN.send({
+    kind: "cos_wake",
+    orgId,
+    jobId,
+    slot: slot.toISOString(),
+    beat: {
+      // At most one a day, since the turn posts only while the day's message is free.
+      email: !beat.typed,
+      trusted: trustedContacts(beat.items),
+      ...(chip && { chip }),
+      follow_ups: beat.items.filter(isFollowUp).map((item) => item.key),
+    },
+  })
+  return record("done", "handed")
 }
 
 /**
@@ -647,18 +582,18 @@ export function heartbeatWith(
     // Detection time is the state boundary: the keys are surfaced before any
     // model looks, so a model that fails does not raise them again.
     await surface(db, job.orgId, fresh, now)
-    const last = await lastHeartbeat(db, job.orgId)
     const beat: Beat = {
       orgId: job.orgId,
       jobId: job.id,
       slot: job.nextRunAt,
-      level: org.proactivity,
       zone: org.timeZone,
       now,
       items: fresh,
       profile: await ownerProfile(db),
-      last,
-      typed: await typedSince(db, last?.at ?? job.createdAt),
+      typed: await typedSince(
+        db,
+        (await lastHeartbeat(db, job.orgId)) ?? job.createdAt
+      ),
     }
     return {
       outcome: "done",
