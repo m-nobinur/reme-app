@@ -373,7 +373,7 @@ export const CASES = [
     turns: [
       {
         mode: "act",
-        text: "You don't need to ask me before saving review replies.",
+        text: "You don't need to ask me before putting customer reviews on my website.",
       },
     ],
     check: ([turn]) => {
