@@ -893,8 +893,11 @@ ownerOnly.post("/site/takedown", async (c) => {
       { orgId, assignmentId: id },
       "the owner deleted their account"
     )
-    await halt(c.env, orgId, id)
   }
+  await afterResponse(
+    c,
+    Promise.all(open.map(({ id }) => halt(c.env, orgId, id)))
+  )
   // QE2: a published site's sandbox can still be warm with no build open.
   // One per site, which the site lock makes safe, keyed by the org.
   await endSite(c.env, orgId)
