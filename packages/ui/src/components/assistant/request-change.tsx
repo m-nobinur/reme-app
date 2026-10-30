@@ -45,7 +45,7 @@ const RequestChange: ToolCallMessagePartComponent = (props) => {
       cancelled="Not started."
       refused="The build could not be started."
       detail={() =>
-        "This starts a build. Nothing goes live until you approve a version."
+        "I'll make this on a copy. Nothing goes live until you publish it."
       }
       done={(output) => (
         <Done>
@@ -58,7 +58,7 @@ const RequestChange: ToolCallMessagePartComponent = (props) => {
       slot="request-change"
       title={(input) => input.text}
       view={view}
-      yes="Approve"
+      yes="Start"
     />
   )
 }

@@ -3,8 +3,8 @@ import { assistantNames } from "../src/onboarding-prepare.ts"
 
 describe("the assistant names the background call writes", () => {
   it("keeps up to three single, capitalised names", () => {
-    expect(assistantNames(["Ellie", "Marcus", "Priya", "Tom"])).toEqual([
-      "Ellie",
+    expect(assistantNames(["Nora", "Marcus", "Priya", "Tom"])).toEqual([
+      "Nora",
       "Marcus",
       "Priya",
     ])
@@ -12,20 +12,12 @@ describe("the assistant names the background call writes", () => {
 
   it("drops Reme, repeats, phrases and anything not a name, and keeps the rest", () => {
     expect(
-      assistantNames([
-        "Reme",
-        "ellie",
-        "Ellie",
-        "ELLIE",
-        "Mr Clean",
-        "O'Neil",
-        7,
-      ])
-    ).toEqual(["Ellie", "O'Neil"])
+      assistantNames(["Reme", "nora", "Nora", "NORA", "Mr Clean", "O'Neil", 7])
+    ).toEqual(["Nora", "O'Neil"])
   })
 
   it("offers none for what is not a list", () => {
     expect(assistantNames(null)).toEqual([])
-    expect(assistantNames("Ellie")).toEqual([])
+    expect(assistantNames("Reme")).toEqual([])
   })
 })

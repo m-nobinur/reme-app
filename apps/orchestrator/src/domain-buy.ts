@@ -1058,7 +1058,7 @@ export async function captureRegistered(
     .email
   return {
     key: `${domainId}:registered`,
-    text: `Payment approved and ${row.name} is registered. One thing only you can do: Cloudflare will email ${email ?? "you"} to confirm the address. Please click the link within 15 days, or the domain gets suspended. Your site will be on it in a few minutes.`,
+    text: `One thing only you can do: Cloudflare will email ${email ?? "you"} to confirm the address. Please click the link within 15 days, or the domain gets suspended.`,
   }
 }
 
@@ -1277,7 +1277,7 @@ export async function boughtElsewhere(
 
 /**
  * The hold's daily look: whether the registry shows the name, or the owner
- * has a claim already. Registered and unclaimed, Ellie offers to connect it
+ * has a claim already. Registered and unclaimed, Reme offers to connect it
  * once; a look the owner's done woke finds the claim and says nothing.
  */
 export async function lookElsewhere(

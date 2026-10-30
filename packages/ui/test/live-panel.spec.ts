@@ -15,10 +15,7 @@ test("a question in the panel takes no answer, it points to the chat", async ({
 }) => {
   await open(page, "QuestionItem")
   const question = page.locator('[data-slot="question-item"]')
-  await expect(question.getByText("Waiting on your answer")).toBeVisible()
-  await expect(
-    question.getByRole("button", { name: "Answer in the chat" })
-  ).toBeVisible()
+  await expect(question.getByRole("button", { name: "Answer" })).toBeVisible()
   await expect(question.locator("input")).toHaveCount(0)
 })
 
@@ -156,7 +153,9 @@ test("the site thumbnail holds its space while it loads, and a broken one leaves
 
   await open(page, "YourWebsite screenshot failed", 400)
   const failed = entry("YourWebsite screenshot failed")
-  await expect(failed.getByText("Your website is live")).toBeVisible()
+  await expect(
+    failed.getByText("Live at brightclean-demo.example.invalid")
+  ).toBeVisible()
 })
 
 test("the site is a link by name, with the host as its title", async ({
@@ -170,9 +169,7 @@ test("the site is a link by name, with the host as its title", async ({
   )
   await expect(visit).toHaveAttribute("target", "_blank")
   await expect(visit).toHaveAttribute("rel", "noreferrer")
-  await expect(page.getByText("brightclean-demo.example.invalid")).toHaveCount(
-    0
-  )
+  await expect(visit).not.toContainText("brightclean-demo.example.invalid")
 })
 
 test("Request changes sits beside Visit", async ({ page }) => {

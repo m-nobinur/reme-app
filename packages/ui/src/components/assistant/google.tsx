@@ -97,7 +97,7 @@ export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
           </p>
           <ConnectGoogleRow href={output.url} />
           <div>
-            {/* Sent as the owner's words, so Ellie puts the offer off. */}
+            {/* Sent as the owner's words, so Reme puts the offer off. */}
             <Button
               disabled={running}
               onClick={() => aui.thread().append("Not now")}

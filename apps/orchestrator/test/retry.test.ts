@@ -129,7 +129,7 @@ describe("what the owner reads", () => {
       pages: ids.map((page) => ({ ...plan.pages[0], page })),
     })
     expect(readyText("site.build", pages(["home", "quote"]))).toBe(
-      "Your website draft is ready, with Home and Request a quote pages. Preview it, then approve it or tell me what to change."
+      "Your draft is ready, with Home and Request a quote pages. Have a look below."
     )
     expect(
       readyText("site.build", pages(["home", "about", "service", "quote"]))
@@ -137,7 +137,7 @@ describe("what the owner reads", () => {
       "with Home, About and Request a quote pages, plus a page for each service."
     )
     expect(readyText("site.build", null)).toBe(
-      "Your website draft is ready. Preview it, then approve it or tell me what to change."
+      "Your draft is ready. Have a look below."
     )
   })
 })
@@ -164,7 +164,7 @@ describe("a change's ready line", () => {
 
   it("falls back to the plain line when there is no label", () => {
     expect(readyText("site.revise", null, {}, "a")).toMatch(
-      /^Your website changes are ready/
+      /^Your changes are ready/
     )
   })
 })
@@ -615,7 +615,7 @@ live("a failed owner build's retry", () => {
     const ready = await readyNote(kit, ids)
     await readyNote(kit, ids)
     expect(ready?.key).toBe(`site.ready:${ids.assignmentId}`)
-    expect(ready?.text).toMatch(/^Your website draft is ready, with /)
+    expect(ready?.text).toMatch(/^Your draft is ready, with /)
     const done = (await notesOf(orgId, ids.assignmentId)).filter(
       (n) => n.kind === "done"
     )

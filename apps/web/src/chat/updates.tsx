@@ -38,9 +38,9 @@ function actionOf(item: AttentionItem) {
 
 const metaOf = (item: AttentionItem) =>
   item.kind === "question"
-    ? "Waiting on your answer"
+    ? "Question"
     : item.kind === "approval"
-      ? "Needs your approval"
+      ? "Approval"
       : "Reminder"
 
 /**

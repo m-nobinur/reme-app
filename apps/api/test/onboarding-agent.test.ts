@@ -30,6 +30,7 @@ import {
   type PlanState,
   plannerInstructions,
   plannerModel,
+  planOf,
   planParts,
   planTurn,
   SAY_MAX,
@@ -180,6 +181,23 @@ describe("the plan's checks", () => {
     ).toMatch(/already started/)
   })
 
+  it("reads a plan whose say holds real line breaks", () => {
+    const broken = {
+      doing: "",
+      pending_card: null,
+      facts: {},
+      chosen_for_owner: [],
+      next: { kind: "answer_only" },
+      say: "First line.\n\nSecond line.",
+    }
+    const raw = JSON.stringify(broken).replace(/\\n/g, "\n")
+    expect(() => JSON.parse(raw)).toThrow()
+    expect(planOf(raw)).toEqual({ plan: broken })
+    expect(planOf("not json")).toEqual({
+      errors: ["the answer is not one JSON object"],
+    })
+  })
+
   it("keeps every message free of rates, currency, links, markup, dashes and stock images", () => {
     for (const bad of [
       "Our prices start low.",
@@ -196,6 +214,8 @@ describe("the plan's checks", () => {
       "There is nothing extra to pay for the website, John.",
       "It's free of charge.",
       "The site comes with your plan at no extra cost.",
+      "Our pass rates start at forty pounds.",
+      "Our rates are lower than our pass rates.",
       "x".repeat(SAY_MAX + 1),
       "   ",
     ]) {
@@ -212,6 +232,8 @@ describe("the plan's checks", () => {
       "You are free to pick another name.",
       "I've included a question about pets.",
       "The site includes a Request a quote page, and you stay in charge of every reply.",
+      "What sets you apart, such as your degrees or student pass rates?",
+      "Do you track your response rate or success rates?",
     ]) {
       expect(sayProblems(fine), fine).toEqual([])
     }
@@ -2385,6 +2407,17 @@ describe("the owner's words in say", () => {
         },
       })
     ).not.toContain(listed)
+    // The pair the planner's prompt shows.
+    const family = {
+      typed: "Divorce, child arrangements, mediation and prenups, in Leeds.",
+    }
+    expect(
+      sayProblems(
+        "Got it, divorce, child arrangements, mediation and prenups across Leeds.",
+        family
+      )
+    ).toContain(listed)
+    expect(sayProblems("Mediation across Leeds, noted.", family)).toEqual([])
   })
 
   it("thanks for a correction only when the plan changed a held fact", () => {

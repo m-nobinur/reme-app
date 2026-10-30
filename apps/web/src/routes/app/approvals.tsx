@@ -64,11 +64,7 @@ function Approvals() {
       </p>
 
       {approvals.length === 0 ? (
-        <EmptyState
-          description="Anything that needs your yes shows here."
-          icon={<DoneIcon />}
-          title="Nothing waiting on you"
-        />
+        <EmptyState icon={<DoneIcon />} title="Nothing waiting on you" />
       ) : (
         <section aria-labelledby="approvals-waiting">
           {/* The cards are h3, matching the panel where they sit under a

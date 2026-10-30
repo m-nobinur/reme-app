@@ -166,7 +166,7 @@ export function readyText(
       return `I couldn't change ${label ?? "that"} exactly as you asked, so I made the nearest change I could. Have a look, and tell me if you'd like it done another way.`
     }
     if (!label) {
-      return "Your website changes are ready. Preview them, then approve them or tell me what to change."
+      return "Your changes are ready. Have a look below."
     }
     const next = "Have a look, and publish when you're happy."
     return pick(
@@ -183,15 +183,15 @@ export function readyText(
           ]
     )
   }
-  const next = "Preview it, then approve it or tell me what to change."
+  const next = "Have a look below."
   const { named, each } = plannedPages(blueprint)
-  if (named.length === 0) return `Your website draft is ready. ${next}`
+  if (named.length === 0) return `Your draft is ready. ${next}`
   const list =
     named.length === 1
       ? named[0]
       : `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`
   const plus = each ? ", plus a page for each service" : ""
-  return `Your website draft is ready, with ${list} pages${plus}. ${next}`
+  return `Your draft is ready, with ${list} pages${plus}. ${next}`
 }
 
 /** A chat line to post, and with a ready line, what the build left out to offer. */
