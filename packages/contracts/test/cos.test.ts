@@ -584,7 +584,8 @@ describe("a slow read's step", () => {
     "%s takes a step of 60 characters and refuses 61",
     (tool, sample) => {
       const { input } = COS_TOOLS[tool as keyof typeof STEPPED]
-      const stepped = (step: string) => input.safeParse({ ...sample, step })
+      const stepped = (step: string) =>
+        input.safeParse({ ...(sample as object), step })
       expect(stepped("a".repeat(60)).success).toBe(true)
       expect(stepped("a".repeat(61)).success).toBe(false)
       expect(input.safeParse(sample).success).toBe(true)
