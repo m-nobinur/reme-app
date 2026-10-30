@@ -63,7 +63,8 @@ const token = Array.from(
   (n) => "abcdefghijklmnopqrstuvwxyz"[n % 26]
 ).join("")
 const HERO = `Spotless homes, golden run ${token}`
-const RULE = "On my website, write every heading in capital letters"
+const RULE =
+  "From now on, whenever you write or change a heading on my website, put it in capital letters"
 
 /** What the run records, printed and attached whether it passes or not. */
 const run = {
