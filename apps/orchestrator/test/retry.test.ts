@@ -163,7 +163,7 @@ describe("a change's ready line", () => {
 
   it("falls back to the plain line when there is no label", () => {
     expect(readyText("site.revise", null, {}, "a")).toMatch(
-      /^Your website changes are ready/
+      /^Your changes are ready/
     )
   })
 })
