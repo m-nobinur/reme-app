@@ -345,6 +345,8 @@ export type ToolArgs = {
   /** A time, already formatted in the business zone. */
   when?: string
   count?: number
+  /** The line the model wrote, for a tool in `STEPPED`. */
+  step?: string | undefined
 }
 
 type Cleaned = {
@@ -666,6 +668,22 @@ const sayings = (copy: ToolCopy, phase: Phase): readonly Say[] | null => {
   }
 }
 
+/**
+ * The slow reads whose call carries a line the model wrote (`step`), which
+ * replaces their fixed one while they run.
+ */
+export const STEPPED: ReadonlySet<string> = new Set([
+  "find_domain",
+  "check_domain",
+  "inspect_domain",
+  "get_search_performance",
+  "get_indexing",
+])
+
+/** The line the model wrote for a call of `tool`, cleaned like any argument, or null. */
+export const stepText = (tool: string, step: string | undefined) =>
+  STEPPED.has(tool) ? cleanArg(step, "text", 60) : null
+
 const clean = (a: ToolArgs): Cleaned => ({
   domain: cleanArg(a.domain, "domain"),
   query: cleanArg(a.query),
@@ -688,6 +706,8 @@ export function toolSay(
   const copy = known(tool) ? TOOLS[tool] : null
   const says = copy && sayings(copy, phase)
   const a = clean(args)
+  const step = phase === "working" ? stepText(tool, args.step) : null
+  if (step) return { text: step, level: "specific" }
   // The same pick for every phase, so a line and its "Still" agree.
   const key = `tool:${tool}`
   if (says) {

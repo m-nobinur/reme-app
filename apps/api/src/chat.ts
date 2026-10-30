@@ -1528,11 +1528,13 @@ export async function putRow(
   db: OrgScopedDb,
   owner: Owner,
   id: string,
-  message: { id: string; role: string; parts: unknown[] }
+  message: { id: string; role: string; parts: unknown[]; partial?: true }
 ): Promise<void> {
   const content = {
     role: message.role,
     parts: shown(message.parts as { type: string }[]),
+    // Its continuation is queued: the chat shows the last step until it posts.
+    ...(message.partial && { partial: true }),
   }
   const updated = await db
     .update(conversationMessages)

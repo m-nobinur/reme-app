@@ -776,7 +776,7 @@ an undo, and the Reminders page and panel a delete, through `DELETE /reminders/:
 the first success and drops it after 10 idle minutes, so a new conversation's first call lands
 where the org's last one left the prefix warm.
 
-**Steps.** No tool takes a `step`: the web's status lines are its own copy. A call repeated with the
+**Steps.** Only the slow reads take a `step` (`find_domain`, `check_domain`, `inspect_domain`, `get_search_performance`, `get_indexing`): at most 60 characters, in the owner's language, shown in place of the tool's fixed line while it runs and never while its input streams. The runner strips it before the tool runs and `callKey` ignores it, so no extra model call and no repeat slips through. A turn cut off with its continuation queued keeps its row marked `partial`, and the chat shows the turn's last step until the continuation posts. Every other tool's line is the web's own copy. A call repeated with the
 same input in a turn is not run again and the model is told so, and after any repeat, and on the
 last step a turn allows, the next step may only write. A step whose stream fails with a retryable
 status before any text or tool call (reasoning is never shown) is tried again, and the third try
