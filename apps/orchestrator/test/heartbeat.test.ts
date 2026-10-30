@@ -17,7 +17,7 @@ import {
   supersedePrivateFact,
 } from "@workspace/db"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { type DeliveryMessage, deliveriesBatch } from "../src/deliveries.ts"
+import type { DeliveryMessage } from "../src/deliveries.ts"
 import {
   digest,
   heartbeatWith,
@@ -25,15 +25,16 @@ import {
   SOURCES,
   type Source,
   surfacedKey,
+  unpromptedKey,
 } from "../src/heartbeat.ts"
 import type { Spent } from "../src/heartbeat-write.ts"
 import { HANDLERS, runJob } from "../src/jobs.ts"
 import { freshOrg, kit } from "./fixture.ts"
 
 /**
- * The heartbeat through `runJob` on a live database, with the two models and
- * the Queue stood in for. Skipped without DATABASE_URL. The org is in
- * London; 2026-10-20 is BST, an hour ahead.
+ * The heartbeat through `runJob` on a live database, with Jev and the Queues
+ * stood in for. Skipped without DATABASE_URL. The org is in London;
+ * 2026-10-20 is BST, an hour ahead.
  */
 
 const url = process.env.DATABASE_URL
@@ -55,23 +56,20 @@ describe.skipIf(!url)("the heartbeat", () => {
     send: vi.fn(async (_message: DeliveryMessage) => undefined),
     sendBatch: vi.fn(async () => undefined),
   }
+  const afterTurn = { send: vi.fn(async (_message: unknown) => undefined) }
   const env = {
     SCHEDULE: {
       get: async () => ({ next: null, scanned: 0 }),
       put: async () => undefined,
     },
     DELIVERIES: queue,
+    AFTER_TURN: afterTurn,
   } as unknown as Env
 
-  /** What Jev answers and what the writer says, set per case. */
+  /** What Jev answers, set per case. */
   let probability: number
-  let reply: () => string
   const models = {
     gate: vi.fn<Models["gate"]>(async () => ({ probability, spent: SPENT })),
-    write: vi.fn<Models["write"]>(async () => ({
-      text: reply(),
-      spent: SPENT,
-    })),
   }
   const handlers = {
     ...HANDLERS,
@@ -84,10 +82,9 @@ describe.skipIf(!url)("the heartbeat", () => {
 
   beforeEach(async () => {
     probability = 0
-    reply = () => "Your boiler engineer call is tomorrow at 07:00."
     models.gate.mockClear()
-    models.write.mockClear()
     queue.send.mockClear()
+    afterTurn.send.mockClear()
     orgId = await freshOrg(kit)
     jobId = await kit.withOrg({ orgId }, async (db) => {
       await db.update(orgs).set({ timeZone: "Europe/London" })
@@ -277,7 +274,7 @@ describe.skipIf(!url)("the heartbeat", () => {
         detail: "unchanged",
       })
       expect(models.gate).toHaveBeenCalledTimes(1)
-      expect(models.write).not.toHaveBeenCalled()
+      expect(afterTurn.send).not.toHaveBeenCalled()
     })
 
     it("surfaces new items once, and an unchanged digest costs no model call", async () => {
@@ -297,7 +294,7 @@ describe.skipIf(!url)("the heartbeat", () => {
         detail: "unchanged",
       })
       expect(models.gate).toHaveBeenCalledTimes(1)
-      expect(models.write).not.toHaveBeenCalled()
+      expect(afterTurn.send).not.toHaveBeenCalled()
     })
 
     it("reads the same digest when only the time has moved", async () => {
@@ -377,8 +374,21 @@ describe.skipIf(!url)("the heartbeat", () => {
     })
   })
 
-  describe("the gate, the cap and the writer", () => {
-    it("stops under the floor with no writer call and no cap taken", async () => {
+  describe("the gate, the cap and the hand-over", () => {
+    const handedOver = () => afterTurn.send.mock.calls.map(([m]) => m)
+
+    /** The `cos.event`s in the org's sessions. */
+    const logged = () =>
+      kit.withOrg({ orgId }, async (db) =>
+        (
+          await db
+            .select({ payload: events.payload })
+            .from(events)
+            .where(eq(events.type, "cos.event"))
+        ).map((row) => row.payload as { source: string; summary: string })
+      )
+
+    it("stops under the floor with nothing handed over and no cap taken", async () => {
       await seed(later(NOON, 20), later(NOON, -2))
       probability = 0.25
       await beat(NOON)
@@ -386,7 +396,8 @@ describe.skipIf(!url)("the heartbeat", () => {
         outcome: "no_change",
         detail: "gate:0.25",
       })
-      expect(models.write).not.toHaveBeenCalled()
+      expect(handedOver()).toEqual([])
+      expect(await logged()).toEqual([])
       expect(await cap()).toEqual([])
       expect(await spends()).toEqual([
         expect.objectContaining({
@@ -397,64 +408,33 @@ describe.skipIf(!url)("the heartbeat", () => {
       ])
     })
 
-    it("passes the floor on any dial and gives the writer the dial's bar", async () => {
-      await kit.withOrg({ orgId }, (db) =>
-        db.update(orgs).set({ proactivity: "high" })
-      )
-      await seed(later(NOON, 20), later(NOON, -2))
-      probability = 0.55
-      await beat(NOON)
-      expect(models.write).toHaveBeenCalledTimes(1)
-      expect(models.write.mock.calls[0]?.[0]).toMatch(/on track/)
-    })
-
-    it("on a yes takes the day, writes, and sends in-app and by email to an owner who has not typed", async () => {
+    it("on a yes logs the items for the CoS and hands it a proactive turn, emailing an owner who has not typed", async () => {
       await seed(later(NOON, 20), later(NOON, -2))
       probability = 0.95
       await beat(NOON)
-      expect(await run(NOON)).toEqual({
-        outcome: "done",
-        detail: "sent:in_app,email",
-      })
-      expect(await cap()).toEqual([`unprompted:${orgId}:2026-10-20`])
-      const key = `heartbeat:${orgId}:${jobId}:${NOON.toISOString()}`
-      expect(queue.send.mock.calls.map(([m]) => m)).toEqual([
+      expect(await run(NOON)).toEqual({ outcome: "done", detail: "handed" })
+      expect(handedOver()).toEqual([
         {
+          kind: "cos_wake",
           orgId,
-          key,
-          channel: "in_app",
-          message: {
-            text: ["Your boiler engineer call is tomorrow at 07:00."],
-          },
-        },
-        {
-          orgId,
-          key: `${key}:email`,
-          channel: "email",
-          subject: "An update on your business",
-          text: "Your boiler engineer call is tomorrow at 07:00.",
+          jobId,
+          slot: NOON.toISOString(),
+          email: true,
         },
       ])
-      // The writer reads dates in the owner's zone, and the items as data.
-      const [system, data] = models.write.mock.calls[0] ?? []
-      expect(system).toMatch(/\[quiet\]/)
-      expect(data).toMatchObject({
-        now: "Tuesday, 20 October 2026 at 12:00 PM",
-        items: expect.arrayContaining([
-          expect.objectContaining({
-            kind: "reminder",
-            since: "Wednesday, 21 October 2026 at 8:00 AM",
-          }),
-          expect.objectContaining({ kind: "alert", host: "www.example.test" }),
-        ]),
-      })
-      expect((await spends()).map((s) => s.job)).toEqual([
-        "heartbeat_gate",
-        "heartbeat_writer",
-      ])
+      // The turn takes the day only when it posts.
+      expect(await cap()).toEqual([])
+      const [event] = await logged()
+      expect(event?.source).toBe("schedule")
+      // Dates in the owner's zone, as the old writer read them.
+      expect(event?.summary).toMatch(
+        /reminder, since Wednesday, 21 October 2026 at 8:00 AM; title: Ring the boiler engineer/
+      )
+      expect(event?.summary).toMatch(/host: www\.example\.test/)
+      expect((await spends()).map((s) => s.job)).toEqual(["heartbeat_gate"])
     })
 
-    it("gives the writer the owner profile's lines, never their ids or sources", async () => {
+    it("gives Jev the owner profile's lines, never their ids or sources", async () => {
       await kit.withOrg({ orgId }, (db) =>
         supersedePrivateFact(db, {
           orgId,
@@ -482,13 +462,12 @@ describe.skipIf(!url)("the heartbeat", () => {
       await seed(later(NOON, 20), later(NOON, -2))
       probability = 0.95
       await beat(NOON)
-      const data = models.write.mock.calls[0]?.[1] as { owner_profile?: string }
-      expect(data.owner_profile).toBe(
-        "Prefers calls after 4pm\nQuotes go out on Fridays"
-      )
+      expect(models.gate.mock.calls[0]?.[0]).toMatchObject({
+        owner_profile: "Prefers calls after 4pm\nQuotes go out on Fridays",
+      })
     })
 
-    it("sends in-app only when the owner has typed since the last heartbeat", async () => {
+    it("asks for no email when the owner has typed since the last heartbeat", async () => {
       await seed(later(NOON, 20), later(NOON, -2))
       probability = 0.95
       await kit.withOrg({ orgId }, async (db) => {
@@ -501,72 +480,44 @@ describe.skipIf(!url)("the heartbeat", () => {
             '{"role":"user","parts":[{"type":"text","text":"hi"}]}'::jsonb)`)
       })
       await beat(NOON)
-      expect(await run(NOON)).toEqual({
-        outcome: "done",
-        detail: "sent:in_app",
-      })
+      expect(handedOver()).toEqual([expect.objectContaining({ email: false })])
     })
 
-    it("stops a second unprompted message the same day before the writer", async () => {
+    it("hands nothing over once the day's unprompted message is taken", async () => {
+      await kit.withOrg({ orgId }, (db) =>
+        db.insert(deliveries).values({
+          orgId,
+          key: unpromptedKey(orgId, "2026-10-20"),
+          channel: "in_app",
+          state: "sent",
+        })
+      )
       await seed(later(NOON, 20), later(NOON, -2))
       probability = 0.95
       await beat(NOON)
-      await remind(later(NOON, 22), "Order more microfibre cloths")
-      const next = later(NOON, 4)
-      await beat(next)
-      expect(await run(next)).toEqual({
+      expect(await run(NOON)).toEqual({
         outcome: "no_change",
         detail: "capped",
       })
-      expect(models.gate).toHaveBeenCalledTimes(2)
-      expect(models.write).toHaveBeenCalledTimes(1)
+      expect(models.gate).toHaveBeenCalledTimes(1)
+      expect(handedOver()).toEqual([])
+      expect(await logged()).toEqual([])
     })
 
-    it("gives the day back when the writer stays quiet, so a later beat can speak", async () => {
+    it("posts nothing and hands nothing over when nothing has changed", async () => {
       await seed(later(NOON, 20), later(NOON, -2))
       probability = 0.95
-      reply = () => "[quiet] nothing the owner needs today"
       await beat(NOON)
-      expect(await run(NOON)).toEqual({
+      afterTurn.send.mockClear()
+      const next = later(NOON, 4)
+      expect(await beat(next)).toBe("no_change")
+      expect(await run(next)).toEqual({
         outcome: "no_change",
-        detail: "quiet: nothing the owner needs today",
+        detail: "unchanged",
       })
-      expect(await cap()).toEqual([])
+      expect(handedOver()).toEqual([])
       expect(queue.send).not.toHaveBeenCalled()
-
-      reply = () => "Your microfibre order reminder is due tomorrow."
-      await remind(later(NOON, 22), "Order more microfibre cloths")
-      const next = later(NOON, 4)
-      await beat(next)
-      expect(await run(next)).toEqual({
-        outcome: "done",
-        detail: "sent:in_app,email",
-      })
-    })
-
-    it("gives the day back when the writer fails or breaks a limit", async () => {
-      await seed(later(NOON, 20), later(NOON, -2))
-      probability = 0.95
-      reply = () => {
-        throw new Error("upstream 502")
-      }
-      await beat(NOON)
-      expect(await run(NOON)).toMatchObject({
-        outcome: "failed",
-        detail: expect.stringMatching(/^writer_error:/),
-      })
-      expect(await cap()).toEqual([])
-
-      reply = () => "One. Two. Three. Four."
-      await remind(later(NOON, 22), "Order more microfibre cloths")
-      const next = later(NOON, 4)
-      await beat(next)
-      expect(await run(next)).toEqual({
-        outcome: "failed",
-        detail: "over_limit:sentences",
-      })
-      expect(await cap()).toEqual([])
-      expect(queue.send).not.toHaveBeenCalled()
+      expect(await logged()).toHaveLength(1)
     })
 
     it("records a gate that fails as an error, with the ledger kept", async () => {
@@ -578,37 +529,7 @@ describe.skipIf(!url)("the heartbeat", () => {
         detail: expect.stringMatching(/^gate_error:/),
       })
       expect(await ledger()).toHaveLength(2)
-    })
-
-    it("tells the writer what it said last time, and when", async () => {
-      await seed(later(NOON, 20), later(NOON, -2))
-      probability = 0.95
-      await beat(NOON)
-      // The consumer posts the in-app message, which is what the owner saw.
-      const inApp = queue.send.mock.calls
-        .map(([m]) => m)
-        .filter((m) => m.channel === "in_app")
-      await deliveriesBatch(
-        {
-          messages: inApp.map((body) => ({
-            body,
-            attempts: 1,
-            ack: () => undefined,
-            retry: () => undefined,
-          })),
-        } as unknown as MessageBatch<DeliveryMessage>,
-        env as never,
-        kit
-      )
-      await remind(later(NOON, 30), "Send the invoice to Mrs Patel")
-      const tomorrow = later(NOON, 24)
-      await beat(tomorrow)
-      expect(models.write.mock.calls[1]?.[1]).toMatchObject({
-        last_message: {
-          text: "Your boiler engineer call is tomorrow at 07:00.",
-          sent: expect.stringMatching(/ 2026 at /),
-        },
-      })
+      expect(handedOver()).toEqual([])
     })
   })
 })
