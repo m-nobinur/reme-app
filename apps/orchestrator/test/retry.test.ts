@@ -189,6 +189,10 @@ describe("whether a narrated line may stand in for the template", () => {
     ["a line break", "I hit a snag.\nI started again."],
     ["silence", "[quiet]"],
     ["too long", `I hit a snag ${"and kept going ".repeat(30)}.`],
+    [
+      "the owner in the third person",
+      "It stopped again. Nothing more happens until the owner says try again.",
+    ],
   ])("refuses %s", (_, text) => {
     expect(narrationOk(text, [])).toBe(false)
   })
