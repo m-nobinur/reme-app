@@ -1357,7 +1357,7 @@ async function typedByOwner(
  * proposed since the owner's last message, whatever came of it. A no, a
  * refusal or a run is the end of that message's yes.
  */
-const connectProposed = (messages: readonly ModelMessage[]) =>
+export const connectProposed = (messages: readonly ModelMessage[]) =>
   messages
     .slice(messages.map((m) => m.role).lastIndexOf("user"))
     .some(
@@ -1372,7 +1372,7 @@ const connectProposed = (messages: readonly ModelMessage[]) =>
     )
 
 /** Whether the org already has `name` live: connecting it again moves live DNS. */
-async function isLive(
+export async function isLive(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
   name: string
 ): Promise<boolean> {

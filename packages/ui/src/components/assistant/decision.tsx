@@ -22,7 +22,13 @@ import {
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
 import { cn, META } from "@workspace/ui/lib/utils"
-import { type ReactNode, useId, useState } from "react"
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useId,
+  useState,
+} from "react"
 
 /**
  * The card every tool that waits for the owner's yes is drawn with, so an
@@ -34,6 +40,15 @@ import { type ReactNode, useId, useState } from "react"
  * No yes is offered on a target the owner cannot read or check, and a call
  * the stream left unfinished never shimmers on after it ends.
  */
+
+/**
+ * Marks a card's yes, by its approval id, as the owner's tap that saves a
+ * grant (the chat sends it as `always`). Without a provider no card offers it.
+ */
+const AlwaysAllowContext = createContext<((approvalId: string) => void) | null>(
+  null
+)
+export const AlwaysAllowProvider = AlwaysAllowContext.Provider
 
 const CANNOT_APPROVE =
   "This did not come through whole, so it cannot be approved. Say not now to carry on."
@@ -58,6 +73,12 @@ type DecisionProps<I, O> = {
   done: (output: O | null) => ReactNode
   /** Why no yes can be offered for this input, if one cannot. */
   blocked?: ((input: I) => string | null) | undefined
+  /**
+   * "beside": an Always allow button next to the yes, on a card whose kind
+   * the owner may stop being asked for; "yes": the yes is itself that tap,
+   * as on the card that offers it.
+   */
+  always?: "beside" | "yes" | undefined
 }
 
 export function Decision<I, O>({
@@ -73,8 +94,10 @@ export function Decision<I, O>({
   refused,
   done,
   blocked,
+  always,
 }: DecisionProps<I, O>) {
   const id = useId()
+  const allow = useContext(AlwaysAllowContext)
   const held = useAuiState((s) => isHeld(s.message.parts, props.toolCallId))
   const running = useAuiState((s) => s.message.status?.type === "running")
   const replaced = useAuiState((s) =>
@@ -115,8 +138,22 @@ export function Decision<I, O>({
   if (view.state === "asking" || (view.state === "broken" && view.waiting)) {
     const withheld = input && blocked ? blocked(input) : null
     const problem = view.state === "broken" ? CANNOT_APPROVE : withheld
+    const approvalId = props.approval?.id
+    const approve = () => props.respondToApproval({ approved: true })
+    const tap =
+      always && allow && approvalId
+        ? () => {
+            allow(approvalId)
+            void approve()
+          }
+        : null
     return (
       <TrayApproval
+        also={
+          !problem && always === "beside" && tap
+            ? { label: "Always allow", onClick: tap }
+            : undefined
+        }
         name={slot}
         no={{
           label: no,
@@ -128,7 +165,7 @@ export function Decision<I, O>({
             ? undefined
             : {
                 label: yes,
-                onYes: () => props.respondToApproval({ approved: true }),
+                onYes: always === "yes" && tap ? tap : approve,
               }
         }
       >
@@ -229,20 +266,22 @@ function endLine<I, O>(
 
 /**
  * An approval in the question tray: its title, what a yes does and what it
- * leaves alone, then the no and the yes. Without `yes` only the no is
- * offered. Outside a thread it is drawn where it stands.
+ * leaves alone, then the no, `also` and the yes. Without `yes` only the no
+ * is offered. Outside a thread it is drawn where it stands.
  */
 export function TrayApproval({
   name,
   title,
   yes,
   no,
+  also,
   children,
 }: {
   name: string
   title: string
   yes?: { label: string; onYes: () => void } | undefined
   no: { label: string; onNo: () => void }
+  also?: { label: string; onClick: () => void } | undefined
   children: ReactNode
 }) {
   const slot = useTraySlot()
@@ -251,6 +290,7 @@ export function TrayApproval({
     <TrayFrame
       collapsed={collapsed}
       onCollapsedChange={setCollapsed}
+      pick={also && { label: also.label, onPick: also.onClick }}
       question={title}
       skip={{ label: no.label, onSkip: no.onNo }}
       submit={yes ? { label: yes.label, onSubmit: yes.onYes } : undefined}

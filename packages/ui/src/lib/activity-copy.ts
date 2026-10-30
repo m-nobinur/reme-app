@@ -574,6 +574,12 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: ["Noted that for later"],
     fail: ["note that for later"],
   },
+  offer_grant: {
+    kind: "thinking",
+    working: ["Saving your choice"],
+    done: ["Saved your choice"],
+    fail: ["save your choice"],
+  },
 }
 
 /** What a tool's line says, whatever the part's state, the turn's end or the time. */

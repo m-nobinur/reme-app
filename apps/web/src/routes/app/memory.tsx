@@ -1,6 +1,7 @@
 import { ArrowCounterClockwiseIcon, BrainIcon } from "@phosphor-icons/react"
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router"
 import {
+  type ApprovalGrantSwitch,
   type MemoryReviewAction,
   PROFILE_MAX_CHARS,
   type ProfileLine,
@@ -13,18 +14,29 @@ import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent } from "@workspace/ui/components/card"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { formatDateTime } from "@workspace/ui/lib/format"
+import { GRANT_TEXT } from "@workspace/ui/lib/grants"
 import { META } from "@workspace/ui/lib/utils"
 import { useRef, useState } from "react"
-import { getMemory, reviewMemory, undoMemory } from "@/lib/api/server"
+import {
+  getGrants,
+  getMemory,
+  reviewMemory,
+  setGrant,
+  undoMemory,
+} from "@/lib/api/server"
 import { useBrowserZone } from "@/panel/workspace-panel"
 
 /**
  * What the Chief of Staff remembers of the owner: the lines it reads at the
  * start of every conversation, and every change to them, each with its undo.
- * Business facts such as prices and hours are the business page's.
+ * Business facts such as prices and hours are the business page's. It also
+ * lists what the owner lets it do without asking, each with its switch.
  */
 export const Route = createFileRoute("/app/memory")({
-  loader: async () => await getMemory(),
+  loader: async () => {
+    const [view, grants] = await Promise.all([getMemory(), getGrants()])
+    return view && { ...view, grants: grants?.grants ?? [] }
+  },
   component: Memory,
 })
 
@@ -89,6 +101,24 @@ function Memory() {
         out === "stale"
           ? "That suggestion is gone or no longer fits. Nothing was changed."
           : done
+      )
+      await router.invalidate()
+    } catch {
+      setStatus("That could not be saved. Nothing was changed.")
+    } finally {
+      setBusy(null)
+      announcer.current?.focus()
+    }
+  }
+
+  async function flip(change: ApprovalGrantSwitch) {
+    setBusy(change.kind)
+    try {
+      await setGrant({ data: change })
+      setStatus(
+        change.on
+          ? "Done. Reme won't ask first for this."
+          : "Reme will ask you first again."
       )
       await router.invalidate()
     } catch {
@@ -225,6 +255,37 @@ function Memory() {
             ))}
           </ul>
         ) : null}
+      </section>
+
+      <section aria-labelledby="memory-grants" className="mb-8">
+        <h2 className="font-semibold text-sm" id="memory-grants">
+          Done without asking
+        </h2>
+        <p className={`mt-1 ${META}`}>
+          Reme asks on a card before these until you tap Always allow on one, or
+          switch it on here. Paying and a new phone number or email always ask.
+        </p>
+        <ul className="mt-2 flex flex-col">
+          {view.grants.map((grant) => (
+            <li key={grant.kind}>
+              <label className="inline-flex min-h-8 w-fit cursor-pointer items-center gap-2 text-sm">
+                <input
+                  checked={grant.on}
+                  className="size-4 accent-primary"
+                  disabled={busy !== null}
+                  onChange={(event) =>
+                    void flip({
+                      kind: grant.kind,
+                      on: event.currentTarget.checked,
+                    })
+                  }
+                  type="checkbox"
+                />
+                {GRANT_TEXT[grant.kind]}
+              </label>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {view.versions.length > 0 ? (

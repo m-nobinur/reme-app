@@ -1,6 +1,8 @@
 import {
   ActivityFeed,
   ApprovalDecision,
+  type ApprovalGrantSwitch,
+  ApprovalGrants,
   type AttentionItem as Attention,
   BoughtElsewhereOutput,
   BuildQuestions,
@@ -779,6 +781,27 @@ async function reviewMemory(
   return MemoryView.parse(await response.json())
 }
 
+async function grants(): Promise<ApprovalGrants | null> {
+  const body = await get("/approval-grants")
+  return body === null ? null : ApprovalGrants.parse(body)
+}
+
+async function setGrant(
+  change: ApprovalGrantSwitch
+): Promise<ApprovalGrants | null> {
+  const response = await call("/approval-grants", {
+    method: "POST",
+    body: change,
+  })
+  if (!response || response.status === 401 || response.status === 403) {
+    return null
+  }
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for /approval-grants`)
+  }
+  return ApprovalGrants.parse(await response.json())
+}
+
 async function pushKey(): Promise<string | null> {
   const body = await get("/push/config")
   return body === null ? null : PushConfig.parse(body).public_key
@@ -939,6 +962,8 @@ export const apiSource: OwnerDataSource = {
   memory,
   undoMemory,
   reviewMemory,
+  grants,
+  setGrant,
   pushKey,
   subscribePush,
   unsubscribePush,

@@ -236,6 +236,7 @@ export const ConnectDomain: ToolCallMessagePartComponent = (props) => {
   }
   return (
     <Decision
+      always="beside"
       busy="Connecting"
       cancelled="Not connected."
       refused={NOT_CONNECTED}

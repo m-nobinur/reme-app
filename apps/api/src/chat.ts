@@ -10,6 +10,7 @@ import {
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
+  GrantKind,
   type MemoryChip,
   type MessageReading,
   ONBOARDING_STATUS,
@@ -67,6 +68,7 @@ import {
   SETS_RULE,
   toolErrorText,
 } from "./cos/agent.ts"
+import { grantedKinds, grantOf, saveGrant } from "./cos/grants.ts"
 import {
   CONTEXT_POLICY,
   deriveCosMessages,
@@ -101,6 +103,7 @@ import {
   withinCap,
   writeAsTurn,
 } from "./cos/turns.ts"
+import { isOrgOwner } from "./domain-buy.ts"
 import {
   failure,
   invalid,
@@ -969,6 +972,13 @@ export async function chat(
     }
     return response
   }
+  // Only the org's owner grants; anyone else's tap on Always allow is a yes.
+  const grantOrg =
+    turn.kind === "results" &&
+    turn.results.some((r) => r.kind === "approval" && r.always) &&
+    (await isOrgOwner(kit, owner))
+      ? owner.orgId
+      : null
   let opened: Opened | Response | { plan: PlanJob }
   try {
     opened = await kit.withOrg(scope, async (db) => {
@@ -1046,11 +1056,20 @@ export async function chat(
           : (await withinCap(db, owner.orgId, reserve))
             ? null
             : "budgetary"
-      const opening = await openCos(db, held, id, parsed.data, log, heard)
+      const opening = await openCos(
+        db,
+        grantOrg,
+        held,
+        id,
+        parsed.data,
+        log,
+        heard
+      )
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
       const { workspace, facts, profile } =
         loaded ?? (await loadWorkspace(tools))
+      const granted = await grantedKinds(db)
       const context = contextOf(
         mode,
         workspace,
@@ -1061,7 +1080,10 @@ export async function chat(
         turn.kind === "message" && log.fresh,
         await google,
         facts,
-        turn.kind === "message" && SETS_RULE.test(turn.text)
+        turn.kind === "message" && SETS_RULE.test(turn.text),
+        null,
+        granted,
+        await offerable(db, granted)
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
@@ -1370,6 +1392,8 @@ function settledChunks(part: CosPart): UIMessageChunk[] {
  */
 async function openCos(
   db: OrgScopedDb,
+  /** The org a tap on Always allow grants in, or null when the person is not its owner. */
+  grantOrg: string | null,
   held: Read,
   id: string,
   { turn }: ChatRequest,
@@ -1388,7 +1412,7 @@ async function openCos(
     const card = typedCard(held.card)
     const answered =
       heard && held.card && card?.toolCallId === heard.callId
-        ? await resolveApprovals(db, id, held.card, [
+        ? await resolveApprovals(db, grantOrg, id, held.card, [
             {
               kind: "approval",
               approval_id: card.approval?.id ?? "",
@@ -1422,8 +1446,40 @@ async function openCos(
   }
   const tail = held.card
   if (tail?.content.role !== "assistant") return stale()
-  const opened = await resolveApprovals(db, id, tail, turn.results)
+  const opened = await resolveApprovals(db, grantOrg, id, tail, turn.results)
   return opened instanceof Response ? opened : { ...opened, typed: null }
+}
+
+/**
+ * The kinds the owner approved on a card at least twice in the last 7 days,
+ * not granted and not offered in that time, for the CoS to offer once.
+ * shortcut: scans the week's messages per turn; keep a count per kind when an org's week passes a few thousand rows.
+ */
+async function offerable(
+  db: OrgScopedDb,
+  granted: readonly GrantKind[]
+): Promise<GrantKind[]> {
+  const rows = await db.execute<{
+    type: string
+    kind: string | null
+    n: number
+  }>(sql`
+    select p->>'type' as type, p->'input'->>'kind' as kind, count(*)::int as n
+    from ${conversationMessages} m
+    cross join lateral jsonb_array_elements(
+      case when jsonb_typeof(m.content->'parts') = 'array' then m.content->'parts' else '[]'::jsonb end
+    ) p
+    where m.created_at > now() - interval '7 days'
+      and (p->>'type' = 'tool-offer_grant'
+        or (p->>'type' in ${GrantKind.options.map((k) => `tool-${k}`)}
+          and p->'approval'->>'approved' = 'true'))
+    group by 1, 2`)
+  return GrantKind.options.filter(
+    (k) =>
+      !granted.includes(k) &&
+      !rows.some((r) => r.type === "tool-offer_grant" && r.kind === k) &&
+      rows.some((r) => r.type === `tool-${k}` && r.n >= 2)
+  )
 }
 
 /**
@@ -1433,6 +1489,7 @@ async function openCos(
  */
 async function resolveApprovals(
   db: OrgScopedDb,
+  grantOrg: string | null,
   id: string,
   tail: Tail,
   results: ChatResult[]
@@ -1482,7 +1539,14 @@ async function resolveApprovals(
     )
     if (!(await binds(card, part.toolCallId ?? "", input, now))) {
       lapsed.add(approvalId)
+      continue
     }
+    // The owner's tap on Always allow, or on an offer card's yes, is the
+    // one way a grant is saved from the chat.
+    const kind = byApproval.get(approvalId)?.always
+      ? grantOf(part.type.slice("tool-".length) as CosToolName, part.input)
+      : null
+    if (kind && grantOrg) await saveGrant(db, grantOrg, kind, approvalId)
   }
   const applied = parts.map((part): CosPart => {
     const result = part.approval ? byApproval.get(part.approval.id) : undefined

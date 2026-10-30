@@ -21,6 +21,7 @@ import {
 import { DomainPurchaseProvider } from "@workspace/ui/components/assistant/buy-domain"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { AlwaysAllowProvider } from "@workspace/ui/components/assistant/decision"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
@@ -55,6 +56,7 @@ import { useConversationRuntime } from "./runtime"
 import { ChatSiteReadyCard } from "./site-ready"
 import { StillWorking } from "./still-working"
 import { trayServices } from "./tray-services"
+import { alwaysTapped } from "./turn"
 import { ChatUpdates } from "./updates"
 import { uploadPhotos } from "./upload"
 
@@ -62,6 +64,10 @@ const frame = getRouteApi("/app")
 
 /** The Request changes presses the composer has taken, by their key. */
 const composed = new Set<string>()
+
+const tapAlways = (approvalId: string) => {
+  alwaysTapped.add(approvalId)
+}
 
 /**
  * The conversation at `/app` (a new one) and `/app/c/$id` (a stored one).
@@ -225,41 +231,45 @@ export function ChatPage() {
           </div>
         ) : (
           <CosToolsProvider value={shared.tools}>
-            <LiveCardsProvider value={shared.cards}>
-              <UploadPhotosProvider value={uploadPhotos}>
-                <TrayServicesProvider value={trayServices}>
-                  <SaveDesignAnswerProvider value={saveDesignAnswer}>
-                    <DomainPurchaseProvider value={domainPurchase}>
-                      <AnswerBuildQuestionProvider value={answerBuildQuestion}>
-                        <Thread
-                          after={
-                            <>
-                              <StillWorking />
-                              <ChatSiteReadyCard />
-                              <BuildStopped />
-                            </>
-                          }
-                          assistant={live.workspace?.assistantName}
-                          briefing={briefing.line}
-                          components={{ ToolFallback: Approval }}
-                          lastShown={LAST_SHOWN}
-                          mode={mode}
-                          onRetry={() => retry.current?.()}
-                          // One neutral line: rotating ideas offered work the
-                          // owner could not ask for yet.
-                          placeholder={`Message ${assistant}…`}
-                          questionPlaceholder={`Tell ${assistant} what to do instead…`}
-                          quickActions={OWNER_QUICK_ACTIONS}
-                          reveal={onboarding ? OPENING_REVEAL : undefined}
-                          stored={id}
-                          updates={<ChatUpdates />}
-                        />
-                      </AnswerBuildQuestionProvider>
-                    </DomainPurchaseProvider>
-                  </SaveDesignAnswerProvider>
-                </TrayServicesProvider>
-              </UploadPhotosProvider>
-            </LiveCardsProvider>
+            <AlwaysAllowProvider value={tapAlways}>
+              <LiveCardsProvider value={shared.cards}>
+                <UploadPhotosProvider value={uploadPhotos}>
+                  <TrayServicesProvider value={trayServices}>
+                    <SaveDesignAnswerProvider value={saveDesignAnswer}>
+                      <DomainPurchaseProvider value={domainPurchase}>
+                        <AnswerBuildQuestionProvider
+                          value={answerBuildQuestion}
+                        >
+                          <Thread
+                            after={
+                              <>
+                                <StillWorking />
+                                <ChatSiteReadyCard />
+                                <BuildStopped />
+                              </>
+                            }
+                            assistant={live.workspace?.assistantName}
+                            briefing={briefing.line}
+                            components={{ ToolFallback: Approval }}
+                            lastShown={LAST_SHOWN}
+                            mode={mode}
+                            onRetry={() => retry.current?.()}
+                            // One neutral line: rotating ideas offered work the
+                            // owner could not ask for yet.
+                            placeholder={`Message ${assistant}…`}
+                            questionPlaceholder={`Tell ${assistant} what to do instead…`}
+                            quickActions={OWNER_QUICK_ACTIONS}
+                            reveal={onboarding ? OPENING_REVEAL : undefined}
+                            stored={id}
+                            updates={<ChatUpdates />}
+                          />
+                        </AnswerBuildQuestionProvider>
+                      </DomainPurchaseProvider>
+                    </SaveDesignAnswerProvider>
+                  </TrayServicesProvider>
+                </UploadPhotosProvider>
+              </LiveCardsProvider>
+            </AlwaysAllowProvider>
           </CosToolsProvider>
         )}
       </div>

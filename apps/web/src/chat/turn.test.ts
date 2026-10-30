@@ -11,6 +11,7 @@ import {
 import { afterEach, expect, it, vi } from "vitest"
 import type { ChatMessage } from "./message"
 import {
+  alwaysTapped,
   cancelOvertaken,
   chatFetch,
   chatTurn,
@@ -348,6 +349,25 @@ it("a yes or a no sends the approval it answers, with the owner's reason", () =>
       results: [{ kind: "approval", approval_id: id, ...rest }],
     })
   }
+})
+
+it("sends always with a yes the owner tapped Always allow on, and never with a no", () => {
+  alwaysTapped.add("appr_9")
+  for (const approved of [true, false]) {
+    const request = chatTurn(CONVERSATION, "act", [
+      assistant(
+        change("approval-responded", { approval: { id: "appr_9", approved } })
+      ),
+    ])
+    expect(ChatRequest.parse(request).turn).toMatchObject({
+      results: [
+        approved
+          ? { approval_id: "appr_9", approved, always: true }
+          : { approval_id: "appr_9", approved },
+      ],
+    })
+  }
+  alwaysTapped.delete("appr_9")
 })
 
 it("sends a yes or no on any tool that asked for one", () => {

@@ -540,6 +540,11 @@ const ChatResult = z.discriminatedUnion("kind", [
     kind: z.literal("approval"),
     approval_id: ApprovalId,
     approved: z.boolean(),
+    /**
+     * Set by a tap on Always allow, or on an offer card's yes: the grant is
+     * saved with the yes. Only a click sends it, never a typed answer.
+     */
+    always: z.literal(true).optional(),
     /** The owner's words, as the AI SDK holds them: data, never instructions. */
     reason: Text(ANSWER_TEXT_MAX).optional(),
   }),
