@@ -86,10 +86,12 @@ export type ContextPolicy = {
  * the turn carries on from one cut off at its limit. Version 13 reads
  * `cos.event`s: a notice as the assistant's message, anything else as
  * labelled data that starts no turn. Version 14 may add a line when events
- * logged away from the chat start a turn of their own.
+ * logged away from the chat start a turn of their own. Version 15 may add a
+ * line naming the kinds the owner lets run with no card, and one for a kind
+ * to offer.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "14",
+  version: "15",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,

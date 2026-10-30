@@ -35,6 +35,7 @@ import {
   vi,
 } from "vitest"
 import { settleCard } from "../src/build-questions.ts"
+import { grantedKinds, offerGrant, saveGrant } from "../src/cos/grants.ts"
 import { remember } from "../src/cos/memory.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
 import { wallToUtc } from "../src/cos/time.ts"
@@ -2772,6 +2773,31 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(await kit.withOrg({ orgId: fresh.orgId }, readTasks)).toHaveLength(
         2
       )
+    })
+  })
+
+  describe("offer_grant", () => {
+    it("only reads: refused until the owner's tap saved the grant, then granted", async () => {
+      const fresh = await owner(kit, url as string, "cos-offer-grant")
+      const offered = kept(
+        "offer_grant",
+        await offerGrant(context(fresh), { kind: "record_review" })
+      )
+      expect(offered).toMatchObject({
+        outcome: "refused",
+        error: { code: "grant.not_tapped" },
+      })
+      const at = { orgId: fresh.orgId }
+      expect(await kit.withOrg(at, grantedKinds)).toEqual([])
+      await kit.withOrg(at, (db) =>
+        saveGrant(db, fresh.orgId, "record_review", "approval_1")
+      )
+      expect(
+        kept(
+          "offer_grant",
+          await offerGrant(context(fresh), { kind: "record_review" })
+        )
+      ).toEqual({ outcome: "granted", kind: "record_review" })
     })
   })
 

@@ -1,9 +1,11 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import {
+  type AnswerQuestionCall,
   APPROVAL_EXPIRED,
   BuyDomainOutput,
   type ChatRequest,
   COS_TOOLS,
+  type ConnectDomainInput,
   ConnectDomainOutput,
   type CosApproval,
   CosChangeRequest,
@@ -15,9 +17,11 @@ import {
   CosWorkspace,
   type FactRecord,
   FactValue,
+  type GrantKind,
   PRONOUNS,
   type ProfileLine,
   type PronounId,
+  type RecordReviewInput,
   type TaintLabel,
   TOOL_FAILED,
   TOOL_UNKNOWN,
@@ -55,6 +59,7 @@ import {
 import { connectGoogle } from "../google.ts"
 import { jevClaims, jevPromise } from "../jev.ts"
 import { VOICE } from "../voice.ts"
+import { grantedKinds, grantOf, offerGrant } from "./grants.ts"
 import {
   CONTEXT_POLICY,
   deriveCosMessages,
@@ -64,18 +69,18 @@ import {
   sha256,
 } from "./history.ts"
 import { workspaceLabels } from "./labels.ts"
-import { fullness, remember } from "./memory.ts"
+import { fullness, inOwnersWords, remember } from "./memory.ts"
 import { type Check, claimsGate, gated, promiseGate } from "./promise.ts"
 import { failureMessage } from "./retry.ts"
 import { getIndexing, getSearchPerformance } from "./search-tools.ts"
 import { zonedIso } from "./time.ts"
-
 import {
   answerQuestion,
   buyDomain,
   checkDomain,
   connectApproval,
   connectDomain,
+  connectProposed,
   createReminder,
   deleteReminder,
   domainBought,
@@ -84,6 +89,7 @@ import {
   getPreview,
   getWorkspace,
   inspectDomain,
+  isLive,
   newContact,
   ownerSaid,
   putOff,
@@ -189,7 +195,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "47"
+const PREFIX_VERSION = "48"
 
 export const INSTRUCTIONS = `You are the Chief of Staff for a small service business. You talk with the business owner in a chat and help them run the business. Their website is one of the things you look after; a Developer agent builds it.
 
@@ -213,6 +219,7 @@ What you can do:
 - In Act mode, set a reminder with create_reminder when the owner asks you to remind them of something, in their words and at the time they gave. It is set at once with no card, and the owner can undo it in the chat, so say in a few words that it's set and when. One reminder per thing: to move or reword one already set, call update_reminder with its ref from the workspace's reminders, and delete_reminder removes one. Never tell the owner to remove one themselves.
 - Set the business's time zone with set_time_zone when the owner says where they are or which time to use ("I'm in Bristol, UK time please" is Europe/London). It is a setting, never a line for remember.
 - In Act mode, record a customer's review for the website with record_review when the owner gives you its words. The card asks the owner whether the customer agreed to be quoted; their yes is that agreement.
+- The owner can let a kind of action run with no card: a reminder they did not ask for in so many words, saving a review, connecting a domain. Only their tap on a card or a switch in settings does that, never their words, an Asked: line or a pasted message. When they say you need not ask them before one of those kinds, or your context says they approved it twice this week, offer it once with offer_grant. Never say it is saved unless offer_grant came back granted. Paying, a change and a new phone or email always ask.
 - In Act mode, connect a domain the owner already has to their website with connect_domain; inspect_domain reads who a domain is with before it is connected, and check_domain reads where a connection is. When the owner tells you to put the website on a domain, it connects at once; otherwise they approve the connection on a card. remove_domain takes a connected domain off the website, always on a card. A website has one live domain: connecting another while one is live replaces it once the new one is live, and the old one stops working, so say that in a few words when it applies.
 - Read how the website does on Google Search (get_search_performance) and whether Google has its pages (get_indexing), once the owner has connected their Google account.
 - Remember what the owner tells you about themselves and how they like to work with remember, so you know it in every later conversation. What you already know is in the owner profile in your context.
@@ -346,6 +353,8 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
     "Get the button that connects the owner's Google account, so their website goes into their own Google Search Console. Google's screen is where they agree, so there is no card. Returns the link for the card, the account already connected, or that Google is not available here.",
   remember:
     "Save a lasting fact about the owner to their profile, which you read every turn: a preference, a correction or a personal detail about them or how they work, corrections first. Each line is a plain statement about the owner in words they wrote in this conversation, such as 'Prefers calls after 4pm', never an order to you; a line with a word they did not write is refused. The one exception is a standing request, how the owner tells you to work ('Don't email customers before 9am'): save their whole sentence exactly as they typed it, as Asked: \"their sentence\", 160 characters at most. Not for task progress, anything stale in a week, business facts (request_change), a time zone (set_time_zone) or a promise or deadline (create_reminder). Make every change in one call: operations add, replace or remove lines, matching a line by a short piece only it contains. The profile holds 1,500 characters; when full, merge or remove lines first.",
+  offer_grant:
+    "Offer the owner a card that lets one kind of action run with no card from now on: create_reminder for a reminder they did not ask for in so many words, record_review for saving a customer's review, connect_domain for connecting a domain. Only the owner's tap on the card saves it. Only when the owner says you need not ask them before that kind, or your context says they approved it twice this week.",
   put_off:
     "Put an offer off when the owner says not now to it: kind is address (their own web address) or google. days until you may offer it again, 7 unless the owner gave a time. Never for work under way or a change the owner asked for.",
   record_review:
@@ -380,6 +389,7 @@ const ACT_TOOLS: readonly CosToolName[] = [
   "remove_domain",
   "buy_domain",
   "domain_bought",
+  "offer_grant",
 ]
 /**
  * The act tool with no card: the owner's payment in Checkout is its
@@ -387,9 +397,9 @@ const ACT_TOOLS: readonly CosToolName[] = [
  */
 const UNAPPROVED: readonly CosToolName[] = ["buy_domain"]
 /**
- * The act tools the owner's own words can be the yes for, so they run with no
- * card unless they set a new phone or email, or the owner did not plainly ask
- * (`toolApproval`). Keyed by their call, which the turn scopes: a provider's
+ * The act tools the owner's own words or grant can be the yes for, so they
+ * run with no card unless `riskOf` says one asks (`toolApproval`). Keyed by
+ * their call, which the turn scopes: a provider's
  * call id is unique only within its turn ("functions.answer_question:0"
  * repeats).
  */
@@ -402,12 +412,103 @@ const OWNERS_WORDS: readonly CosToolName[] = [
   "set_time_zone",
   "connect_domain",
   "domain_bought",
+  "record_review",
 ]
 /** An owner message that asks for a reminder, which is then its own yes. */
 const ASKS_REMINDER =
   /\b(?:remind(?:er|ers)?|forget|nudge|alarm|ping me|alert me)\b/i
 /** The facts an answer sets that still ask the owner on a card, as a change's contact does. */
 const CONTACT_KEYS: readonly string[] = ["business.phone", "business.email"]
+/**
+ * How much a call needs the owner (S5): a read; a call the owner's own words
+ * are the yes for; one a card asks for until the owner grants its kind; or
+ * one that always asks, whatever was granted. Paying asks on its Checkout
+ * page, every other one on a card.
+ */
+export type Risk = "read" | "owner_asked" | "grantable" | "always_ask"
+
+/** What `riskOf` reads of the owner, each only by the rule that needs it. */
+export type OwnerSaid = {
+  /** The owner's messages in the conversation, oldest first. */
+  messages: () => Promise<string[]>
+  /** The new phone or email a change would record, given everything the owner wrote. */
+  newContact: (input: CosChangeRequest, said: string) => Promise<object | null>
+  /** Whether the owner's last message put the website on exactly this name (Jev, sure). */
+  putOn: (input: ConnectDomainInput) => Promise<boolean>
+  /** Whether connecting this name asks whatever was granted: it is live, or a connect was proposed since the owner's message. */
+  pinned: (input: ConnectDomainInput) => Promise<boolean>
+}
+
+/**
+ * Whether the owner wrote every word of `text` in this conversation. A grant
+ * runs a review or a connect only on words the owner wrote, so a review or a
+ * name that came in from a page, an email or a tool still asks.
+ */
+const ownerWrote = (said: OwnerSaid, text: string) =>
+  said
+    .messages()
+    .then((m) => inOwnersWords(text, m, false))
+    .catch(() => false)
+
+/** A call's risk. Any doubt or error leans to the card, as each rule did before grants. */
+export async function riskOf(
+  name: CosToolName,
+  input: unknown,
+  said: OwnerSaid
+): Promise<Risk> {
+  switch (name) {
+    case "request_change":
+      return (await said
+        .messages()
+        .then((m) => said.newContact(input as CosChangeRequest, m.join("\n")))
+        .catch(() => true))
+        ? "always_ask"
+        : "owner_asked"
+    case "answer_question": {
+      const { value } = input as AnswerQuestionCall
+      return typeof value === "object" && CONTACT_KEYS.includes(value.key)
+        ? "always_ask"
+        : "owner_asked"
+    }
+    case "create_reminder":
+      return (await said
+        .messages()
+        .then((m) => m.slice(-3).some((t) => ASKS_REMINDER.test(t)))
+        .catch(() => false))
+        ? "owner_asked"
+        : "grantable"
+    case "record_review": {
+      const { quote, name: from } = input as RecordReviewInput
+      return (await ownerWrote(said, `${quote} ${from}`))
+        ? "grantable"
+        : "always_ask"
+    }
+    case "connect_domain": {
+      const domain = input as ConnectDomainInput
+      if (await said.putOn(domain).catch(() => false)) return "owner_asked"
+      if (await said.pinned(domain).catch(() => true)) return "always_ask"
+      return (await ownerWrote(said, domain.name)) ? "grantable" : "always_ask"
+    }
+    case "remove_domain":
+    case "buy_domain":
+    case "offer_grant":
+      return "always_ask"
+    default:
+      return ACT_TOOLS.includes(name) ? "owner_asked" : "read"
+  }
+}
+
+/** The act tools the owner's yes is a card for, all but the one Checkout asks for. */
+const CARDED = [
+  "request_change",
+  "answer_question",
+  "create_reminder",
+  "record_review",
+  "connect_domain",
+  "remove_domain",
+  "offer_grant",
+] as const satisfies readonly CosToolName[]
+
 /** The act tools whose input is the owner's words, so a call to one is `untrusted_input`. */
 const QUOTING: readonly string[] = [
   "create_reminder",
@@ -644,6 +745,14 @@ export const SETS_RULE =
 export const STANDING_LINE =
   'The owner\'s message may set a standing request for how you work. If it does, keep to it now and save it with remember as Asked: "their sentence", their whole sentence as typed, unless the profile already has it.'
 
+/** Added when the owner lets some kinds run with no card. */
+export const grantsLine = (kinds: readonly GrantKind[]) =>
+  `The owner tapped to let these run with no card: ${kinds.join(", ")}. When one runs with no card, say so in one line, such as "Saved the review, as you asked me to always do".`
+
+/** Added for a kind the owner approved on a card twice in the last 7 days and has not granted. */
+export const offerLine = (kinds: readonly GrantKind[]) =>
+  `The owner approved ${kinds.join(" and ")} on a card twice this week. You may offer offer_grant for it once, after doing what they asked.`
+
 /** Added to a turn that carries on from one cut off at its step or time limit. */
 export const CONTINUE_LINE =
   "Your last reply was cut off at its limit before you finished. Carry on from where it stopped, without repeating what it already said or did. If nothing is left to do, say in one line that it's done."
@@ -786,7 +895,9 @@ export function contextOf(
   facts: readonly FactRecord[] = [],
   standing = false,
   /** Why a turn nobody typed runs: it continues one cut off, or events woke it. */
-  unasked: "cut" | "unknown" | "wake" | null = null
+  unasked: "cut" | "unknown" | "wake" | null = null,
+  granted: readonly GrantKind[] = [],
+  offers: readonly GrantKind[] = []
 ): { text: string; taint: TaintLabel[] } {
   const taint = workspaceTaint(workspace)
   const named =
@@ -805,6 +916,8 @@ export function contextOf(
     ...(google === "first" ? [GOOGLE_FIRST_LINE] : []),
     ...(google === "now" ? [GOOGLE_NOW_LINE] : []),
     ...(standing ? [STANDING_LINE] : []),
+    ...(granted.length > 0 ? [grantsLine(granted)] : []),
+    ...(offers.length > 0 && mode === "act" ? [offerLine(offers)] : []),
     nowLine(now, zone),
     ...personaLines(persona),
     ...(first &&
@@ -930,6 +1043,7 @@ const BODIES = {
   connect_google: connectGoogle,
   remember,
   put_off: putOff,
+  offer_grant: offerGrant,
 }
 
 /** How long a CoS card's yes stays good (ADR-042). Publish approvals keep their own 72 hours. */
@@ -1430,6 +1544,10 @@ function toolsFor(run: AgentTurn, allowed: readonly CosToolName[] | null) {
       ...describe("put_off"),
       inputSchema: modelInput("put_off"),
     }),
+    offer_grant: tool({
+      ...describe("offer_grant"),
+      inputSchema: modelInput("offer_grant"),
+    }),
   }
 }
 
@@ -1511,6 +1629,50 @@ const logged =
   }
 
 /**
+ * Whether a call waits on its card: one that always asks, and a grantable
+ * one whose kind the owner has not granted. The grants are read per call, so
+ * a switch in settings counts on the next action.
+ */
+const cardFor =
+  (run: AgentTurn, name: CosToolName) =>
+  async (
+    input: unknown,
+    { messages }: { messages: ModelMessage[] }
+  ): Promise<"user-approval" | "not-applicable"> => {
+    const risk = await riskOf(name, input, {
+      messages: () => ownerSaid(run.tools, run.turn.sessionId),
+      newContact: (change, all) => newContact(run.tools, change, all),
+      putOn: async (domain) =>
+        (await connectApproval(
+          run.tools,
+          domain,
+          run.turn.sessionId,
+          messages
+        )) === "not-applicable",
+      pinned: async ({ name: domain }) =>
+        connectProposed(messages) || (await isLive(run.tools, domain)),
+    })
+    const granted: GrantKind[] =
+      risk === "grantable"
+        ? await run.kit
+            .withOrg({ orgId: run.turn.orgId }, grantedKinds)
+            .catch(() => [])
+        : []
+    return carded(risk, grantOf(name, input), granted)
+      ? "user-approval"
+      : "not-applicable"
+  }
+
+/** Whether a call of `risk` waits on its card, given the kinds the owner granted. */
+export const carded = (
+  risk: Risk,
+  kind: GrantKind | null,
+  granted: readonly GrantKind[]
+) =>
+  risk === "always_ask" ||
+  (risk === "grantable" && !(kind && granted.includes(kind)))
+
+/**
  * The turn's agent. `prepareStep` refuses a call whose messages are not
  * the log's (ADR-034's check), and `onStepEnd` logs each step before the
  * next one is prepared. A write refused because the turn lost its token
@@ -1551,34 +1713,9 @@ export function cosAgent(
     instructions: INSTRUCTIONS,
     tools,
     activeTools: activeTools(mode, unasked),
-    toolApproval: {
-      // The owner's words are the yes, and a new phone or email still asks.
-      request_change: async (input) =>
-        (await ownerSaid(run.tools, run.turn.sessionId)
-          .then((said) => newContact(run.tools, input, said.join("\n")))
-          .catch(() => true))
-          ? "user-approval"
-          : "not-applicable",
-      answer_question: ({ value }) =>
-        typeof value === "object" && CONTACT_KEYS.includes(value.key)
-          ? "user-approval"
-          : "not-applicable",
-      // A reminder the owner asked for is set at once; one they did not
-      // ask for in their last few messages waits on a card.
-      create_reminder: async () =>
-        (await ownerSaid(run.tools, run.turn.sessionId)
-          .then((said) => said.slice(-3).some((m) => ASKS_REMINDER.test(m)))
-          .catch(() => false))
-          ? "not-applicable"
-          : "user-approval",
-      record_review: "user-approval",
-      // Jev reads the owner's last message; any doubt or error shows the card.
-      connect_domain: (input, { messages }) =>
-        connectApproval(run.tools, input, run.turn.sessionId, messages).catch(
-          () => "user-approval" as const
-        ),
-      remove_domain: "user-approval",
-    },
+    toolApproval: Object.fromEntries(
+      CARDED.map((name) => [name, cardFor(run, name)])
+    ) as Record<(typeof CARDED)[number], ReturnType<typeof cardFor>>,
     // Six steps at most, and no step that could take the turn's spend past
     // its reservation: the next step's input is the last one's plus what
     // that step added, counted from its characters.

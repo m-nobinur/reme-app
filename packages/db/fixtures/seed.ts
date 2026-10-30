@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm"
 import { connect } from "../src/client.ts"
 import {
+  approvalGrants,
   approvals,
   assignments,
   assignmentTransitions,
@@ -142,6 +143,7 @@ export async function clearOrgs(
   await tx
     .delete(pushSubscriptions)
     .where(inArray(pushSubscriptions.orgId, ids))
+  await tx.delete(approvalGrants).where(inArray(approvalGrants.orgId, ids))
   await tx.delete(jobRuns).where(inArray(jobRuns.orgId, ids))
   await tx.delete(scheduledJobs).where(inArray(scheduledJobs.orgId, ids))
   // A reminder and a message cite their conversation, and a conversation its

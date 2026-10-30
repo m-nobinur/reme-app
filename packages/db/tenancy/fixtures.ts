@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm"
 import { clearOrgs } from "../fixtures/seed.ts"
 import { connect } from "../src/client.ts"
 import {
+  approvalGrants,
   approvals,
   assignments,
   assignmentTransitions,
@@ -362,6 +363,11 @@ export async function seedTwoOrgs() {
       endpoint: `https://push.example.test/tenancy-${tag}`,
       p256dh: "tenancy-p256dh",
       auth: "tenancy-auth",
+    })
+    await db.insert(approvalGrants).values({
+      orgId: org,
+      kind: "record_review",
+      grantedByStaffId: per(tag, 4),
     })
     // The org's connected domain: live, served on its apex (org A on `www.`).
     await db.insert(domains).values({

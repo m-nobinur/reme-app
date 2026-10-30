@@ -1,5 +1,6 @@
 import {
   APPROVAL_EXPIRED,
+  ApprovalGrants,
   CARD_ANSWERED,
   ChangeKind,
   ChatRequest,
@@ -18,6 +19,7 @@ import {
 } from "@workspace/contracts"
 import {
   appendSessionEvent,
+  approvalGrants,
   assignments,
   conversationMessages,
   emailMessageId,
@@ -82,6 +84,7 @@ import {
   LIMITS,
   messageTaint,
   NotRun,
+  offerLine,
   openrouterModel,
   personaOf,
   priceOf,
@@ -2374,6 +2377,217 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       ],
     })
     expect(result?.taint).toEqual([])
+  })
+
+  describe("a grant", () => {
+    const review = {
+      slot: 1,
+      quote: "Spotless every time.",
+      name: "Ann",
+      permission: true,
+    }
+    const grantsOf = (who: Owner) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        db
+          .select({
+            kind: approvalGrants.kind,
+            sourceApproval: approvalGrants.sourceApproval,
+          })
+          .from(approvalGrants)
+      )
+    /** A yes on the tail's one card, with the Always allow tap or without. */
+    const yesTo = async (who: Owner, id: string, always: boolean) => {
+      const tail = await tailOf(who, id)
+      const [card] = waiting(tail)
+      const done = await turn(
+        who,
+        {
+          conversation_id: id,
+          mode: "act",
+          turn: {
+            kind: "results",
+            message_id: tail.id,
+            results: [
+              {
+                kind: "approval",
+                approval_id: card?.approval.id,
+                approved: true,
+                ...(always ? { always: true } : {}),
+              },
+            ],
+          },
+        },
+        { model: null }
+      )
+      expect(done.response.status, done.text).toBe(200)
+      return card?.approval.id
+    }
+    const outcomes = async (id: string) =>
+      (await logOf(id))
+        .filter((e) => e.type === "cos.tool_result")
+        .map((e) => e.payload.output)
+
+    it("is saved by a tap on Always allow, and the next review runs with no card and the model is told", async () => {
+      const who = await owner(kit, url as string, "cos-grant-always")
+      const id = await conversation(who)
+      await turn(who, typed(id, "Ann says: spotless every time. Save it."), {
+        model: scripted(
+          calls({ id: "call_r1", tool: "record_review", input: review })
+        ).model,
+      })
+      expect(waiting(await tailOf(who, id)).map((p) => p.type)).toEqual([
+        "tool-record_review",
+      ])
+      expect(await grantsOf(who)).toEqual([])
+      const approvalId = await yesTo(who, id, true)
+      expect(await grantsOf(who)).toEqual([
+        { kind: "record_review", sourceApproval: approvalId },
+      ])
+      const { model, sent } = scripted(
+        calls({
+          id: "call_r2",
+          tool: "record_review",
+          input: { ...review, slot: 2, name: "Bo" },
+        })
+      )
+      const next = await turn(who, typed(id, "Bo says: great job."), { model })
+      expect(next.response.status, next.text).toBe(200)
+      expect(
+        next.chunks.filter((c) => c.type === "tool-approval-request")
+      ).toHaveLength(0)
+      expect(waiting(await tailOf(who, id))).toEqual([])
+      expect((await outcomes(id)).map((o) => o.outcome)).toEqual([
+        "recorded",
+        "recorded",
+      ])
+      expect(wire(sent)).toContain(
+        "The owner tapped to let these run with no card: record_review."
+      )
+    })
+
+    it("asks on an offer card when the owner says it need not ask, and only the card's tap saves the grant", async () => {
+      const who = await owner(kit, url as string, "cos-grant-offer")
+      const offer = () =>
+        scripted(
+          calls({
+            id: "call_o",
+            tool: "offer_grant",
+            input: { kind: "record_review" },
+          })
+        ).model
+      const id = await conversation(who)
+      const done = await turn(
+        who,
+        typed(id, "You don't need to ask me before saving replies."),
+        { model: offer() }
+      )
+      expect(done.response.status, done.text).toBe(200)
+      expect(waiting(await tailOf(who, id)).map((p) => p.type)).toEqual([
+        "tool-offer_grant",
+      ])
+      expect(await grantsOf(who)).toEqual([])
+      // A yes without the tap, as a typed yes is resolved, saves nothing.
+      await yesTo(who, id, false)
+      expect(await grantsOf(who)).toEqual([])
+      expect(await outcomes(id)).toMatchObject([
+        { outcome: "refused", error: { code: "grant.not_tapped" } },
+      ])
+      const tapped = await conversation(who)
+      await turn(
+        who,
+        typed(tapped, "You don't need to ask me before saving replies."),
+        { model: offer() }
+      )
+      const approvalId = await yesTo(who, tapped, true)
+      expect(await grantsOf(who)).toEqual([
+        { kind: "record_review", sourceApproval: approvalId },
+      ])
+      expect(await outcomes(tapped)).toEqual([
+        { outcome: "granted", kind: "record_review" },
+      ])
+    })
+
+    it("lists every kind in settings, and a switch grants or takes one back for the next action", async () => {
+      const who = await owner(kit, url as string, "cos-grant-switch")
+      const flip = async (body: unknown) => {
+        const res = await who.call(stubOrchestrator(), "/approval-grants", {
+          method: "POST",
+          body: JSON.stringify(body),
+        })
+        return {
+          status: res.status,
+          body: (await res.json()) as ApprovalGrants,
+        }
+      }
+      const listed = await who.call(stubOrchestrator(), "/approval-grants", {
+        method: "GET",
+      })
+      expect(ApprovalGrants.parse(await listed.json())).toEqual({
+        grants: [
+          { kind: "create_reminder", on: false, granted_at: null },
+          { kind: "record_review", on: false, granted_at: null },
+          { kind: "connect_domain", on: false, granted_at: null },
+        ],
+      })
+      const on = await flip({ kind: "record_review", on: true })
+      expect(on.status).toBe(200)
+      expect(on.body.grants[1]).toMatchObject({
+        kind: "record_review",
+        on: true,
+        granted_at: expect.any(String),
+      })
+      expect(await grantsOf(who)).toEqual([
+        { kind: "record_review", sourceApproval: null },
+      ])
+      const id = await conversation(who)
+      await turn(who, typed(id, "Ann says: spotless every time."), {
+        model: scripted(
+          calls({ id: "call_s1", tool: "record_review", input: review })
+        ).model,
+      })
+      expect(waiting(await tailOf(who, id))).toEqual([])
+      expect((await flip({ kind: "record_review", on: false })).status).toBe(
+        200
+      )
+      expect(await grantsOf(who)).toEqual([])
+      await turn(who, typed(id, "Bo says: great job."), {
+        model: scripted(
+          calls({
+            id: "call_s2",
+            tool: "record_review",
+            input: { ...review, slot: 2, name: "Bo" },
+          })
+        ).model,
+      })
+      expect(waiting(await tailOf(who, id)).map((p) => p.type)).toEqual([
+        "tool-record_review",
+      ])
+      expect((await flip({ kind: "buy_domain", on: true })).status).toBe(400)
+    })
+
+    it("lets the model offer a kind the owner approved on a card twice this week", async () => {
+      const who = await owner(kit, url as string, "cos-grant-twice")
+      const id = await conversation(who)
+      for (const [slot, name] of [
+        [1, "Ann"],
+        [2, "Bo"],
+      ] as const) {
+        const { model, sent } = scripted(
+          calls({
+            id: `call_r${slot}`,
+            tool: "record_review",
+            input: { ...review, slot, name },
+          })
+        )
+        await turn(who, typed(id, `${name} says: great job.`), { model })
+        expect(wire(sent)).not.toContain("offer_grant for it once")
+        await yesTo(who, id, false)
+      }
+      const { model, sent } = scripted(said("Glad to help."))
+      await turn(who, typed(id, "Thanks."), { model })
+      expect(wire(sent)).toContain(offerLine(["record_review"]))
+      expect(await grantsOf(who)).toEqual([])
+    })
   })
 
   it("runs an approved change before the model continues the same message, and the model reads its result", async () => {

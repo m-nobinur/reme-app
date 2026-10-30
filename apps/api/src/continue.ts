@@ -27,6 +27,7 @@ import {
   personaOf,
   reservation,
 } from "./cos/agent.ts"
+import { grantedKinds } from "./cos/grants.ts"
 import {
   CONTEXT_POLICY,
   deriveCosMessages,
@@ -186,7 +187,8 @@ export async function continueTurn(
       null,
       facts,
       false,
-      job.unknown || unknownAfter(log, continued.seq) ? "unknown" : "cut"
+      job.unknown || unknownAfter(log, continued.seq) ? "unknown" : "cut",
+      await grantedKinds(db)
     )
     const turn: Turn = { ...session, turnId: newUlid() }
     await beginTurn(db, turn, {
