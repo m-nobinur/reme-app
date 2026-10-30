@@ -257,7 +257,7 @@ Your next move (next.kind):
 
 ${STYLE_ANCHORS}
 
-Answer with the JSON object only, in exactly this shape and key order:
+Answer with the JSON object only, the plan itself and never the schema or a wrapper around it (no type, properties or required keys), in exactly this shape and key order:
 `
 
 /**
