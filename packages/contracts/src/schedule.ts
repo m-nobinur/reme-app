@@ -10,13 +10,16 @@ import { Timestamp, TimeZone, Ulid, Uuid } from "./common.ts"
  * `reminder` points at a `reminders` row through `ref_id`. `heartbeat` and
  * `weekly_report` are one job per org and have no referent. `cos_continue`
  * is the system's: one more CoS turn for a turn cut off with work left, its
- * `ref_id` the conversation.
+ * `ref_id` the conversation. `cos_wake` is the system's too, one per org: a
+ * proactive CoS turn once the staff results that asked for one have
+ * gathered for a minute.
  */
 export const JobKind = z.enum([
   "reminder",
   "heartbeat",
   "weekly_report",
   "cos_continue",
+  "cos_wake",
 ])
 
 /**

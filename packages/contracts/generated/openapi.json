@@ -43318,7 +43318,8 @@
               "reminder",
               "heartbeat",
               "weekly_report",
-              "cos_continue"
+              "cos_continue",
+              "cos_wake"
             ]
           },
           "ref_id": {
