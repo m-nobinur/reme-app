@@ -88,7 +88,7 @@ function ApprovalRequest({
         label: "Not now",
         onNo: () => respondToApproval({ approved: false }),
       }}
-      title={toolLine(toolName, "working")}
+      title={toolLine(toolName, "waiting")}
       yes={{
         label: "Approve",
         onYes: () => respondToApproval({ approved: true }),
