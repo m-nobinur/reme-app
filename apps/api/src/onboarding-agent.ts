@@ -1754,13 +1754,13 @@ const escapeBreaks = (quoted: string) =>
 export function planOf(
   raw: string
 ): { plan: OnboardingPlan } | { errors: string[] } {
-  const text = raw.replace(FENCES, "")
+  const body = raw.replace(FENCES, "")
   let json: unknown
   try {
-    json = JSON.parse(text)
+    json = JSON.parse(body)
   } catch {
     try {
-      json = JSON.parse(text.replace(STRINGS, escapeBreaks))
+      json = JSON.parse(body.replace(STRINGS, escapeBreaks))
     } catch {
       return { errors: ["the answer is not one JSON object"] }
     }

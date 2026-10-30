@@ -182,7 +182,7 @@ describe("the plan's checks", () => {
   })
 
   it("reads a plan whose say holds real line breaks", () => {
-    const plan = {
+    const broken = {
       doing: "",
       pending_card: null,
       facts: {},
@@ -190,9 +190,9 @@ describe("the plan's checks", () => {
       next: { kind: "answer_only" },
       say: "First line.\n\nSecond line.",
     }
-    const raw = JSON.stringify(plan).replace(/\\n/g, "\n")
+    const raw = JSON.stringify(broken).replace(/\\n/g, "\n")
     expect(() => JSON.parse(raw)).toThrow()
-    expect(planOf(raw)).toEqual({ plan })
+    expect(planOf(raw)).toEqual({ plan: broken })
     expect(planOf("not json")).toEqual({
       errors: ["the answer is not one JSON object"],
     })
