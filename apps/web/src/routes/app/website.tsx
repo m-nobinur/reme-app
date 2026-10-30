@@ -302,7 +302,7 @@ function Website() {
             <Button onClick={requestChanges}>Request changes</Button>
           ) : null
         }
-        description="What your customers see, and where to ask for a change."
+        description="What your customers see."
         title="Website"
       />
       {review ? <SiteReadyCard className="mb-6" /> : null}
@@ -318,7 +318,7 @@ function Website() {
                 step ??
                 (live
                   ? "A change to your website is being built"
-                  : "Your first version is being built")
+                  : `${leading(assistantOf(workspace))} is building your website`)
               }
               state={work?.state === "waiting" ? "waiting" : "working"}
             />

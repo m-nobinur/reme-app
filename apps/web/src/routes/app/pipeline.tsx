@@ -56,7 +56,7 @@ function Pipeline() {
 
       {items.length === 0 ? (
         <EmptyState
-          description="Enquiries appear here once your intake channels are connected."
+          description="Enquiries appear here once your enquiry forms are connected."
           icon={<PipelineIcon />}
           title="No enquiries yet"
         />

@@ -107,14 +107,14 @@ const neededOf = (
     case "approval_expiring": {
       // Within a day of expiry, so the line always starts Today or Tomorrow.
       const closes = zone
-        ? `Publish by ${dueLine(reminder.expires_at, zone, now).replace(/^T/, "t")}.`
-        : "Publish within a day."
+        ? `Due ${dueLine(reminder.expires_at, zone, now).replace(/^T/, "t")}.`
+        : "Due within a day."
       return {
         key: `approval-${reminder.approval_id}`,
         title: "Your website is ready to publish",
         detail: closes,
         action: {
-          label: "Review and publish",
+          label: "Review",
           focus: anchorOf.approval(reminder.approval_id),
         },
       }
@@ -147,7 +147,7 @@ const neededOf = (
       return {
         key: "facts",
         title: `${leading(assistant)} still needs ${factsNeeded(reminder.keys)}`,
-        detail: `Your website uses these. Tell ${assistant} in a chat.`,
+        detail: "Your website shows these.",
         action: { label: `Tell ${assistant}`, chat: true },
       }
   }

@@ -113,7 +113,6 @@ function Notifications() {
               id: wait.id,
               kind: "wait",
               title: wait.title,
-              detail: `Waiting for ${wait.what}.`,
               at: wait.since,
               expiresAt: wait.until,
               onExpiry: "",

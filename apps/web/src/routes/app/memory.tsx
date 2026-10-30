@@ -29,6 +29,8 @@ import {
   setGrant,
   undoMemory,
 } from "@/lib/api/server"
+import { assistantOf, leading } from "@/lib/briefing"
+import { useLiveWorkspace } from "@/lib/workspace"
 import { useBrowserZone } from "@/panel/workspace-panel"
 
 /**
@@ -55,6 +57,8 @@ function Memory() {
   const view = Route.useLoaderData()
   const router = useRouter()
   const zone = useBrowserZone()
+  const { workspace } = useLiveWorkspace()
+  const assistant = assistantOf(workspace)
   const [status, setStatus] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | number | null>(null)
   const announcer = useRef<HTMLParagraphElement>(null)
@@ -158,7 +162,7 @@ function Memory() {
   return (
     <>
       <PageHeader
-        description="What your assistant remembers about you and how you like to work. It reads these lines at the start of every conversation. Prices, hours and contact details are on the business page."
+        description={`${leading(assistant)} reads these at the start of every chat. Prices, hours and contact details are on the business page.`}
         title="Memory"
       />
 
@@ -184,9 +188,9 @@ function Memory() {
         </h2>
         {view.lines.length === 0 ? (
           <EmptyState
-            description="When you say how you like to work, it is saved here."
+            description={`Tell ${assistant} how you like to work.`}
             icon={<BrainIcon />}
-            title="Nothing remembered yet"
+            title="Nothing yet"
           />
         ) : (
           <Card className="mt-2">
