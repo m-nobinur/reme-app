@@ -206,6 +206,7 @@ const RELEASED: Record<
   "12": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "13": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "14": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "15": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
 }
 
 describe("CONTEXT_POLICY", () => {
