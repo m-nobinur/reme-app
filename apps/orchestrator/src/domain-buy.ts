@@ -1058,7 +1058,7 @@ export async function captureRegistered(
     .email
   return {
     key: `${domainId}:registered`,
-    text: `Payment approved and ${row.name} is registered. One thing only you can do: Cloudflare will email ${email ?? "you"} to confirm the address. Please click the link within 15 days, or the domain gets suspended. Your site will be on it in a few minutes.`,
+    text: `One thing only you can do: Cloudflare will email ${email ?? "you"} to confirm the address. Please click the link within 15 days, or the domain gets suspended.`,
   }
 }
 

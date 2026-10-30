@@ -9,7 +9,7 @@ import {
 
 /**
  * The buy tray's calls to the api. Every Pay opens its own Checkout; the
- * buy-elsewhere note and "Done, I bought it" are keyed per press too, since
+ * buy-elsewhere note and "I've bought it" are keyed per press too, since
  * each asks the registry afresh.
  */
 export const domainPurchase: DomainPurchase = {

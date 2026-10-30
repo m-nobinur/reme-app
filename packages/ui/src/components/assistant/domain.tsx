@@ -38,7 +38,7 @@ import { useState } from "react"
  * what follows is the list of records to add where their domain is managed,
  * each value with its own copy button, and a link to the provider's DNS
  * settings only when the detected provider carries one of our own links.
- * "Done, I'll wait" answers in the owner's voice through the thread, and the
+ * "OK" answers in the owner's voice through the thread, and the
  * assistant watches the domain either way.
  */
 
@@ -111,7 +111,7 @@ function WaitButton() {
         size="sm"
         type="button"
       >
-        Done, I'll wait
+        OK
       </Button>
     </div>
   )
@@ -187,10 +187,7 @@ function Records({
         ))}
         {output.apex ? <li>{apexText(output.apex, name)}</li> : null}
       </ol>
-      <p className={META}>
-        I'll watch for the change and message you. There's no need to tell me
-        when it's done.
-      </p>
+      <p className={META}>I'll message you once it's live.</p>
       <WaitButton />
     </div>
   )
@@ -258,7 +255,7 @@ export const ConnectDomain: ToolCallMessagePartComponent = (props) => {
       no="Cancel"
       props={props}
       slot="connect-domain"
-      title={(input) => `Put your website on ${input.name}.`}
+      title={(input) => `Put your website on ${input.name}`}
       view={view}
       yes="Connect"
     />
@@ -300,7 +297,7 @@ export const DomainBought: ToolCallMessagePartComponent = (props) => {
     >
       {output.outcome === "connecting" ? (
         <>
-          <Done>{name} is yours. Next, the settings to change.</Done>
+          <Done>{name} is yours.</Done>
           <ConnectSteps name={name} output={output} />
         </>
       ) : output.outcome === "not_registered_yet" ? (
@@ -333,12 +330,7 @@ export const RemoveDomain: ToolCallMessagePartComponent = (props) => (
     detail={() =>
       "Your website goes back to its own address. Nothing is deleted at your domain's provider."
     }
-    done={() => (
-      <Done>
-        {RemoveDomainInput.safeParse(props.args).data?.name ?? "The domain"} is
-        no longer connected. Your website is back on its own address.
-      </Done>
-    )}
+    done={() => <Done>Done. Your website is back on its own address.</Done>}
     no="Keep it"
     props={props}
     slot="remove-domain"

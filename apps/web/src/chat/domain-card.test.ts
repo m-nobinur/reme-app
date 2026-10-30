@@ -120,7 +120,7 @@ afterEach(() => {
 it("asks for the owner's yes through the existing approval flow", async () => {
   const card = await draw({ approval: { approved: undefined } })
   expect(card.container.querySelector("h2")?.textContent).toBe(
-    `Put your website on ${NAME}.`
+    `Put your website on ${NAME}`
   )
   expect(card.container.textContent).toContain("Your email is not affected.")
   expect(choices(card.container)).toEqual(["Cancel", "Connect"])
@@ -188,14 +188,14 @@ it("puts Add it for me first when the provider can add the record, with the reco
   expect(first?.getAttribute("rel")).toContain("noopener")
   expect(settings?.getAttribute("href")).toBe("https://dash.cloudflare.com/")
   expect(card.container.querySelectorAll("ol > li")).toHaveLength(2)
-  expect(buttons(card.container)).toContain("Done, I'll wait")
+  expect(buttons(card.container)).toContain("OK")
   await card.unmount()
 })
 
 it("says the website is live, with no records or links, once it is on the domain", async () => {
   const card = await draw(done({ ...RECORDS, provider: GODADDY }), [NAME])
   expect(card.container.textContent).toBe(
-    `Put your website on ${NAME}.Your website is live on ${NAME}.`
+    `Put your website on ${NAME}Your website is live on ${NAME}.`
   )
   expect(card.container.querySelector("a")).toBeNull()
   expect(buttons(card.container)).toEqual([])
@@ -295,10 +295,10 @@ it("warns, rather than reassures, when the email may be affected", async () => {
   await card.unmount()
 })
 
-it("sends Done, I'll wait as the owner only while the card is the last message", async () => {
+it("sends the wait reply as the owner only while the card is the last message", async () => {
   const card = await draw(done(RECORDS))
-  const wait = [...card.container.querySelectorAll("button")].find((b) =>
-    b.textContent?.includes("Done, I'll wait")
+  const wait = [...card.container.querySelectorAll("button")].find(
+    (b) => b.textContent === "OK"
   )
   await act(async () => wait?.click())
   expect(store.append).toHaveBeenCalledExactlyOnceWith(DONE_WAITING)
@@ -400,7 +400,7 @@ it("says the domain is no longer connected once removed, and what a refusal or a
     ...done({ outcome: "removed" }),
   })
   expect(removed.container.textContent).toContain(
-    `${NAME} is no longer connected. Your website is back on its own address.`
+    "Done. Your website is back on its own address."
   )
   expect(buttons(removed.container)).toEqual([])
   await removed.unmount()
