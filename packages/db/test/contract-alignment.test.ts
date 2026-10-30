@@ -256,6 +256,7 @@ describe("rows map onto contracts", () => {
     budgetUsd: 12.5,
     costUsd: null,
     blueprint: null,
+    result: null,
     deadline: null,
     priority: "normal",
     workflowInstanceId: null,

@@ -751,6 +751,11 @@ export const assignments = pgTable(
      * planner; the column is its store, as `acceptance_criteria` is.
      */
     blueprint: jsonb("blueprint"),
+    /**
+     * The `HandoffResult` written in the transition that ends the row, and
+     * logged in the CoS session as a `cos.event`. Null while it is open.
+     */
+    result: jsonb("result"),
     deadline: timestamp("deadline", { withTimezone: true }),
     priority: assignmentPriority("priority").notNull().default("normal"),
     /** The Workflows instance driving this row, once one exists. */

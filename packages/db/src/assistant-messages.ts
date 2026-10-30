@@ -1,7 +1,19 @@
 import { createHash } from "node:crypto"
-import { ChangeAskedPart, ServerMessage } from "@workspace/contracts"
+import {
+  ChangeAskedPart,
+  CosEvent,
+  HandoffResult,
+  ServerMessage,
+  type TaintLabel,
+} from "@workspace/contracts"
 import { sql } from "drizzle-orm"
-import { conversationMessages, conversations, events } from "./schema.ts"
+import { appendSessionEvent } from "./events.ts"
+import {
+  assignments,
+  conversationMessages,
+  conversations,
+  events,
+} from "./schema.ts"
 import type { OrgScopedDb, Tenancy } from "./tenancy.ts"
 
 /**
@@ -38,8 +50,9 @@ export const emailMessageId = (key: string) => `eml_${digest(key)}`
  * `conversationId` names the conversation instead (a reminder goes to the
  * one it was set in), archived or not; one the org does not have is `none`.
  *
- * Not written to the CoS session log here: `cos.message` belongs to a turn,
- * so apps/api/src/chat.ts logs this row on the owner's next typed turn.
+ * Logged in the CoS session in the same transaction, as a `notice`
+ * `cos.event` naming the message, so the next turn reads it whatever starts
+ * that turn.
  */
 export async function postAssistantMessage(
   kit: Tenancy,
@@ -59,6 +72,10 @@ export async function postAssistantMessage(
     ...message,
     id: serverMessageId(key),
   })
+  // A card's questions, as the words the owner read, so a typed answer is recognised.
+  const asked = questions
+    ? [`On a card I asked: ${questions.questions.map((q) => q.text).join(" ")}`]
+    : []
   return post(kit, {
     orgId,
     id,
@@ -70,7 +87,103 @@ export async function postAssistantMessage(
       ...(button ? [{ type: "data-button", data: button }] : []),
       ...(questions ? [{ type: "data-build_questions", data: questions }] : []),
     ],
+    event: {
+      source: "notice",
+      summary: [...text, ...asked].join("\n\n").slice(0, 1500),
+      evidence: [],
+      wake: false,
+      message_id: id,
+    },
   })
+}
+
+/**
+ * Where a `cos.event` goes: the conversation the rail's Chat icon opens, or
+ * `conversationId`, held under its turn lock with no turn open. `busy` and
+ * `none` are as `Posted` says.
+ */
+async function session(
+  db: OrgScopedDb,
+  conversationId?: string
+): Promise<{ id: string; kind: string } | "busy" | "none"> {
+  const [target] = await db.execute<{ id: string; kind: string }>(
+    conversationId
+      ? sql`select id, kind from ${conversations} where id = ${conversationId}`
+      : sql`select id, kind from ${conversations} where archived_at is null
+        order by updated_at desc limit 1`
+  )
+  if (!target) return "none"
+  const [turn] = await db.execute<{ locked: boolean }>(
+    sql`select pg_try_advisory_xact_lock(2, hashtext(${target.id}::text)) as locked`
+  )
+  if (!turn?.locked) return "busy"
+  // A CoS turn streams after its first transaction lets the lock go; its
+  // latest `cos.context` with no `cos.turn` yet is that turn still open. One
+  // older than `LIMITS.totalMs` plus `GRACE_MS` (90 s) has lapsed.
+  const [open] = await db.execute(sql`
+    select 1 from ${events} c
+    where c.session_id = ${target.id} and c.type = 'cos.context'
+      and c.recorded_at > now() - interval '90 seconds'
+      and not exists (select 1 from ${events} t
+        where t.session_id = c.session_id and t.type = 'cos.turn'
+          and t.payload->>'turn_id' = c.payload->>'turn_id')
+    limit 1`)
+  return open ? "busy" : target
+}
+
+/** What a handoff result reads as in the CoS log: it may quote the owner's goal. */
+export const handoffEvent = (result: HandoffResult) => ({
+  type: "cos.event",
+  payload: CosEvent.parse({
+    source: "staff",
+    summary: result.summary,
+    evidence: result.evidence,
+    wake: true,
+  }),
+  taint: ["inferred", "untrusted_input"] as TaintLabel[],
+})
+
+/**
+ * Logs an ended assignment's `result` in the CoS session now, inside the
+ * caller's transaction. `busy` and `none` leave it for the next turn's
+ * opening, which logs every result no `cos.event` names yet
+ * (`unloggedResults`), so the CoS never polls for one.
+ */
+export async function logHandoff(
+  db: OrgScopedDb,
+  assignment: { orgId: string; id: string; staffId: string },
+  result: HandoffResult
+): Promise<"logged" | "busy" | "none"> {
+  const target = await session(db)
+  if (typeof target === "string") return target
+  await appendSessionEvent(db, {
+    orgId: assignment.orgId,
+    staffId: assignment.staffId,
+    assignmentId: assignment.id,
+    sessionId: target.id,
+    ...handoffEvent(result),
+  })
+  return "logged"
+}
+
+/** Ended assignments whose result no `cos.event` has logged yet, oldest first. */
+export async function unloggedResults(
+  db: OrgScopedDb
+): Promise<{ id: string; staffId: string; result: HandoffResult }[]> {
+  const rows = await db.execute<{
+    id: string
+    staff_id: string
+    result: unknown
+  }>(sql`
+    select a.id, a.staff_id, a.result from ${assignments} a
+    where a.result is not null and not exists (select 1 from ${events} e
+      where e.assignment_id = a.id and e.type = 'cos.event')
+    order by a.updated_at`)
+  return rows.map((row) => ({
+    id: row.id,
+    staffId: row.staff_id,
+    result: HandoffResult.parse(row.result),
+  }))
 }
 
 /**
@@ -147,12 +260,14 @@ async function post(
     conversationId,
     role,
     parts,
+    event,
   }: {
     orgId: string
     id: string
     conversationId?: string
     role: "assistant" | "user"
     parts: Record<string, unknown>[]
+    event?: CosEvent
   }
 ): Promise<Posted> {
   return kit.withOrg({ orgId }, async (db) => {
@@ -162,29 +277,8 @@ async function post(
       sql`select 1 from ${conversationMessages} where id = ${id} limit 1`
     )
     if (posted) return "exists"
-    const [target] = await db.execute<{ id: string; kind: string }>(
-      conversationId
-        ? sql`select id, kind from ${conversations} where id = ${conversationId}`
-        : sql`select id, kind from ${conversations} where archived_at is null
-          order by updated_at desc limit 1`
-    )
-    if (!target) return "none"
-    const [turn] = await db.execute<{ locked: boolean }>(
-      sql`select pg_try_advisory_xact_lock(2, hashtext(${target.id}::text)) as locked`
-    )
-    if (!turn?.locked) return "busy"
-    // A CoS turn streams after its first transaction lets the lock go; its
-    // latest `cos.context` with no `cos.turn` yet is that turn still open. One
-    // older than `LIMITS.totalMs` plus `GRACE_MS` (90 s) has lapsed.
-    const [open] = await db.execute(sql`
-      select 1 from ${events} c
-      where c.session_id = ${target.id} and c.type = 'cos.context'
-        and c.recorded_at > now() - interval '90 seconds'
-        and not exists (select 1 from ${events} t
-          where t.session_id = c.session_id and t.type = 'cos.turn'
-            and t.payload->>'turn_id' = c.payload->>'turn_id')
-      limit 1`)
-    if (open) return "busy"
+    const target = await session(db, conversationId)
+    if (typeof target === "string") return target
     if (target.kind === "onboarding" && !(await scriptEnded(db, target.id))) {
       return "waiting"
     }
@@ -215,6 +309,18 @@ async function post(
     await db.execute(
       sql`update ${conversations} set updated_at = now() where id = ${target.id}`
     )
+    if (event) {
+      await appendSessionEvent(db, {
+        orgId,
+        staffId: null,
+        assignmentId: null,
+        sessionId: target.id,
+        type: "cos.event",
+        payload: CosEvent.parse(event),
+        // The words may be a model's (`writeUpdate`).
+        taint: ["inferred"],
+      })
+    }
     return "posted"
   })
 }

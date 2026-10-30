@@ -1,10 +1,16 @@
-import { type AssignmentState, TERMINAL_STATES } from "@workspace/contracts"
+import {
+  type AssignmentState,
+  HANDOFF_STATUS,
+  HandoffResult,
+  TERMINAL_STATES,
+} from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
   assignmentTransitions,
   eq,
   events,
+  logHandoff,
   type OrgScopedDb,
   siteRevisions,
   sql,
@@ -194,6 +200,28 @@ export async function lastEventAt(
   return row?.at ? new Date(row.at).getTime() : 0
 }
 
+/** What an ending assignment hands back to the CoS. The goal may quote the owner. */
+function handoffResult(
+  row: Row,
+  to: AssignmentState,
+  reason?: string
+): HandoffResult {
+  const said =
+    to === "published"
+      ? "Done and live"
+      : reason === "superseded"
+        ? "Replaced by a newer change"
+        : to === "cancelled"
+          ? "Cancelled before it was finished"
+          : "Stopped without finishing"
+  return HandoffResult.parse({
+    outcome: HANDOFF_STATUS[to],
+    summary: `${said}: ${row.goal}`.slice(0, 1500),
+    evidence: [{ kind: "record", table: "assignments", id: row.id }],
+    metadata: { kind: row.kind, state: to, ...(reason && { reason }) },
+  })
+}
+
 type TransitionInput = Ids & {
   to: AssignmentState
   expectedVersion: number
@@ -267,10 +295,13 @@ export async function transition(
   const costUsd = TERMINAL_STATES.includes(to)
     ? await assignmentCost(db, row.id)
     : undefined
+  const result = TERMINAL_STATES.includes(to)
+    ? handoffResult(row, to, input.reason)
+    : undefined
   try {
     await db
       .update(assignments)
-      .set({ state: to, version, costUsd, updatedAt: new Date() })
+      .set({ state: to, version, costUsd, result, updatedAt: new Date() })
       .where(eq(assignments.id, row.id))
   } catch (error) {
     // The site lock (§13): another site assignment in this org is between
@@ -333,6 +364,7 @@ export async function transition(
     eventId,
     reason: input.reason ?? null,
   })
+  if (result) await logHandoff(db, row, result)
   // A change holds the draft it revises paused (revise.ts `holdDraft`): the
   // draft comes back, with its review, if the change ends without a draft
   // of its own, and goes once the change's own is in front of the owner.

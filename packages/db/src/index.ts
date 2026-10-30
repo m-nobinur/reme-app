@@ -6,11 +6,14 @@ export { asc, eq, type SQL, sql } from "drizzle-orm"
 export { orgOpen, tombstone } from "./accounts.ts"
 export {
   emailMessageId,
+  handoffEvent,
+  logHandoff,
   type Posted,
   postAssistantMessage,
   postChangeAsked,
   postOwnerEmail,
   serverMessageId,
+  unloggedResults,
 } from "./assistant-messages.ts"
 export { activeDomainHost, domainHeldElsewhere } from "./domains.ts"
 export {

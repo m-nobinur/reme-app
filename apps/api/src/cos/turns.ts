@@ -17,8 +17,10 @@ import {
   conversations,
   eq,
   events,
+  handoffEvent,
   type OrgScopedDb,
   sql,
+  unloggedResults,
 } from "@workspace/db"
 import { constraint } from "../http.ts"
 import { stepMessages } from "./history.ts"
@@ -263,13 +265,18 @@ const abandoned = (found: Open): Checked => ({
 async function append(
   db: OrgScopedDb,
   turn: Omit<Turn, "turnId">,
-  write: { type: string; payload: Record<string, unknown>; taint: TaintLabel[] }
+  write: {
+    type: string
+    payload: Record<string, unknown>
+    taint: TaintLabel[]
+    assignmentId?: string
+  }
 ): Promise<number | null> {
   try {
     const { seq } = await appendSessionEvent(db, {
       orgId: turn.orgId,
       staffId: turn.staffId,
-      assignmentId: null,
+      assignmentId: write.assignmentId ?? null,
       sessionId: turn.sessionId,
       type: write.type,
       payload: write.payload,
@@ -499,7 +506,8 @@ export type Opening = {
 
 /**
  * For a turn's first transaction, after `closeLapsedTurn` said no turn is
- * open: the prefix when the session lacks it, the turn's messages and its
+ * open: the staff results that found a turn open when they ended, the
+ * prefix when the session lacks it, the turn's messages and its
  * `cos.context`, which gives the turn its token. Throws `SessionBusy` when
  * another writer took a seq meanwhile.
  */
@@ -513,6 +521,10 @@ export async function beginTurn(
     throw new Error("cos.turns: a context for another turn")
   }
   const writes = [
+    ...(await unloggedResults(db)).map(({ id, result }) => ({
+      ...handoffEvent(result),
+      assignmentId: id,
+    })),
     ...(opening.prefix
       ? [
           {

@@ -211,6 +211,13 @@
       "when": 1793343714152,
       "tag": "0029_job_outcomes",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793347661562,
+      "tag": "0030_assignment_result",
+      "breakpoints": true
     }
   ]
 }

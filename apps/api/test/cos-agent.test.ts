@@ -1447,10 +1447,17 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const again = scripted(said("Yes."))
     await turn(me, typed(id, "Thanks", "ask"), { model: again.model })
     expect(wire(again.sent)).toContain("brightclean.example is live.")
-    const posts = (await logOf(id)).filter(
+    const log = await logOf(id)
+    expect(
+      log.filter(
+        (e) =>
+          e.type === "cos.message" &&
+          e.payload.message.id === serverMessageId(key)
+      )
+    ).toEqual([])
+    const posts = log.filter(
       (e) =>
-        e.type === "cos.message" &&
-        e.payload.message.id === serverMessageId(key)
+        e.type === "cos.event" && e.payload.message_id === serverMessageId(key)
     )
     expect(posts).toHaveLength(1)
     expect(posts[0]?.taint).toEqual(["inferred"])
@@ -2450,8 +2457,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       )
       expect(done.response.status, done.text).toBe(200)
       expect(stub.calls).toHaveLength(1)
-      // The history ends on the call and its result; the post is logged on
-      // the next typed turn, after the card, as the chat shows it.
+      // The history ends on the call and its result; the post, logged after
+      // the card, is read on the next typed turn, as the chat shows it.
       const prompt = JSON.stringify(sent[0]?.prompt)
       expect(prompt).toContain('"outcome":"started"')
       expect(prompt).not.toContain(ready)

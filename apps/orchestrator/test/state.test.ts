@@ -2,9 +2,11 @@ import { type AssignmentState, TERMINAL_STATES } from "@workspace/contracts"
 import {
   assignments,
   assignmentTransitions,
+  conversations,
   eq,
   events,
   sql,
+  staff,
 } from "@workspace/db"
 import fc from "fast-check"
 import { ulid } from "ulid"
@@ -531,5 +533,103 @@ live("a new build supersedes a preview nobody reviewed", () => {
     })
     expect((await current(first)).state).toBe("awaiting_review")
     expect((await current(second)).state).toBe("queued")
+  })
+})
+
+live("the handoff result", () => {
+  /** A chat for the org, as the owner's first turn opens one. */
+  const chat = (orgId: string) =>
+    kit.withOrg({ orgId }, async (db) => {
+      const [chief] = await db
+        .select({ id: staff.id })
+        .from(staff)
+        .where(eq(staff.staffCode, "COS-001"))
+      const [made] = await db
+        .insert(conversations)
+        .values({
+          orgId,
+          kind: "assistant",
+          createdByStaffId: chief?.id as string,
+        })
+        .returning({ id: conversations.id })
+      return made?.id as string
+    })
+  const logged = (orgId: string, sessionId: string) =>
+    kit.withOrg({ orgId }, (db) =>
+      db
+        .select({
+          assignmentId: events.assignmentId,
+          payload: events.payload,
+          taint: events.taint,
+        })
+        .from(events)
+        .where(
+          sql`${events.sessionId} = ${sessionId} and ${events.type} = 'cos.event'`
+        )
+    )
+  const resultOf = (ids: { orgId: string; assignmentId: string }) =>
+    kit.withOrg({ orgId: ids.orgId }, async (db) => {
+      const [row] = await db
+        .select({ result: assignments.result })
+        .from(assignments)
+        .where(eq(assignments.id, ids.assignmentId))
+      return row?.result
+    })
+
+  it("is written as the row ends and logged in the CoS session", async () => {
+    const ids = await newAssignment(await freshOrg())
+    const session = await chat(ids.orgId)
+    await walk(ids, PATH.awaiting_review)
+    expect(await resultOf(ids)).toBeNull()
+    expect(await logged(ids.orgId, session)).toEqual([])
+    await walk(ids, ["release_candidate", "published"])
+    const result = {
+      outcome: "done",
+      summary: "Done and live: probe",
+      evidence: [
+        { kind: "record", table: "assignments", id: ids.assignmentId },
+      ],
+      metadata: { kind: "site.build", state: "published" },
+    }
+    expect(await resultOf(ids)).toEqual(result)
+    expect(await logged(ids.orgId, session)).toEqual([
+      {
+        assignmentId: ids.assignmentId,
+        payload: {
+          source: "staff",
+          summary: result.summary,
+          evidence: result.evidence,
+          wake: true,
+        },
+        taint: ["inferred", "untrusted_input"],
+      },
+    ])
+  })
+
+  it("waits in the row with no chat, or a turn open", async () => {
+    const ids = await newAssignment(await freshOrg())
+    expect(await cancel(kit, ids)).toBe("cancelled")
+    expect(await resultOf(ids)).toMatchObject({ outcome: "failed" })
+
+    const later = await newAssignment(ids.orgId)
+    const session = await chat(ids.orgId)
+    await kit.withOrg({ orgId: ids.orgId }, (db) =>
+      db.insert(events).values({
+        eventId: ulid(),
+        orgId: ids.orgId,
+        staffId: null,
+        assignmentId: null,
+        sessionId: session,
+        seq: 0,
+        type: "cos.context",
+        occurredAt: new Date(),
+        idempotencyKey: ulid(),
+        taint: [],
+        payload: { turn_id: ulid() },
+      })
+    )
+    expect(await cancel(kit, later)).toBe("cancelled")
+    expect(await resultOf(later)).toMatchObject({ outcome: "failed" })
+    expect(await logged(ids.orgId, session)).toEqual([])
   })
 })

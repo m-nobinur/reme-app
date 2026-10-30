@@ -1732,7 +1732,8 @@ async function fallbackTurn(
 /**
  * The messages posted outside a turn that the session's log does not hold
  * yet, oldest first, cut to their text: the assistant's own (`srv_…`,
- * `postAssistantMessage`) and the owner's emailed replies (`eml_…`,
+ * `postAssistantMessage`, posted before it logged a `cos.event`) and the
+ * owner's emailed replies (`eml_…`,
  * `postOwnerEmail`). A typed turn logs them before the owner's message, so
  * the model's history, which reads the log alone, holds what it already told
  * the owner and what the owner answered by email.
@@ -1749,8 +1750,9 @@ async function unloggedPosts(db: OrgScopedDb, id: string) {
         (m.id like 'srv\_%' and m.content->>'role' = 'assistant')
         or (m.id like 'eml\_%' and m.content->>'role' = 'user'))
       and not exists (select 1 from ${events} e
-        where e.session_id = ${id} and e.type = 'cos.message'
-          and e.payload->'message'->>'id' = m.id)
+        where e.session_id = ${id} and (
+          (e.type = 'cos.message' and e.payload->'message'->>'id' = m.id)
+          or (e.type = 'cos.event' and e.payload->>'message_id' = m.id)))
     order by m.seq`)
   return rows.map((row) => ({
     id: row.id,
