@@ -204,6 +204,13 @@
       "when": 1793305750705,
       "tag": "0028_cos_continue",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793343714152,
+      "tag": "0029_job_outcomes",
+      "breakpoints": true
     }
   ]
 }

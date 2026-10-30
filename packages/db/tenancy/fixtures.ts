@@ -349,7 +349,7 @@ export async function seedTwoOrgs() {
       jobId: per(tag, 20),
       orgId: org,
       runAt: new Date("2026-10-15T09:00:00Z"),
-      outcome: "ok",
+      outcome: "done",
     })
     await db.insert(deliveries).values({
       orgId: org,

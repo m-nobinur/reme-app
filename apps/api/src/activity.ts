@@ -6,6 +6,7 @@ import type {
   AssignmentState,
   AttentionItem,
   BuildSummary,
+  JobOutcome,
   OwnerTask,
   Reminder,
   TaskStepState,
@@ -57,7 +58,7 @@ export type HeartbeatRow = {
   /** Null while the job is paused. */
   next: string | null
   /** The newest run in the last day. */
-  last: { at: string; outcome: "ok" | "skipped" | "failed" } | null
+  last: { at: string; outcome: JobOutcome } | null
 }
 
 export type ActivityRows = {
@@ -669,7 +670,7 @@ export function activityOf(input: ActivityInput, now: Date): Activity {
       steps: [
         {
           id: "message",
-          state: beat.last.outcome === "ok" ? "done" : "skipped",
+          state: beat.last.outcome === "done" ? "done" : "skipped",
         },
       ],
       at: iso(beat.last.at),

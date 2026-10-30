@@ -188,7 +188,7 @@ describe.skipIf(!url)("running a claimed job", () => {
     const message = await claimed(FIRST_0130)
     const handlers = { reminder: counting }
     expect(await runJob(kit, env, message, handlers, after(FIRST_0130))).toBe(
-      "ok"
+      "done"
     )
     expect(await runJob(kit, env, message, handlers, after(FIRST_0130))).toBe(
       "stale"
@@ -200,7 +200,7 @@ describe.skipIf(!url)("running a claimed job", () => {
     const { job, runs } = await read(message.jobId)
     expect(calls).toEqual([message.jobId])
     expect(runs).toHaveLength(1)
-    expect(runs[0]).toMatchObject({ runAt: FIRST_0130, outcome: "ok" })
+    expect(runs[0]).toMatchObject({ runAt: FIRST_0130, outcome: "done" })
     // A one-off never fires again.
     expect(job).toMatchObject({ claimedAt: null, failures: 0 })
     expect(job?.pausedAt).toEqual(after(FIRST_0130))
@@ -213,7 +213,7 @@ describe.skipIf(!url)("running a claimed job", () => {
       runJob(kit, env, message, handlers, after(FIRST_0130)),
       runJob(kit, env, message, handlers, after(FIRST_0130)),
     ])
-    expect(both.sort()).toEqual(["ok", "stale"])
+    expect(both.sort()).toEqual(["done", "stale"])
     expect(calls).toHaveLength(1)
     expect((await read(message.jobId)).runs).toHaveLength(1)
   })
@@ -245,7 +245,7 @@ describe.skipIf(!url)("running a claimed job", () => {
     const message = await claimed(FIRST_0130, "30 1 * * *")
     const late = new Date("2026-11-04T12:00:00Z")
     expect(await runJob(kit, env, message, { reminder: counting }, late)).toBe(
-      "ok"
+      "done"
     )
     const { job, runs } = await read(message.jobId)
     expect(calls).toHaveLength(1)
@@ -256,10 +256,13 @@ describe.skipIf(!url)("running a claimed job", () => {
   it("records a kind with no handler as skipped and moves on", async () => {
     const message = await claimed(FIRST_0130, "30 1 * * *")
     expect(await runJob(kit, env, message, {}, after(FIRST_0130))).toBe(
-      "skipped"
+      "no_change"
     )
     const { job, runs } = await read(message.jobId)
-    expect(runs[0]).toMatchObject({ outcome: "skipped", detail: "no handler" })
+    expect(runs[0]).toMatchObject({
+      outcome: "no_change",
+      detail: "no handler",
+    })
     expect(job?.nextRunAt).toEqual(new Date("2026-11-02T06:30:00Z"))
   })
 
@@ -364,7 +367,7 @@ describe.skipIf(!url)("running a claimed job", () => {
     expect(lost.retry).toHaveBeenCalledOnce()
     expect(lost.ack).not.toHaveBeenCalled()
     expect((await read(message.jobId)).runs).toMatchObject([
-      { outcome: "skipped" },
+      { outcome: "no_change" },
     ])
   })
 })

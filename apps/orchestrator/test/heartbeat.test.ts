@@ -228,14 +228,14 @@ describe.skipIf(!url)("the heartbeat", () => {
     })
 
     it("records an empty digest as skipped", async () => {
-      expect(await beat(NOON)).toBe("skipped")
-      expect(await run(NOON)).toEqual({ outcome: "skipped", detail: "empty" })
+      expect(await beat(NOON)).toBe("no_change")
+      expect(await run(NOON)).toEqual({ outcome: "no_change", detail: "empty" })
       expect(models.gate).not.toHaveBeenCalled()
     })
 
     it("surfaces new items once, and an unchanged digest costs no model call", async () => {
       const id = await seed(later(NOON, 20), later(NOON, -2))
-      expect(await beat(NOON)).toBe("ok")
+      expect(await beat(NOON)).toBe("done")
       expect((await ledger()).sort()).toEqual(
         [
           expect.stringMatching(new RegExp(`^heartbeat-item:${orgId}:alert:`)),
@@ -244,9 +244,9 @@ describe.skipIf(!url)("the heartbeat", () => {
       )
       expect(models.gate).toHaveBeenCalledTimes(1)
       const next = later(NOON, 4)
-      expect(await beat(next)).toBe("skipped")
+      expect(await beat(next)).toBe("no_change")
       expect(await run(next)).toEqual({
-        outcome: "skipped",
+        outcome: "no_change",
         detail: "unchanged",
       })
       expect(models.gate).toHaveBeenCalledTimes(1)
@@ -274,7 +274,7 @@ describe.skipIf(!url)("the heartbeat", () => {
           .set({ dueAt: later(NOON, 22) })
           .where(eq(reminders.id, id))
       )
-      expect(await beat(later(NOON, 4))).toBe("ok")
+      expect(await beat(later(NOON, 4))).toBe("done")
       expect(models.gate.mock.calls[1]?.[0]).toMatchObject({
         items: [{ kind: "reminder", title: "Ring the boiler engineer" }],
       })
@@ -292,21 +292,21 @@ describe.skipIf(!url)("the heartbeat", () => {
       expect(await beat(NOON, failing)).toBe("failed")
       expect(await ledger()).toEqual([])
       expect(models.gate).not.toHaveBeenCalled()
-      expect(await beat(later(NOON, 4))).toBe("ok")
+      expect(await beat(later(NOON, 4))).toBe("done")
       expect(await ledger()).toHaveLength(2)
     })
 
     it("skips without looking when the owner had a CoS turn in the last 15 minutes", async () => {
       await seed(later(NOON, 20), later(NOON, -2))
       await record("cos.context", later(NOON, -0.2), {})
-      expect(await beat(NOON)).toBe("skipped")
+      expect(await beat(NOON)).toBe("no_change")
       expect(await run(NOON)).toEqual({
-        outcome: "skipped",
+        outcome: "no_change",
         detail: "owner_active",
       })
       expect(await ledger()).toEqual([])
       expect(models.gate).not.toHaveBeenCalled()
-      expect(await beat(later(NOON, 4))).toBe("ok")
+      expect(await beat(later(NOON, 4))).toBe("done")
     })
 
     it("runs nothing in quiet hours, and the next beat waits for 08:00", async () => {
@@ -314,9 +314,9 @@ describe.skipIf(!url)("the heartbeat", () => {
       probability = 1
       // 22:30 in London: a retry's backoff can land here.
       const night = new Date("2026-10-20T21:30:00Z")
-      expect(await beat(night)).toBe("skipped")
+      expect(await beat(night)).toBe("no_change")
       expect(await run(night)).toEqual({
-        outcome: "skipped",
+        outcome: "no_change",
         detail: "quiet_hours",
       })
       expect(await ledger()).toEqual([])
@@ -325,7 +325,7 @@ describe.skipIf(!url)("the heartbeat", () => {
       expect(await nextRunAt()).toEqual(new Date("2026-10-21T07:00:00Z"))
       // 20:00 in London is the last beat of the day.
       const evening = new Date("2026-10-20T19:00:00Z")
-      expect(await beat(evening)).toBe("ok")
+      expect(await beat(evening)).toBe("done")
       expect(await nextRunAt()).toEqual(new Date("2026-10-21T07:00:00Z"))
     })
   })
@@ -336,7 +336,7 @@ describe.skipIf(!url)("the heartbeat", () => {
       probability = 0.25
       await beat(NOON)
       expect(await run(NOON)).toEqual({
-        outcome: "skipped",
+        outcome: "no_change",
         detail: "gate:0.25",
       })
       expect(models.write).not.toHaveBeenCalled()
@@ -366,7 +366,7 @@ describe.skipIf(!url)("the heartbeat", () => {
       probability = 0.95
       await beat(NOON)
       expect(await run(NOON)).toEqual({
-        outcome: "ok",
+        outcome: "done",
         detail: "sent:in_app,email",
       })
       expect(await cap()).toEqual([`unprompted:${orgId}:2026-10-20`])
@@ -454,7 +454,10 @@ describe.skipIf(!url)("the heartbeat", () => {
             '{"role":"user","parts":[{"type":"text","text":"hi"}]}'::jsonb)`)
       })
       await beat(NOON)
-      expect(await run(NOON)).toEqual({ outcome: "ok", detail: "sent:in_app" })
+      expect(await run(NOON)).toEqual({
+        outcome: "done",
+        detail: "sent:in_app",
+      })
     })
 
     it("stops a second unprompted message the same day before the writer", async () => {
@@ -464,7 +467,10 @@ describe.skipIf(!url)("the heartbeat", () => {
       await remind(later(NOON, 22), "Order more microfibre cloths")
       const next = later(NOON, 4)
       await beat(next)
-      expect(await run(next)).toEqual({ outcome: "skipped", detail: "capped" })
+      expect(await run(next)).toEqual({
+        outcome: "no_change",
+        detail: "capped",
+      })
       expect(models.gate).toHaveBeenCalledTimes(2)
       expect(models.write).toHaveBeenCalledTimes(1)
     })
@@ -475,7 +481,7 @@ describe.skipIf(!url)("the heartbeat", () => {
       reply = () => "[quiet] nothing the owner needs today"
       await beat(NOON)
       expect(await run(NOON)).toEqual({
-        outcome: "skipped",
+        outcome: "no_change",
         detail: "quiet: nothing the owner needs today",
       })
       expect(await cap()).toEqual([])
@@ -486,7 +492,7 @@ describe.skipIf(!url)("the heartbeat", () => {
       const next = later(NOON, 4)
       await beat(next)
       expect(await run(next)).toEqual({
-        outcome: "ok",
+        outcome: "done",
         detail: "sent:in_app,email",
       })
     })

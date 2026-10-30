@@ -481,7 +481,7 @@ type Beat = Look & {
 async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
   const { orgId, jobId, slot } = beat
   const thisRun = sql`${jobRuns.jobId} = ${jobId} and ${jobRuns.runAt} = ${slot.toISOString()}::timestamptz`
-  const record = (outcome: "ok" | "skipped" | "failed", detail: string) =>
+  const record = (outcome: "done" | "no_change" | "failed", detail: string) =>
     kit.withOrg({ orgId }, (db) =>
       db
         .update(jobRuns)
@@ -505,7 +505,7 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
   }
   const pass = gate.probability >= GATE.floor
   await spend("heartbeat_gate", pass ? "pass" : "stop", gate.spent)
-  if (!pass) return record("skipped", `gate:${gate.probability.toFixed(2)}`)
+  if (!pass) return record("no_change", `gate:${gate.probability.toFixed(2)}`)
 
   const cap = `unprompted:${orgId}:${localDate(beat.now, beat.zone)}`
   const took = await kit.withOrg({ orgId }, (db) =>
@@ -517,7 +517,7 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
   )
   if (took.length === 0) {
     await putBack()
-    return record("skipped", "capped")
+    return record("no_change", "capped")
   }
 
   let reply: Reply
@@ -536,7 +536,7 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
   if (reply.kind !== "message") {
     await release()
     if (reply.kind === "quiet")
-      return record("skipped", `quiet: ${reply.reason}`)
+      return record("no_change", `quiet: ${reply.reason}`)
     await putBack()
     return record("failed", reply.detail)
   }
@@ -544,7 +544,7 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
   if (await kit.withOrg({ orgId }, (db) => ownerActive(db, orgId, beat.now))) {
     await release()
     await putBack()
-    return record("skipped", "owner_active")
+    return record("no_change", "owner_active")
   }
 
   const { text } = reply
@@ -600,7 +600,7 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
     await db
       .update(jobRuns)
       .set({
-        outcome: "ok",
+        outcome: "done",
         detail: out.length > 1 ? "sent:in_app,email" : "sent:in_app",
       })
       .where(thisRun)
@@ -631,16 +631,16 @@ export function heartbeatWith(
       })
       .from(orgs)
     if (!org || org.proactivity === "off")
-      return { outcome: "skipped", detail: "off" }
+      return { outcome: "no_change", detail: "off" }
     if (
       inQuiet(now, org.timeZone, { start: org.quietStart, end: org.quietEnd })
     )
-      return { outcome: "skipped", detail: "quiet_hours" }
+      return { outcome: "no_change", detail: "quiet_hours" }
     if (await ownerActive(db, job.orgId, now))
-      return { outcome: "skipped", detail: "owner_active" }
+      return { outcome: "no_change", detail: "owner_active" }
     await dismissAnswered(db)
     const items = await digest(db, now, sources)
-    if (items.length === 0) return { outcome: "skipped", detail: "empty" }
+    if (items.length === 0) return { outcome: "no_change", detail: "empty" }
     const unseen = await unsurfaced(db, job.orgId, items)
     // One thing per message: the news as before, else the longest wait. The
     // other follow-ups stay unsurfaced for a later day's message.
@@ -649,7 +649,7 @@ export function heartbeatWith(
       news.length > 0
         ? news
         : unseen.filter(isFollowUp).sort(bySince).slice(0, 1)
-    if (fresh.length === 0) return { outcome: "skipped", detail: "unchanged" }
+    if (fresh.length === 0) return { outcome: "no_change", detail: "unchanged" }
     // Detection time is the state boundary: the keys are surfaced before any
     // model looks, so a model that fails does not raise them again.
     await surface(db, job.orgId, fresh, now)
@@ -667,7 +667,7 @@ export function heartbeatWith(
       typed: await typedSince(db, last?.at ?? job.createdAt),
     }
     return {
-      outcome: "ok",
+      outcome: "done",
       detail: `new:${fresh.length}`,
       after: async () => {
         await speak(kit, env, models(env), beat)
