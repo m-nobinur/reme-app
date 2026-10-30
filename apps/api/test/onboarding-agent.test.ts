@@ -196,6 +196,8 @@ describe("the plan's checks", () => {
       "There is nothing extra to pay for the website, John.",
       "It's free of charge.",
       "The site comes with your plan at no extra cost.",
+      "Our pass rates start at forty pounds.",
+      "Our rates are lower than our pass rates.",
       "x".repeat(SAY_MAX + 1),
       "   ",
     ]) {
@@ -212,6 +214,8 @@ describe("the plan's checks", () => {
       "You are free to pick another name.",
       "I've included a question about pets.",
       "The site includes a Request a quote page, and you stay in charge of every reply.",
+      "What sets you apart, such as your degrees or student pass rates?",
+      "Do you track your response rate or success rates?",
     ]) {
       expect(sayProblems(fine), fine).toEqual([])
     }

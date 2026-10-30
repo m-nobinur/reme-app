@@ -763,6 +763,9 @@ export function turnData(s: PlanState): string {
 
 // --- The checks -----------------------------------------------------------
 
+const RESULT_RATES =
+  /\b(pass|success|response|completion|graduation|satisfaction|retention)\s+rates?\b/gi
+
 /**
  * What a message to the owner must never hold, as the script's copy is
  * tested: rates and currency (the site quotes, it never lists), a claim
@@ -786,12 +789,13 @@ export function sayProblems(
   if (say.length > SAY_MAX) {
     problems.push(`say is ${say.length} characters; keep it under ${SAY_MAX}`)
   }
+  const money = say.replace(RESULT_RATES, "")
   if (
     !context.prices &&
     (/[$£€¥₹]|\b(prices?|pricing|priced|tiers?|fees?|rates?|cost|costs|GBP|USD|EUR|pounds|dollars|euros|quid)\b/i.test(
-      say
+      money
     ) ||
-      /\d+\s*(an hour|per hour|\/h(ou)?r?\b|p\/h)/i.test(say))
+      /\d+\s*(an hour|per hour|\/h(ou)?r?\b|p\/h)/i.test(money))
   ) {
     problems.push(
       "say mentions rates, fees, costs or currency; the site uses Request a quote, so never mention them"
