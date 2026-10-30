@@ -138,7 +138,8 @@ async function look(
 ): Promise<unknown> {
   const reserved = worstCall(
     price,
-    system.length + text.length + pictures.length * VISION.pictureChars
+    system.length + text.length + pictures.length * VISION.pictureChars,
+    VISION.maxOutputTokens
   )
   if (!(await kit.withOrg({ orgId }, (db) => withinCap(db, orgId, reserved))))
     return undefined

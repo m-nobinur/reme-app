@@ -103,6 +103,9 @@ export const DRAW_DEADLINE_MS = 4 * 60_000
 /** The director's limit; past it the variants are drawn without its ideas. */
 const DIRECTOR_MS = 6_000
 
+/** The director's output cap; reasoning tokens count against it, and 400 cut the answer off when measured. */
+const DIRECTOR_TOKENS = 1_500
+
 /**
  * The rounds one org may start in a UTC day, counting tries after a failure.
  * Twenty: one logo question allows ten, and an owner who starts onboarding
@@ -563,7 +566,11 @@ function openrouterDirector(
       colors: brief.colors,
     }).replace(/</g, "\\u003c")
     const prompt = `<data source="onboarding" taint="untrusted_input">\n${data}\n</data>`
-    const reserved = worstCall(price, DIRECTOR_GUIDE.length + prompt.length)
+    const reserved = worstCall(
+      price,
+      DIRECTOR_GUIDE.length + prompt.length,
+      DIRECTOR_TOKENS
+    )
     if (!(await kit.withOrg({ orgId }, (db) => withinCap(db, orgId, reserved))))
       return null
     // A call that fails may still bill, so it stays counted at its worst.
@@ -574,8 +581,7 @@ function openrouterDirector(
         system: DIRECTOR_GUIDE,
         prompt,
         output: Output.json(),
-        // Reasoning tokens count against this: 400 cut the answer off when measured.
-        maxOutputTokens: 1_500,
+        maxOutputTokens: DIRECTOR_TOKENS,
         maxRetries: 0,
         abortSignal: AbortSignal.timeout(DIRECTOR_MS),
       })
