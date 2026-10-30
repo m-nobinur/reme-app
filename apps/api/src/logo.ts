@@ -11,7 +11,7 @@ import {
   type LogoRounds,
   type LogoStyle,
 } from "@workspace/contracts"
-import type { Tenancy } from "@workspace/db"
+import { events, newUlid, type Tenancy } from "@workspace/db"
 import { generateText, Output } from "ai"
 import {
   editUploads,
@@ -22,6 +22,8 @@ import {
   uploadKey,
 } from "./assets.ts"
 import type { Owner } from "./changes.ts"
+import { priceOf, stepCost } from "./cos/agent.ts"
+import { withinCap } from "./cos/turns.ts"
 import { failure, invalid, keyMissing, readBody, sha256Hex } from "./http.ts"
 import { logoReference } from "./logo-references.ts"
 import {
@@ -32,7 +34,11 @@ import {
   variantStyles,
 } from "./logo-style.ts"
 import { factValue } from "./onboarding.ts"
-import { DEFAULT_ONBOARDING_MODEL, plannerModel } from "./onboarding-agent.ts"
+import {
+  DEFAULT_ONBOARDING_MODEL,
+  plannerModel,
+  worstCall,
+} from "./onboarding-agent.ts"
 import { cropToMark } from "./png-crop.ts"
 import { readFacts } from "./workspace.ts"
 
@@ -105,6 +111,9 @@ const DIRECTOR_MS = 6_000
  * day at about $1.04 of drawing, well under the org's daily model cap.
  */
 export const LOGO_ROUNDS_PER_DAY = 20
+
+/** What one image call reserves against the org's daily cap: three times the $0.017 a logo cost when measured with an example attached. */
+export const DRAW_RESERVE_USD = 0.05
 
 /** What the queue carries: names only, the manifest holds the rest. */
 export type LogoJob = {
@@ -247,6 +256,44 @@ export async function useDaily(
   return true
 }
 
+/** A model call's cost as a `cos.background_step`, which the org's daily cap counts. */
+export async function logSpend(
+  kit: Tenancy,
+  orgId: string,
+  job: string,
+  model: string,
+  cost: number
+): Promise<void> {
+  await kit.withOrg({ orgId }, (db) =>
+    db.insert(events).values({
+      eventId: newUlid(),
+      orgId,
+      staffId: null,
+      assignmentId: null,
+      type: "cos.background_step",
+      occurredAt: new Date(),
+      idempotencyKey: newUlid(),
+      payload: { job, model, cost_usd: cost },
+    })
+  )
+}
+
+/** Whether a round of the org's under another question is drawing. */
+async function drawingElsewhere(
+  env: Env,
+  orgId: string,
+  toolCallId: string
+): Promise<boolean> {
+  const here = manifestPrefix(orgId, toolCallId)
+  const listed = await env.SITES.list({ prefix: `logos/${orgId}/` })
+  const others = await Promise.all(
+    listed.objects
+      .filter(({ key }) => !key.startsWith(here))
+      .map(async ({ key }) => (await env.SITES.get(key))?.json<Manifest>())
+  )
+  return others.some((m) => m && roundView(m).status === "drawing")
+}
+
 const ToolCallId = DrawLogosRequest.shape.tool_call_id
 
 /** `POST /logos`: starts a round, or replays the one this key or a drawing round already is. */
@@ -281,6 +328,13 @@ export async function drawLogos(
   const view = latest && roundView(latest.manifest)
   // One round at a time: a second click while one draws gets that one.
   if (latest && view?.status === "drawing") return started(latest)
+  if (await drawingElsewhere(env, orgId, toolCallId)) {
+    return refused(
+      409,
+      "logos.tray_open",
+      "Your logos are still being drawn. They'll show here when they're ready."
+    )
+  }
   // A round that drew nothing is tried again in its own place.
   const retry = view?.status === "failed" ? latest : undefined
   const round = retry ? retry.manifest.round : rounds.length + 1
@@ -491,9 +545,15 @@ export type Director = (
   brief: LogoBrief
 ) => Promise<{ ideas: string[]; support?: string } | null>
 
-function openrouterDirector(apiKey: string, modelId: string): Director | null {
+function openrouterDirector(
+  apiKey: string,
+  modelId: string,
+  kit: Tenancy,
+  orgId: string
+): Director | null {
   const model = plannerModel(apiKey, modelId)
-  if (!model) return null
+  const price = priceOf(modelId)
+  if (!model || !price) return null
   return async (subject, brief) => {
     const data = JSON.stringify({
       ...subject,
@@ -502,18 +562,32 @@ function openrouterDirector(apiKey: string, modelId: string): Director | null {
       style: brief.style,
       colors: brief.colors,
     }).replace(/</g, "\\u003c")
-    const result = await generateText({
-      model,
-      system: DIRECTOR_GUIDE,
-      prompt: `<data source="onboarding" taint="untrusted_input">\n${data}\n</data>`,
-      output: Output.json(),
-      // Reasoning tokens count against this: 400 cut the answer off when measured.
-      maxOutputTokens: 1_500,
-      maxRetries: 0,
-      abortSignal: AbortSignal.timeout(DIRECTOR_MS),
-    })
-    const support = supportOf(result.output)
-    return { ideas: symbolsOf(result.output), ...(support ? { support } : {}) }
+    const prompt = `<data source="onboarding" taint="untrusted_input">\n${data}\n</data>`
+    const reserved = worstCall(price, DIRECTOR_GUIDE.length + prompt.length)
+    if (!(await kit.withOrg({ orgId }, (db) => withinCap(db, orgId, reserved))))
+      return null
+    // A call that fails may still bill, so it stays counted at its worst.
+    let cost = reserved
+    try {
+      const result = await generateText({
+        model,
+        system: DIRECTOR_GUIDE,
+        prompt,
+        output: Output.json(),
+        // Reasoning tokens count against this: 400 cut the answer off when measured.
+        maxOutputTokens: 1_500,
+        maxRetries: 0,
+        abortSignal: AbortSignal.timeout(DIRECTOR_MS),
+      })
+      cost = stepCost(price, result)
+      const support = supportOf(result.output)
+      return {
+        ideas: symbolsOf(result.output),
+        ...(support ? { support } : {}),
+      }
+    } finally {
+      await logSpend(kit, orgId, "logo_director", modelId, cost)
+    }
   }
 }
 
@@ -618,6 +692,7 @@ const dataUrl = (bytes: Uint8Array, type: string) => {
  */
 export async function drawRound(
   env: Env,
+  kit: Tenancy,
   job: LogoJob,
   deps: { director?: Director | null } = {}
 ): Promise<void> {
@@ -670,7 +745,9 @@ export async function drawRound(
       ? deps.director
       : openrouterDirector(
           apiKey,
-          env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
+          env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL,
+          kit,
+          job.orgId
         )
   const directed =
     base || !director
@@ -707,6 +784,16 @@ export async function drawRound(
               reference: !base,
               changes: manifest.changes,
             })
+        if (
+          !(await kit.withOrg({ orgId: job.orgId }, (db) =>
+            withinCap(db, job.orgId, DRAW_RESERVE_USD)
+          ))
+        ) {
+          console.log(
+            JSON.stringify({ code: "logos.budgetary", model: model.id })
+          )
+          break
+        }
         const drawn = await drawOne(apiKey, model, prompt, reference).catch(
           (error: unknown) => {
             console.error(
@@ -718,6 +805,14 @@ export async function drawRound(
             )
             return null
           }
+        )
+        // A call that fails may still bill, so it stays counted at its worst.
+        await logSpend(
+          kit,
+          job.orgId,
+          "logo",
+          model.id,
+          drawn?.cost ?? DRAW_RESERVE_USD
         )
         if (!drawn) continue
         await env.SITES.put(
@@ -763,10 +858,11 @@ export const isLogoJob = (body: unknown): body is LogoJob =>
 /** One logo message: acked when drawn, retried on a storage failure, then the dead-letter queue. */
 export async function drawLogoMessage(
   env: Env,
+  kit: Tenancy,
   message: Message<LogoJob>
 ): Promise<void> {
   try {
-    await drawRound(env, message.body)
+    await drawRound(env, kit, message.body)
     message.ack()
   } catch (error) {
     console.error(

@@ -62,12 +62,12 @@ export async function afterTurnBatch(
   batch: MessageBatch<AfterTurn | LogoJob | ContinueJob | WakeJob>,
   env: Env
 ): Promise<void> {
+  const kit = tenancy(env.HYPERDRIVE.connectionString)
   // Logo rounds ride this queue for a consumer's fifteen minutes (`logo.ts`),
   // drawn beside the turns' work rather than ahead of it.
   const logos = batch.messages
     .filter((m): m is Message<LogoJob> => isLogoJob(m.body))
-    .map((m) => drawLogoMessage(env, m))
-  const kit = tenancy(env.HYPERDRIVE.connectionString)
+    .map((m) => drawLogoMessage(env, kit, m))
   const model = env.OPENROUTER_API_KEY
     ? openrouterModel(env.OPENROUTER_API_KEY, COMPACTION.model)
     : null

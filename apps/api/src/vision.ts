@@ -15,10 +15,16 @@ import type { Tenancy } from "@workspace/db"
 import { generateText, type LanguageModel, Output } from "ai"
 import { editUploads, sniff, uploadKey } from "./assets.ts"
 import type { Owner } from "./changes.ts"
+import { priceOf, stepCost } from "./cos/agent.ts"
+import { withinCap } from "./cos/turns.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
-import { useDaily } from "./logo.ts"
+import { logSpend, useDaily } from "./logo.ts"
 import { factValue, logoOf } from "./onboarding.ts"
-import { DEFAULT_ONBOARDING_MODEL, plannerModel } from "./onboarding-agent.ts"
+import {
+  DEFAULT_ONBOARDING_MODEL,
+  plannerModel,
+  worstCall,
+} from "./onboarding-agent.ts"
 import { hexOf, readableStops, WHITE } from "./palette.ts"
 import { readFacts } from "./workspace.ts"
 
@@ -39,6 +45,8 @@ export const VISION = {
   maxOutputTokens: 3_000,
   /** The long side the model sees: enough to judge a photo or read a colour. */
   width: 640,
+  /** What a picture adds to a call's prompt in characters, so the reservation covers it. */
+  pictureChars: 4_000,
   /**
    * Each route's allowance per org a UTC day. An honest tray reviews a few
    * times (each upload, then the missing ones) and reads a palette once or
@@ -101,44 +109,67 @@ async function small(
 
 type Deps = { model?: LanguageModel | null }
 
-const modelOf = (env: Env, deps: Deps) =>
-  deps.model !== undefined
-    ? deps.model
-    : env.OPENROUTER_API_KEY
-      ? plannerModel(
-          env.OPENROUTER_API_KEY,
-          env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
-        )
-      : null
+/** The model that looks, with the id and price its spend is reserved and counted at; null without one. */
+const modelOf = (env: Env, deps: Deps) => {
+  const id = env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
+  const price = priceOf(id)
+  const model =
+    deps.model !== undefined
+      ? deps.model
+      : env.OPENROUTER_API_KEY
+        ? plannerModel(env.OPENROUTER_API_KEY, id)
+        : null
+  return model && price ? { model, id, price } : null
+}
 
+/**
+ * One vision call, counted against the org's daily model cap: undefined
+ * without a call when the day has no room for it, else the model's JSON.
+ * A call that fails may still bill, so it stays counted at its worst.
+ */
 async function look(
-  model: LanguageModel,
+  kit: Tenancy,
+  orgId: string,
+  { model, id, price }: NonNullable<ReturnType<typeof modelOf>>,
+  job: string,
   system: string,
   text: string,
   pictures: { bytes: Uint8Array; type: string }[]
 ): Promise<unknown> {
-  const result = await generateText({
-    model,
-    system,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text },
-          ...pictures.map((p) => ({
-            type: "file" as const,
-            data: p.bytes,
-            mediaType: p.type,
-          })),
-        ],
-      },
-    ],
-    output: Output.json(),
-    maxOutputTokens: VISION.maxOutputTokens,
-    maxRetries: 0,
-    abortSignal: AbortSignal.timeout(VISION.callMs),
-  })
-  return result.output
+  const reserved = worstCall(
+    price,
+    system.length + text.length + pictures.length * VISION.pictureChars
+  )
+  if (!(await kit.withOrg({ orgId }, (db) => withinCap(db, orgId, reserved))))
+    return undefined
+  let cost = reserved
+  try {
+    const result = await generateText({
+      model,
+      system,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text },
+            ...pictures.map((p) => ({
+              type: "file" as const,
+              data: p.bytes,
+              mediaType: p.type,
+            })),
+          ],
+        },
+      ],
+      output: Output.json(),
+      maxOutputTokens: VISION.maxOutputTokens,
+      maxRetries: 0,
+      abortSignal: AbortSignal.timeout(VISION.callMs),
+    })
+    cost = stepCost(price, result)
+    return result.output
+  } finally {
+    await logSpend(kit, orgId, job, id, cost)
+  }
 }
 
 // --- Photo review -----------------------------------------------------------
@@ -242,11 +273,15 @@ export async function reviewPhotos(
   let looks: Look[]
   try {
     const output = await look(
+      kit,
+      orgId,
       model,
+      "vision_review",
       REVIEW_GUIDE,
       `<data source="onboarding" taint="untrusted_input">\n${JSON.stringify(business).replace(/</g, "\\u003c")}\n</data>\n${photos.length} photos follow.`,
       pictures as { bytes: Uint8Array; type: string }[]
     )
+    if (output === undefined) return capped()
     looks = looksOf(output, photos.length)
   } catch (error) {
     console.error(
@@ -325,6 +360,7 @@ const FORM_SLACK = 64 * 1024
 export async function paletteFromImage(
   request: Request,
   env: Env,
+  kit: Tenancy,
   owner: Owner,
   deps: Deps = {}
 ): Promise<Response> {
@@ -361,9 +397,17 @@ export async function paletteFromImage(
   }
   try {
     const picture = await small(env, file.stream(), kind)
-    const palette = paletteOf(
-      await look(model, PALETTE_GUIDE, "The picture follows.", [picture])
+    const output = await look(
+      kit,
+      owner.orgId,
+      model,
+      "vision_palette",
+      PALETTE_GUIDE,
+      "The picture follows.",
+      [picture]
     )
+    if (output === undefined) return capped()
+    const palette = paletteOf(output)
     if (!palette) return unreadable()
     return Response.json(palette satisfies PaletteFromImage)
   } catch (error) {
@@ -457,14 +501,17 @@ export async function logoPalettes(
       logo.content_type,
       hexOf(WHITE)
     )
-    const palettes = logoPalettesOf(
-      await look(
-        model,
-        LOGO_PALETTE_GUIDE,
-        `<data source="onboarding" taint="untrusted_input">\n${JSON.stringify({ trade }).replace(/</g, "\\u003c")}\n</data>\nThe logo follows.`,
-        [picture]
-      )
+    const output = await look(
+      kit,
+      orgId,
+      model,
+      "vision_logo_palettes",
+      LOGO_PALETTE_GUIDE,
+      `<data source="onboarding" taint="untrusted_input">\n${JSON.stringify({ trade }).replace(/</g, "\\u003c")}\n</data>\nThe logo follows.`,
+      [picture]
     )
+    if (output === undefined) return capped()
+    const palettes = logoPalettesOf(output)
     if (palettes.length === 0) return unreadable()
     const body = JSON.stringify({ palettes } satisfies LogoPalettes)
     await env.SITES.put(key, body)

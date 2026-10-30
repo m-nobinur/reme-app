@@ -24,12 +24,15 @@ import {
   vi,
 } from "vitest"
 import type { Owner } from "../src/changes.ts"
+import { DAILY_CAP_USD, withinCap } from "../src/cos/turns.ts"
 import {
   DRAW_DEADLINE_MS,
+  DRAW_RESERVE_USD,
   drawLogos,
   drawRound,
   hasAlpha,
   LOGO_MODELS,
+  logSpend,
   nextRoundAt,
   readLogos,
   roundView,
@@ -49,6 +52,7 @@ import {
 } from "../src/logo-style.ts"
 import { owner, stubOrchestrator } from "./owner-fixture.ts"
 import { stubJwksFetch } from "./sealed-session.ts"
+import { ledger } from "./spend-ledger.ts"
 
 const palette = PALETTES[0] as (typeof PALETTES)[number]
 const { primary: light, ink: dark } = palette
@@ -392,7 +396,7 @@ describe("drawing a round in the queue", () => {
       (model, prompt) =>
         model === LOGO_MODELS[0].id && prompt.includes("Idea: a bucket")
     )
-    await drawRound(env, job, {
+    await drawRound(env, ledger().kit, job, {
       director: async () => ({
         ideas: ["a mop", "a bucket", "a cloth", "a spray"],
       }),
@@ -418,17 +422,17 @@ describe("drawing a round in the queue", () => {
     const first = manifest().planned[0] as string
     await sites.put(`generated/${ORG}/${first}.png`, PNG)
     const asked = images()
-    await drawRound(env, job, { director: null })
+    await drawRound(env, ledger().kit, job, { director: null })
     expect(asked).toHaveLength(LOGO_VARIANTS - 1)
     expect((await read()).variants).toHaveLength(LOGO_VARIANTS)
-    await drawRound(env, job, { director: null })
+    await drawRound(env, ledger().kit, job, { director: null })
     expect(asked).toHaveLength(LOGO_VARIANTS - 1)
   })
 
   it("marks a round no model drew as failed, and leaves a lapsed one alone", async () => {
     const { env, read } = await setup()
     const asked = images(() => true)
-    await drawRound(env, job, { director: null })
+    await drawRound(env, ledger().kit, job, { director: null })
     expect((await read()).status).toBe("failed")
     expect(asked).toHaveLength(LOGO_VARIANTS * LOGO_MODELS.length)
 
@@ -436,7 +440,7 @@ describe("drawing a round in the queue", () => {
       started_at: new Date(Date.now() - DRAW_DEADLINE_MS - 1000).toISOString(),
     })
     const none = images()
-    await drawRound(lapsed.env, job, { director: null })
+    await drawRound(lapsed.env, ledger().kit, job, { director: null })
     expect(none).toHaveLength(0)
   })
 
@@ -445,7 +449,9 @@ describe("drawing a round in the queue", () => {
     const { sites, env } = await setup({ base, changes: "Make the roof red" })
     await sites.put(`generated/${ORG}/${base}.png`, PNG)
     const asked = images()
-    await drawRound(env, job, { director: async () => ({ ideas: ["unused"] }) })
+    await drawRound(env, ledger().kit, job, {
+      director: async () => ({ ideas: ["unused"] }),
+    })
     expect(
       asked.every((a) => a.reference && a.prompt.includes("Make the roof red"))
     ).toBe(true)
@@ -456,7 +462,7 @@ describe("drawing a round in the queue", () => {
     const styles = variantStyles("surprise")
     const { env } = await setup({ styles })
     const asked = images()
-    await drawRound(env, job, { director: null })
+    await drawRound(env, ledger().kit, job, { director: null })
     const looks = asked.map((a) =>
       LOGO_STYLES.find((each) => a.prompt.includes(LOGO_STYLE_WORDS[each]))
     )
@@ -470,7 +476,7 @@ describe("drawing a round in the queue", () => {
       brief: { ...brief, type: "emblem" },
     })
     const asked = images()
-    await drawRound(env, job, { director: null })
+    await drawRound(env, ledger().kit, job, { director: null })
     expect(asked).toHaveLength(LOGO_VARIANTS)
     const urls = asked.map((a) => a.url)
     expect(new Set(urls).size).toBe(LOGO_VARIANTS)
@@ -486,7 +492,7 @@ describe("drawing a round in the queue", () => {
   it("gives a one-colour brief the director's supporting colour, and a many-colour one its own", async () => {
     const one = await setup({ brief: { ...brief, colors: [light] } })
     const askedOne = images()
-    await drawRound(one.env, job, {
+    await drawRound(one.env, ledger().kit, job, {
       director: async () => ({ ideas: [], support: dark }),
     })
     expect(
@@ -497,7 +503,7 @@ describe("drawing a round in the queue", () => {
     const other = (PALETTES[1] as (typeof PALETTES)[number]).primary
     const many = await setup()
     const askedMany = images()
-    await drawRound(many.env, job, {
+    await drawRound(many.env, ledger().kit, job, {
       director: async () => ({ ideas: [], support: other }),
     })
     expect(askedMany.some((a) => a.prompt.includes(other))).toBe(false)
@@ -506,9 +512,69 @@ describe("drawing a round in the queue", () => {
   it("keeps only pictures with alpha: an opaque one falls to the next model, then loses its tile", async () => {
     const { env, read } = await setup()
     const asked = images(() => false, pngOf(2))
-    await drawRound(env, job, { director: null })
+    await drawRound(env, ledger().kit, job, { director: null })
     expect(asked).toHaveLength(LOGO_VARIANTS * LOGO_MODELS.length)
     expect((await read()).status).toBe("failed")
+  })
+
+  it("counts every image call: the billed cost of a picture, the reserve for a call that failed", async () => {
+    const { env } = await setup()
+    const asked = images((model) => model === LOGO_MODELS[0].id)
+    const books = ledger()
+    await drawRound(env, books.kit, job, { director: null })
+    expect(books.rows).toHaveLength(asked.length)
+    expect(books.rows.every((r) => r.type === "cos.background_step")).toBe(true)
+    const costs = books.rows.map((r) => r.payload.cost_usd)
+    expect(costs.filter((c) => c === 0.01)).toHaveLength(LOGO_VARIANTS)
+    expect(costs.filter((c) => c === DRAW_RESERVE_USD)).toHaveLength(
+      LOGO_VARIANTS
+    )
+  })
+
+  it("calls no model once the day's cap has no room, the director included, and the round fails", async () => {
+    const { env, read } = await setup()
+    const asked = images()
+    const books = ledger(DAILY_CAP_USD)
+    await drawRound(env, books.kit, job)
+    expect(asked).toHaveLength(0)
+    expect(books.rows).toHaveLength(0)
+    expect((await read()).status).toBe("failed")
+  })
+
+  it("counts the director's call at its billed cost", async () => {
+    const { env } = await setup()
+    images()
+    vi.stubGlobal("fetch", async (to: string) =>
+      to.endsWith("/chat/completions")
+        ? Response.json({
+            id: "gen-1",
+            model: "google/gemini-3.8-flash",
+            created: 1,
+            choices: [
+              {
+                index: 0,
+                finish_reason: "stop",
+                message: {
+                  role: "assistant",
+                  content: JSON.stringify({ ideas: ["a mop"] }),
+                },
+              },
+            ],
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 20,
+              total_tokens: 120,
+              cost: 0.002,
+            },
+          })
+        : Response.json({ data: [] })
+    )
+    const books = ledger()
+    await drawRound(env, books.kit, job)
+    expect(books.rows[0]?.payload).toMatchObject({
+      job: "logo_director",
+      cost_usd: 0.002,
+    })
   })
 })
 
@@ -629,6 +695,28 @@ describe("POST /logos before it draws", () => {
     const busy = await drawLogos(post("k2", {}), envWith(sites), kit, caller)
     expect(busy.status).toBe(202)
     expect(LogoRound.parse(await busy.json()).status).toBe("drawing")
+  })
+
+  it("refuses a round while another question's tray is drawing, and starts nothing", async () => {
+    const sites = bucket()
+    await sites.put(
+      `logos/${ORG}/call_other/1.json`,
+      JSON.stringify(manifest())
+    )
+    const refusal = await drawLogos(post("k2", {}), envWith(sites), kit, caller)
+    expect(refusal.status).toBe(409)
+    expect(ErrorEnvelope.parse(await refusal.json()).code).toBe(
+      "logos.tray_open"
+    )
+    expect(sites.objects.has(manifestAt)).toBe(false)
+
+    await sites.put(
+      `logos/${ORG}/call_other/1.json`,
+      JSON.stringify(manifest({ status: "ready" }))
+    )
+    await expect(
+      drawLogos(post("k3", {}), envWith(sites), kit, caller)
+    ).rejects.toThrow()
   })
 
   it("refuses a round past the most, and changes to a picture it never drew", async () => {
@@ -780,6 +868,17 @@ describe.skipIf(!url)("POST /logos/:id/keep, on a live connection", () => {
     const [own] = UploadedAssets.parse(await sent.json()).assets
     expect((await keep(who, sites, own?.id as string)).status).toBe(200)
     expect(await uploads(who)).toEqual([[own?.id, "logo"]])
+  })
+
+  it("logs a call as spend that the org's daily cap then counts", async () => {
+    const who = await owner(kit, url as string, "logo-spend")
+    const room = (amount: number) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        withinCap(db, who.orgId, amount)
+      )
+    expect(await room(DAILY_CAP_USD)).toBe(true)
+    await logSpend(kit, who.orgId, "logo", "m", DAILY_CAP_USD)
+    expect(await room(0.01)).toBe(false)
   })
 
   it("keeps nothing that is not this org's drawn logo", async () => {
