@@ -421,6 +421,21 @@ describe("the plan's checks", () => {
     ).toMatch(/site.direction is not what the card holds/)
   })
 
+  it("keeps two options on every design question when the directions an industry lists look alike", () => {
+    // Both automotive directions share one hero and services arrangement.
+    const o = atDesign([
+      {
+        key: "business.industry",
+        value: { name: "Car detailing", category: "automotive" },
+      },
+    ])
+    const questions = (designCard(o, counter()) as ToolPart)
+      .input as AskDesignInput
+    for (const q of questions.questions) {
+      expect(q.card.options.length, q.id).toBeGreaterThanOrEqual(2)
+    }
+  })
+
   it("opens the tray on the logo's way the owner's words chose, and on none for a bare word", () => {
     const o = atDesign(
       without("site.template", "site.palette", "site.font", "site.pages")
