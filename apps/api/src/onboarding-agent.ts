@@ -1745,13 +1745,25 @@ export async function planReservation(
 /** A code fence a model may wrap its JSON in. */
 const FENCES = /^\s*```(?:json)?\s*|\s*```\s*$/g
 
+/** Quoted strings, where a model may leave a real line break instead of an escape. */
+const STRINGS = /"(?:[^"\\]|\\.)*"/gs
+const escapeBreaks = (quoted: string) =>
+  quoted.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")
+
 /** The model's text as a plan, or why it is not one, from the schema. */
-function planOf(raw: string): { plan: OnboardingPlan } | { errors: string[] } {
+export function planOf(
+  raw: string
+): { plan: OnboardingPlan } | { errors: string[] } {
+  const text = raw.replace(FENCES, "")
   let json: unknown
   try {
-    json = JSON.parse(raw.replace(FENCES, ""))
+    json = JSON.parse(text)
   } catch {
-    return { errors: ["the answer is not one JSON object"] }
+    try {
+      json = JSON.parse(text.replace(STRINGS, escapeBreaks))
+    } catch {
+      return { errors: ["the answer is not one JSON object"] }
+    }
   }
   const plan = OnboardingPlan.safeParse(json)
   return plan.success

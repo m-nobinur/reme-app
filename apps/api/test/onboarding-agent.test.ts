@@ -30,6 +30,7 @@ import {
   type PlanState,
   plannerInstructions,
   plannerModel,
+  planOf,
   planParts,
   planTurn,
   SAY_MAX,
@@ -178,6 +179,23 @@ describe("the plan's checks", () => {
     expect(
       errorsOf(start, typed("go", { ...ready(), offered: true }))[0]
     ).toMatch(/already started/)
+  })
+
+  it("reads a plan whose say holds real line breaks", () => {
+    const plan = {
+      doing: "",
+      pending_card: null,
+      facts: {},
+      chosen_for_owner: [],
+      next: { kind: "answer_only" },
+      say: "First line.\n\nSecond line.",
+    }
+    const raw = JSON.stringify(plan).replace(/\\n/g, "\n")
+    expect(() => JSON.parse(raw)).toThrow()
+    expect(planOf(raw)).toEqual({ plan })
+    expect(planOf("not json")).toEqual({
+      errors: ["the answer is not one JSON object"],
+    })
   })
 
   it("keeps every message free of rates, currency, links, markup, dashes and stock images", () => {
