@@ -38,6 +38,7 @@ import {
   decisionView,
   type ReadView,
   readView,
+  stepOf,
 } from "@workspace/ui/lib/tool-state"
 import { browserZone, wallText, zoneLabel } from "@workspace/ui/lib/zone"
 import { createContext, useContext, useState } from "react"
@@ -123,8 +124,7 @@ const PreviewRead: ToolCallMessagePartComponent = (props) => (
  */
 const DomainRead: ToolCallMessagePartComponent = (props) => {
   const view = readView(props, CheckDomainOutput)
-  // A call stored before lines came from the catalogue carries the model's
-  // `step`, which is not part of the question the owner asked.
+  // The model's `step` is a line for the owner, not the question they asked.
   const { step: _step, ...asking } = props.args
   const asked = CheckDomainInput.safeParse(asking).data?.name
   const name = asked ?? "Your domain"
@@ -145,7 +145,7 @@ const DomainRead: ToolCallMessagePartComponent = (props) => {
   }
   return (
     <Read
-      args={asked ? { domain: asked } : {}}
+      args={{ ...(asked && { domain: asked }), step: stepOf(props) }}
       slot="cos-read-domain"
       tool="check_domain"
       view={view}

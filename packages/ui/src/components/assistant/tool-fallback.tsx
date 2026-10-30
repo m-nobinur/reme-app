@@ -15,6 +15,7 @@ import {
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
 import { ToolStatus } from "@workspace/ui/components/status-line"
+import { stepOf } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { memo, useCallback, useRef, useState } from "react"
 
@@ -110,11 +111,13 @@ function ToolFallbackDuration({
 function ToolFallbackTrigger({
   toolName,
   status,
+  step,
   className,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   toolName: string
   status?: ToolCallMessagePartStatus
+  step?: string | undefined
 }) {
   const statusType = status?.type ?? "complete"
   const isCancelled =
@@ -135,6 +138,7 @@ function ToolFallbackTrigger({
         clockAfter={null}
         delay={0}
         tool={toolName}
+        args={{ step }}
         state={
           statusType === "running"
             ? "working"
@@ -523,6 +527,7 @@ function ToolFallbackApproval({
 
 const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   toolName,
+  args,
   argsText,
   result,
   status,
@@ -547,7 +552,11 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
 
   return (
     <ToolFallbackRoot open={open} onOpenChange={setOpen}>
-      <ToolFallbackTrigger toolName={toolName} status={status} />
+      <ToolFallbackTrigger
+        toolName={toolName}
+        status={status}
+        step={stepOf({ args, argsText })}
+      />
       <ToolFallbackContent>
         <ToolFallbackError status={status} />
         <ToolFallbackArgs

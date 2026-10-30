@@ -31,9 +31,25 @@ import { factText } from "@workspace/ui/lib/facts"
 /** The fields of a tool-call part these views read. */
 export type ToolPartView = {
   args: unknown
+  argsText?: string | undefined
   result?: unknown
   isError?: boolean | undefined
   approval?: { approved?: boolean | undefined } | undefined
+}
+
+/**
+ * The line the model wrote for a call, once its input is whole: a streaming
+ * input's text is cut before its closing brace, so it does not parse, and a
+ * half-written line is never shown.
+ */
+export function stepOf(part: ToolPartView): string | undefined {
+  try {
+    JSON.parse(part.argsText ?? "")
+  } catch {
+    return undefined
+  }
+  const { step } = (part.args ?? {}) as { step?: unknown }
+  return typeof step === "string" ? step : undefined
 }
 
 /** `{ error }` on a failed part, as `@assistant-ui/ai-sdk` 0.0.2 sets it. */

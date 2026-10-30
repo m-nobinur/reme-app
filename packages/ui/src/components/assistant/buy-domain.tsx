@@ -37,7 +37,7 @@ import { DoneIcon, ToolStatus } from "@workspace/ui/components/status-line"
 import type { ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { FIELD_ERROR, OPTION, OPTION_PILL } from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
-import { type Failure, readView } from "@workspace/ui/lib/tool-state"
+import { type Failure, readView, stepOf } from "@workspace/ui/lib/tool-state"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
   createContext,
@@ -1074,7 +1074,10 @@ export const FindDomain: ToolCallMessagePartComponent = (props) => {
     return (
       <div data-slot="find-domain">
         <ToolLine
-          args={{ query: FindDomainInput.safeParse(props.args).data?.query }}
+          args={{
+            query: FindDomainInput.safeParse(props.args).data?.query,
+            step: stepOf(props),
+          }}
           state={view.state}
           streaming={streaming}
           tool="find_domain"
