@@ -14,7 +14,8 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import type { Owner } from "../changes.ts"
-import { invalid, readBody } from "../http.ts"
+import { isOrgOwner } from "../domain-buy.ts"
+import { failure, invalid, readBody } from "../http.ts"
 import type { ToolContext } from "./tools.ts"
 
 /**
@@ -101,6 +102,14 @@ export async function grantsRoute(
   if (request.method !== "POST") return null
   const parsed = ApprovalGrantSwitch.safeParse(await readBody(request))
   if (!parsed.success) return invalid(parsed.error.issues)
+  if (!(await isOrgOwner(kit, owner))) {
+    return failure(403, {
+      class: "permission",
+      code: "grants.not_owner",
+      message: "Only the owner can choose what is done without asking.",
+      detail: {},
+    })
+  }
   const { kind, on } = parsed.data
   return Response.json(
     await kit.withOrg(at, async (db) => {

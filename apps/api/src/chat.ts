@@ -103,6 +103,7 @@ import {
   withinCap,
   writeAsTurn,
 } from "./cos/turns.ts"
+import { isOrgOwner } from "./domain-buy.ts"
 import {
   failure,
   invalid,
@@ -971,6 +972,13 @@ export async function chat(
     }
     return response
   }
+  // Only the org's owner grants; anyone else's tap on Always allow is a yes.
+  const grantOrg =
+    turn.kind === "results" &&
+    turn.results.some((r) => r.kind === "approval" && r.always) &&
+    (await isOrgOwner(kit, owner))
+      ? owner.orgId
+      : null
   let opened: Opened | Response | { plan: PlanJob }
   try {
     opened = await kit.withOrg(scope, async (db) => {
@@ -1050,7 +1058,7 @@ export async function chat(
             : "budgetary"
       const opening = await openCos(
         db,
-        owner.orgId,
+        grantOrg,
         held,
         id,
         parsed.data,
@@ -1384,7 +1392,8 @@ function settledChunks(part: CosPart): UIMessageChunk[] {
  */
 async function openCos(
   db: OrgScopedDb,
-  orgId: string,
+  /** The org a tap on Always allow grants in, or null when the person is not its owner. */
+  grantOrg: string | null,
   held: Read,
   id: string,
   { turn }: ChatRequest,
@@ -1403,7 +1412,7 @@ async function openCos(
     const card = typedCard(held.card)
     const answered =
       heard && held.card && card?.toolCallId === heard.callId
-        ? await resolveApprovals(db, orgId, id, held.card, [
+        ? await resolveApprovals(db, grantOrg, id, held.card, [
             {
               kind: "approval",
               approval_id: card.approval?.id ?? "",
@@ -1437,7 +1446,7 @@ async function openCos(
   }
   const tail = held.card
   if (tail?.content.role !== "assistant") return stale()
-  const opened = await resolveApprovals(db, orgId, id, tail, turn.results)
+  const opened = await resolveApprovals(db, grantOrg, id, tail, turn.results)
   return opened instanceof Response ? opened : { ...opened, typed: null }
 }
 
@@ -1480,7 +1489,7 @@ async function offerable(
  */
 async function resolveApprovals(
   db: OrgScopedDb,
-  orgId: string,
+  grantOrg: string | null,
   id: string,
   tail: Tail,
   results: ChatResult[]
@@ -1537,7 +1546,7 @@ async function resolveApprovals(
     const kind = byApproval.get(approvalId)?.always
       ? grantOf(part.type.slice("tool-".length) as CosToolName, part.input)
       : null
-    if (kind) await saveGrant(db, orgId, kind, approvalId)
+    if (kind && grantOrg) await saveGrant(db, grantOrg, kind, approvalId)
   }
   const applied = parts.map((part): CosPart => {
     const result = part.approval ? byApproval.get(part.approval.id) : undefined

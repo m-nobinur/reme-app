@@ -69,7 +69,7 @@ import {
   sha256,
 } from "./history.ts"
 import { workspaceLabels } from "./labels.ts"
-import { fullness, inOwnersWords, remember } from "./memory.ts"
+import { fullness, remember } from "./memory.ts"
 import { type Check, claimsGate, gated, promiseGate } from "./promise.ts"
 import { failureMessage } from "./retry.ts"
 import { getIndexing, getSearchPerformance } from "./search-tools.ts"
@@ -440,15 +440,46 @@ export type OwnerSaid = {
 }
 
 /**
- * Whether the owner wrote every word of `text` in this conversation. A grant
- * runs a review or a connect only on words the owner wrote, so a review or a
- * name that came in from a page, an email or a tool still asks.
+ * Whether one message the owner wrote in this conversation passes `test`. A
+ * grant runs a review or a connect only on what the owner wrote whole in one
+ * message, so a review or a name from a page, an email or a tool still asks.
  */
-const ownerWrote = (said: OwnerSaid, text: string) =>
+const ownerWrote = (said: OwnerSaid, test: (message: string) => boolean) =>
   said
     .messages()
-    .then((m) => inOwnersWords(text, m, false))
+    .then((m) => m.some(test))
     .catch(() => false)
+
+const normal = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim()
+const WORD = /[\p{L}\p{N}]/u
+const EDGES = /^[\s"'.,!?;:]+|[\s"'.,!?;:]+$/g
+
+/** Whether `message` holds `text` whole and in order, not inside a longer word. */
+export function holdsWhole(message: string, text: string): boolean {
+  const m = normal(message)
+  const t = normal(text).replace(EDGES, "")
+  if (!t) return false
+  for (let i = m.indexOf(t); i >= 0; i = m.indexOf(t, i + 1)) {
+    if (!WORD.test(m[i - 1] ?? "") && !WORD.test(m[i + t.length] ?? "")) {
+      return true
+    }
+  }
+  return false
+}
+
+const HOSTNAME = /[a-z0-9-]+(?:\.[a-z0-9-]+)+/g
+
+/** Whether `message` names exactly `name` as a domain, not a longer one holding it. */
+export const namesDomain = (message: string, name: string) =>
+  (normal(message).match(HOSTNAME) ?? ([] as string[])).includes(
+    normal(name).replace(/\.$/, "")
+  )
 
 /** A call's risk. Any doubt or error leans to the card, as each rule did before grants. */
 export async function riskOf(
@@ -479,7 +510,10 @@ export async function riskOf(
         : "grantable"
     case "record_review": {
       const { quote, name: from } = input as RecordReviewInput
-      return (await ownerWrote(said, `${quote} ${from}`))
+      return (await ownerWrote(
+        said,
+        (m) => holdsWhole(m, quote) && holdsWhole(m, from)
+      ))
         ? "grantable"
         : "always_ask"
     }
@@ -487,7 +521,9 @@ export async function riskOf(
       const domain = input as ConnectDomainInput
       if (await said.putOn(domain).catch(() => false)) return "owner_asked"
       if (await said.pinned(domain).catch(() => true)) return "always_ask"
-      return (await ownerWrote(said, domain.name)) ? "grantable" : "always_ask"
+      return (await ownerWrote(said, (m) => namesDomain(m, domain.name)))
+        ? "grantable"
+        : "always_ask"
     }
     case "remove_domain":
     case "buy_domain":

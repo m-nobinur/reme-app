@@ -9,6 +9,7 @@ import {
   CosToolResult,
   CosTurn,
   CreateReminderRequest,
+  ErrorEnvelope,
   type FactRecord,
   ONBOARDING_STATUS,
   type OnboardingStatus,
@@ -27,6 +28,7 @@ import {
   events,
   facts,
   failureCode,
+  memberships,
   postAssistantMessage,
   postOwnerEmail,
   reminders,
@@ -2447,7 +2449,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         calls({
           id: "call_r2",
           tool: "record_review",
-          input: { ...review, slot: 2, name: "Bo" },
+          input: { ...review, slot: 2, name: "Bo", quote: "Great job." },
         })
       )
       const next = await turn(who, typed(id, "Bo says: great job."), { model })
@@ -2563,6 +2565,34 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         "tool-record_review",
       ])
       expect((await flip({ kind: "buy_domain", on: true })).status).toBe(400)
+    })
+
+    it("takes a member's tap on Always allow as a yes only, and refuses their switch", async () => {
+      const who = await owner(kit, url as string, "cos-grant-member")
+      await kit.withOrg({ orgId: who.orgId }, (db) =>
+        db
+          .update(memberships)
+          .set({ role: "member" })
+          .where(sql`${memberships.orgId} = ${who.orgId}`)
+      )
+      const id = await conversation(who)
+      await turn(who, typed(id, "Ann says: spotless every time. Save it."), {
+        model: scripted(
+          calls({ id: "call_m1", tool: "record_review", input: review })
+        ).model,
+      })
+      await yesTo(who, id, true)
+      expect((await outcomes(id)).map((o) => o.outcome)).toEqual(["recorded"])
+      expect(await grantsOf(who)).toEqual([])
+      const flipped = await who.call(stubOrchestrator(), "/approval-grants", {
+        method: "POST",
+        body: JSON.stringify({ kind: "record_review", on: true }),
+      })
+      expect(flipped.status).toBe(403)
+      expect(ErrorEnvelope.parse(await flipped.json()).code).toBe(
+        "grants.not_owner"
+      )
+      expect(await grantsOf(who)).toEqual([])
     })
 
     it("lets the model offer a kind the owner approved on a card twice this week", async () => {

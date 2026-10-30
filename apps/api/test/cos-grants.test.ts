@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest"
 import {
   carded,
   grantsLine,
+  holdsWhole,
+  namesDomain,
   type OwnerSaid,
   offerLine,
   riskOf,
@@ -213,6 +215,30 @@ const TABLE: Row[] = [
     "run",
   ],
   [
+    "a review whose words are spread over messages, granted",
+    "record_review",
+    REVIEW,
+    said(["Ann was here", "every time it is spotless"]),
+    ["record_review"],
+    "card",
+  ],
+  [
+    "a connect whose name's parts are spread over messages, granted",
+    "connect_domain",
+    DOMAIN,
+    said(["Sparkleclean is the brand", "we are a co in the uk"]),
+    ["connect_domain"],
+    "card",
+  ],
+  [
+    "a connect for a longer name holding the owner's, granted",
+    "connect_domain",
+    DOMAIN,
+    said(["Put the site on sparkleclean.co.uk.evil.example"]),
+    ["connect_domain"],
+    "card",
+  ],
+  [
     "a connect for a name the owner never typed, granted",
     "connect_domain",
     DOMAIN,
@@ -255,6 +281,37 @@ const TABLE: Row[] = [
     "run",
   ],
 ]
+
+describe("what the owner wrote whole", () => {
+  it("finds a quote in one message, in order, ignoring case, spacing and edge punctuation", () => {
+    expect(
+      holdsWhole("Ann says:  “Spotless every time!”", "spotless every time.")
+    ).toBe(true)
+    expect(
+      holdsWhole("Ann says spotless, every time", "Spotless every time")
+    ).toBe(false)
+    expect(holdsWhole("time every spotless", "Spotless every time")).toBe(false)
+    expect(holdsWhole("Joanna said so", "Ann")).toBe(false)
+    expect(holdsWhole("Ann said so", "Ann")).toBe(true)
+    expect(holdsWhole("anything", "  .. ")).toBe(false)
+  })
+
+  it("finds a domain only as the whole name typed", () => {
+    expect(
+      namesDomain("Put us on SparkleClean.co.uk.", "sparkleclean.co.uk")
+    ).toBe(true)
+    expect(
+      namesDomain("use www.sparkleclean.co.uk", "sparkleclean.co.uk")
+    ).toBe(false)
+    expect(
+      namesDomain("sparkleclean.co.uk.evil.example", "sparkleclean.co.uk")
+    ).toBe(false)
+    expect(namesDomain("my-sparkleclean.co.uk", "sparkleclean.co.uk")).toBe(
+      false
+    )
+    expect(namesDomain("sparkleclean co uk", "sparkleclean.co.uk")).toBe(false)
+  })
+})
 
 describe("riskOf", () => {
   it.each(TABLE)(
