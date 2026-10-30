@@ -662,7 +662,7 @@ export function activityOf(input: ActivityInput, now: Date): Activity {
       steps: [],
       at: d.due_at,
     }))
-  if (beat?.last && beat.last.outcome !== "failed")
+  if (beat?.last && ["done", "no_change"].includes(beat.last.outcome))
     done.push({
       id: "checkin:last",
       kind: "checkin",

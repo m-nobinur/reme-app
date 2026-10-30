@@ -24,10 +24,11 @@ type ScheduledJob = typeof scheduledJobs.$inferSelect
 /**
  * One occurrence of a job, as its handler sees it. `db` is the run's own
  * transaction: what the handler writes commits with the `job_runs` row or not
- * at all, so a crash mid-run leaves nothing and the job is retaken when its
- * claim lapses. Anything that leaves Postgres goes through the outbox, and
- * the transaction's 15-second idle limit bounds the work done inside it.
- * `kit` is for `after`, which runs once that transaction is over.
+ * at all, so a failed run leaves nothing in Postgres. Anything that leaves
+ * Postgres goes through the outbox, and the transaction's 15-second idle limit
+ * bounds the work done inside it. `kit` is for `after`, which runs once that
+ * transaction is over. `earlierUnknown` is set when the job's last attempt
+ * ended with its result unknown, for a handler whose effect leaves Postgres.
  */
 export type JobRun = {
   db: OrgScopedDb
@@ -35,22 +36,42 @@ export type JobRun = {
   env: Env
   job: ScheduledJob
   now: Date
+  earlierUnknown: boolean
+}
+
+/** What a run's `after` step settled, written over the run's outcome. */
+export type Settled = {
+  outcome: "done" | "no_change" | "failed"
+  detail?: string
 }
 
 /**
- * Nothing returned means `ok`. Throwing is a failure, with backoff. `after`
- * runs once the run's transaction has committed and never otherwise, for what
- * must not happen ahead of the commit, such as a Queue send for a row the run
- * wrote. If it throws the run still stands; the error is logged.
+ * Nothing returned means `done`; `no_change` is a run with nothing to say.
+ * Throwing is a failure, with backoff, unless it throws `OutcomeUnknown`.
+ * `after` runs once the run's transaction has committed and never otherwise,
+ * for what must not happen ahead of the commit, such as a Queue send for a
+ * row the run wrote, and may return what it settled. If it throws the run
+ * still stands; the error is logged.
  */
 export type Handler = (run: JobRun) => Promise<
   | {
       outcome: "done" | "no_change"
       detail?: string
-      after?: () => Promise<void>
+      after?: () => Promise<Settled | undefined>
     }
   | undefined
 >
+
+/**
+ * Thrown by a handler whose effect outside Postgres may have happened before
+ * it failed. The run is recorded `unknown`, and the retry is told so.
+ */
+export class OutcomeUnknown extends Error {
+  constructor(readonly code: string) {
+    super(code)
+    this.name = "OutcomeUnknown"
+  }
+}
 
 export type Handlers = Partial<Record<ScheduledJob["kind"], Handler>>
 
@@ -62,12 +83,18 @@ export const JOBS_QUEUES = ["reme-jobs", "reme-jobs-production"]
  * to its after-turn queue, ids only. Sent inside the run, so a send that
  * fails is retried with the job; the api finds a second hand-over done.
  */
-export const continueJob: Handler = async ({ env, job }) => {
-  await env.AFTER_TURN.send({
-    kind: "cos_continue",
-    orgId: job.orgId,
-    jobId: job.id,
-  })
+export const continueJob: Handler = async ({ env, job, earlierUnknown }) => {
+  try {
+    await env.AFTER_TURN.send({
+      kind: "cos_continue",
+      orgId: job.orgId,
+      jobId: job.id,
+      ...(earlierUnknown && { unknown: true }),
+    })
+  } catch (error) {
+    // A send that threw may still have been accepted.
+    throw new OutcomeUnknown(failureCode(error))
+  }
   return undefined
 }
 
@@ -78,8 +105,8 @@ export const HANDLERS: Handlers = {
   cos_continue: continueJob,
 }
 
-/** Failures in a row before a job pauses and the owner is told. */
-export const MAX_FAILURES = 5
+/** Failures in a row before a job turns itself off and the owner is told. */
+export const MAX_FAILURES = 10
 
 /** Minutes to wait after the `failures`th failure in a row. */
 export const backoffMinutes = (failures: number) => Math.min(60, 2 ** failures)
@@ -120,8 +147,19 @@ async function claimedJob(db: OrgScopedDb, jobId: string, now: Date) {
 }
 
 /**
- * Runs one claimed job once. The `job_runs` row for this occurrence goes in
- * first, and a conflict on it means the occurrence already ran. Success moves
+ * What a started attempt writes in its `job_runs` row's detail: the claim it
+ * ran under. A second delivery of the same claim finds it and leaves the
+ * attempt alone; a retaken claim means the first attempt's worker is gone.
+ */
+const startedUnder = (claimedAt: Date) => `claim ${claimedAt.toISOString()}`
+
+/**
+ * Runs one claimed job once, in two transactions. The first writes the
+ * occurrence's `job_runs` row as `unknown` and commits, so a worker that dies
+ * mid-run leaves the mark that its result is not known. The second holds the
+ * job's lock, runs the handler and settles the row with what the handler
+ * writes. A retaken claim finds the mark and reruns with `earlierUnknown`;
+ * so does the next try after a run recorded `unknown`. Success moves
  * `next_run_at` to the rule's next time in the org's zone, or pauses a
  * one-off for good.
  */
@@ -133,37 +171,64 @@ export async function runJob(
   now = new Date()
 ): Promise<Ran> {
   let next: Date | null = null
-  let after: (() => Promise<void>) | undefined
+  let after: (() => Promise<Settled | undefined>) | undefined
+  let runAt: Date | undefined
   try {
-    const ran = await kit.withOrg({ orgId }, async (db): Promise<Ran> => {
-      after = undefined
+    const started = await kit.withOrg({ orgId }, async (db) => {
       const job = await claimedJob(db, jobId, now)
-      if (!job) return "stale"
+      if (!job) return "stale" as const
       if (!(await orgOpen(db))) {
         await db
           .update(scheduledJobs)
           .set({ pausedAt: now, claimedAt: null })
           .where(eq(scheduledJobs.id, jobId))
-        return "closed"
+        return "closed" as const
       }
-      const [run] = await db
+      const [last] = await db
+        .select()
+        .from(jobRuns)
+        .where(eq(jobRuns.jobId, jobId))
+        .orderBy(sql`${jobRuns.runAt} desc`)
+        .limit(1)
+      const detail = startedUnder(job.claimedAt as Date)
+      if (
+        last?.runAt.getTime() === job.nextRunAt.getTime() &&
+        (last.outcome !== "unknown" || last.detail === detail)
+      )
+        return "stale" as const
+      await db
         .insert(jobRuns)
-        .values({ jobId, orgId, runAt: job.nextRunAt, outcome: "done" })
-        .onConflictDoNothing()
-        .returning({ jobId: jobRuns.jobId })
-      if (!run) return "stale"
+        .values({
+          jobId,
+          orgId,
+          runAt: job.nextRunAt,
+          outcome: "unknown",
+          detail,
+        })
+        .onConflictDoUpdate({
+          target: [jobRuns.jobId, jobRuns.runAt],
+          set: { detail },
+        })
+      return { earlierUnknown: last?.outcome === "unknown" }
+    })
+    if (typeof started === "string") return started
+    const ran = await kit.withOrg({ orgId }, async (db): Promise<Ran> => {
+      after = undefined
+      const job = await claimedJob(db, jobId, now)
+      if (!job) return "stale"
+      runAt = job.nextRunAt
       const handler = handlers[job.kind]
       const result: Awaited<ReturnType<Handler>> = handler
-        ? await handler({ db, kit, env, job, now })
+        ? await handler({ db, kit, env, job, now, ...started })
         : { outcome: "no_change", detail: "no handler" }
       after = result?.after
-      if (result)
-        await db
-          .update(jobRuns)
-          .set({ outcome: result.outcome, detail: result.detail ?? null })
-          .where(
-            sql`${eq(jobRuns.jobId, jobId)} and ${eq(jobRuns.runAt, job.nextRunAt)}`
-          )
+      const outcome = result?.outcome ?? "done"
+      await db
+        .update(jobRuns)
+        .set({ outcome, detail: result?.detail ?? null })
+        .where(
+          sql`${eq(jobRuns.jobId, jobId)} and ${eq(jobRuns.runAt, job.nextRunAt)}`
+        )
       if (job.rule) {
         const [org] = await db
           .select({
@@ -184,11 +249,11 @@ export async function runJob(
           ...(next ? { nextRunAt: next } : { pausedAt: now }),
         })
         .where(eq(scheduledJobs.id, jobId))
-      return result?.outcome ?? "done"
+      return outcome
     })
     if (next) await lowerNextDue(env.SCHEDULE, next, env.JOBS)
     // Committed. A failure here leaves the handler's delivery rows pending.
-    await after?.().catch((error: unknown) =>
+    const settled = await after?.().catch((error: unknown) => {
       console.error(
         JSON.stringify({
           code: "jobs.after_failed",
@@ -196,7 +261,31 @@ export async function runJob(
           error: failureCode(error),
         })
       )
-    )
+    })
+    if (settled && runAt) {
+      const at = runAt
+      await kit
+        .withOrg({ orgId }, (db) =>
+          db
+            .update(jobRuns)
+            .set({
+              outcome: settled.outcome,
+              detail: settled.detail?.slice(0, 500) ?? null,
+            })
+            .where(
+              sql`${eq(jobRuns.jobId, jobId)} and ${eq(jobRuns.runAt, at)}`
+            )
+        )
+        .catch((error: unknown) =>
+          console.error(
+            JSON.stringify({
+              code: "jobs.settle_failed",
+              job_id: jobId,
+              error: failureCode(error),
+            })
+          )
+        )
+    }
     return ran
   } catch (error) {
     return failed(kit, env, { jobId, orgId }, error, now)
@@ -204,9 +293,11 @@ export async function runJob(
 }
 
 /**
- * The run threw and its transaction rolled back. Record the failure in a
- * transaction of its own and back off; the fifth in a row pauses the job and
- * tells the owner. If this throws too, the message is retried.
+ * The run threw and its transaction rolled back. Record it in a transaction
+ * of its own, as `unknown` when the handler says its effect may have
+ * happened and `failed` when nothing did, and back off; the tenth in a row
+ * pauses the job and tells the owner. If this throws too, the message is
+ * retried.
  */
 async function failed(
   kit: Tenancy,
@@ -215,25 +306,22 @@ async function failed(
   error: unknown,
   now: Date
 ): Promise<Ran> {
-  const code = failureCode(error)
+  const unknown = error instanceof OutcomeUnknown
+  const code = unknown ? error.code : failureCode(error)
   console.error(
     JSON.stringify({ code: "jobs.run_failed", job_id: jobId, error: code })
   )
   const after = await kit.withOrg({ orgId }, async (db) => {
     const job = await claimedJob(db, jobId, now)
     if (!job) return null
-    const [run] = await db
+    const outcome = unknown ? "unknown" : "failed"
+    await db
       .insert(jobRuns)
-      .values({
-        jobId,
-        orgId,
-        runAt: job.nextRunAt,
-        outcome: "failed",
-        detail: code,
+      .values({ jobId, orgId, runAt: job.nextRunAt, outcome, detail: code })
+      .onConflictDoUpdate({
+        target: [jobRuns.jobId, jobRuns.runAt],
+        set: { outcome, detail: code },
       })
-      .onConflictDoNothing()
-      .returning({ jobId: jobRuns.jobId })
-    if (!run) return null
     const failures = job.failures + 1
     const paused = failures >= MAX_FAILURES
     const next = new Date(now.getTime() + backoffMinutes(failures) * 60_000)
@@ -259,12 +347,12 @@ async function failed(
           failures,
         },
       })
-    return { next, paused }
+    return { next, paused, outcome } as const
   })
   if (!after) return "stale"
   if (!after.paused) {
     await lowerNextDue(env.SCHEDULE, after.next, env.JOBS)
-    return "failed"
+    return after.outcome
   }
   // Once per pause. A busy chat drops it; the alert row keeps it.
   const posted = await postAssistantMessage(kit, {

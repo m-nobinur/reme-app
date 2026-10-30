@@ -62,18 +62,24 @@ a Queue as one message, and the consumer runs it under `withOrg`.
 
 **A run happens once.** `job_runs (job_id, org_id, run_at, outcome, detail)` is unique on
 `(job_id, run_at)`. The consumer locks the job and runs it only if it is still claimed, unpaused
-and due; then it inserts the run with `on conflict do nothing`, so a redelivered message, even one
-racing the first, finds the run written and does nothing. The insert, the handler and the move to
-the next time are one transaction: a crash leaves nothing behind and the job is retaken when its
-claim lapses. A handler therefore writes only to Postgres, sends through the outbox, and fits
-inside `withOrg`'s 15-second idle limit. A kind with no handler is recorded `skipped`.
+and due; then a first transaction writes the run as `unknown`, naming the claim it ran under, and
+commits. A redelivered message, even one racing the first, finds that run for the same claim and
+does nothing. The handler and the move to the next time are a second transaction that settles the
+run: a crash leaves the `unknown` mark behind, and when the claim lapses and the job is retaken
+the rerun is told the earlier attempt's result is unknown. A handler therefore writes only to
+Postgres, sends through the outbox, and fits inside `withOrg`'s 15-second idle limit. A kind with
+no handler is recorded `no_change`. Outcomes are `done`, `no_change`, `failed` and `unknown`;
+`no_change` posts nothing.
 
 Success clears `claimed_at` and `failures` and moves `next_run_at` to the rule's next time after
 now, or pauses a one-off for good. Computing from now collapses missed fires: a daily job down
 for three days runs once, never three times. When `orgs.time_zone` changes, `recomputeOrgJobs`
 (in `@workspace/db`, with `nextRun`) moves the org's upcoming recurring jobs into the new zone in
 the same transaction. A failed run rolls back, is recorded `failed` in a transaction
-of its own, and backs off `min(60, 2^failures)` minutes. The fifth failure in a row pauses the job,
+of its own, and backs off `min(60, 2^failures)` minutes. A handler whose effect outside Postgres may
+have happened before it failed (the `cos_continue` hand-over to a Queue) throws `OutcomeUnknown`
+and the run is recorded `unknown`; the retry is told, and for `cos_continue` the note reaches the
+continuation turn. The tenth failure in a row, either kind, pauses the job,
 raises `alert.raised` `{kind: "job.paused"}` and posts one fixed chat message, keyed by the pause
 so it posts once. A job whose org is closed (ADR-035) is paused without running, and deleting the
 account deletes the org's jobs.
@@ -106,9 +112,10 @@ the same state read an hour later is the same digest. A ledger drops items alrea
 `deliveries` row keyed `heartbeat-item:<org>:<item key>`, inserted if absent and never sent. It is
 written before any model runs, so a model that fails does not raise the same items again. A
 digest query that fails rolls the run back, ledger included, so a source error is not a change.
-An empty digest, or one with nothing new, ends the run `skipped`. `job_outcome` has no
-`owner_active` or `error` value and adding one needs a migration, so those runs are `skipped`
-and `failed` with the reason in `detail`.
+An empty digest, or one with nothing new, ends the run `no_change`. `job_outcome` has no
+`owner_active` or `error` value, so those runs are `no_change` and `failed` with the reason in
+`detail`. The weekly Search report's key is its newest day of data, so a Monday whose sync brought
+nothing new finds the key surfaced and ends `no_change` before any model runs.
 
 New items go to two models after the run commits, in its `after`. First Jev
 (`typesafe/jev-1.13` through the AI SDK provider's `evaluationModel`, the second Jev caller)

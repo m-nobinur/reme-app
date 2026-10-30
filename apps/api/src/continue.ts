@@ -49,7 +49,13 @@ import {
  * the job and hands it here on the after-turn queue, since the CoS runs in
  * this Worker; the message holds ids only.
  */
-export type ContinueJob = { kind: "cos_continue"; orgId: string; jobId: string }
+export type ContinueJob = {
+  kind: "cos_continue"
+  orgId: string
+  jobId: string
+  /** The job's last attempt ended with its result unknown. */
+  unknown?: true
+}
 
 export const isContinueJob = (body: unknown): body is ContinueJob =>
   (body as { kind?: unknown } | null)?.kind === "cos_continue"
@@ -202,7 +208,7 @@ export async function continueTurn(
       null,
       facts,
       false,
-      unknownAfter(log, continued.seq) ? "unknown" : "cut"
+      job.unknown || unknownAfter(log, continued.seq) ? "unknown" : "cut"
     )
     const turn: Turn = { ...session, turnId: newUlid() }
     await beginTurn(db, turn, {
