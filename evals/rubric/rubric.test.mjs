@@ -16,11 +16,13 @@ import {
 const verdict = ({ failRules = [], tells = [], skip } = {}) => ({
   rules: RULES.filter((r) => r.id !== skip).map((r) => ({
     id: r.id,
+    reason: "judged",
     pass: !failRules.includes(r.id),
     node: failRules.includes(r.id) ? `<h2> in ${r.id}` : null,
   })),
   tells: TELLS.map((t) => ({
     id: t.id,
+    reason: "judged",
     present: tells.includes(t.id),
     node: tells.includes(t.id) ? "the hero" : null,
   })),
@@ -86,6 +88,21 @@ test("the verdict schema accepts exactly the rubric's ids", () => {
     schema.properties.tells.items.properties.id.enum,
     TELLS.map((t) => t.id)
   )
+})
+
+test("each row asks for its reason before its flag, and the prompt says so", () => {
+  const { schema } = verdictSchema()
+  for (const [key, flag] of [
+    ["rules", "pass"],
+    ["tells", "present"],
+  ]) {
+    const items = schema.properties[key].items
+    const order = ["id", "reason", flag, "node"]
+    assert.deepEqual(Object.keys(items.properties), order)
+    assert.deepEqual(items.required, order)
+    assert.equal(items.additionalProperties, false)
+  }
+  assert.match(rubricPrompt(build("a")).system, /reason first/)
 })
 
 test("a page is shown without scripts, drawn paths and inlined binaries, and bounded", () => {
