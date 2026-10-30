@@ -25,6 +25,7 @@ import {
   planParts,
   planTurn,
   REQUIRED,
+  sayContext,
   sayProblems,
 } from "../../apps/api/src/onboarding-agent.ts"
 import { voiceProblems } from "../../apps/api/src/voice.ts"
@@ -368,7 +369,11 @@ async function onboard(persona, spec) {
     put([...checked.stated, ...checked.chosen])
     says.push(checked.plan.say)
     plans.push(checked.plan)
-    for (const problem of sayProblems(checked.plan.say)) flag(`say: ${problem}`)
+    for (const problem of sayProblems(
+      checked.plan.say,
+      sayContext(checked.plan, s, checked.after)
+    ))
+      flag(`say: ${problem}`)
     // A re-docked card after a side question (answer_only) is not a new ask.
     if (checked.plan.next.kind === "ask_open") asked([checked.plan.next.about])
     else if (checked.plan.next.kind !== "answer_only")
@@ -491,6 +496,10 @@ async function onboard(persona, spec) {
         act.output.answer === "changes"
       )
         quoteChanged = true
+      if (card.type === "tool-ask_design") {
+        const held = factOf(sim.facts, "media.uploads")?.items ?? []
+        put([{ key: "media.uploads", value: { items: [...held, LOGO] } }])
+      }
       if (card.type === "tool-ask_upload" && act.output.answer === "uploaded") {
         put([{ key: "media.uploads", value: { items: act.output.assets } }])
       }
@@ -660,6 +669,14 @@ const ASSETS = [
   },
 ]
 
+const LOGO = {
+  id: "5f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0e",
+  name: "logo.png",
+  content_type: "image/png",
+  bytes: 3000,
+  use: "logo",
+}
+
 /** What the owner does with a card, by the sheet's rules, or null to type. */
 function cardAction(persona, card, { quoteChanged }) {
   const input = card.input
@@ -674,6 +691,8 @@ function cardAction(persona, card, { quoteChanged }) {
     // One option per question: the owner's own preset when the tray offers it, else the first; a ticked page set stays as the tray proposed it.
     const answers = Object.fromEntries(
       input.questions.map((q) => {
+        if (q.visual === "logo") return [q.id, { logo: LOGO }]
+        if (q.visual === "photos") return [q.id, { photos: [], create: true }]
         const ids = q.card.options.map((o) => o.id)
         const mine = [persona.cards[q.id], persona.cards[q.card.step]].find(
           (id) => id && ids.includes(id)
@@ -694,7 +713,7 @@ function cardAction(persona, card, { quoteChanged }) {
     return { kind: "answer", output: { answers, skip_all: false } }
   }
   if (card.type === "tool-ask_open") {
-    return persona.cards.open === "skip" || persona.skipAll
+    return input.skippable && (persona.cards.open === "skip" || persona.skipAll)
       ? { kind: "answer", output: { answer: "skipped" } }
       : { kind: "open" }
   }
