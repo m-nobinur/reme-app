@@ -585,6 +585,21 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(
+        in oklab,
+        var(--muted-foreground) 35%,
+        transparent
+      )
+      transparent;
+  }
+  *:hover {
+    scrollbar-color: color-mix(
+        in oklab,
+        var(--muted-foreground) 60%,
+        transparent
+      )
+      transparent;
   }
   body {
     @apply bg-background text-foreground antialiased;
