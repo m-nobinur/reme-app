@@ -118,6 +118,18 @@ describe("quickPrompt", () => {
     // The same for every edit, so it caches.
     expect(quickPrompt("style", {}, [], "x").system).toBe(system)
   })
+
+  it("carries the owner's corrections last in the cached part, quoted", () => {
+    const plain = quickPrompt("copy", FILES, [], "x").system
+    const { system, user } = quickPrompt("copy", FILES, [], "x", [
+      "Never say spotless on my site.",
+    ])
+    expect(system.startsWith(plain)).toBe(true)
+    expect(system.slice(plain.length)).toContain(
+      '"Never say spotless on my site."'
+    )
+    expect(user).not.toContain("spotless")
+  })
 })
 
 describe("wordsOf", () => {

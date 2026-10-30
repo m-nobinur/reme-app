@@ -4,8 +4,10 @@ import {
   conversationMessages,
   deliveries,
   jobRuns,
+  lowerNextDue,
   newUlid,
   type OrgScopedDb,
+  scheduledJobs,
   sql,
   surfacedKey,
   type Tenancy,
@@ -67,6 +69,9 @@ export const isWakeJob = (body: unknown): body is WakeJob =>
 
 /** How long the owner must have typed nothing before a turn they did not start. */
 export const IDLE_MS = 2 * 60_000
+
+/** How soon a procedure's run the owner was busy for tries again. */
+export const SKILL_RETRY_MS = 15 * 60_000
 
 /** Posts event-driven turns may make in an org's day; a `[quiet]` turn makes none. */
 export const WAKE_POSTS_PER_DAY = 3
@@ -200,6 +205,7 @@ export async function wakeTurn(
   let decided = false
   const ended = async (outcome: Woke) => {
     if (outcome === "done") return outcome
+    let retryAt: Date | null = null
     await kit.withOrg({ orgId: job.orgId }, async (db) => {
       if (!kept) await giveBack(db, job.orgId, beat?.follow_ups ?? [])
       if (outcome === "ran" && !decided)
@@ -210,7 +216,21 @@ export async function wakeTurn(
           outcome === "fell_back" ? "failed" : "no_change",
           outcome
         )
+      // A scheduled procedure waits out the owner's chat rather than its
+      // whole period. The orchestrator's run holds the row until it has set
+      // the rule's next time, so this lands after it.
+      if (outcome === "owner_active" && job.skill) {
+        const [moved] = await db
+          .update(scheduledJobs)
+          .set({ nextRunAt: new Date(Date.now() + SKILL_RETRY_MS) })
+          .where(
+            sql`${scheduledJobs.id} = ${job.jobId} and ${scheduledJobs.pausedAt} is null`
+          )
+          .returning({ nextRunAt: scheduledJobs.nextRunAt })
+        retryAt = moved?.nextRunAt ?? null
+      }
     })
+    if (retryAt) await lowerNextDue(env.SCHEDULE, retryAt, env.JOBS)
     return outcome
   }
   const reserved = reservation(price)
