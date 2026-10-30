@@ -339,7 +339,7 @@ export function narrationOk(text: string, known: readonly string[]): boolean {
   }
   let rest = text
   for (const value of known) if (value) rest = rest.replaceAll(value, " ")
-  return !/\d|\b(?:reme|ava)\b/i.test(rest)
+  return !/\d|\b(?:reme|ava|the owner)\b/i.test(rest)
 }
 
 /**
