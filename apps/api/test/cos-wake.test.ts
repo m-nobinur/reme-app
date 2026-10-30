@@ -12,7 +12,12 @@ import postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { DEFAULT_MODEL, WAKE_LINE } from "../src/cos/agent.ts"
 import { SessionBusy } from "../src/cos/turns.ts"
-import { isQuiet, WAKE_POSTS_PER_DAY, wakeTurn } from "../src/wake.ts"
+import {
+  isQuiet,
+  WAKE_POSTS_PER_DAY,
+  type WakeJob,
+  wakeTurn,
+} from "../src/wake.ts"
 import { type Owner, owner, SUFFIX, stubOrchestrator } from "./owner-fixture.ts"
 import { env, stubJwksFetch } from "./sealed-session.ts"
 
@@ -117,19 +122,44 @@ describe.skipIf(!url)("a proactive turn", () => {
     return id
   }
 
-  const wake = (model: MockLanguageModelV4, email?: boolean) =>
-    wakeTurn(
+  /** The last hand-over's job, and its run as the orchestrator recorded it. */
+  let last = { jobId: "", slot: "" }
+  const wake = async (model: MockLanguageModelV4, beat?: WakeJob["beat"]) => {
+    const slot = new Date().toISOString()
+    // Paused, so no scan in a suite alongside finds it due.
+    const [job] = await admin<{ id: string }[]>`
+      insert into scheduled_jobs (org_id, kind, next_run_at, paused_at)
+      values (${me.orgId}, ${beat ? "heartbeat" : "cos_wake"}, ${slot}, now())
+      returning id`
+    const jobId = job?.id as string
+    await admin`insert into job_runs (job_id, org_id, run_at, outcome, detail)
+      values (${jobId}, ${me.orgId}, ${slot}, 'done', 'handed')`
+    last = { jobId, slot }
+    return wakeTurn(
       bindings(),
       kit,
       {
         kind: "cos_wake",
         orgId: me.orgId,
-        jobId: crypto.randomUUID(),
-        slot: new Date().toISOString(),
-        ...(email !== undefined && { email }),
+        jobId,
+        slot,
+        ...(beat && { beat }),
       },
       { model }
     )
+  }
+  const lastRun = async () =>
+    (
+      await admin<{ outcome: string; detail: string }[]>`
+        select outcome, detail from job_runs
+        where job_id = ${last.jobId} and run_at = ${last.slot}`
+    )[0]
+  const heartbeat = (beat: Partial<NonNullable<WakeJob["beat"]>> = {}) => ({
+    email: true,
+    trusted: [],
+    follow_ups: [],
+    ...beat,
+  })
 
   const posted = (prefix: string) =>
     admin<{ key: string; channel: string }[]>`
@@ -230,14 +260,126 @@ describe.skipIf(!url)("a proactive turn", () => {
   it("takes a heartbeat's one unprompted message only when it posts, and emails when asked", async () => {
     await clearPosts()
     await chatWithResult()
-    expect(await wake(replying("[quiet] nothing new").model, true)).toBe("ran")
-    expect(await posted("unprompted:")).toEqual([])
-    sends.length = 0
-    expect(await wake(replying("A review came in today.").model, true)).toBe(
+    expect(await wake(replying("[quiet] nothing new").model, heartbeat())).toBe(
       "ran"
     )
+    expect(await posted("unprompted:")).toEqual([])
+    sends.length = 0
+    expect(
+      await wake(replying("A review came in today.").model, heartbeat())
+    ).toBe("ran")
     expect(await posted("unprompted:")).toHaveLength(1)
     expect(sends.map((s) => s.channel)).toEqual(["in_app", "email"])
-    expect(await wake(replying("Another.").model, true)).toBe("capped")
+    expect(await wake(replying("Another.").model, heartbeat())).toBe("capped")
   }, 60_000)
+
+  it("posts nothing and records the run failed when the reply repeats a link injected into a review", async () => {
+    await clearPosts()
+    await chatWithResult()
+    const followUp = `task:${crypto.randomUUID()}:records:blocked`
+    await admin`insert into deliveries (org_id, key, channel, state)
+      values (${me.orgId}, ${`heartbeat-item:${me.orgId}:${followUp}`}, 'in_app', 'sent')`
+    sends.length = 0
+    const beat = heartbeat({
+      trusted: ["www.brightclean.test"],
+      follow_ups: [followUp],
+    })
+    expect(
+      await wake(
+        replying(
+          "Jo left a review. Book her again at https://evil.example/pay."
+        ).model,
+        beat
+      )
+    ).toBe("ran")
+    expect(sends).toEqual([])
+    expect(await posted(`heartbeat:${me.orgId}:`)).toEqual([])
+    expect(await posted("unprompted:")).toEqual([])
+    expect(await lastRun()).toEqual({
+      outcome: "failed",
+      detail: "unsourced_contact",
+    })
+    // The follow-up goes back to the ledger's unsurfaced, for a later beat.
+    expect(await posted(`heartbeat-item:${me.orgId}:${followUp}`)).toEqual([])
+    expect(
+      await admin`select 1 from task_followups where fingerprint = ${followUp}`
+    ).toHaveLength(0)
+
+    // A trusted host is fine, and the post records the follow-up and carries the chip.
+    expect(
+      await wake(
+        replying("Your DNS change at www.brightclean.test is still waiting.")
+          .model,
+        { ...beat, chip: "Connect Google" }
+      )
+    ).toBe("ran")
+    expect(await lastRun()).toEqual({
+      outcome: "done",
+      detail: "sent:in_app,email",
+    })
+    expect(sends[0]).toMatchObject({
+      channel: "in_app",
+      message: {
+        button: {
+          label: "Connect Google",
+          action: { kind: "connect", service: "google" },
+        },
+      },
+    })
+    expect(
+      await admin`select 1 from task_followups where fingerprint = ${followUp}`
+    ).toHaveLength(1)
+  }, 60_000)
+
+  it("keeps a heartbeat's follow-ups asked when the turn stays quiet", async () => {
+    await clearPosts()
+    await chatWithResult()
+    const followUp = `task:${crypto.randomUUID()}:records:blocked`
+    const ledger = `heartbeat-item:${me.orgId}:${followUp}`
+    await admin`insert into deliveries (org_id, key, channel, state)
+      values (${me.orgId}, ${ledger}, 'in_app', 'sent')`
+    expect(
+      await wake(
+        replying("[quiet]").model,
+        heartbeat({ follow_ups: [followUp] })
+      )
+    ).toBe("ran")
+    expect(await lastRun()).toEqual({ outcome: "no_change", detail: "quiet" })
+    expect(await posted(ledger)).toHaveLength(1)
+  }, 30_000)
+
+  it("runs no write tool, even one the model calls by name", async () => {
+    await clearPosts()
+    const id = await chatWithResult()
+    const steps: Record<string, unknown>[][] = [
+      [
+        { type: "stream-start", warnings: [] },
+        {
+          type: "tool-call",
+          toolCallId: "call_put_off",
+          toolName: "put_off",
+          input: JSON.stringify({ kind: "google", days: 7 }),
+        },
+        {
+          type: "finish",
+          finishReason: { unified: "tool-calls", raw: "tool-calls" },
+          usage: said("").at(-1)?.usage,
+        },
+      ],
+      said("[quiet]"),
+    ]
+    const model = new MockLanguageModelV4({
+      modelId: DEFAULT_MODEL,
+      doStream: async () => ({
+        stream: convertArrayToReadableStream(
+          steps.shift() ?? said("[quiet]")
+        ) as never,
+      }),
+    })
+    expect(await wake(model)).toBe("ran")
+    const started = (await logOf(id)).filter(
+      (e) => e.type === "cos.tool_started" || e.type === "cos.tool_result"
+    )
+    expect(started).toEqual([])
+  }, 30_000)
 })

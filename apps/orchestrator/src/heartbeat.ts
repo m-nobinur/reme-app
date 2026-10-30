@@ -20,8 +20,10 @@ import {
   readTasks,
   reminders,
   sql,
+  surfacedKey,
   type Tenancy,
   taskFollowups,
+  unpromptedKey,
   waitedOn,
 } from "@workspace/db"
 import {
@@ -30,6 +32,7 @@ import {
   type Look,
   logSpend,
   modelInput,
+  trustedContacts,
 } from "./heartbeat-write.ts"
 import type { Handler, Settled } from "./jobs.ts"
 import { weeklyItem } from "./search-sync.ts"
@@ -293,10 +296,6 @@ export async function digest(
   return items.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
 }
 
-/** The ledger row that says an item was surfaced. */
-export const surfacedKey = (orgId: string, key: string) =>
-  `heartbeat-item:${orgId}:${key}`
-
 /** The items the ledger has not seen. */
 async function unsurfaced(
   db: OrgScopedDb,
@@ -439,10 +438,6 @@ const liveModels = (env: Env): Models => ({
   gate: (state) => askGate(env.OPENROUTER_API_KEY, state),
 })
 
-/** The ledger row that holds an org's one unprompted message on a local day. */
-export const unpromptedKey = (orgId: string, day: string) =>
-  `unprompted:${orgId}:${day}`
-
 /** What the model step needs, read inside the run's transaction. */
 type Beat = Look & {
   orgId: string
@@ -520,31 +515,25 @@ async function speak(
       }
     )
     if (logged !== "logged") return logged
-    const asked = beat.items.filter(isFollowUp)
-    if (asked.length > 0)
-      await db
-        .insert(taskFollowups)
-        .values(
-          asked.map((item) => ({
-            orgId,
-            fingerprint: item.key,
-            sentAt: beat.now,
-          }))
-        )
-        .onConflictDoNothing()
     return "handed"
   })
   if (handed !== "handed") {
     await putBack()
     return record("no_change", handed)
   }
+  const chip = beat.items.find((item) => item.facts.chip)?.facts.chip
   await env.AFTER_TURN.send({
     kind: "cos_wake",
     orgId,
     jobId,
     slot: slot.toISOString(),
-    // At most one a day, since the turn posts only while the day's message is free.
-    email: !beat.typed,
+    beat: {
+      // At most one a day, since the turn posts only while the day's message is free.
+      email: !beat.typed,
+      trusted: trustedContacts(beat.items),
+      ...(chip && { chip }),
+      follow_ups: beat.items.filter(isFollowUp).map((item) => item.key),
+    },
   })
   return record("done", "handed")
 }

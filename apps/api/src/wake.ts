@@ -1,14 +1,19 @@
-import { dashesToCommas } from "@workspace/contracts"
+import { dashesToCommas, type ServerMessage } from "@workspace/contracts"
 import {
   chiefStaffId,
   conversationMessages,
   deliveries,
+  jobRuns,
   newUlid,
   type OrgScopedDb,
   sql,
+  surfacedKey,
   type Tenancy,
+  taskFollowups,
+  unpromptedKey,
   wakeSession,
 } from "@workspace/db"
+import { vouched } from "@workspace/gates/contacts"
 import type { LanguageModel } from "ai"
 import { settleCard } from "./build-questions.ts"
 import { cosModel } from "./chat.ts"
@@ -37,14 +42,21 @@ import {
  * the after-turn queue: an org's `cos_wake` job, once the staff results that
  * asked for a turn have gathered for a minute, or a heartbeat Jev said yes
  * to, which logged its items as a `schedule` event first. `slot` is the
- * job's due time and keys the post; `email` comes with a heartbeat only.
+ * job's due time and keys the post and the run's `job_runs` row. A heartbeat
+ * adds `beat`: whether to email, the contacts its trusted facts hold, the
+ * Search report's chip, and the follow-ups it asks about (`task:` keys).
  */
 export type WakeJob = {
   kind: "cos_wake"
   orgId: string
   jobId: string
   slot: string
-  email?: boolean
+  beat?: {
+    email: boolean
+    trusted: string[]
+    chip?: string
+    follow_ups: string[]
+  }
 }
 
 export const isWakeJob = (body: unknown): body is WakeJob =>
@@ -75,7 +87,7 @@ export type Woke =
 
 /** The outbox rows a post writes, as the orchestrator's consumer reads them. */
 type Delivery = { orgId: string; key: string; conversationId: string } & (
-  | { channel: "in_app"; message: { text: string[] } }
+  | { channel: "in_app"; message: Omit<ServerMessage, "id"> }
   | { channel: "email"; subject: string; text: string }
 )
 
@@ -109,13 +121,30 @@ async function ownerTyped(db: OrgScopedDb) {
 }
 
 /**
+ * Puts a heartbeat's follow-ups back when its turn posted nothing for a
+ * reason other than the turn deciding to stay quiet, so a later beat asks.
+ */
+const giveBack = (db: OrgScopedDb, orgId: string, keys: string[]) =>
+  keys.length === 0
+    ? Promise.resolve()
+    : db.execute(
+        sql`delete from ${deliveries} where key in (${sql.join(
+          keys.map((k) => sql`${surfacedKey(orgId, k)}`),
+          sql`, `
+        )})`
+      )
+
+/**
  * Runs the turn as the org's owner, in `ask` mode with the read tools only.
  * It opens only with no turn open (`SessionBusy`, which the queue retries
  * after a turn's longest life) and the owner quiet for `IDLE_MS`, within the
  * daily cost cap and the day's posts: `WAKE_POSTS_PER_DAY` for events, the
  * one unprompted message for a heartbeat. Its reply is posted through the
  * outbox, which logs it as the assistant's notice and pushes it; a `[quiet]`
- * reply posts nothing and spends none of the day's posts.
+ * reply posts nothing and spends none of the day's posts. Nor does a reply
+ * with a link, an email address or a phone number that no trusted fact
+ * holds: the org's own hosts, or a heartbeat's trusted facts. What became of
+ * the run is written to its `job_runs` row.
  */
 export async function wakeTurn(
   env: Env,
@@ -127,7 +156,8 @@ export async function wakeTurn(
   const model = deps.model !== undefined ? deps.model : cos.model
   const { modelId, price } = cos
   if (!model || !price) return "no_model"
-  const heartbeat = job.email !== undefined
+  const { beat } = job
+  const heartbeat = beat !== undefined
   const key = `${heartbeat ? "heartbeat" : "wake"}:${job.orgId}:${job.jobId}:${job.slot}`
   const found = await kit.withOrg({ orgId: job.orgId }, (db) =>
     ownerOf(db, job.orgId, `cos_wake:${job.jobId}`)
@@ -141,7 +171,45 @@ export async function wakeTurn(
   ])
   const persona = personaOf(facts, profile)
   const day = today(zone)
-  const cap = `unprompted:${job.orgId}:${day}`
+  const cap = unpromptedKey(job.orgId, day)
+  const trusted = [
+    ...(beat?.trusted ?? []),
+    ...[
+      workspace.site.host,
+      ...(workspace.domains ?? []).map((d) => d.name),
+    ].filter((host) => host !== null),
+  ]
+  const record = async (
+    db: OrgScopedDb,
+    outcome: "done" | "no_change" | "failed",
+    detail: string
+  ) => {
+    await db
+      .update(jobRuns)
+      .set({ outcome, detail })
+      .where(
+        sql`${jobRuns.jobId} = ${job.jobId} and ${jobRuns.runAt} = ${job.slot}::timestamptz`
+      )
+  }
+  /** Whether the follow-ups stay asked: the turn posted, or chose to stay quiet. */
+  let kept = false
+  /** Whether the reply reached `post`, which records what it did. */
+  let decided = false
+  const ended = async (outcome: Woke) => {
+    if (outcome === "done") return outcome
+    await kit.withOrg({ orgId: job.orgId }, async (db) => {
+      if (!kept) await giveBack(db, job.orgId, beat?.follow_ups ?? [])
+      if (outcome === "ran" && !decided)
+        await record(db, "failed", "turn_error")
+      else if (outcome !== "ran")
+        await record(
+          db,
+          outcome === "fell_back" ? "failed" : "no_change",
+          outcome
+        )
+    })
+    return outcome
+  }
   const reserved = reservation(price)
   const opened = await kit.withOrg({ orgId: job.orgId }, async (db) => {
     const staffId = await chiefStaffId(db)
@@ -205,11 +273,18 @@ export async function wakeTurn(
       log: await readSession(db, sessionId),
     }
   })
-  if (typeof opened === "string") return opened
+  if (typeof opened === "string") return ended(opened)
 
   const queued: Delivery[] = []
   const post = async (db: OrgScopedDb, reply: string) => {
-    if (isQuiet(reply)) return
+    decided = true
+    if (isQuiet(reply)) {
+      kept = true
+      return record(db, "no_change", "quiet")
+    }
+    const text = dashesToCommas(reply)
+    if (!vouched(text, trusted))
+      return record(db, "failed", "unsourced_contact")
     if (heartbeat) {
       const took = await db
         .insert(deliveries)
@@ -221,9 +296,8 @@ export async function wakeTurn(
         })
         .onConflictDoNothing()
         .returning({ key: deliveries.key })
-      if (took.length === 0) return
+      if (took.length === 0) return record(db, "no_change", "capped")
     }
-    const text = dashesToCommas(reply)
     const conversationId = opened.turn.sessionId
     const out: Delivery[] = [
       {
@@ -231,9 +305,21 @@ export async function wakeTurn(
         key,
         conversationId,
         channel: "in_app",
-        message: { text: [text] },
+        message: {
+          text: [text],
+          ...(beat?.chip && {
+            button: {
+              label: beat.chip,
+              // The Search report's Google chip starts the sign-in from the row itself.
+              action:
+                beat.chip === "Connect Google"
+                  ? { kind: "connect" as const, service: "google" as const }
+                  : { kind: "ask" as const, text: beat.chip },
+            },
+          }),
+        },
       },
-      ...(job.email
+      ...(beat?.email
         ? [
             {
               orgId: job.orgId,
@@ -259,6 +345,23 @@ export async function wakeTurn(
         }))
       )
       .onConflictDoNothing()
+    if (beat && beat.follow_ups.length > 0)
+      await db
+        .insert(taskFollowups)
+        .values(
+          beat.follow_ups.map((fingerprint) => ({
+            orgId: job.orgId,
+            fingerprint,
+            sentAt: new Date(),
+          }))
+        )
+        .onConflictDoNothing()
+    await record(
+      db,
+      "done",
+      out.length > 1 ? "sent:in_app,email" : "sent:in_app"
+    )
+    kept = true
     queued.push(...out)
   }
   const ran = await runOpened({
@@ -287,5 +390,5 @@ export async function wakeTurn(
       )
     )
   }
-  return ran
+  return ended(ran)
 }

@@ -19,6 +19,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./claims": "./src/claims.ts",
+    "./contacts": "./src/contacts.ts",
     "./fields": "./src/fields.ts",
     "./preview": "./src/preview.ts",
     "./rubric": "./src/rubric.ts",

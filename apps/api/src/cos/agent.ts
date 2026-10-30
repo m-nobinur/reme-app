@@ -1254,7 +1254,8 @@ function withoutIds(output: unknown): JSONValue {
 }
 
 /** Each tool, its schema `COS_TOOLS[name].input`, running through `runTool`. */
-function toolsFor(run: AgentTurn) {
+/** `allowed` holds what an unasked turn may run, whatever the model calls. */
+function toolsFor(run: AgentTurn, allowed: readonly CosToolName[] | null) {
   const execute =
     (name: CosToolName) =>
     async (
@@ -1262,6 +1263,9 @@ function toolsFor(run: AgentTurn) {
       { toolCallId, messages }: { toolCallId: string; messages: ModelMessage[] }
     ) => {
       try {
+        if (allowed && !allowed.includes(name)) {
+          throw new Error(`cos.tool_not_allowed: ${name}`)
+        }
         // A fresh read of the workspace after a change is not a repeat.
         const key = callKey(name, input)
         if (name !== "get_workspace" && run.state.calls.includes(key)) {
@@ -1518,7 +1522,7 @@ export function cosAgent(
   mode: "ask" | "act",
   unasked = false
 ) {
-  const tools = toolsFor(run)
+  const tools = toolsFor(run, unasked ? activeTools(mode, true) : null)
   const closed = (error: unknown) => {
     if (error instanceof TurnClosed) run.abort.abort(error)
   }

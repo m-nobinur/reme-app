@@ -12,14 +12,10 @@ import {
   setStep,
   staff,
   taskFollowups,
+  unpromptedKey,
 } from "@workspace/db"
 import { afterAll, describe, expect, it, onTestFinished, vi } from "vitest"
-import {
-  heartbeatWith,
-  type Models,
-  SOURCES,
-  unpromptedKey,
-} from "../src/heartbeat.ts"
+import { heartbeatWith, type Models, SOURCES } from "../src/heartbeat.ts"
 import type { Spent } from "../src/heartbeat-write.ts"
 import { HANDLERS, runJob } from "../src/jobs.ts"
 import { freshOrg, kit } from "./fixture.ts"
@@ -55,8 +51,9 @@ describe.skipIf(!url)("heartbeat follow-ups over a week", () => {
     let looked: unknown[] = []
     const delivered: { hour: number; waiting: string[] }[] = []
     let hour = 0
-    // The proactive turn posts, which takes the day's one unprompted message.
-    const handOver = async () => {
+    // The proactive turn posts, which takes the day's one unprompted message
+    // and records the follow-ups it asked about.
+    const handOver = async (message: { beat: { follow_ups: string[] } }) => {
       delivered.push({
         hour,
         waiting: (looked as { waiting_for?: string }[]).flatMap((item) =>
@@ -66,14 +63,23 @@ describe.skipIf(!url)("heartbeat follow-ups over a week", () => {
       const day = now.at.toLocaleDateString("en-CA", {
         timeZone: "Europe/London",
       })
-      await kit.withOrg({ orgId }, (db) =>
-        db.insert(deliveries).values({
+      await kit.withOrg({ orgId }, async (db) => {
+        await db.insert(deliveries).values({
           orgId,
           key: unpromptedKey(orgId, day),
           channel: "in_app",
           state: "sent",
         })
-      )
+        const asked = message.beat.follow_ups
+        if (asked.length > 0)
+          await db.insert(taskFollowups).values(
+            asked.map((fingerprint) => ({
+              orgId,
+              fingerprint,
+              sentAt: now.at,
+            }))
+          )
+      })
     }
     const env = {
       SCHEDULE: {

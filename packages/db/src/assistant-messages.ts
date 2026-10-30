@@ -208,6 +208,14 @@ export async function wakeSession(
     : target.id
 }
 
+/** The heartbeat's ledger row that says an item was surfaced. */
+export const surfacedKey = (orgId: string, key: string) =>
+  `heartbeat-item:${orgId}:${key}`
+
+/** The ledger row that holds an org's one unprompted message on a local day. */
+export const unpromptedKey = (orgId: string, day: string) =>
+  `unprompted:${orgId}:${day}`
+
 /** How long wake events gather before their one proactive turn. */
 export const WAKE_WINDOW_MS = 60_000
 

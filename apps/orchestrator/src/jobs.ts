@@ -103,12 +103,17 @@ export const continueJob: Handler = async ({ env, job, earlierUnknown }) => {
  * `slot` is the window's due time, which keys what the turn posts.
  */
 export const wakeJob: Handler = async ({ env, job }) => {
-  await env.AFTER_TURN.send({
-    kind: "cos_wake",
-    orgId: job.orgId,
-    jobId: job.id,
-    slot: job.nextRunAt.toISOString(),
-  })
+  try {
+    await env.AFTER_TURN.send({
+      kind: "cos_wake",
+      orgId: job.orgId,
+      jobId: job.id,
+      slot: job.nextRunAt.toISOString(),
+    })
+  } catch (error) {
+    // A send that threw may still have been accepted.
+    throw new OutcomeUnknown(failureCode(error))
+  }
   return undefined
 }
 
