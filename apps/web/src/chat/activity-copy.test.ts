@@ -413,6 +413,22 @@ const STATES = ["upcoming", "now", "waiting", "done", "failed"] as const
 const ORGS = Array.from({ length: 30 }, (_, i) => `org-${i}`)
 
 describe("segment copy", () => {
+  it("adds no line at work that the title and steps already say, but a standing row keeps one", () => {
+    const ctx = { seed: "org-1", assistant: "Ellie" }
+    const buying = segment("address", "now", {
+      steps: [
+        { id: "find_out", state: "done" },
+        { id: "choose", state: "done" },
+        { id: "purchase", state: "now" },
+      ],
+      names: { domain: "spark.co.uk" },
+    })
+    expect(segmentLine(buying, ctx)).toBeNull()
+    expect(segmentLine(segment("purchase", "now"), ctx)).toBeNull()
+    expect(segmentLine(segment("google", "now"), ctx)).toBeNull()
+    expect(standingLine(buying, ctx)).toBe("Registering the name")
+  })
+
   it("says what an owner task waits for by the step that waits, its note first", () => {
     const ctx = { seed: "org-1", assistant: "Ellie" }
     const address = (id: string, note?: string, total?: number) =>
@@ -448,9 +464,9 @@ describe("segment copy", () => {
     expect(pillLine(address("purchase", "buying spark.co.uk"), ctx)).toBe(
       "Ellie is waiting for you to buy it"
     )
-    expect(segmentLine(address("purchase", "Buying spark.co.uk"), ctx)).toBe(
-      "Buying spark.co.uk"
-    )
+    expect(
+      segmentLine(address("purchase", "buying spark.co.uk"), ctx)
+    ).toBeNull()
     const google = segment("google", "waiting", {
       steps: [
         { id: "sign_in", state: "done" },

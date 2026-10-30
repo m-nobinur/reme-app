@@ -545,7 +545,7 @@ describe("later jobs", () => {
     expect(google?.title).toMatch(
       /^(Connecting Google|Linking your site to Google)$/
     )
-    expect(google?.line).toBe("Checking your site with Google")
+    expect(google?.line).toBeNull()
     expect(google?.icon).toBe("google")
     expect(google?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Sign in", "done"],

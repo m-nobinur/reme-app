@@ -1324,7 +1324,7 @@ type LineExtras = {
   doing?: string
 }
 
-/** The muted line under a segment's title, or null when it has none (done, upcoming). */
+/** The muted line under a segment's title, or null when it has none (done, upcoming, or nothing the title and steps don't say). */
 export function segmentLine(
   segment: ActivitySegment,
   ctx: CopyContext,
@@ -1382,26 +1382,29 @@ export function segmentLine(
     case "golive":
       // Waiting, its one step says what it waits for.
       return waiting ? null : "Going live in a minute"
+    // At work, the title and the step list already say what is happening.
     case "address": {
+      if (!waiting) return null
+      const step = waitingStep(segment)
+      // These name the wait for the pill; the title already says them.
+      if (step?.note?.startsWith("buying ") || step?.note === "picking a name")
+        return null
       // The step's own note first: code wrote it for this wait.
-      const step = waiting
-        ? waitingStep(segment)
-        : segment.steps.find((s) => s.state === "now")
-      const note = waiting ? cleanArg(step?.note, "text", 80) : null
+      const note = cleanArg(step?.note, "text", 80)
       if (note) return cap(note)
-      if (step?.id === "purchase" && waiting) return payBy(extras)
-      if ((step?.id === "records" || step?.id === "ownership") && waiting)
+      if (step?.id === "purchase") return payBy(extras)
+      if (step?.id === "records" || step?.id === "ownership")
         return dnsChanges(segment, n.provider)
-      return (step && ADDRESS_NOW[step.id]) ?? null
+      return null
     }
     case "domain":
       return waiting
         ? dnsChanges(segment, cleanArg(extras.provider) ?? n.provider)
-        : "The certificate is on its way"
+        : null
     case "purchase":
-      return waiting ? payBy(extras) : "Registering the name"
+      return waiting ? payBy(extras) : null
     case "google": {
-      if (!waiting) return "Checking your site with Google"
+      if (!waiting) return null
       const step = waitingStep(segment)
       return (
         cleanArg(step?.note, "text", 80) ??
@@ -1429,15 +1432,6 @@ const dnsChanges = (segment: ActivitySegment, provider: string | null) => {
 const payBy = (extras: LineExtras) => {
   const by = cleanArg(extras.until, "text", 40)
   return by ? `Pay by ${by} to keep the name` : "Pay soon to keep the name"
-}
-
-/** An address step at work, as the line under its title. */
-const ADDRESS_NOW: Readonly<Record<string, string>> = {
-  purchase: "Registering the name",
-  records: "Setting up the records",
-  ownership: "Checking the domain is yours",
-  certificate: "The certificate is on its way",
-  loads: "Checking your website loads on it",
 }
 
 /** The panel pill: "Ellie is building your website", or "Ellie is waiting for your payment". Null when nothing runs or waits. */
@@ -1946,10 +1940,28 @@ type PageExtras = {
   until?: string | undefined
 }
 
-/** The domain steps at work, where the segment's own line says only the certificate. */
-const DOMAIN_NOW: Readonly<Record<string, string>> = {
+/** An address or domain step at work, for a standing row, which shows no steps. */
+const STEP_NOW: Readonly<Record<string, string>> = {
+  purchase: "Registering the name",
+  records: "Setting up the records",
+  ownership: "Checking the domain is yours",
   certificate: "The certificate is on its way",
   loads: "Checking your website loads on it",
+}
+
+/** A standing row's line while its job is at work, where the panel's steps would say it. */
+const standingNow = (segment: ActivitySegment): string | undefined => {
+  const step = segment.steps.find((s) => s.state === "now")?.id
+  switch (segment.kind) {
+    case "address":
+      return step && STEP_NOW[step]
+    case "domain":
+      return (step && STEP_NOW[step]) || STEP_NOW.certificate
+    case "purchase":
+      return STEP_NOW.purchase
+    case "google":
+      return "Checking your site with Google"
+  }
 }
 
 /**
@@ -1971,11 +1983,8 @@ export function standingLine(
     return waitingRow(segment, extras.until) ?? "Waiting for you"
   }
   if (state === "now") {
-    const step = segment.steps.find((s) => s.state === "now")
     return (
-      (kind === "domain" && step && DOMAIN_NOW[step.id]) ||
-      segmentLine(segment, ctx) ||
-      UNIVERSAL.working
+      standingNow(segment) || segmentLine(segment, ctx) || UNIVERSAL.working
     )
   }
   // Begun and paused between steps: what is proved so far, never "Live".
