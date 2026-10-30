@@ -685,6 +685,18 @@ export const samples: Record<ContractName, unknown> = {
     replaced_range: { from_seq: 4, to_seq: 31 },
     dropped_refs: [ULID],
   },
+  CosEvent: {
+    source: "staff",
+    summary: "The site build is done and published.",
+    evidence: [{ kind: "record", table: "assignments", id: ASSIGNMENT }],
+    wake: true,
+  },
+  HandoffResult: {
+    outcome: "done",
+    summary: "The site build is done and published.",
+    evidence: [{ kind: "record", table: "assignments", id: ASSIGNMENT }],
+    metadata: { kind: "site.build", state: "published" },
+  },
   CosToolStarted: {
     tool_call_id: "functions.create_reminder:0",
     approval_id: "approval_9fK2",

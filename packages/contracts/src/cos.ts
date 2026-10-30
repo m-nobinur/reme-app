@@ -3,6 +3,7 @@ import { InformationRequest } from "./assignment.ts"
 import { ChatRequest, RequestChangeOutput } from "./chat.ts"
 import {
   ActionEvidence,
+  Evidence,
   JsonObject,
   Timestamp,
   TimeZone,
@@ -918,6 +919,21 @@ export const CosCompaction = z.strictObject({
   dropped_refs: z.array(Ulid).max(500),
 })
 
+/**
+ * The `cos.event` payload: something that happened away from the chat,
+ * logged in the CoS session when it happened so the next turn reads it: a
+ * staff result, a notice posted in the chat, a scheduled run's outcome. A
+ * notice names the message it posted. `wake` asks for a turn of its own.
+ * Labelled by the text `summary` carries.
+ */
+export const CosEvent = z.strictObject({
+  source: z.enum(["staff", "notice", "schedule"]),
+  summary: Text(1500),
+  evidence: z.array(Evidence).max(4),
+  wake: z.boolean(),
+  message_id: ConversationMessage.shape.id.optional(),
+})
+
 export type CosWorkspace = z.infer<typeof CosWorkspace>
 export type CosFacts = z.infer<typeof CosFacts>
 export type CosChangeRequest = z.infer<typeof CosChangeRequest>
@@ -964,3 +980,4 @@ export type CosApproval = z.infer<typeof CosApproval>
 export type CosToolStarted = z.infer<typeof CosToolStarted>
 export type CosToolUnknown = z.infer<typeof CosToolUnknown>
 export type CosCompaction = z.infer<typeof CosCompaction>
+export type CosEvent = z.infer<typeof CosEvent>
