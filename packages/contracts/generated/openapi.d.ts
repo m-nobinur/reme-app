@@ -5698,6 +5698,38 @@ export interface components {
       text: string
       reserved_usd: number
     }
+    CosEvent: {
+      /** @enum {string} */
+      source: "staff" | "notice" | "schedule"
+      summary: string
+      evidence: (
+        | {
+            /** @constant */
+            kind: "url"
+            url: string
+            status: number
+            /** Format: date-time */
+            checked_at: string
+          }
+        | {
+            /** @constant */
+            kind: "job"
+            /** Format: uuid */
+            job_id: string
+            /** Format: date-time */
+            runs_at: string
+          }
+        | {
+            /** @constant */
+            kind: "record"
+            table: string
+            /** Format: uuid */
+            id: string
+          }
+      )[]
+      wake: boolean
+      message_id?: string
+    }
     CosFacts: {
       facts: (
         | {
@@ -10540,6 +10572,39 @@ export interface components {
       code: string
       verifier: string
       redirect_uri: string
+    }
+    HandoffResult: {
+      /** @enum {string} */
+      outcome: "working" | "needs_owner" | "done" | "failed"
+      summary: string
+      evidence: (
+        | {
+            /** @constant */
+            kind: "url"
+            url: string
+            status: number
+            /** Format: date-time */
+            checked_at: string
+          }
+        | {
+            /** @constant */
+            kind: "job"
+            /** Format: uuid */
+            job_id: string
+            /** Format: date-time */
+            runs_at: string
+          }
+        | {
+            /** @constant */
+            kind: "record"
+            table: string
+            /** Format: uuid */
+            id: string
+          }
+      )[]
+      metadata: {
+        [key: string]: unknown
+      }
     }
     ImageSlot:
       | {

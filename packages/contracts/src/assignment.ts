@@ -1,5 +1,12 @@
 import { z } from "zod"
-import { JsonObject, Timestamp, Uuid, VersionedRef } from "./common.ts"
+import {
+  Evidence,
+  JsonObject,
+  Timestamp,
+  Uuid,
+  VersionedRef,
+} from "./common.ts"
+import { Text } from "./text.ts"
 
 /** The §8.4 state machine. Transitions happen only through the orchestrator. */
 export const AssignmentState = z.enum([
@@ -27,6 +34,46 @@ export const TERMINAL_STATES: readonly AssignmentState[] = [
   "failed",
   "cancelled",
 ]
+
+/** Where a handoff stands, read from its assignment's state, never stored. */
+export const HandoffStatus = z.enum([
+  "working",
+  "needs_owner",
+  "done",
+  "failed",
+])
+
+export const HANDOFF_STATUS: Readonly<
+  Record<AssignmentState, z.infer<typeof HandoffStatus>>
+> = {
+  queued: "working",
+  briefing: "working",
+  planning: "working",
+  implementing: "working",
+  validating: "working",
+  preview_ready: "working",
+  awaiting_review: "working",
+  revising: "working",
+  release_candidate: "working",
+  published: "done",
+  blocked_on_information: "needs_owner",
+  blocked_on_approval: "needs_owner",
+  repairing: "working",
+  paused: "working",
+  failed: "failed",
+  cancelled: "failed",
+}
+
+/**
+ * `assignments.result`: what a staff member hands back to the CoS when its
+ * assignment ends, logged in the CoS session as a `cos.event`.
+ */
+export const HandoffResult = z.strictObject({
+  outcome: HandoffStatus,
+  summary: Text(1500),
+  evidence: z.array(Evidence).max(4),
+  metadata: JsonObject,
+})
 
 /**
  * `Assignment` (§19): CoS to orchestrator to runtime. The brief travels as a
@@ -173,6 +220,8 @@ export const ApprovalDecision = z.strictObject({
 
 export type AssignmentState = z.infer<typeof AssignmentState>
 export type Assignment = z.infer<typeof Assignment>
+export type HandoffStatus = z.infer<typeof HandoffStatus>
+export type HandoffResult = z.infer<typeof HandoffResult>
 export type InformationRequest = z.infer<typeof InformationRequest>
 export type InformationAnswer = z.infer<typeof InformationAnswer>
 export type ApprovalTarget = z.infer<typeof ApprovalTarget>
