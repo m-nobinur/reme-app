@@ -52,6 +52,7 @@ function fromRun(run) {
         owner: t.owner,
         parts: t.parts ?? partsOf(t.chunks),
         outcome: t.outcome,
+        seen: t.seen,
       })
     ),
   }))
