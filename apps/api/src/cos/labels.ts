@@ -90,6 +90,7 @@ const CHECK_WORDS: Record<GateName, string> = {
   copy: "the wording checks",
   a11y: "the accessibility checks",
   size: "the page size",
+  interaction: "using the pages in a browser",
 }
 
 /** `owner.preferred_name` as `owner preferred name`. */

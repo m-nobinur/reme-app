@@ -402,6 +402,7 @@ export interface components {
         | "copy"
         | "a11y"
         | "size"
+        | "interaction"
       )[]
       /** Format: uuid */
       retry_id?: string
@@ -6235,6 +6236,7 @@ export interface components {
                   | "copy"
                   | "a11y"
                   | "size"
+                  | "interaction"
                 )[]
               }
               progress?: {
@@ -6281,6 +6283,7 @@ export interface components {
                 | "copy"
                 | "a11y"
                 | "size"
+                | "interaction"
               )[]
             }[]
             questions: {
@@ -8979,6 +8982,7 @@ export interface components {
             | "copy"
             | "a11y"
             | "size"
+            | "interaction"
           )[]
         }
         progress?: {
@@ -9015,6 +9019,7 @@ export interface components {
           | "copy"
           | "a11y"
           | "size"
+          | "interaction"
         )[]
       }[]
       questions: {
@@ -13302,6 +13307,7 @@ export interface components {
           | "copy"
           | "a11y"
           | "size"
+          | "interaction"
         passed: boolean
         evidence_key: string | null
         offending_node: string | null

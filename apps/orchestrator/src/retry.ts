@@ -66,6 +66,7 @@ const GATE_WORDS: Record<GateName, string> = {
   copy: "the wording",
   a11y: "accessibility",
   size: "page size",
+  interaction: "trying every page in a browser",
 }
 
 export type Ended = {
