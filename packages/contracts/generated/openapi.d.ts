@@ -5716,6 +5716,9 @@ export interface components {
         | "inspect_domain"
         | "domain_bought"
         | "offer_grant"
+        | "read_skill"
+        | "save_correction"
+        | "schedule_skill"
       )[]
       text: string
       reserved_usd: number
@@ -6180,6 +6183,9 @@ export interface components {
           | "inspect_domain"
           | "domain_bought"
           | "offer_grant"
+          | "read_skill"
+          | "save_correction"
+          | "schedule_skill"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -8727,6 +8733,102 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "read_skill"
+          output:
+            | {
+                /** @constant */
+                outcome: "skill"
+                name: string
+                body: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "save_correction"
+          output:
+            | {
+                /** @constant */
+                outcome: "saved"
+                note: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "schedule_skill"
+          output:
+            | {
+                /** @constant */
+                outcome: "on"
+                /** Format: date-time */
+                next_run_at: string
+              }
+            | {
+                /** @constant */
+                outcome: "off"
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosToolStarted: {
       tool_call_id: string
       approval_id: string
@@ -8773,6 +8875,9 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
+            | "read_skill"
+            | "save_correction"
+            | "schedule_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8816,6 +8921,9 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
+            | "read_skill"
+            | "save_correction"
+            | "schedule_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8857,6 +8965,9 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
+            | "read_skill"
+            | "save_correction"
+            | "schedule_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8898,6 +9009,9 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
+            | "read_skill"
+            | "save_correction"
+            | "schedule_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8939,6 +9053,9 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
+            | "read_skill"
+            | "save_correction"
+            | "schedule_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8980,6 +9097,9 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
+            | "read_skill"
+            | "save_correction"
+            | "schedule_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -10975,6 +11095,15 @@ export interface components {
         action: "add" | "replace" | "remove"
         text?: string
         was?: string
+        /** Format: date-time */
+        at: string
+      }[]
+      corrections: {
+        /** Format: uuid */
+        id: string
+        /** @enum {string} */
+        staff: "developer"
+        text: string & (unknown & unknown)
         /** Format: date-time */
         at: string
       }[]

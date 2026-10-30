@@ -48,6 +48,14 @@ import {
   GetSearchPerformanceInput,
   GetSearchPerformanceOutput,
 } from "./search.ts"
+import {
+  ReadSkillInput,
+  ReadSkillOutput,
+  SaveCorrectionInput,
+  SaveCorrectionOutput,
+  ScheduleSkillInput,
+  ScheduleSkillOutput,
+} from "./skills.ts"
 import { OwnerTask, TaskKind } from "./task.ts"
 import { Text, ToolStep } from "./text.ts"
 
@@ -672,6 +680,9 @@ export const COS_TOOLS = {
   inspect_domain: { input: InspectDomainInput, output: InspectDomainOutput },
   domain_bought: { input: DomainBoughtInput, output: BoughtElsewhereOutput },
   offer_grant: { input: OfferGrantInput, output: OfferGrantOutput },
+  read_skill: { input: ReadSkillInput, output: ReadSkillOutput },
+  save_correction: { input: SaveCorrectionInput, output: SaveCorrectionOutput },
+  schedule_skill: { input: ScheduleSkillInput, output: ScheduleSkillOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -891,6 +902,21 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     ...Called,
     tool: z.literal("offer_grant"),
     output: COS_TOOLS.offer_grant.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("read_skill"),
+    output: COS_TOOLS.read_skill.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("save_correction"),
+    output: COS_TOOLS.save_correction.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("schedule_skill"),
+    output: COS_TOOLS.schedule_skill.output,
   }),
 ])
 
