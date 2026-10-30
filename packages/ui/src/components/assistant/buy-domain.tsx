@@ -57,7 +57,7 @@ import {
  * to Your details, prefilled from what the api holds and asking only for
  * the gaps, and Pay opens the payment dialog on the purchase's Stripe
  * Checkout Session, where paying is the consent. Buying elsewhere opens
- * Cloudflare's or GoDaddy's search and leaves the tray waiting for "Done, I bought it". `buy_domain`
+ * Cloudflare's or GoDaddy's search and leaves the tray waiting for "I've bought it". `buy_domain`
  * and a posted Pay button open Your details for their name. The price shown
  * is the api's, from the price table, never the model's text. Done, the
  * tray goes and the thread keeps one line.
@@ -318,7 +318,6 @@ function Elsewhere({
           onClick={onFollow}
         />
       </ConnectRows>
-      <p className={META}>Tell me once it's yours and I'll connect it.</p>
     </>
   )
 }
@@ -923,12 +922,11 @@ function WaitingPage({
   return (
     <TrayFrame
       {...frame}
-      hint={`Buying ${name}`}
-      question="Tell me when you've bought it"
+      question={`Buy ${name} from either site`}
       skip={{ label: "Back", onSkip: onBack, disabled: sending }}
       status={said}
       submit={{
-        label: sending ? "Checking" : "Done, I bought it",
+        label: sending ? "Checking" : "I've bought it",
         onSubmit: () => void done(),
         disabled: sending,
       }}
@@ -1013,7 +1011,7 @@ export function BuyTray({
           className="my-3 flex max-w-md flex-col gap-2"
           data-slot="buy-domain"
         >
-          <Done>{draft.name} is yours. Next, the settings to change.</Done>
+          <Done>{draft.name} is yours.</Done>
           <ConnectSteps name={draft.name} output={draft.output} />
         </section>
       )
