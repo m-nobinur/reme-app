@@ -127,11 +127,13 @@
   // message holds ids only, so a consumer never carries a conversation's text.
   // The first attempt and three retries, then the dead-letter queue, where a
   // poisoned job waits to be read instead of retrying forever. `JOBS` is the
-  // orchestrator's queue, here only to send a reminder's wake (ADR-043).
+  // orchestrator's queue, here only to send a reminder's wake (ADR-043), and
+  // `DELIVERIES` its outbox, for what a proactive CoS turn posts.
   "queues": {
     "producers": [
       { "binding": "AFTER_TURN", "queue": "reme-after-turn" },
-      { "binding": "JOBS", "queue": "reme-jobs" }
+      { "binding": "JOBS", "queue": "reme-jobs" },
+      { "binding": "DELIVERIES", "queue": "reme-deliveries" }
     ],
     "consumers": [
       {
@@ -211,7 +213,8 @@
       "queues": {
         "producers": [
           { "binding": "AFTER_TURN", "queue": "reme-after-turn-production" },
-          { "binding": "JOBS", "queue": "reme-jobs-production" }
+          { "binding": "JOBS", "queue": "reme-jobs-production" },
+          { "binding": "DELIVERIES", "queue": "reme-deliveries-production" }
         ],
         "consumers": [
           {

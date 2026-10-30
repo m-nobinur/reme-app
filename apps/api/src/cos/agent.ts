@@ -416,11 +416,14 @@ const QUOTING: readonly string[] = [
   "remember",
 ]
 
-export const activeTools = (mode: "ask" | "act"): CosToolName[] => [
-  ...READ_TOOLS,
-  ...MEMORY_TOOLS,
-  ...(mode === "act" ? ACT_TOOLS : []),
-]
+/** A turn the owner did not start (`wake.ts`) only reads. */
+export const activeTools = (
+  mode: "ask" | "act",
+  unasked = false
+): CosToolName[] =>
+  unasked
+    ? [...READ_TOOLS]
+    : [...READ_TOOLS, ...MEMORY_TOOLS, ...(mode === "act" ? ACT_TOOLS : [])]
 
 let prefix: Promise<CosPrefix> | null = null
 
@@ -649,6 +652,10 @@ export const CONTINUE_LINE =
 export const UNKNOWN_LINE =
   "The earlier attempt's result is unknown; check what it did before repeating it."
 
+/** Added to a turn that something logged away from the chat started, with the owner away. */
+export const WAKE_LINE =
+  "The owner did not write. What was logged since your last reply started this turn, and the owner is away. If any of it is worth their attention now, write them one short message about it in your own words, at most three sentences: the point first, agreeing with what was logged, then the next small step if there is one. Otherwise reply with [quiet] and nothing else, which sends nothing."
+
 /** Who the owner made the Chief of Staff, from their facts. Null where they have not said. */
 type Persona = {
   name: string | null
@@ -778,7 +785,8 @@ export function contextOf(
   google: "first" | "now" | null = null,
   facts: readonly FactRecord[] = [],
   standing = false,
-  continued: "cut" | "unknown" | null = null
+  /** Why a turn nobody typed runs: it continues one cut off, or events woke it. */
+  unasked: "cut" | "unknown" | "wake" | null = null
 ): { text: string; taint: TaintLabel[] } {
   const taint = workspaceTaint(workspace)
   const named =
@@ -791,8 +799,8 @@ export function contextOf(
       : "Mode: ask. You may only read. For a change, the owner switches to Act."
   const text = [
     modeLine,
-    ...(continued ? [CONTINUE_LINE] : []),
-    ...(continued === "unknown" ? [UNKNOWN_LINE] : []),
+    ...(unasked === "wake" ? [WAKE_LINE] : unasked ? [CONTINUE_LINE] : []),
+    ...(unasked === "unknown" ? [UNKNOWN_LINE] : []),
     ...(intent === "site_change" && mode === "act" ? [SITE_CHANGE_LINE] : []),
     ...(google === "first" ? [GOOGLE_FIRST_LINE] : []),
     ...(google === "now" ? [GOOGLE_NOW_LINE] : []),
@@ -1507,7 +1515,8 @@ const logged =
 export function cosAgent(
   run: AgentTurn,
   model: LanguageModel,
-  mode: "ask" | "act"
+  mode: "ask" | "act",
+  unasked = false
 ) {
   const tools = toolsFor(run)
   const closed = (error: unknown) => {
@@ -1537,7 +1546,7 @@ export function cosAgent(
     ]),
     instructions: INSTRUCTIONS,
     tools,
-    activeTools: activeTools(mode),
+    activeTools: activeTools(mode, unasked),
     toolApproval: {
       // The owner's words are the yes, and a new phone or email still asks.
       request_change: async (input) =>

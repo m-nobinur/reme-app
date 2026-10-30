@@ -113,7 +113,12 @@ import {
   whileHeld,
   workKey,
 } from "./sandbox.ts"
-import { type JobsQueueMessage, SCHEDULE_CRON, scanDue } from "./schedule.ts"
+import {
+  type JobsQueueMessage,
+  passWake,
+  SCHEDULE_CRON,
+  scanDue,
+} from "./schedule.ts"
 import { forgetStrays } from "./search.ts"
 import { afterPublish, startDueSyncs } from "./search-sync.ts"
 import {
@@ -202,7 +207,9 @@ const withKit = async <T>(
 ): Promise<T> => {
   const kit = tenancy(env.HYPERDRIVE.connectionString)
   try {
-    return await fn(kit)
+    const done = await fn(kit)
+    await passWake(env)
+    return done
   } catch (error) {
     if (error instanceof TransitionError && error.errorClass !== "transient") {
       throw new NonRetryableError(error.code)

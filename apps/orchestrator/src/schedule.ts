@@ -1,12 +1,14 @@
 import {
   claimDueJobs,
   eq,
+  lowerNextDue,
   NEXT_DUE_KEY,
   type NextDue,
   nextDueAt,
   readNextDue,
   type ScanMessage,
   scheduledJobs,
+  takeWake,
 } from "@workspace/db"
 import { withKit } from "./domain-flow.ts"
 
@@ -27,6 +29,18 @@ export const FALLBACK_MS = 55 * 60_000
 
 /** One claim per minute, and the most one `sendBatch` takes. */
 export const CLAIM_BATCH = 100
+
+/**
+ * Lets the scheduler see a CoS wake window opened by work that has
+ * committed (`queueWake`): run where a unit of work that can end an
+ * assignment finishes.
+ */
+export async function passWake(
+  env: Pick<Env, "SCHEDULE" | "JOBS">
+): Promise<void> {
+  const at = takeWake()
+  if (at) await lowerNextDue(env.SCHEDULE, at, env.JOBS)
+}
 
 /** One claimed job, which is all a Queue message carries. */
 export type JobMessage = { jobId: string; orgId: string }

@@ -13,6 +13,7 @@ import {
   conversationMessages,
   conversations,
   events,
+  scheduledJobs,
 } from "./schema.ts"
 import type { OrgScopedDb, Tenancy } from "./tenancy.ts"
 
@@ -131,39 +132,129 @@ async function session(
   return open ? "busy" : target
 }
 
-/** What a handoff result reads as in the CoS log: it may quote the owner's goal. */
+/** Why an assignment ended that the owner caused: nothing in its result is news to them. */
+const OWNER_ENDED = [
+  "superseded",
+  "review.rejected",
+  "the owner deleted their account",
+]
+
+/**
+ * What a handoff result reads as in the CoS log: it may quote the owner's
+ * goal. It asks for a turn of its own unless the owner ended it.
+ */
 export const handoffEvent = (result: HandoffResult) => ({
   type: "cos.event",
   payload: CosEvent.parse({
     source: "staff",
     summary: result.summary,
     evidence: result.evidence,
-    wake: true,
+    wake: !OWNER_ENDED.includes(String(result.metadata.reason ?? "")),
   }),
   taint: ["inferred", "untrusted_input"] as TaintLabel[],
 })
 
 /**
  * Logs an ended assignment's `result` in the CoS session now, inside the
- * caller's transaction. `busy` and `none` leave it for the next turn's
- * opening, which logs every result no `cos.event` names yet
- * (`unloggedResults`), so the CoS never polls for one.
+ * caller's transaction, and opens the org's wake window when it asks for a
+ * turn. `busy` and `none` leave it for the next turn's opening, which logs
+ * every result no `cos.event` names yet (`unloggedResults`), so the CoS never
+ * polls for one.
  */
 export async function logHandoff(
   db: OrgScopedDb,
   assignment: { orgId: string; id: string; staffId: string },
   result: HandoffResult
 ): Promise<"logged" | "busy" | "none"> {
+  const event = handoffEvent(result)
+  const logged = await logEvent(
+    db,
+    {
+      orgId: assignment.orgId,
+      staffId: assignment.staffId,
+      assignmentId: assignment.id,
+    },
+    event
+  )
+  if (logged === "logged" && event.payload.wake) {
+    await queueWake(db, assignment.orgId)
+  }
+  return logged
+}
+
+/** Logs a `cos.event` in the CoS session now, inside the caller's transaction. */
+export async function logEvent(
+  db: OrgScopedDb,
+  ids: { orgId: string; staffId: string | null; assignmentId: string | null },
+  write: { type: string; payload: CosEvent; taint: TaintLabel[] }
+): Promise<"logged" | "busy" | "none"> {
   const target = await session(db)
   if (typeof target === "string") return target
-  await appendSessionEvent(db, {
-    orgId: assignment.orgId,
-    staffId: assignment.staffId,
-    assignmentId: assignment.id,
-    sessionId: target.id,
-    ...handoffEvent(result),
-  })
+  await appendSessionEvent(db, { ...ids, sessionId: target.id, ...write })
   return "logged"
+}
+
+/**
+ * The session a turn nobody typed opens in: the one a `cos.event` goes to,
+ * once any onboarding script there has ended.
+ */
+export async function wakeSession(
+  db: OrgScopedDb
+): Promise<string | "busy" | "none" | "waiting"> {
+  const target = await session(db)
+  if (typeof target === "string") return target
+  return target.kind === "onboarding" && !(await scriptEnded(db, target.id))
+    ? "waiting"
+    : target.id
+}
+
+/** How long wake events gather before their one proactive turn. */
+export const WAKE_WINDOW_MS = 60_000
+
+let woken: Date | null = null
+
+/**
+ * Opens the org's wake window: its one `cos_wake` row comes due a minute from
+ * now, unless a window is open already, which this event joins. Between
+ * windows the row is paused, as the scheduler leaves a one-off that has run.
+ */
+export async function queueWake(db: OrgScopedDb, orgId: string): Promise<Date> {
+  await db.execute(
+    sql`select pg_advisory_xact_lock(6, hashtext(${orgId}::text))`
+  )
+  const [row] = await db
+    .select({
+      id: scheduledJobs.id,
+      at: scheduledJobs.nextRunAt,
+      paused: scheduledJobs.pausedAt,
+    })
+    .from(scheduledJobs)
+    .where(sql`${scheduledJobs.kind} = 'cos_wake'`)
+  if (row && !row.paused) return row.at
+  const at = new Date(Date.now() + WAKE_WINDOW_MS)
+  if (row) {
+    await db
+      .update(scheduledJobs)
+      .set({ nextRunAt: at, pausedAt: null, failures: 0 })
+      .where(sql`${scheduledJobs.id} = ${row.id}`)
+  } else {
+    await db
+      .insert(scheduledJobs)
+      .values({ orgId, kind: "cos_wake", nextRunAt: at })
+  }
+  if (!woken || at < woken) woken = at
+  return at
+}
+
+/**
+ * The earliest window `queueWake` opened in this isolate that no caller has
+ * passed to the scheduler (`lowerNextDue`) yet, cleared as it is read. The
+ * row is the truth: a hint lost here waits for the scheduler's fallback scan.
+ */
+export function takeWake(): Date | null {
+  const at = woken
+  woken = null
+  return at
 }
 
 /** Ended assignments whose result no `cos.event` has logged yet, oldest first. */

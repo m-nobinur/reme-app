@@ -4,6 +4,7 @@ import {
   eq,
   memberships,
   newUlid,
+  type OrgScopedDb,
   orgs,
   scheduledJobs,
   sql,
@@ -135,36 +136,13 @@ export async function continueTurn(
       .select({ refId: scheduledJobs.refId, payload: scheduledJobs.payload })
       .from(scheduledJobs)
       .where(eq(scheduledJobs.id, job.jobId))
-    const [person] = await db
-      .select({
-        workosUserId: users.workosUserId,
-        email: users.email,
-        name: users.name,
-      })
-      .from(memberships)
-      .innerJoin(users, eq(users.id, memberships.userId))
-      .where(
-        sql`${memberships.role} = 'owner' and ${memberships.status} = 'active'`
-      )
-      .orderBy(memberships.createdAt)
-      .limit(1)
-    const [org] = await db.select({ zone: orgs.timeZone }).from(orgs)
-    return row?.refId && person
-      ? { row, person, zone: org?.zone ?? null }
-      : null
+    const org = await ownerOf(db, job.orgId, `cos_continue:${job.jobId}`)
+    return row?.refId && org ? { row, ...org } : null
   })
   if (!found) return "gone"
   const { turn_id: turnId, attempt } = CosContinue.parse(found.row.payload)
   const sessionId = found.row.refId as string
-  const owner: Owner = {
-    orgId: job.orgId,
-    session: {
-      ...found.person,
-      // No browser session: the bridge records the job as the caller's.
-      sessionId: `cos_continue:${job.jobId}`,
-      impersonated: false,
-    },
-  }
+  const { owner } = found
   const tools = { env, kit, owner, settleCard }
   const [{ workspace, facts, profile }, prefix] = await Promise.all([
     loadWorkspace(tools),
@@ -228,18 +206,87 @@ export async function continueTurn(
     return { turn, mode, log: await readSession(db, sessionId) }
   })
   if (typeof opened === "string") return opened
-  const run: AgentTurn = {
-    turn: opened.turn,
+  return runOpened({
+    env,
     kit,
     tools,
     price,
     reserved,
+    zone: found.zone,
+    opened,
+    model,
+    modelId,
+    newMessageId: () => continuationId(turnId),
+    attempt,
+  })
+}
+
+/**
+ * The org's first active owner, as the caller of a turn a job runs, and its
+ * zone. `sessionId` names the job, since there is no browser session: the
+ * bridge records the job as the caller's.
+ */
+export async function ownerOf(
+  db: OrgScopedDb,
+  orgId: string,
+  sessionId: string
+): Promise<{ owner: Owner; zone: string | null } | null> {
+  const [person] = await db
+    .select({
+      workosUserId: users.workosUserId,
+      email: users.email,
+      name: users.name,
+    })
+    .from(memberships)
+    .innerJoin(users, eq(users.id, memberships.userId))
+    .where(
+      sql`${memberships.role} = 'owner' and ${memberships.status} = 'active'`
+    )
+    .orderBy(memberships.createdAt)
+    .limit(1)
+  if (!person) return null
+  const [org] = await db.select({ zone: orgs.timeZone }).from(orgs)
+  return {
+    owner: {
+      orgId,
+      session: { ...person, sessionId, impersonated: false },
+    },
+    zone: org?.zone ?? null,
+  }
+}
+
+/**
+ * Runs a turn a job opened to its close, with no client: the stream read to
+ * its end, or the fallback closed when the run ended before any content.
+ */
+export async function runOpened(input: {
+  env: Env
+  kit: Tenancy
+  tools: AgentTurn["tools"]
+  price: AgentTurn["price"]
+  reserved: number
+  zone: string | null
+  opened: { turn: Turn; mode: "ask" | "act"; log: LoggedEvent[] }
+  model: LanguageModel
+  modelId: string
+  newMessageId: () => string
+  attempt?: number
+  post?: (db: OrgScopedDb, text: string) => Promise<void>
+}): Promise<"ran" | "fell_back"> {
+  const { env, opened, tools, modelId } = input
+  const run: AgentTurn = {
+    turn: opened.turn,
+    kit: input.kit,
+    tools,
+    price: input.price,
+    reserved: input.reserved,
     state: newRunState(),
     abort: new AbortController(),
-    zone: found.zone,
+    zone: input.zone,
     log: opened.log,
   }
-  const rows: Rows = (db, message) => putRow(db, owner, sessionId, message)
+  const rows: Rows = (db, message) =>
+    putRow(db, tools.owner, opened.turn.sessionId, message)
   const closing: Promise<unknown>[] = []
   const ended = (outcome: "error" | "integrity" | "fallback"): CosTurn => {
     const { outcome: _, ...ran } = ranTurn(run, modelId, "answered", null)
@@ -255,17 +302,18 @@ export async function continueTurn(
     await settle(run, rows)
     const streamed = await streamTurn({
       run,
-      model,
+      model: input.model,
       mode: opened.mode,
       modelId,
       uiMessages: deriveCosMessages(run.log, CONTEXT_POLICY).messages,
-      newMessageId: () => continuationId(turnId),
+      newMessageId: input.newMessageId,
       lead: [],
       chip: null,
       reading: null,
       rows,
       waitUntil: (p) => closing.push(p),
-      attempt,
+      attempt: input.attempt,
+      post: input.post,
     })
     if (streamed instanceof Response) {
       // Read to its end, which runs the turn's close.

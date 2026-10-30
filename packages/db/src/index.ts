@@ -7,13 +7,18 @@ export { orgOpen, tombstone } from "./accounts.ts"
 export {
   emailMessageId,
   handoffEvent,
+  logEvent,
   logHandoff,
   type Posted,
   postAssistantMessage,
   postChangeAsked,
   postOwnerEmail,
+  queueWake,
   serverMessageId,
+  takeWake,
   unloggedResults,
+  WAKE_WINDOW_MS,
+  wakeSession,
 } from "./assistant-messages.ts"
 export { activeDomainHost, domainHeldElsewhere } from "./domains.ts"
 export {

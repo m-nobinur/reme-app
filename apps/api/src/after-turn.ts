@@ -5,6 +5,7 @@ import { COMPACTION, compactAfterTurn } from "./cos/compaction.ts"
 import { REFLECTION, reflectAfterTurn } from "./cos/reflection.ts"
 import { GRACE_MS, SessionBusy } from "./cos/turns.ts"
 import { drawLogoMessage, isLogoJob, type LogoJob } from "./logo.ts"
+import { isWakeJob, type WakeJob, wakeTurn } from "./wake.ts"
 
 /** What a closed turn tells the queue: ids only, never text. */
 export type AfterTurn = {
@@ -52,12 +53,13 @@ export async function enqueueAfterTurn(
 
 /**
  * The work after each closed turn: compaction, then reflection; and a
- * continuation the orchestrator handed over (`continue.ts`). A message
- * whose job threw is retried, after a newer turn's longest life when it is
- * open, then goes to the dead-letter queue.
+ * continuation or a proactive turn the orchestrator handed over
+ * (`continue.ts`, `wake.ts`). A message whose job threw is retried, after a
+ * newer turn's longest life when it is open, then goes to the dead-letter
+ * queue.
  */
 export async function afterTurnBatch(
-  batch: MessageBatch<AfterTurn | LogoJob | ContinueJob>,
+  batch: MessageBatch<AfterTurn | LogoJob | ContinueJob | WakeJob>,
   env: Env
 ): Promise<void> {
   // Logo rounds ride this queue for a consumer's fifteen minutes (`logo.ts`),
@@ -83,6 +85,11 @@ export async function afterTurnBatch(
               continued,
             })
           )
+        } else if (isWakeJob(body)) {
+          const woke = await wakeTurn(env, kit, body)
+          console.log(
+            JSON.stringify({ type: "cos.woke", job_id: body.jobId, woke })
+          )
         } else {
           if (!body.idle) await compactAfterTurn(kit, model, body)
           await reflectAfterTurn(kit, model, body)
@@ -92,7 +99,7 @@ export async function afterTurnBatch(
         console.error(
           JSON.stringify({
             code: "after_turn.failed",
-            ...(isContinueJob(body)
+            ...(isContinueJob(body) || isWakeJob(body)
               ? { job_id: body.jobId }
               : { turn_id: body.turnId }),
             attempts: message.attempts,
