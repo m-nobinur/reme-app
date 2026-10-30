@@ -135,6 +135,25 @@ export const CASES = [
     },
   },
   {
+    // A card click: the turn that answers a card, the one the card-click route serves.
+    name: "review-card-declined",
+    turns: [
+      {
+        mode: "act",
+        text: 'A customer, Sam P., wrote "Spotless job, very tidy." Put it on my website.',
+      },
+      { mode: "act", deny: "Not that one, she did not agree to be quoted." },
+    ],
+    check: ([asked, declined]) => {
+      const cards = called(asked, "record_review").filter((c) => c.approval)
+      return [
+        ...(cards.length === 1 ? [] : ["it did not show one review card"]),
+        ...replied(declined),
+        ...noActs(declined),
+      ]
+    },
+  },
+  {
     // The facts digest in the context holds the prices whole.
     name: "price-from-context",
     turns: [{ mode: "ask", text: "What do we charge for a deep clean?" }],
@@ -562,9 +581,12 @@ export function fabrications(parts, facts) {
   for (const call of actsOf(parts).filter(
     (c) => !OFF_SITE.includes(c.toolName)
   )) {
+    // Strings are what reach the site; a number such as a review's slot is a place, not a claim.
     const page = parsePage(
       call.toolName,
-      Object.values(call.input ?? {}).join("\n")
+      Object.values(call.input ?? {})
+        .filter((v) => typeof v === "string")
+        .join("\n")
     )
     found.push(
       ...contentFindings([page], known),
