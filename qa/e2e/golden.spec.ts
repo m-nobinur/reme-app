@@ -63,6 +63,7 @@ const token = Array.from(
   (n) => "abcdefghijklmnopqrstuvwxyz"[n % 26]
 ).join("")
 const HERO = `Spotless homes, golden run ${token}`
+const RULE = "On my website, write every heading in capital letters"
 
 /** What the run records, printed and attached whether it passes or not. */
 const run = {
@@ -290,7 +291,7 @@ async function expectQuote(page: Page, host: string) {
   }
 }
 
-/** The live site answers 200 and shows each of `texts`. */
+/** The live site answers 200 and shows each of `texts`, as styled. */
 async function expectLive(page: Page, host: string, texts: string[]) {
   const site = await page.context().newPage()
   try {
@@ -300,6 +301,7 @@ async function expectLive(page: Page, host: string, texts: string[]) {
       for (const text of texts) {
         await expect(site.locator("body")).toContainText(text, {
           timeout: 5_000,
+          useInnerText: true,
         })
       }
     }).toPass({ timeout: WAIT.publish, intervals: [5_000] })
@@ -452,10 +454,23 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     run.blank_state_actions["See notifications"] = "clicked"
   })
 
-  await step("a Chief of Staff change, approved to v2 live", async () => {
+  await step("a correction for the Developer, saved", async () => {
     // Nothing is new any more, so /app is a new chat, not onboarding.
     await visit(page, "/app")
     await expect(page).toHaveURL(/\/app\/?$/)
+    await page.getByLabel("Message input").fill(RULE)
+    await page.getByLabel("Send message").click()
+    await expect(async () => {
+      const { corrections } = await readJson<{
+        corrections: { staff: string; text: string }[]
+      }>("/memory")
+      expect(corrections).toContainEqual(
+        expect.objectContaining({ staff: "developer", text: RULE })
+      )
+    }).toPass({ timeout: WAIT.chat, intervals: [5_000] })
+  })
+
+  await step("a Chief of Staff change, approved to v2 live", async () => {
     await expect(page.getByLabel("Message input")).toBeVisible()
     await page
       .getByLabel("Message input")
@@ -464,7 +479,8 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     await page.getByLabel("Send message").click()
     second = await approveVersion(page, publishIn.panel(page), first)
     expect(second).toBe(first + 1)
-    await expectLive(page, host, [HERO])
+    // The hero follows the owner's correction.
+    await expectLive(page, host, [HERO.toUpperCase()])
     await expectQuote(page, host)
   })
 
