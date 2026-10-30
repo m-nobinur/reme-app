@@ -89,7 +89,7 @@ test("the change card is one tap either way, and waits for the server", async ({
   await expect(tray.getByRole("heading")).toHaveText(
     "Build my website from the details I gave you."
   )
-  await expect(tray.getByRole("button", { name: "Approve" })).toBeEnabled()
+  await expect(tray.getByRole("button", { name: "Start" })).toBeEnabled()
   await expect(tray.getByRole("button", { name: "Not now" })).toBeEnabled()
   // After the tap, nothing claims the build started until it has.
   const answered = cards.nth(0)
@@ -125,7 +125,7 @@ test("the change card is one tap either way, and waits for the server", async ({
   // The card beside a held answer still waits, in the tray.
   for (let step = 0; step < 2; step++)
     await page.getByRole("button", { name: "Newer" }).click()
-  await expect(tray.getByRole("button", { name: "Approve" })).toBeEnabled()
+  await expect(tray.getByRole("button", { name: "Start" })).toBeEnabled()
   // And a no, on either card.
   const NOT_NOW = "You said not now. Sent once you answer the other cards."
   await expect(cards.nth(7).getByRole("status")).toHaveText(NOT_NOW)
@@ -148,13 +148,13 @@ test("the change card is one tap either way, and waits for the server", async ({
   await expect(declining.getByRole("button")).toHaveCount(0)
 })
 
-test("the approve button shows a visible focus ring from the keyboard", async ({
+test("the start button shows a visible focus ring from the keyboard", async ({
   page,
 }) => {
   await open(page, "RequestChange")
   const approve = page
     .locator('[data-slot="question-tray"]:visible')
-    .getByRole("button", { name: "Approve" })
+    .getByRole("button", { name: "Start" })
   await approve.focus()
   await page.keyboard.press("Shift+Tab")
   await page.keyboard.press("Tab")

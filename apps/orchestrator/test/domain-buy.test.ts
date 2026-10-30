@@ -849,7 +849,9 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     await startRegistration(p.env, kit, p.orgId, p.row.id)
     const said = await captureRegistered(p.env, kit, p.orgId, p.row.id)
     await subscribeRenewal(p.env, kit, p.orgId, p.row.id)
-    expect(said?.text).toMatch(/registered.*jane@example\.com.*15 days/)
+    expect(said?.text).toMatch(
+      /^One thing only you can do: .*jane@example\.com.*15 days/
+    )
     expect((await rowOf(p.orgId, p.name)).registration).toMatchObject({
       sandbox: false,
       outcome: "registered",

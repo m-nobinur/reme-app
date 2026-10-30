@@ -19,6 +19,7 @@ import {
   segmentTitle,
   stepKind,
   stepLabel,
+  stepName,
 } from "@workspace/ui/lib/activity-copy"
 import { dayOf } from "@workspace/ui/lib/format"
 import type { AttentionItem, Workspace } from "./api/types"
@@ -363,12 +364,17 @@ export function panelFor(input: PanelInput): Panel | null {
         )
         const { count: _count, ...plain } = step
         const said = stepLabel(segment, plain)
-        return label
+        // Uncounted, a build step at work says the title's words again.
+        const shown =
+          segment.kind === "website" && label === said
+            ? (stepName(segment, step) ?? label)
+            : label
+        return shown
           ? [
               {
                 id: step.id,
-                label,
-                ...(said && said !== label ? { said } : {}),
+                label: shown,
+                ...(said && said !== shown ? { said } : {}),
                 state: step.state,
                 kind: stepKind(segment, step),
               },

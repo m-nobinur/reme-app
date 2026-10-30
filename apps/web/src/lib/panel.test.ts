@@ -446,6 +446,15 @@ describe("the first run", () => {
     expect(panel?.line.lead).toBe("The website build stopped")
   })
 
+  it("shows a build step at work by its name, which the title already says, and speaks it in full", () => {
+    const panel = firstRun([
+      onboarding(8, "done"),
+      segment("website", "now", along(WEBSITE_STEPS, 2), BUSINESS),
+    ])
+    const writing = panel?.journey[0]?.steps[2]
+    expect(writing).toMatchObject({ label: "Pages", said: "Writing the pages" })
+  })
+
   it("gives a counted step a spoken form without its count", () => {
     const steps = along(WEBSITE_STEPS, 2).map((each) =>
       each.id === "writing" ? { ...each, count: { done: 2, total: 6 } } : each
@@ -459,6 +468,7 @@ describe("the first run", () => {
     expect(writing?.said).toBe("Writing the pages")
     // A step with no count has nothing to leave out.
     expect(planning?.said).toBeUndefined()
+    expect(planning?.label).toBe("Planning")
     expect(photos?.said).toBeUndefined()
   })
 
@@ -573,9 +583,9 @@ describe("later jobs", () => {
     expect(domain?.title).toMatch(/fixture\.example\.invalid$/)
     expect(domain?.line).toBe("Changes to make at your DNS provider")
     expect(domain?.steps.map((each) => [each.label, each.state])).toEqual([
-      ["Your DNS change", "waiting"],
+      ["DNS change", "waiting"],
       ["Certificate", "next"],
-      ["Site loads on the new address", "next"],
+      ["Live check", "next"],
     ])
     expect(purchase?.title).toMatch(/fixtureclean\.example\.invalid$/)
     expect(purchase?.line).toBe("Pay by 11:50 AM to keep the name")

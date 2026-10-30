@@ -322,7 +322,7 @@ export const reasoningLine = (working: boolean) =>
  */
 export const publishLine = (published: boolean, live = false, late = false) =>
   live
-    ? "Published, your website is live"
+    ? "Published"
     : published && late
       ? "Your website is taking longer than usual to come online. I'll tell you when it's live"
       : published
@@ -1591,18 +1591,18 @@ const STEP_LABELS: Partial<
     ready: "Ready",
   },
   address: {
-    find_out: "Your web address",
-    choose: "Choosing a name",
-    purchase: "Buying it",
-    records: "Your DNS change",
-    ownership: "Proving it's yours",
+    find_out: "Current address",
+    choose: "Name",
+    purchase: "Purchase",
+    records: "DNS change",
+    ownership: "Ownership",
     certificate: "Certificate",
-    loads: "Site loads on the new address",
+    loads: "Live check",
   },
   domain: {
-    dns: "Your DNS change",
+    dns: "DNS change",
     certificate: "Certificate",
-    loads: "Site loads on the new address",
+    loads: "Live check",
   },
   purchase: {
     details: "Your details",
@@ -1672,6 +1672,10 @@ export function stepLabel(
   }
   return STEP_LABELS[segment.kind]?.[step.id] ?? null
 }
+
+/** A step's short name, whatever it is doing. */
+export const stepName = (segment: ActivitySegment, step: ActivityStep) =>
+  STEP_LABELS[segment.kind]?.[step.id] ?? null
 
 /** What a skipped step says beside its label. */
 export const SKIPPED = "Skipped"

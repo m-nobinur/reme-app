@@ -75,13 +75,13 @@ it("offers a live site's owner a look, a change and a reminder", () => {
   ])
 })
 
-it("says the assistant asks, never who on the staff did", () => {
+it("words a question without naming who on the staff asked", () => {
   const briefing = briefingOf(
     ORG,
     workspace({ live: 3, attention: [question("The Developer")] })
   )
   expect(briefing.line).toBe(
-    "Your website is live. Your assistant has a question for you."
+    "Your website is live. One question needs your answer."
   )
   expect(
     briefingOf(
@@ -92,7 +92,7 @@ it("says the assistant asks, never who on the staff did", () => {
         attention: [question("The Developer")],
       })
     ).line
-  ).toBe("Your website is live. Reme has a question for you.")
+  ).toBe("Your website is live. One question needs your answer.")
   expect(prompts(briefing)).toEqual([
     "What do you need from me?",
     "What's on my website now?",
@@ -289,7 +289,7 @@ it("puts an unpublished version after reviews and questions", () => {
     "Your website is live. Your latest changes are ready to publish."
   )
   expect(lineOf({ attention: [question("The Developer")] })).toBe(
-    "Your website is live. Your assistant has a question for you."
+    "Your website is live. One question needs your answer."
   )
   expect(
     lineOf({

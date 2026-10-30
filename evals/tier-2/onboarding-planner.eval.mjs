@@ -69,8 +69,8 @@ import {
  * model: owners passed, fallbacks, first plans refused, cost per onboarding
  * and call latency.
  *
- *   node --env-file=.env.local --experimental-transform-types \
- *     evals/tier-2/onboarding-planner.eval.mjs
+ *   node --env-file=.env.local --import ./evals/json-imports.mjs \
+ *     --experimental-transform-types evals/tier-2/onboarding-planner.eval.mjs
  *
  * `ONBOARDING_EVAL_MODELS` (comma list, default the api's default),
  * `ONBOARDING_EVAL_PERSONAS` (comma list of ids, or `conversations` for the
@@ -275,6 +275,7 @@ async function onboard(persona, spec) {
   const says = []
   let fallbacks = 0
   let refusedFirst = 0
+  const refusals = []
   let turns = 0
   let quoteChanged = false
   let trayTurn = null
@@ -356,7 +357,10 @@ async function onboard(persona, spec) {
       calls.push(c)
       spent += c.costUsd
     }
-    if (outcome.calls[0]?.errors.length) refusedFirst += 1
+    if (outcome.calls[0]?.errors.length) {
+      refusedFirst += 1
+      refusals.push(...outcome.calls[0].errors)
+    }
     if (!outcome.ok) {
       fallbacks += 1
       problems.push(
@@ -633,6 +637,7 @@ async function onboard(persona, spec) {
     firsts,
     fallbacks,
     refusedFirst,
+    refusals,
     turns,
     transcript: lines(),
     heard,
@@ -883,6 +888,16 @@ export default async function run() {
   table.push(
     "",
     `Spent about $${spent.toFixed(3)} (planner and owner simulator, as billed).`
+  )
+  const tally = {}
+  for (const reason of results.flatMap((r) => r.refusals))
+    tally[reason.slice(0, 160)] = (tally[reason.slice(0, 160)] ?? 0) + 1
+  table.push(
+    "",
+    "First-plan refusals by reason:",
+    ...Object.entries(tally)
+      .sort((a, b) => b[1] - a[1])
+      .map(([reason, n]) => `${String(n).padStart(4)}  ${reason}`)
   )
   console.log(table.join("\n"))
   if (process.env.GITHUB_STEP_SUMMARY)

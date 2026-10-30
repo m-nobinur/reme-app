@@ -146,13 +146,13 @@ function AnswerInChat() {
   if (docked) {
     return (
       <button className={ANSWER} onClick={docked.open} type="button">
-        Answer in the chat
+        Answer
       </button>
     )
   }
   return chat ? (
     <Link className={ANSWER} params={{ id: chat.id }} to="/app/c/$id">
-      Answer in the chat
+      Answer
     </Link>
   ) : null
 }

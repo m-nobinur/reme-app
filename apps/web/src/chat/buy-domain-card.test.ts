@@ -596,10 +596,10 @@ it("buys elsewhere: links with the name, tells the api, then waits for done", as
   await act(async () => tray.querySelector("a")?.click())
   expect(purchase.elsewhere).toHaveBeenCalledWith(NAME)
   expect(tray.querySelector("h2")?.textContent).toBe(
-    "Tell me when you've bought it"
+    `Buy ${NAME} from either site`
   )
 
-  await press(tray, "Done, I bought it")
+  await press(tray, "I've bought it")
   expect(purchase.bought).toHaveBeenCalledWith(NAME)
   expect(tray.textContent).toContain(`I can't see ${NAME} at the registry yet.`)
 })
@@ -625,7 +625,7 @@ it("connects a name bought elsewhere once the registry shows it", async () => {
   )
   await press(tray, "Buy directly from a provider")
   await act(async () => tray.querySelector("a")?.click())
-  await press(tray, "Done, I bought it")
+  await press(tray, "I've bought it")
   expect(chat.textContent).toContain(`${NAME} is yours.`)
   expect(chat.querySelectorAll("ol > li")).toHaveLength(1)
   expect(tray.textContent).toBe("")

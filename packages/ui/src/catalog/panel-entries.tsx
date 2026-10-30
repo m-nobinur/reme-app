@@ -103,7 +103,7 @@ const question = (title: string) => (
         className={buttonVariants({ variant: "outline", size: "sm" })}
         type="button"
       >
-        Answer in the chat
+        Answer
       </button>
     }
     title={title}

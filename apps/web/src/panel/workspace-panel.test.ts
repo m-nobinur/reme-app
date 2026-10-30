@@ -339,7 +339,9 @@ it("links the live site by name, where the api says it opens, with the host as i
   expect(visit?.title).toBe("brightclean-demo.reme.localhost")
   expect(visit?.target).toBe("_blank")
   expect(visit?.rel).toBe("noreferrer")
-  expect(container.textContent).toContain("Your website is live")
+  expect(container.textContent).toContain(
+    "Live at brightclean-demo.reme.localhost"
+  )
 })
 
 it("Request changes puts the chat's composer into website change mode", async () => {

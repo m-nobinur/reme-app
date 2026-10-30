@@ -774,7 +774,7 @@ it("offers the build, keeps a not now, and a typed change after it", async () =>
   await type(chat, "Add Saturday hours, 9 to 1.")
   await vi.waitFor(() =>
     expect(transcript(chat).at(-1)).toContain(
-      "Add Saturday hours, 9 to 1.This starts a build"
+      "Add Saturday hours, 9 to 1.I'll make this on a copy"
     )
   )
   // The no stays a no on screen, as it does in the stored row.
@@ -1033,7 +1033,7 @@ const HELD = "You said yes. Sent once you answer the other cards."
 for (const [answer, response] of Object.entries(RESOLVED)) {
   it(`holds a yes until every card in the step is answered, sends one turn, and nothing more after ${answer} answers`, async () => {
     const chat = await open(COS_HISTORY)
-    await press(chat, "Approve")
+    await press(chat, "Start")
     expect(await decided(1)).toEqual([false])
     expect(sent).toEqual([])
     // Nothing is in flight, so nothing claims the build is starting.
@@ -1104,7 +1104,7 @@ it("a held not now says so on either card", async () => {
 
 it("a message typed while a yes is held cancels it, as the api stores it", async () => {
   const chat = await open(COS_HISTORY)
-  await press(chat, "Approve")
+  await press(chat, "Start")
   await vi.waitFor(() => expect(changeCard(chat)?.textContent).toContain(HELD))
   turns.push(
     sse({
@@ -1189,7 +1189,7 @@ const BUSY = "I'm still working on your last message. Try again in a moment."
 const ACTIONS = {
   "a typed message": (chat: HTMLElement) => type(chat, "Make it 10 to 2."),
   "a whole step of yeses": async (chat: HTMLElement) => {
-    await press(chat, "Approve")
+    await press(chat, "Start")
     await press(chat, "Send answer")
   },
 }
@@ -1211,9 +1211,9 @@ for (const [action, run] of Object.entries(ACTIONS)) {
         [...chat.querySelectorAll("button")]
           .filter((each) => !each.disabled)
           .map((each) => each.textContent?.trim())
-          .filter((name) => name === "Approve" || name === "Send answer")
+          .filter((name) => name === "Start" || name === "Send answer")
           .sort()
-      ).toEqual(["Approve", "Send answer"])
+      ).toEqual(["Send answer", "Start"])
     )
     if (action === "a typed message") {
       expect(chat.querySelector("textarea")?.value).toBe("Make it 10 to 2.")

@@ -102,7 +102,7 @@ export function briefingOf(
   } else if (waiting) {
     next = `${assistant} is still waiting for your answer about ${waiting.title.toLowerCase()}.`
   } else if (questions.length === 1) {
-    next = `${assistant} has a question for you.`
+    next = "One question needs your answer."
   } else if (questions.length > 1) {
     next = `You have ${questions.length} questions to answer.`
   } else if (unpublished && !approval) {
