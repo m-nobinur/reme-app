@@ -26,7 +26,7 @@ import {
 } from "@workspace/db"
 import { z } from "zod"
 import { assistantName } from "./assistant.ts"
-import { logSpend, writeText } from "./heartbeat-write.ts"
+import { logSpend, reserve, worstWrite, writeText } from "./heartbeat-write.ts"
 import { answers, inputOf, questionOk } from "./question.ts"
 import type { Ids } from "./state.ts"
 
@@ -180,7 +180,7 @@ async function ownerWords(
   return rows.map((r) => r.text.slice(0, 2000))
 }
 
-/** The model's reading, or null when there is no key or it fails. Never throws. */
+/** The model's reading, or null when there is no key, the day's cap has no room, or it fails. Never throws. */
 async function readChat(
   env: { OPENROUTER_API_KEY?: string },
   kit: Tenancy,
@@ -200,21 +200,32 @@ async function readChat(
         tone: TONES.find((t) => t.id === tone?.id)?.hint ?? null,
       }
     })
-    const written = await write(
-      key,
-      relayPrompt(voice.name, voice.tone),
-      {
-        // Not `why`: the Developer's own text never steers what is read from the owner's chat.
-        question: {
-          about: data.request.field,
-          draft: data.request.question ?? null,
-          options: data.request.options ?? null,
-        },
-        owner_messages: data.said,
+    const system = relayPrompt(voice.name, voice.tone)
+    const input = {
+      // Not `why`: the Developer's own text never steers what is read from the owner's chat.
+      question: {
+        about: data.request.field,
+        draft: data.request.question ?? null,
+        options: data.request.options ?? null,
       },
-      RELAY_TIMEOUT_MS
+      owner_messages: data.said,
+    }
+    const reservation = await reserve(
+      kit,
+      orgId,
+      "build_question",
+      worstWrite(system, input)
     )
-    await logSpend(kit, orgId, "build_question", "written", written.spent)
+    if (!reservation) return null
+    const written = await write(key, system, input, RELAY_TIMEOUT_MS)
+    await logSpend(
+      kit,
+      orgId,
+      reservation,
+      "build_question",
+      "written",
+      written.spent
+    )
     const json = written.text.replace(/^```(?:json)?\s*|\s*```$/g, "")
     return Reading.parse(JSON.parse(json))
   } catch (error) {

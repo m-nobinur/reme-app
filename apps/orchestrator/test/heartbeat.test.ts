@@ -1,5 +1,6 @@
 import {
   conversations,
+  DAILY_CAP_USD,
   deliveries,
   ensureHeartbeat,
   eq,
@@ -569,6 +570,23 @@ describe.skipIf(!url)("the heartbeat", () => {
       expect(handedOver()).toEqual([])
       expect(queue.send).not.toHaveBeenCalled()
       expect(await logged()).toHaveLength(1)
+    })
+
+    it("asks Jev nothing once the day's cap is spent, and posts nothing", async () => {
+      await seed(later(NOON, 20), later(NOON, -2))
+      await record("cos.background_step", NOON, {
+        job: "logo",
+        cost_usd: DAILY_CAP_USD,
+      })
+      probability = 0.9
+      await beat(NOON)
+      expect(await run(NOON)).toEqual({
+        outcome: "no_change",
+        detail: "over_cap",
+      })
+      expect(models.gate).not.toHaveBeenCalled()
+      expect(handedOver()).toEqual([])
+      expect(await logged()).toEqual([])
     })
 
     it("records a gate that fails as an error, with the ledger kept", async () => {

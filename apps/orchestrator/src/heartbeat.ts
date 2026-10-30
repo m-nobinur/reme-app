@@ -32,7 +32,9 @@ import {
   type Look,
   logSpend,
   modelInput,
+  reserve,
   trustedContacts,
+  worstGate,
 } from "./heartbeat-write.ts"
 import type { Handler, Settled } from "./jobs.ts"
 import { weeklyItem } from "./search-sync.ts"
@@ -455,7 +457,7 @@ type Beat = Look & {
  * event and a proactive CoS turn is handed to the api (`wake.ts` there). The
  * turn may stay `[quiet]`; it takes the day's message
  * (`unprompted:<org>:<local date>`) only when it posts. Jev's call is
- * logged as a `cos.background_step` so the CoS's daily cap counts it.
+ * reserved against the CoS's daily cap first, and is not made without room.
  */
 async function speak(
   kit: Tenancy,
@@ -475,7 +477,13 @@ async function speak(
 
   const { state, summary } = modelInput(beat)
   let gate: Awaited<ReturnType<Models["gate"]>>
+  let reservation: string | null
   try {
+    reservation = await reserve(kit, orgId, "heartbeat_gate", worstGate(state))
+    if (!reservation) {
+      await putBack()
+      return record("no_change", "over_cap")
+    }
     gate = await models.gate(state)
   } catch (error) {
     await putBack()
@@ -485,6 +493,7 @@ async function speak(
   await logSpend(
     kit,
     orgId,
+    reservation,
     "heartbeat_gate",
     pass ? "pass" : "stop",
     gate.spent

@@ -1,6 +1,11 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { dashesToCommas } from "@workspace/contracts"
-import { events, failureCode, newUlid, type Tenancy } from "@workspace/db"
+import {
+  failureCode,
+  reserveSpend,
+  settleSpend,
+  type Tenancy,
+} from "@workspace/db"
 import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
@@ -118,6 +123,16 @@ export async function askGate(
   }
 }
 
+/** Jev's call at its worst, to reserve: two characters a token. */
+export const worstGate = (state: GateState) =>
+  (Math.ceil(
+    (JSON.stringify(state).length +
+      Object.values(GATE.questions).join("").length) /
+      2
+  ) *
+    GATE.inputPrice) /
+  1e6
+
 /**
  * One reply from the writer model at low effort, with no tools, through the
  * same OpenRouter routing the CoS uses: capped at the table's price and kept
@@ -157,6 +172,17 @@ export async function writeText(
       ms: Date.now() - started,
     },
   }
+}
+
+/** A `writeText` call at its worst, to reserve: two characters a token in, the whole output cap out. */
+export function worstWrite(system: string, data: unknown): number {
+  const cost = models.find((m) => m.id === WRITER.model)?.cost
+  if (!cost) throw new Error("heartbeat.writer_unpriced")
+  return (
+    (Math.ceil((system.length + JSON.stringify(data).length) / 2) * cost.input +
+      WRITER.maxOutputTokens * cost.output) /
+    1e6
+  )
 }
 
 /** Hard limits on a heartbeat message, checked in code. */
@@ -311,27 +337,23 @@ export function overLimit(text: string): string | null {
   return null
 }
 
-/** A model call's cost as a `cos.background_step`, which the CoS's daily cap counts. */
-export async function logSpend(
+/** Room for `amount` in the org's daily cap, reserved until `logSpend` settles it; null when there is none. */
+export const reserve = (
   kit: Tenancy,
   orgId: string,
   job: string,
+  amount: number
+) => kit.withOrg({ orgId }, (db) => reserveSpend(db, orgId, job, amount))
+
+/** A reserved call's cost as a `cos.background_step`, which the CoS's daily cap counts. A call that throws stays counted at its reservation. */
+export const logSpend = (
+  kit: Tenancy,
+  orgId: string,
+  reservation: string,
+  job: string,
   outcome: string,
   spent: Spent
-): Promise<void> {
-  await kit.withOrg({ orgId }, (db) =>
-    db.insert(events).values({
-      eventId: newUlid(),
-      orgId,
-      staffId: null,
-      assignmentId: null,
-      type: "cos.background_step",
-      occurredAt: new Date(),
-      idempotencyKey: newUlid(),
-      payload: { job, outcome, ...spent },
-    })
-  )
-}
+) => settleSpend(kit, { orgId }, reservation, { job, outcome, ...spent })
 
 /**
  * An update that answers something the owner started (a site going live, a
@@ -376,8 +398,9 @@ export function faithful(text: string, facts: Record<string, string>): boolean {
 
 /**
  * The owner's update in the model's words, or the template when there is no
- * key, the call fails, or the text is not `faithful`. Never throws. These
- * answer the owner's own actions, so quiet hours do not apply.
+ * key, the day's cap has no room, the call fails, or the text is not
+ * `faithful`. Never throws. These answer the owner's own actions, so quiet
+ * hours do not apply.
  */
 export async function writeUpdate(
   env: { OPENROUTER_API_KEY?: string },
@@ -389,19 +412,24 @@ export async function writeUpdate(
   const key = env.OPENROUTER_API_KEY
   if (!key) return update.template
   try {
-    const written = await write(
-      key,
-      updatePrompt(
-        await kit.withOrg({ orgId }, assistantName).catch(() => null)
-      ),
-      { facts: update.facts, draft: update.template },
-      UPDATE_TIMEOUT_MS
+    const system = updatePrompt(
+      await kit.withOrg({ orgId }, assistantName).catch(() => null)
     )
+    const data = { facts: update.facts, draft: update.template }
+    const reservation = await reserve(
+      kit,
+      orgId,
+      "update",
+      worstWrite(system, data)
+    )
+    if (!reservation) return update.template
+    const written = await write(key, system, data, UPDATE_TIMEOUT_MS)
     const text = written.text.trim()
     const kept = faithful(text, update.facts)
     await logSpend(
       kit,
       orgId,
+      reservation,
       "update",
       kept ? "written" : "template",
       written.spent

@@ -2,6 +2,7 @@ import { AGENT_NOTE, Blueprint, BUILD_FAILURES } from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
+  DAILY_CAP_USD,
   eq,
   events,
   newUlid,
@@ -316,6 +317,25 @@ live("a build note in the assistant's own voice", () => {
         }))
       )
     )
+    expect(
+      await narrate(env, kit, orgId, "site.build", note, "t", unused)
+    ).toBe("t")
+    expect(unused).not.toHaveBeenCalled()
+  })
+
+  it("falls back to the template without a call once the day's cap is spent", async () => {
+    const orgId = await freshOrg(kit)
+    await kit.withOrg({ orgId }, (db) =>
+      db.insert(events).values({
+        eventId: newUlid(),
+        orgId,
+        type: "cos.background_step",
+        occurredAt: new Date(),
+        idempotencyKey: newUlid(),
+        payload: { job: "logo", cost_usd: DAILY_CAP_USD },
+      })
+    )
+    const unused = writer(good)
     expect(
       await narrate(env, kit, orgId, "site.build", note, "t", unused)
     ).toBe("t")

@@ -31,7 +31,13 @@ import { insertAssignment } from "./app.ts"
 import { assistantName } from "./assistant.ts"
 import { creationChoices, failureReason, lastReport } from "./brief.ts"
 import { eventKey } from "./domain-flow.ts"
-import { logSpend, replyOf, writeText } from "./heartbeat-write.ts"
+import {
+  logSpend,
+  replyOf,
+  reserve,
+  worstWrite,
+  writeText,
+} from "./heartbeat-write.ts"
 import { inputOf, refuseQuestion } from "./question.ts"
 import { QUICK_EDITED } from "./quick.ts"
 import { workKey } from "./sandbox.ts"
@@ -345,7 +351,8 @@ export function narrationOk(text: string, known: readonly string[]): boolean {
 /**
  * The note's chat line in the assistant's own voice, from structured fields
  * only, or `template` when there is no key, the org is over its hourly
- * share, the call fails or times out, or the line fails `narrationOk`.
+ * share or its daily cap, the call fails or times out, or the line fails
+ * `narrationOk`.
  * Never throws.
  */
 export async function narrate(
@@ -380,25 +387,29 @@ export async function narrate(
       }
     })
     if (!known) return template
-    const written = await write(
-      key,
-      narratePrompt(known.name, known.tone),
-      {
-        business: known.business,
-        what:
-          kind === "site.revise"
-            ? "a change to the website"
-            : "the website build",
-        event: note.kind,
-        try: note.attempt > 1 ? "second" : "first",
-        cause: note.cause ? CAUSE_WORDS[note.cause] : null,
-        checks_failed: note.failed.map((g) => GATE_WORDS[g]),
-        pages: note.pages ?? [],
-        next: NEXT_WORDS[note.kind],
-        draft: template,
-      },
-      NARRATE_TIMEOUT_MS
+    const system = narratePrompt(known.name, known.tone)
+    const data = {
+      business: known.business,
+      what:
+        kind === "site.revise"
+          ? "a change to the website"
+          : "the website build",
+      event: note.kind,
+      try: note.attempt > 1 ? "second" : "first",
+      cause: note.cause ? CAUSE_WORDS[note.cause] : null,
+      checks_failed: note.failed.map((g) => GATE_WORDS[g]),
+      pages: note.pages ?? [],
+      next: NEXT_WORDS[note.kind],
+      draft: template,
+    }
+    const reservation = await reserve(
+      kit,
+      orgId,
+      "build_note",
+      worstWrite(system, data)
     )
+    if (!reservation) return template
+    const written = await write(key, system, data, NARRATE_TIMEOUT_MS)
     const text = dashesToCommas(written.text.trim())
     const kept = narrationOk(text, [
       known.name ?? "",
@@ -408,6 +419,7 @@ export async function narrate(
     await logSpend(
       kit,
       orgId,
+      reservation,
       "build_note",
       kept ? "written" : "template",
       written.spent
