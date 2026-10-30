@@ -96,9 +96,7 @@
     // its own per environment because one routing rule reaches one Worker. A
     // short name on the apex (`rstg@remeai.co.uk`) if Email Routing cannot
     // route plus addresses on the subdomain; the orchestrator holds the same.
-    "REPLY_MAILBOX": "reply@reply-stg.remeai.co.uk",
-    // Routes switched on past owner_turn (src/cos/agent.ts), staging only until measured.
-    "COS_ROUTES": "card_click"
+    "REPLY_MAILBOX": "reply@reply-stg.remeai.co.uk"
   },
   // The orchestrator's site bucket. The api writes only the owner's photos,
   // under `uploads/{org_id}/{asset_id}`, and the orchestrator copies them into
