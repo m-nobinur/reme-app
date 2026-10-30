@@ -44,6 +44,7 @@ export const GateName = z.enum([
   "copy",
   "a11y",
   "size",
+  "interaction",
 ])
 
 export const GateResult = z.strictObject({
