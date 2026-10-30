@@ -607,20 +607,26 @@ describe("the CoS's change kinds", () => {
 
 describe("the CoS's routing table", () => {
   it("keeps every owner-waiting turn on the default model at default effort", () => {
-    expect(ROUTES.owner_turn).toMatchObject({
+    expect(ROUTES.owner_turn).toEqual({
       model: DEFAULT_MODEL,
       effort: null,
       path: "stream",
-      enabled: true,
     })
-    expect(routeOf("owner_turn")).toBe(ROUTES.owner_turn)
   })
 
-  it("records the card-click and deferred rows as not enabled, and falls back to the owner-turn route", () => {
-    expect(ROUTES.card_click).toMatchObject({ effort: "low", enabled: false })
-    expect(ROUTES.deferred).toMatchObject({ path: "batch", enabled: false })
-    expect(routeOf("card_click")).toBe(ROUTES.owner_turn)
-    expect(routeOf("deferred")).toBe(ROUTES.owner_turn)
+  it("keeps a card click on the owner turn's model, at low effort", () => {
+    expect(ROUTES.card_click).toEqual({
+      ...ROUTES.owner_turn,
+      effort: "low",
+    })
+  })
+
+  it("serves every task from the owner-turn route until COS_ROUTES names it", () => {
+    expect(routeOf("card_click")).toBe("owner_turn")
+    expect(routeOf("deferred", "")).toBe("owner_turn")
+    expect(routeOf("card_click", "deferred")).toBe("owner_turn")
+    expect(routeOf("card_click", "deferred, card_click")).toBe("card_click")
+    expect(routeOf("owner_turn", "card_click")).toBe("owner_turn")
   })
 })
 
@@ -1166,7 +1172,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     who: Owner,
     body: unknown,
     deps: ChatDeps = {},
-    stub: Stub = stubOrchestrator()
+    stub: Stub = stubOrchestrator(),
+    vars: Partial<Env> = {}
   ) {
     const running: Promise<unknown>[] = []
     const response = await chat(
@@ -1180,6 +1187,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         SITE_HOST_SUFFIX: SUFFIX,
         STRIPE_SECRET_KEY: "sk_fixture",
         STRIPE_WEBHOOK_SECRET: "whsec_fix",
+        ...vars,
       } as unknown as Env,
       kit,
       { orgId: who.orgId, session: session(who) },
@@ -1193,9 +1201,10 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     who: Owner,
     body: unknown,
     deps: ChatDeps = {},
-    stub?: Stub
+    stub?: Stub,
+    vars?: Partial<Env>
   ) {
-    const { response, running } = await send(who, body, deps, stub)
+    const { response, running } = await send(who, body, deps, stub, vars)
     const text = await response.text()
     await Promise.all(running)
     return { response, text, chunks: chunksOf(text) }
@@ -2762,12 +2771,22 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         },
       },
       { model },
-      stub
+      stub,
+      { COS_ROUTES: "card_click" }
     )
     expect(done.response.status, done.text).toBe(200)
     expect(stub.calls).toHaveLength(1)
     expect(sent).toHaveLength(1)
     expect(JSON.stringify(sent[0]?.prompt)).toContain('"outcome":"started"')
+    // Each turn's first chunk is recorded under the route that served it.
+    expect(
+      (await turnsOf(id)).map(
+        (t) => t.outcome !== "abandoned" && [t.route, typeof t.first_chunk_ms]
+      )
+    ).toEqual([
+      ["owner_turn", "number"],
+      ["card_click", "number"],
+    ])
     // The model reads what the evidence shows, never its row id.
     expect(JSON.stringify(sent[0]?.prompt)).toContain(
       '"evidence":[{"kind":"record","table":"assignments"}]'

@@ -1,4 +1,9 @@
-import { CosContext, CosContinue, type CosTurn } from "@workspace/contracts"
+import {
+  CosContext,
+  CosContinue,
+  type CosRoute,
+  type CosTurn,
+} from "@workspace/contracts"
 import {
   chiefStaffId,
   eq,
@@ -218,6 +223,7 @@ export async function continueTurn(
     opened,
     model,
     modelId,
+    route: cos.route,
     newMessageId: () => continuationId(turnId),
     attempt,
   })
@@ -271,6 +277,7 @@ export async function runOpened(input: {
   opened: { turn: Turn; mode: "ask" | "act"; log: LoggedEvent[] }
   model: LanguageModel
   modelId: string
+  route: CosRoute
   newMessageId: () => string
   attempt?: number
   post?: (db: OrgScopedDb, text: string) => Promise<void>
@@ -279,6 +286,7 @@ export async function runOpened(input: {
   const run: AgentTurn = {
     turn: opened.turn,
     kit: input.kit,
+    route: input.route,
     tools,
     price: input.price,
     reserved: input.reserved,

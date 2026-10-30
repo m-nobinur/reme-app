@@ -29,6 +29,11 @@ interface Env {
   OPENROUTER_API_KEY?: string
   /** The CoS's model id, when not `DEFAULT_MODEL`. It must be in the facade's price table. */
   COS_MODEL?: string
+  /**
+   * CoS routes switched on beside `owner_turn`, comma-separated (`card_click`).
+   * Unset, every CoS turn takes `owner_turn`.
+   */
+  COS_ROUTES?: string
   /** The onboarding planner's model id, when not `DEFAULT_ONBOARDING_MODEL`. Same table. */
   ONBOARDING_MODEL?: string
   /**

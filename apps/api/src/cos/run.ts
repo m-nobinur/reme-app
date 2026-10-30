@@ -177,6 +177,7 @@ export function ranTurn<
     outcome,
     turn_id: run.turn.turnId,
     model: modelId,
+    route: run.route,
     usage: run.state.usage,
     cost_usd: run.state.costUsd,
     tools: [...new Set(run.state.tools)],

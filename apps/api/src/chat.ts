@@ -6,6 +6,7 @@ import {
   ChatRequest,
   type ChatResult,
   CosChangeRequest,
+  type CosRoute,
   type CosToolName,
   type CosTurn,
   ErrorEnvelope,
@@ -63,6 +64,7 @@ import {
   openrouterModel,
   personaOf,
   priceOf,
+  ROUTES,
   reservation,
   routeOf,
   SETS_RULE,
@@ -787,26 +789,27 @@ async function gateAnswer(
 /** A typed reply already read, by Jev and code, with the state it was read on. */
 type Given = { onboarding: Onboarding; answer: Answer }
 
-/** The Chief of Staff's model, its id and price; no model without an OpenRouter key. */
-export function cosModel(env: Env) {
-  const modelId = env.COS_MODEL ?? routeOf("owner_turn").model
+/** The Chief of Staff's model for `task`, its route, id and price; no model without an OpenRouter key. */
+export function cosModel(env: Env, task: CosRoute = "owner_turn") {
+  const route = routeOf(task, env.COS_ROUTES)
+  const { effort } = ROUTES[route]
+  const modelId = env.COS_MODEL ?? ROUTES[route].model
   // A step that fails twice before anything streamed goes to the fallback.
   const fallbackId = (
     env.REME_MODEL_FALLBACK ?? DEFAULT_ONBOARDING_MODEL
   ).replace(/^openrouter\//, "")
   const model = env.OPENROUTER_API_KEY
     ? retrying(
-        openrouterModel(
-          env.OPENROUTER_API_KEY,
-          modelId,
-          modelId === OUTAGE_MODEL ? {} : { models: [modelId, OUTAGE_MODEL] }
-        ),
+        openrouterModel(env.OPENROUTER_API_KEY, modelId, {
+          ...(modelId !== OUTAGE_MODEL && { models: [modelId, OUTAGE_MODEL] }),
+          ...(effort && { reasoning: { effort } }),
+        }),
         fallbackId === modelId
           ? null
           : openrouterModel(env.OPENROUTER_API_KEY, fallbackId)
       )
     : null
-  return { modelId, price: priceOf(modelId), model }
+  return { route, modelId, price: priceOf(modelId), model }
 }
 
 export async function chat(
@@ -904,7 +907,10 @@ export async function chat(
     turn.kind === "message" && ahead.open
       ? await typedVerdict(ahead.open, turn.text, approvalOf)
       : null
-  const cos = cosModel(env)
+  const cos = cosModel(
+    env,
+    turn.kind === "results" ? "card_click" : "owner_turn"
+  )
   const { modelId, price } = cos
   const model = deps.model !== undefined ? deps.model : cos.model
   const plannerId = env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
@@ -1153,6 +1159,7 @@ export async function chat(
   const run: AgentTurn = {
     turn: opened.turn,
     kit,
+    route: cos.route,
     tools,
     price: price ?? { input: 0, output: 0, cacheRead: 0 },
     reserved: opened.reserved,
