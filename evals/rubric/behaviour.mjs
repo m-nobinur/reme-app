@@ -19,7 +19,7 @@ export const RULES = [
   },
   {
     id: "voice",
-    text: "The replies follow the voice rules in the house rules below: tone, length, no ceremony, praise or sign-offs, no narrating tools, first person for the work, nothing said twice.",
+    text: "The replies follow the voice rules in the house rules below: tone, length, no ceremony, praise or sign-offs, no narrating tools, first person for the work, nothing said twice. In Ask mode, telling the owner to switch to Act for a change is the answer, not a non-answer.",
   },
   {
     id: "no_internal",
