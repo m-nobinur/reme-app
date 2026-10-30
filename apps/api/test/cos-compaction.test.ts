@@ -16,6 +16,7 @@ import {
   promptOf,
   summarise,
   targetTokens,
+  worstCall,
 } from "../src/cos/compaction.ts"
 import {
   CONTEXT_POLICY,
@@ -26,7 +27,14 @@ import {
   SUMMARY_HEADER,
   sha256,
 } from "../src/cos/history.ts"
-import { SessionBusy, withinCap, writeCompaction } from "../src/cos/turns.ts"
+import {
+  DAILY_CAP_USD as CAP,
+  reserveSpend,
+  SessionBusy,
+  settleSpend,
+  withinCap,
+  writeCompaction,
+} from "../src/cos/turns.ts"
 import recorded from "./cos-compaction-session.json" with { type: "json" }
 import { type Owner, owner } from "./owner-fixture.ts"
 
@@ -588,22 +596,22 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
 
   afterAll(() => kit.close())
 
-  /** A conversation of mine holding the scripted session, each row at the seq the replay gives it. */
-  const seeded = () =>
-    kit.withOrg({ orgId: me.orgId }, async (db) => {
+  /** A conversation of `who`'s holding the scripted session, each row at the seq the replay gives it. */
+  const seeded = (who: Owner = me) =>
+    kit.withOrg({ orgId: who.orgId }, async (db) => {
       const [made] = await db
         .insert(conversations)
         .values({
-          orgId: me.orgId,
+          orgId: who.orgId,
           kind: "assistant",
-          createdByStaffId: me.chiefId,
+          createdByStaffId: who.chiefId,
         })
         .returning({ id: conversations.id })
       const sessionId = made?.id as string
       for (const row of SESSION.flat()) {
         await appendSessionEvent(db, {
-          orgId: me.orgId,
-          staffId: me.chiefId,
+          orgId: who.orgId,
+          staffId: who.chiefId,
           assignmentId: null,
           sessionId,
           type: row.type,
@@ -613,8 +621,8 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
       return sessionId
     })
 
-  const rowsOf = (sessionId: string) =>
-    kit.withOrg({ orgId: me.orgId }, (db) =>
+  const rowsOf = (sessionId: string, who: Owner = me) =>
+    kit.withOrg({ orgId: who.orgId }, (db) =>
       db
         .select({
           seq: events.seq,
@@ -640,9 +648,9 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
       )
     )
 
-  const job = (sessionId: string, turnId = TURN(60)) => ({
-    orgId: me.orgId,
-    staffId: me.chiefId,
+  const job = (sessionId: string, turnId = TURN(60), who: Owner = me) => ({
+    orgId: who.orgId,
+    staffId: who.chiefId,
     sessionId,
     turnId,
   })
@@ -762,5 +770,73 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
     expect(await write(0, 20)).toEqual(expect.any(Number))
     expect(await write(0, 10)).toBeNull()
     expect(await write(0, 30)).toEqual(expect.any(Number))
+  }, 60_000)
+
+  /** What one scripted session's closed turns already spent. */
+  const scriptedUsd = SESSION.flat()
+    .filter((r) => r.type === "cos.turn")
+    .reduce(
+      (sum, r) => sum + Number((r.payload as { cost_usd: number }).cost_usd),
+      0
+    )
+
+  /** `who`'s day, holding `sessions` scripted ones, spent down to `left` dollars, and the cap check. */
+  const spentTo = async (who: Owner, sessions: number, left: number) => {
+    const id = await kit.withOrg({ orgId: who.orgId }, (db) =>
+      reserveSpend(db, who.orgId, "seed", 0)
+    )
+    await settleSpend(kit, who, id as string, {
+      job: "seed",
+      cost_usd: CAP - left - sessions * scriptedUsd,
+    })
+    return (amount: number) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        withinCap(db, who.orgId, amount)
+      )
+  }
+
+  const worstOf = async (sessionId: string, who: Owner) =>
+    worstCall(
+      promptOf(
+        planCompaction(
+          (await rowsOf(sessionId, who)).map((r) => ({
+            ...r,
+            seq: Number(r.seq),
+          }))
+        ) as Plan
+      )
+    )
+
+  it("lets one of two calls at once through when the day has room for one", async () => {
+    const who = await owner(kit, url as string, "cos-compaction-race")
+    const [a, b] = [await seeded(who), await seeded(who)]
+    const worst = await worstOf(a, who)
+    await spentTo(who, 2, 1.5 * worst)
+    const { model, prompts } = fakeModel("A summary.", "stop", 0.001)
+    const answer = model.doGenerate
+    model.doGenerate = async (options) => {
+      await new Promise((r) => setTimeout(r, 500))
+      return answer(options)
+    }
+    await Promise.all([
+      compactAfterTurn(kit, model, job(a, TURN(60), who)),
+      compactAfterTurn(kit, model, job(b, TURN(60), who)),
+    ])
+    expect(prompts).toHaveLength(1)
+  }, 60_000)
+
+  it("counts a failed call once, at its worst, not its reservation as well", async () => {
+    const who = await owner(kit, url as string, "cos-compaction-failed")
+    const sessionId = await seeded(who)
+    const worst = await worstOf(sessionId, who)
+    const room = await spentTo(who, 1, 3 * worst)
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        throw new Error("provider down")
+      },
+    })
+    await compactAfterTurn(kit, model, job(sessionId, TURN(60), who))
+    expect(await room(1.5 * worst)).toBe(true)
+    expect(await room(2.5 * worst)).toBe(false)
   }, 60_000)
 })

@@ -1,5 +1,5 @@
 import { CosCompaction } from "@workspace/contracts"
-import { events, newUlid, type Tenancy } from "@workspace/db"
+import type { Tenancy } from "@workspace/db"
 import { scrub } from "@workspace/facade/tee"
 import { generateText, type LanguageModel } from "ai"
 import type { AfterTurn } from "../after-turn.ts"
@@ -13,7 +13,12 @@ import {
   type SessionEvent,
   SUMMARY_ID,
 } from "./history.ts"
-import { SessionBusy, withinCap, writeCompaction } from "./turns.ts"
+import {
+  reserveSpend,
+  SessionBusy,
+  settleSpend,
+  writeCompaction,
+} from "./turns.ts"
 
 /**
  * Compaction (ADR-042, §10.6): after a turn closes, history past a
@@ -258,7 +263,7 @@ export type Summary = {
 const PRICE = priceOf(COMPACTION.model) as Price
 
 /** The call at its worst: the prompt at two characters a token and the whole output cap. */
-const worstCall = (prompt: string) =>
+export const worstCall = (prompt: string) =>
   (tokensIn(SUMMARY_INSTRUCTIONS.length + prompt.length) * PRICE.input +
     COMPACTION.maxOutputTokens * PRICE.output) /
   1_000_000
@@ -352,36 +357,22 @@ export async function compactAfterTurn(
   if (!plan) return
   if (!model) return log("no_model")
   const prompt = promptOf(plan)
-  if (
-    !(await kit.withOrg(at, (db) =>
-      withinCap(db, job.orgId, worstCall(prompt))
-    ))
-  ) {
-    return log("budgetary")
-  }
+  const reservation = await kit.withOrg(at, (db) =>
+    reserveSpend(db, job.orgId, "compaction", worstCall(prompt))
+  )
+  if (!reservation) return log("budgetary")
 
   const made = await summarise(model, plan)
-  await kit.withOrg(at, (db) =>
-    db.insert(events).values({
-      eventId: newUlid(),
-      orgId: job.orgId,
-      staffId: job.staffId,
-      assignmentId: null,
-      type: "cos.background_step",
-      occurredAt: new Date(),
-      idempotencyKey: newUlid(),
-      payload: {
-        job: "compaction",
-        session_id: job.sessionId,
-        turn_id: job.turnId,
-        model: COMPACTION.model,
-        outcome: made.problem ?? "written",
-        usage: made.usage,
-        cost_usd: made.cost,
-        ms: made.ms,
-      },
-    })
-  )
+  await settleSpend(kit, job, reservation, {
+    job: "compaction",
+    session_id: job.sessionId,
+    turn_id: job.turnId,
+    model: COMPACTION.model,
+    outcome: made.problem ?? "written",
+    usage: made.usage,
+    cost_usd: made.cost,
+    ms: made.ms,
+  })
   const facts = {
     from_seq: plan.replaced_range.from_seq,
     to_seq: plan.replaced_range.to_seq,

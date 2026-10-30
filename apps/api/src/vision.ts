@@ -16,9 +16,9 @@ import { generateText, type LanguageModel, Output } from "ai"
 import { editUploads, sniff, uploadKey } from "./assets.ts"
 import type { Owner } from "./changes.ts"
 import { priceOf, stepCost } from "./cos/agent.ts"
-import { withinCap } from "./cos/turns.ts"
+import { reserveSpend, settleSpend } from "./cos/turns.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
-import { logSpend, useDaily } from "./logo.ts"
+import { useDaily } from "./logo.ts"
 import { factValue, logoOf } from "./onboarding.ts"
 import {
   DEFAULT_ONBOARDING_MODEL,
@@ -141,8 +141,10 @@ async function look(
     system.length + text.length + pictures.length * VISION.pictureChars,
     VISION.maxOutputTokens
   )
-  if (!(await kit.withOrg({ orgId }, (db) => withinCap(db, orgId, reserved))))
-    return undefined
+  const reservation = await kit.withOrg({ orgId }, (db) =>
+    reserveSpend(db, orgId, job, reserved)
+  )
+  if (!reservation) return undefined
   let cost = reserved
   try {
     const result = await generateText({
@@ -169,7 +171,11 @@ async function look(
     cost = stepCost(price, result)
     return result.output
   } finally {
-    await logSpend(kit, orgId, job, id, cost)
+    await settleSpend(kit, { orgId }, reservation, {
+      job,
+      model: id,
+      cost_usd: cost,
+    })
   }
 }
 

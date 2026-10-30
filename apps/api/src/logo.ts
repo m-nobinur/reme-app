@@ -11,7 +11,7 @@ import {
   type LogoRounds,
   type LogoStyle,
 } from "@workspace/contracts"
-import { events, newUlid, type Tenancy } from "@workspace/db"
+import type { Tenancy } from "@workspace/db"
 import { generateText, Output } from "ai"
 import {
   editUploads,
@@ -23,7 +23,7 @@ import {
 } from "./assets.ts"
 import type { Owner } from "./changes.ts"
 import { priceOf, stepCost } from "./cos/agent.ts"
-import { withinCap } from "./cos/turns.ts"
+import { reserveSpend, settleSpend } from "./cos/turns.ts"
 import { failure, invalid, keyMissing, readBody, sha256Hex } from "./http.ts"
 import { logoReference } from "./logo-references.ts"
 import {
@@ -257,28 +257,6 @@ export async function useDaily(
   if (used.objects.length >= cap) return false
   await env.SITES.put(`${day}${await sha256Hex(marker)}`, "")
   return true
-}
-
-/** A model call's cost as a `cos.background_step`, which the org's daily cap counts. */
-export async function logSpend(
-  kit: Tenancy,
-  orgId: string,
-  job: string,
-  model: string,
-  cost: number
-): Promise<void> {
-  await kit.withOrg({ orgId }, (db) =>
-    db.insert(events).values({
-      eventId: newUlid(),
-      orgId,
-      staffId: null,
-      assignmentId: null,
-      type: "cos.background_step",
-      occurredAt: new Date(),
-      idempotencyKey: newUlid(),
-      payload: { job, model, cost_usd: cost },
-    })
-  )
 }
 
 /** Whether a round of the org's under another question is drawing. */
@@ -571,8 +549,10 @@ function openrouterDirector(
       DIRECTOR_GUIDE.length + prompt.length,
       DIRECTOR_TOKENS
     )
-    if (!(await kit.withOrg({ orgId }, (db) => withinCap(db, orgId, reserved))))
-      return null
+    const reservation = await kit.withOrg({ orgId }, (db) =>
+      reserveSpend(db, orgId, "logo_director", reserved)
+    )
+    if (!reservation) return null
     // A call that fails may still bill, so it stays counted at its worst.
     let cost = reserved
     try {
@@ -592,7 +572,11 @@ function openrouterDirector(
         ...(support ? { support } : {}),
       }
     } finally {
-      await logSpend(kit, orgId, "logo_director", modelId, cost)
+      await settleSpend(kit, { orgId }, reservation, {
+        job: "logo_director",
+        model: modelId,
+        cost_usd: cost,
+      })
     }
   }
 }
@@ -790,11 +774,10 @@ export async function drawRound(
               reference: !base,
               changes: manifest.changes,
             })
-        if (
-          !(await kit.withOrg({ orgId: job.orgId }, (db) =>
-            withinCap(db, job.orgId, DRAW_RESERVE_USD)
-          ))
-        ) {
+        const reservation = await kit.withOrg({ orgId: job.orgId }, (db) =>
+          reserveSpend(db, job.orgId, "logo", DRAW_RESERVE_USD)
+        )
+        if (!reservation) {
           console.log(
             JSON.stringify({ code: "logos.budgetary", model: model.id })
           )
@@ -813,13 +796,11 @@ export async function drawRound(
           }
         )
         // A call that fails may still bill, so it stays counted at its worst.
-        await logSpend(
-          kit,
-          job.orgId,
-          "logo",
-          model.id,
-          drawn?.cost ?? DRAW_RESERVE_USD
-        )
+        await settleSpend(kit, { orgId: job.orgId }, reservation, {
+          job: "logo",
+          model: model.id,
+          cost_usd: drawn?.cost ?? DRAW_RESERVE_USD,
+        })
         if (!drawn) continue
         await env.SITES.put(
           variantKey(job.orgId, id, EXTENSION[drawn.type] as string),
