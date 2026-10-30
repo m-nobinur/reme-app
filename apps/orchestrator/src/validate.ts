@@ -20,7 +20,13 @@ import {
   type Tenancy,
   toFactRecord,
 } from "@workspace/db"
-import { checkAxe, parseAxe, runGates } from "@workspace/gates"
+import {
+  checkAxe,
+  checkInteraction,
+  parseAxe,
+  parseInteraction,
+  runGates,
+} from "@workspace/gates"
 import budget from "@workspace/starter-site/size-budget.json"
 import { A11Y_CHECKED, lockSite } from "./publish.ts"
 import { type Ids, lockRow, TransitionError, transition } from "./state.ts"
@@ -218,7 +224,12 @@ export async function validateRevision(
         ...planned(row.blueprint),
       })
     ).filter((result) => result.gate !== "a11y"),
-    ...(input.axe === "later" ? [] : [await axeGate(sites, input.axe)]),
+    ...(input.axe === "later"
+      ? []
+      : [
+          await axeGate(sites, input.axe),
+          await interactionGate(sites, input.axe),
+        ]),
   ]
 
   const gates: GateResult[] = await Promise.all(
@@ -329,8 +340,10 @@ export async function validateRevision(
   })
 }
 
-/** A sandbox script's run, as `runAxe` reports it. */
-type AxeRun = { exit_code: number; key: string | null }
+type ScriptRun = { exit_code: number; key: string | null }
+
+/** Axe's run, as `runAxe` reports it, and the browser pass that ran after it. */
+type AxeRun = ScriptRun & { interaction?: ScriptRun }
 
 /**
  * The accessibility gate (§8.5): axe ran in the sandbox over the built site
@@ -347,22 +360,38 @@ async function axeGate(sites: Artifacts, axe: AxeRun | null) {
       offending_node: null,
       message: "axe did not run: a newer edit took the site's sandbox first",
     }
-  const evidence = axe.key ? await sites.get(axe.key) : null
-  let result: ReturnType<typeof parseAxe> = null
-  try {
-    result = evidence
-      ? parseAxe(
-          JSON.parse(new TextDecoder().decode(await evidence.arrayBuffer()))
-        )
-      : null
-  } catch {
-    // Left null: the gate fails on it.
-  }
   return checkAxe(
     {
       checks: [{ check: "axe", exit_code: axe.exit_code, output_key: axe.key }],
     },
-    result
+    parseAxe(await evidenceOf(sites, axe.key))
+  )
+}
+
+/** A sandbox script's JSON, or null when it is missing or does not parse. */
+async function evidenceOf(sites: Artifacts, key: string | null) {
+  const object = key ? await sites.get(key) : null
+  try {
+    return object
+      ? (JSON.parse(
+          new TextDecoder().decode(await object.arrayBuffer())
+        ) as unknown)
+      : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The interaction gate: every page used in a browser after axe, from the
+ * same sandbox. A newer edit that took the sandbox, or an axe step logged
+ * before the browser pass existed, means it did not run, which fails.
+ */
+async function interactionGate(sites: Artifacts, axe: AxeRun | null) {
+  const run = axe?.interaction
+  return checkInteraction(
+    run,
+    parseInteraction(await evidenceOf(sites, run?.key ?? null))
   )
 }
 

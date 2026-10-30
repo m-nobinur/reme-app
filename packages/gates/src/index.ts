@@ -58,6 +58,12 @@ export {
   withCustomSections,
 } from "./custom.ts"
 export { factsToAsk, HIDDEN_FACTS_KEY } from "./fields.ts"
+export {
+  checkInteraction,
+  type InteractionFinding,
+  type InteractionResult,
+  parseInteraction,
+} from "./interaction.ts"
 export { type Page, parsePage } from "./page.ts"
 export { limit } from "./pool.ts"
 export { resolveSitePath } from "./site-path.ts"
