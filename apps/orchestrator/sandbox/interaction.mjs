@@ -12,11 +12,21 @@
 // check, path, width, detail }] }`, and packages/gates/src/interaction.ts
 // reads it back. The same findings are printed, so the Developer can run
 // this script itself and see what the gate sees.
-import { existsSync, readdirSync, statSync, writeFileSync } from "node:fs"
+import {
+  appendFileSync,
+  existsSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs"
 import { createRequire } from "node:module"
 import { join, normalize } from "node:path"
 
 const [dist = "dist", out = "/tmp/interaction.json"] = process.argv.slice(2)
+const started = Date.now()
+// Where a run killed by its time limit got to: the runner reads the last line.
+const stage = (what) =>
+  appendFileSync(`${out}.log`, `${Date.now() - started} ms ${what}\n`)
 const WIDTHS = [390, 768, 1440]
 const PHONE = 390
 const HEIGHT = 900
@@ -196,6 +206,7 @@ try {
   const { chromium } = createRequire("/usr/local/lib/node_modules/")(
     "playwright"
   )
+  stage("launch")
   browser = await chromium.launch()
   const links = new Map()
   for (const width of WIDTHS) {
@@ -205,6 +216,7 @@ try {
     })
     await context.route("**/*", serve)
     for (const path of chosen) {
+      stage(`${path} at ${width} px`)
       const page = await context.newPage()
       const errors = []
       page.on("pageerror", (error) => errors.push(error.message))
@@ -230,7 +242,10 @@ try {
       if (width === PHONE) await useMenu(page, path)
       // Before the form, which leaves the page for the sink.
       for (const error of new Set(errors)) find("console", path, width, error)
-      if (width === PHONE) await useForm(page, path)
+      if (width === PHONE) {
+        stage(`${path} form`)
+        await useForm(page, path)
+      }
       await page.close()
     }
     await context.close()
@@ -252,6 +267,7 @@ try {
       continue
     }
     if (!hash) continue
+    stage(`link ${href}`)
     await page.goto(href, { waitUntil: "load" })
     const id = decodeURIComponent(hash.slice(1))
     if (
@@ -277,6 +293,7 @@ try {
 } catch (error) {
   console.error(`interaction: ${error.message}`)
 } finally {
+  stage("close")
   await browser?.close()
 }
 process.exit(code)

@@ -11,7 +11,13 @@ import { dirname, join } from "node:path"
 import { URL } from "node:url"
 import { describe, expect, it } from "vitest"
 import { SITE_ROOT } from "../src/revise.ts"
-import { finishRevision, runAxe, SEAL_PHOTOS, uploadDist } from "../src/tail.ts"
+import {
+  finishRevision,
+  runAxe,
+  runInteraction,
+  SEAL_PHOTOS,
+  uploadDist,
+} from "../src/tail.ts"
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const sha = async (s: string) =>
@@ -218,6 +224,43 @@ describe("the axe step", () => {
       exit_code: 137,
       key: null,
     })
+  })
+})
+
+describe("the interaction step", () => {
+  const run = (exitCode: number, log: string | null) => {
+    const commands: string[] = []
+    const result = runInteraction(
+      {
+        exec: async (command) => {
+          commands.push(command)
+          return { exitCode, stdout: "", stderr: "" }
+        },
+        readFileBuffer: async (path) => {
+          if (path.endsWith(".log") && log !== null) return enc(log)
+          throw new Error("no such file")
+        },
+        writeFile: async () => undefined,
+      },
+      { put: async () => undefined },
+      "sites/o/r/"
+    )
+    return { commands, result }
+  }
+
+  it("runs under a time limit that kills a hung browser", async () => {
+    const r = run(0, null)
+    await r.result
+    expect(r.commands[0]).toMatch(
+      /timeout -k 5 90 node \/tmp\/interaction.mjs dist \/tmp\/interaction.json$/
+    )
+  })
+
+  it("names the stage a killed run stopped at", async () => {
+    await expect(
+      run(124, "40 ms launch\n900 ms /about/ at 768 px\n").result
+    ).rejects.toThrow("last stage: 900 ms /about/ at 768 px")
+    await expect(run(137, null).result).rejects.toThrow("last stage: none")
   })
 })
 
