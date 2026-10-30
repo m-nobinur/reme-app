@@ -271,16 +271,20 @@ const openKit: MiddlewareHandler<ConsoleEnv> = async (c, next) => {
     await next()
     await passWake(c.env)
   } finally {
-    // Outside a Worker (the route test) there is no execution context.
-    let ctx: { waitUntil: (promise: Promise<unknown>) => void } | null = null
-    try {
-      ctx = c.executionCtx
-    } catch {
-      ctx = null
-    }
-    if (ctx) ctx.waitUntil(kit.close())
-    else await kit.close()
+    await afterResponse(c, kit.close())
   }
+}
+
+/** Work the response does not wait for, or does where there is no Worker (the route test). */
+async function afterResponse(c: Context<ConsoleEnv>, work: Promise<unknown>) {
+  let ctx: { waitUntil: (promise: Promise<unknown>) => void } | null = null
+  try {
+    ctx = c.executionCtx
+  } catch {
+    ctx = null
+  }
+  if (ctx) ctx.waitUntil(work)
+  else await work
 }
 
 /**
@@ -825,7 +829,9 @@ consoleOnly.get("/:id/events", async (c) => {
 
 /**
  * Cancel: the row first, then the instance. Terminating an instance that is
- * already finished or was never created is success, not an error (R5).
+ * already finished or was never created is success, not an error (R5). The
+ * answer does not wait for the termination, which can outlast the api's
+ * bridge timeout; the cancelled row already refuses every later transition.
  */
 bridge.post("/:id/cancel", async (c) => {
   const id = c.req.param("id")
@@ -842,7 +848,7 @@ bridge.post("/:id/cancel", async (c) => {
     }
     throw error
   }
-  await halt(c.env, c.get("orgId"), id)
+  await afterResponse(c, halt(c.env, c.get("orgId"), id))
   return c.json({ assignment_id: id, state })
 })
 
