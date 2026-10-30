@@ -12395,7 +12395,12 @@ export interface components {
       /** Format: uuid */
       org_id: string
       /** @enum {string} */
-      kind: "reminder" | "heartbeat" | "weekly_report" | "cos_continue"
+      kind:
+        | "reminder"
+        | "heartbeat"
+        | "weekly_report"
+        | "cos_continue"
+        | "cos_wake"
       ref_id: string | null
       rule: string | null
       /** Format: date-time */

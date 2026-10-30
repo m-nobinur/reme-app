@@ -1184,6 +1184,7 @@ export const jobKind = pgEnum("job_kind", [
   "heartbeat",
   "weekly_report",
   "cos_continue",
+  "cos_wake",
 ])
 
 /**
