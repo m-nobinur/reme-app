@@ -342,6 +342,8 @@ export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
   const failures = new Map<string, { text: string; repeats: number }>()
   let tasksRunning = 0
   let leadTurns = 0
+  // flue runs each streamed chunk of a call through the interceptor as the same operation.
+  const leadTurnIds = new Set<string>()
   let refusedPastCap = 0
   const childCalls = new Set<string>()
   const cancelled = new Set<string>()
@@ -363,7 +365,12 @@ export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
     ctx,
     next
   ) => {
-    if (operation.type === "model" && !ctx.taskId) {
+    if (
+      operation.type === "model" &&
+      !ctx.taskId &&
+      !leadTurnIds.has(operation.turnId)
+    ) {
+      leadTurnIds.add(operation.turnId)
       leadTurns += 1
       if (leadTurns === options.turnCap) options.onCapped?.(leadTurns)
     }
@@ -470,6 +477,7 @@ export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
       failures.clear()
       cancelled.clear()
       leadTurns = 0
+      leadTurnIds.clear()
       refusedPastCap = 0
     },
     fromChild: (toolCallId) => childCalls.has(toolCallId),

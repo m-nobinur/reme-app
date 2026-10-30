@@ -711,13 +711,14 @@ describe("the turn cap", () => {
     toolName,
   })
   const ran = async (): Promise<unknown> => "ran"
+  let calls = 0
   const turns = async (
     gate: ReturnType<typeof createTurnGate>,
     n: number,
     ctx = lead
   ) => {
     for (let i = 0; i < n; i++)
-      await gate.interceptor({ type: "model", turnId: `t${i}` }, ctx, ran)
+      await gate.interceptor({ type: "model", turnId: `t${calls++}` }, ctx, ran)
   }
 
   it("leaves only the reads and the report once the lead's model calls pass the cap, and says so once", async () => {
@@ -759,6 +760,13 @@ describe("the turn cap", () => {
       details: { code: "tool.repeating_failure" },
     })
     expect(reasons).toEqual(["tool.repeating_failure"])
+  })
+
+  it("counts a streamed call once, however many chunks pass through it", async () => {
+    const gate = createTurnGate({ turnCap: 2 })
+    for (let chunk = 0; chunk < 60; chunk++)
+      await gate.interceptor({ type: "model", turnId: "t0" }, lead, ran)
+    await expect(gate.interceptor(op("edit"), lead, ran)).resolves.toBe("ran")
   })
 
   it("counts only the lead's calls, starts again each delivery, and is off without a cap", async () => {
