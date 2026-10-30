@@ -146,7 +146,7 @@ it("says a publish is slow to come online once the load check runs long, until i
   )
   await draw(true, true)
   await act(async () => vi.advanceTimersByTime(5000))
-  expect(line()).toBe("Published, your website is live")
+  expect(line()).toBe("Published")
   await act(async () => root.unmount())
   vi.useRealTimers()
 })

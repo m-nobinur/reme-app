@@ -412,7 +412,9 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     expect(first).toBe(1)
     const said = Date.now()
     await expect(
-      page.getByText("Published, your website is live", { exact: true })
+      page
+        .locator('[data-slot="site-ready"]')
+        .getByText("Published", { exact: true })
     ).toBeVisible({ timeout: WAIT.publish })
     note(
       `The chat said v1 is live ${Math.round((Date.now() - said) / 1000)} s after the panel did.`
