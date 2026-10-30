@@ -41,9 +41,10 @@ export function verdictSchema() {
     items: {
       type: "object",
       additionalProperties: false,
-      required: ["id", flag, "node"],
+      required: ["id", "reason", flag, "node"],
       properties: {
         id: { type: "string", enum: ids },
+        reason: { type: "string" },
         [flag]: { type: "boolean" },
         node: { anyOf: [{ type: "string" }, { type: "null" }] },
       },
@@ -73,7 +74,7 @@ export function rubricPrompt({ blueprint, html, css }) {
   const system = [
     "You are the design judge at Reme. You score one small business's finished website against a fixed rubric. You see its home page as HTML and its stylesheet, not as a picture, so judge what the markup and styles show and say so in the node when a check needs an image you do not have.",
     "",
-    "Answer every rule: pass true or false. Answer every tell: present true or false. For every rule that fails and every tell that is present, node says where, quoting the element, heading or declaration. A check you cannot judge from text is a pass with a null node, never a guess.",
+    "Answer every rule: pass true or false. Answer every tell: present true or false. Write each row's reason first, one or two sentences that end in your final reading of that check, then the flag that states it. Decide before you write the reason: do not reconsider inside it, and the flag must say what the reason concludes. For every rule that fails and every tell that is present, node says where, quoting the element, heading or declaration. A check you cannot judge from text is a pass with a null node, never a guess.",
     "",
     "Rules:",
     ...RULES.map((r) => `- ${r.id}: ${r.text}`),
