@@ -421,9 +421,11 @@ async function onboard(persona, spec) {
     }
     const current = applied(o, meant)
     // As `chat.ts` routes them: a card answer is the script's, with no
-    // model call, except a quote form sent back with changes in words.
+    // model call, except a quote form sent back with changes in words and
+    // an open question answered in them.
     let step =
-      output.answer === "changes"
+      output.answer === "changes" ||
+      (output.answer === "stated" && typeof output.text === "string")
         ? await plan(state(current, null, { kind: "card", card, output }))
         : null
     Object.assign(card, { state: "output-available", output })
@@ -484,18 +486,6 @@ async function onboard(persona, spec) {
       }
     }
     if (act?.kind === "answer") {
-      // Until the api reads an open question's answer, the words go to the planner as typed.
-      if (
-        card.type === "tool-ask_open" &&
-        !cardAnswer(card, act.output, [], sim.facts)
-      ) {
-        await typed(
-          act.output.answer === "stated"
-            ? act.output.text
-            : "I'd rather skip that one."
-        )
-        continue
-      }
       if (
         card.type === "tool-review_quote_form" &&
         act.output.answer === "changes"
