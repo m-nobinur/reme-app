@@ -2392,6 +2392,17 @@ describe("the owner's words in say", () => {
         },
       })
     ).not.toContain(listed)
+    // The pair the planner's prompt shows.
+    const family = {
+      typed: "Divorce, child arrangements, mediation and prenups, in Leeds.",
+    }
+    expect(
+      sayProblems(
+        "Got it, divorce, child arrangements, mediation and prenups across Leeds.",
+        family
+      )
+    ).toContain(listed)
+    expect(sayProblems("Mediation across Leeds, noted.", family)).toEqual([])
   })
 
   it("thanks for a correction only when the plan changed a held fact", () => {
