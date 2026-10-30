@@ -63,6 +63,12 @@ export {
 } from "./recurrence.ts"
 export * from "./schema.ts"
 export {
+  DAILY_CAP_USD,
+  reserveSpend,
+  settleSpend,
+  withinCap,
+} from "./spend.ts"
+export {
   chiefStaffId,
   ensureStartingTeam,
   rootStaffId,

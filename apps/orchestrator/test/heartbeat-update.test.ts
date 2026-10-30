@@ -215,12 +215,15 @@ const UPDATE: Update = {
     "I didn't see the records for www.brightclean.co.uk within 3 days, so I've stopped watching.",
 }
 
-/** A kit whose spend row is counted, not written. */
+/** A kit with nothing spent today, whose spend rows are counted, not written. */
 function kitFor() {
   const logged = vi.fn()
   const kit = {
     withOrg: async (_ctx: unknown, fn: (db: unknown) => unknown) =>
-      fn({ insert: () => ({ values: logged }) }),
+      fn({
+        execute: async () => [{ spent: 0 }],
+        insert: () => ({ values: logged }),
+      }),
   } as unknown as Tenancy
   return { kit, logged }
 }
