@@ -69,8 +69,8 @@ import {
  * model: owners passed, fallbacks, first plans refused, cost per onboarding
  * and call latency.
  *
- *   node --env-file=.env.local --experimental-transform-types \
- *     evals/tier-2/onboarding-planner.eval.mjs
+ *   node --env-file=.env.local --import ./evals/json-imports.mjs \
+ *     --experimental-transform-types evals/tier-2/onboarding-planner.eval.mjs
  *
  * `ONBOARDING_EVAL_MODELS` (comma list, default the api's default),
  * `ONBOARDING_EVAL_PERSONAS` (comma list of ids, or `conversations` for the
