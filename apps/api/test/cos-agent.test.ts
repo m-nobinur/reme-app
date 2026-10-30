@@ -68,6 +68,7 @@ import {
   activeTools,
   binds,
   type CosAgent,
+  callKey,
   callRepeated,
   contextOf,
   cosAgent,
@@ -360,12 +361,13 @@ describe("a tool's schema", () => {
   ]
 
   it("asks only the slow reads for a step line, at most 60 characters", async () => {
-    const { tools } = await cosPrefix()
+    const { tools, instructions } = await cosPrefix()
     for (const { name, input_schema } of tools) {
       const props = (input_schema.properties ?? {}) as Record<string, unknown>
       if (STEPPED.includes(name)) {
         expect(props.step, name).toEqual({ type: "string", maxLength: 60 })
         expect(input_schema.required ?? [], name).not.toContain("step")
+        expect(instructions).toContain(name)
       } else {
         expect(Object.keys(props), name).not.toContain("step")
       }
@@ -375,6 +377,24 @@ describe("a tool's schema", () => {
     expect(Object.keys(change?.input_schema.properties ?? {})).not.toContain(
       "chat"
     )
+  })
+
+  it("grows the prefix by under 150 tokens for the step lines", async () => {
+    const { tools, instructions } = await cosPrefix()
+    const rule = instructions.match(/^- find_domain, check_domain[^\n]*\n/m)
+    // Each step property as sent: its key, schema and comma.
+    const properties = tools.flatMap(
+      ({ input_schema }) =>
+        (input_schema.properties as Record<string, unknown>).step ?? []
+    )
+    const added =
+      (rule?.[0].length ?? Number.POSITIVE_INFINITY) +
+      properties.reduce<number>(
+        (sum, step) => sum + `"step":${JSON.stringify(step)},`.length,
+        0
+      )
+    // Characters over four, the repo has no tokenizer.
+    expect(added / 4).toBeLessThan(150)
   })
 
   it("sends each schema lean, as the prefix logs it, and Zod still checks the call", async () => {
@@ -464,9 +484,16 @@ describe("a call refused by its schema", () => {
       text: "Make the hero title more professional",
     })
     const read = repairedCall(
-      call({ name: "x.co.uk", step: "Checking your domain" }, "check_domain")
+      call({ name: "x.co.uk", step: "a".repeat(61) }, "check_domain")
     )
     expect(JSON.parse(read?.input ?? "{}")).toEqual({ name: "x.co.uk" })
+  })
+
+  it("tells two calls apart by their input, not by the step line", () => {
+    const name = { name: "x.co.uk" }
+    expect(callKey("check_domain", { ...name, step: "Checking x.co.uk" })).toBe(
+      callKey("check_domain", name)
+    )
   })
 
   it("leaves any other failure, and an unknown tool, to the model", () => {

@@ -120,7 +120,7 @@ async function queueContinue(db: OrgScopedDb, turn: Turn, attempt: number) {
 /** What the closing transaction writes besides the log: the stored rows. */
 export type Rows = (
   db: OrgScopedDb,
-  message: { id: string; role: string; parts: unknown[] }
+  message: { id: string; role: string; parts: unknown[]; partial?: true }
 ) => Promise<void>
 
 type StreamTurn = {
@@ -331,7 +331,7 @@ export async function streamTurn(
             await input.rows(db, stored)
             await queueContinue(db, run.turn, attempt)
           }
-        : input.rows
+        : (db, { partial: _, ...stored }) => input.rows(db, stored)
     )
     if (queue) {
       const { env } = run.tools

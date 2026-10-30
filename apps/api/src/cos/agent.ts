@@ -189,7 +189,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "46"
+const PREFIX_VERSION = "47"
 
 export const INSTRUCTIONS = `You are the Chief of Staff for a small service business. You talk with the business owner in a chat and help them run the business. Their website is one of the things you look after; a Developer agent builds it.
 
@@ -202,6 +202,7 @@ ${VOICE}
 - When work is finished, say what changed, what you checked and what is left, in that order, and only what is true. Leave out a part with nothing to say.
 - A call that shows the owner a card ends your turn until they answer it, so write your words before the call, never after. Always write at least one short line: one they can't read on the card, such as a recommendation with its reason, or what you are setting up. Never a line that points at it ("The card shows...") or repeats it. When the owner's message also answered your question or said something else, acknowledge that in the same line.
 - Before a tool that only reads (get_workspace, get_facts, get_preview, check_domain, inspect_domain, get_search_performance, get_indexing), write nothing: the owner sees a line while it runs. Say what you found once, after it.
+- find_domain, check_domain, inspect_domain, get_search_performance and get_indexing take an optional step: a few words, in the owner's language, on what you are doing for them, shown while the call runs, such as "Checking the records for northsidegrooming.co.uk". At most 60 characters, no ids, no tool names.
 - Don't narrate your tools or your steps ("Let me check the workspace"): do it, then report. Agree with the owner only when they are right; when they are not, or you can't tell, say so plainly and what you would do instead.
 - Say each piece of news once. A message in the conversation the app posted itself, such as a domain update, was already shown to the owner, and so is check_domain's result: add only what they don't say, or that nothing has changed since.
 
@@ -263,9 +264,8 @@ Rules:
 
 /**
  * `name`'s input as the model is sent it. `request_change`'s `step` stays in
- * the contract for stored calls but is not asked for: the status line comes
- * from the web's own copy. Its `chat` is the panel's alone, which posts the
- * owner's words here.
+ * the contract for stored calls but is not asked for. Its `chat` is the
+ * panel's alone, which posts the owner's words here.
  */
 const inputOf = <N extends CosToolName>(name: N) =>
   (name === "request_change"
@@ -1000,11 +1000,11 @@ export async function binds(
 const SPARE = ["label", "proof"] as const
 
 /**
- * A call refused by its schema only for a `step`, which no tool takes any
- * more but a model may copy from an older call in the history, or for
- * `request_change`'s panel-only `chat` or a spare field, with those dropped, so it runs on this
- * call rather than after the model sees the error and sends it again. Null
- * for any other.
+ * A call refused by its schema only for a `step` (on a tool that takes none,
+ * copied from an older call in the history, or over its length), for
+ * `request_change`'s panel-only `chat` or for a spare field, with those
+ * dropped, so it runs on this call rather than after the model sees the error
+ * and sends it again. Null for any other.
  */
 export function repairedCall<T extends { toolName: string; input: string }>(
   call: T
@@ -1031,9 +1031,15 @@ export function repairedCall<T extends { toolName: string; input: string }>(
     : null
 }
 
+/** A call's input without the `step` line the owner reads: it is no part of the call. */
+const withoutStep = (input: unknown) => {
+  const { step: _, ...rest } = (input ?? {}) as { step?: unknown }
+  return rest
+}
+
 /** A call's tool and input as one string, to tell two identical calls apart. */
 export const callKey = (name: string, input: unknown) =>
-  `${name}:${JSON.stringify(input)}`
+  `${name}:${JSON.stringify(withoutStep(input))}`
 
 /**
  * Whether one call ran twice in the turn's steps with the same input. On
@@ -1257,7 +1263,7 @@ function toolsFor(run: AgentTurn) {
         return await runTool(
           run,
           name,
-          input,
+          withoutStep(input),
           toolCallId,
           approvalFor(messages, toolCallId),
           messages

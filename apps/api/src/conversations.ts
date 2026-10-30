@@ -176,7 +176,10 @@ export type StoredMessage = Omit<
   ConversationMessage,
   "content" | "feedback"
 > & {
-  content: Omit<ConversationMessage["content"], "metadata">
+  content: Omit<ConversationMessage["content"], "metadata"> & {
+    /** Its continuation is queued. */
+    partial?: true
+  }
 }
 
 type MessageRow = typeof conversationMessages.$inferSelect
@@ -190,7 +193,7 @@ function toConversationMessage(
   row: MessageRow,
   rating: MessageRating | null = null
 ): ConversationMessage {
-  const { role, parts } = row.content as StoredMessage["content"]
+  const { role, parts, partial } = row.content as StoredMessage["content"]
   return {
     id: row.id,
     parent_id: row.parentId,
@@ -199,7 +202,12 @@ function toConversationMessage(
       role,
       // A row written before the provider's data was stripped still holds it.
       parts: parts.map((part) => withoutProviderData(part)),
-      metadata: { custom: { createdAt: row.createdAt.toISOString() } },
+      metadata: {
+        custom: {
+          createdAt: row.createdAt.toISOString(),
+          ...(partial && { partial }),
+        },
+      },
     },
     feedback: role === "assistant" ? rating : null,
   }

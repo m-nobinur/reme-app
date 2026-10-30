@@ -236,7 +236,12 @@ describe.skipIf(!url)("a turn cut off, and its continuation", () => {
       select id, payload from scheduled_jobs
       where kind = 'cos_continue' and ref_id = ${id} order by created_at`
   const rows = (id: string) =>
-    admin<{ id: string; content: { role: string; parts: unknown[] } }[]>`
+    admin<
+      {
+        id: string
+        content: { role: string; parts: unknown[]; partial?: true }
+      }[]
+    >`
       select id, content from conversation_messages
       where conversation_id = ${id} order by seq`
   const run = (jobId: string, model: MockLanguageModelV4, unknown = false) =>
@@ -269,6 +274,8 @@ describe.skipIf(!url)("a turn cut off, and its continuation", () => {
     const stored = (await rows(id)).at(-1)
     expect(stored?.id).toBe(reply?.message.id)
     expect(JSON.stringify(stored?.content.parts)).toContain("Your hours are")
+    // Its continuation is queued, so the chat keeps showing its last step.
+    expect(stored?.content.partial).toBe(true)
     const [job] = await jobs(id)
     expect(job?.payload).toEqual({ turn_id: cut?.turn_id, attempt: 1 })
     expect(wakes).toContainEqual({ kind: "scan" })
@@ -356,5 +363,7 @@ describe.skipIf(!url)("a turn cut off, and its continuation", () => {
     const last = (await replies(id)).at(-1)
     expect(last?.message).toMatchObject({ stopped: true, partial: true })
     expect(await jobs(id)).toHaveLength(2)
+    // Nothing is queued after it, so no row waits for a continuation.
+    expect((await rows(id)).at(-1)?.content.partial).toBeUndefined()
   }, 30_000)
 })

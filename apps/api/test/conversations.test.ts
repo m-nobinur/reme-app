@@ -313,6 +313,21 @@ describe.skipIf(!url)("the conversation routes, on a live connection", () => {
       ).toEqual([at.u_1?.toISOString(), at.a_1?.toISOString()])
     })
 
+    it("marks a message whose continuation is queued", async () => {
+      const { body } = await create()
+      const waiting = text("a_1", "assistant", null)
+      await seed(kit, who).messages(body.id, [
+        text("u_1", "user", null),
+        { ...waiting, content: { ...waiting.content, partial: true } },
+      ])
+      const history = ConversationHistory.parse(
+        await (await call(`/conversations/${body.id}/messages`)).json()
+      )
+      expect(
+        history.messages.map((m) => m.content.metadata.custom.partial)
+      ).toEqual([undefined, true])
+    })
+
     it("reads by write order, not by created_at", async () => {
       const { body } = await create()
       await seed(kit, who).messages(body.id, [
