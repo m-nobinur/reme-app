@@ -550,7 +550,7 @@ describe.skipIf(!url)("the Monday report", () => {
     const item = () => rows(orgId, (db) => weeklyItem(db, orgId, now, monday))
     const weekly = await item()
     expect(weekly).toMatchObject({
-      key: "search_report:2026-W42:1",
+      key: "search_report:2026-10-11:1",
       since: "2026-10-12T00:00:00.000Z",
       facts: { chip: "Rewrite that page's title" },
     })

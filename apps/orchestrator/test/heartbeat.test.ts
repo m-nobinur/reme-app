@@ -9,6 +9,9 @@ import {
   orgs,
   reminders,
   scheduledJobs,
+  searchConnections,
+  searchDaily,
+  searchProperties,
   sql,
   staff,
   supersedePrivateFact,
@@ -231,6 +234,50 @@ describe.skipIf(!url)("the heartbeat", () => {
       expect(await beat(NOON)).toBe("no_change")
       expect(await run(NOON)).toEqual({ outcome: "no_change", detail: "empty" })
       expect(models.gate).not.toHaveBeenCalled()
+    })
+
+    it("makes no model call for a Search report with no new data since the last", async () => {
+      await kit.withOrg({ orgId }, async (db) => {
+        await db.insert(searchConnections).values({
+          orgId,
+          refreshToken: ["v1", "iv", "ct"].join("."),
+          state: "active",
+        })
+        const [property] = await db
+          .insert(searchProperties)
+          .values({
+            orgId,
+            host: "h.example.test",
+            siteUrl: "https://h.example.test/",
+            kind: "subdomain",
+            method: "file",
+            token: "t",
+            state: "verified",
+          })
+          .returning({ id: searchProperties.id })
+        await db.insert(searchDaily).values(
+          ["2026-10-24", "2026-10-25"].map((date) => ({
+            orgId,
+            propertyId: property?.id as string,
+            date,
+            clicks: 3,
+            impressions: 50,
+            ctr: 0.06,
+            position: 5,
+          }))
+        )
+      })
+      const monday = new Date("2026-10-26T11:00:00Z")
+      expect(await beat(monday)).toBe("done")
+      expect(models.gate).toHaveBeenCalledTimes(1)
+      const week = later(monday, 7 * 24)
+      expect(await beat(week)).toBe("no_change")
+      expect(await run(week)).toEqual({
+        outcome: "no_change",
+        detail: "unchanged",
+      })
+      expect(models.gate).toHaveBeenCalledTimes(1)
+      expect(models.write).not.toHaveBeenCalled()
     })
 
     it("surfaces new items once, and an unchanged digest costs no model call", async () => {
