@@ -802,6 +802,21 @@ async function setGrant(
   return ApprovalGrants.parse(await response.json())
 }
 
+async function removeCorrection(
+  id: string
+): Promise<MemoryView | "stale" | null> {
+  const path = `/memory/corrections/${id}`
+  const response = await call(path, { method: "DELETE" })
+  if (!response || response.status === 401 || response.status === 403) {
+    return null
+  }
+  if (response.status === 404) return "stale"
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for ${path}`)
+  }
+  return MemoryView.parse(await response.json())
+}
+
 async function pushKey(): Promise<string | null> {
   const body = await get("/push/config")
   return body === null ? null : PushConfig.parse(body).public_key
@@ -964,6 +979,7 @@ export const apiSource: OwnerDataSource = {
   reviewMemory,
   grants,
   setGrant,
+  removeCorrection,
   pushKey,
   subscribePush,
   unsubscribePush,

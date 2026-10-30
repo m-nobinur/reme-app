@@ -14,16 +14,20 @@ import {
   type RememberInput,
   type RememberOperation,
   type RememberOutput,
+  STAFF_CORRECTIONS_KEY,
+  Uuid,
 } from "@workspace/contracts"
 import {
   currentFact,
   factVersions,
   type OrgScopedDb,
+  readCorrections,
   sql,
   supersedePrivateFact,
   type Tenancy,
 } from "@workspace/db"
 import type { Owner } from "../changes.ts"
+import { isOrgOwner } from "../domain-buy.ts"
 import { failure, invalid, readBody } from "../http.ts"
 import type { ToolContext } from "./tools.ts"
 import type { Turn } from "./turns.ts"
@@ -502,6 +506,7 @@ export async function memoryView(db: OrgScopedDb): Promise<MemoryView> {
     versions,
     ask_first: review.ask_first,
     proposals: review.proposals,
+    corrections: (await readCorrections(db)).lines,
   }
 }
 
@@ -622,7 +627,33 @@ export async function reviewAction(
   return true
 }
 
-/** The owner's page: `GET /memory`, `POST /memory/undo` and `POST /memory/review`. */
+/**
+ * Takes one of the owner's corrections for staff away, from the next run
+ * on. False when it is not there.
+ */
+export async function removeCorrection(
+  db: OrgScopedDb,
+  orgId: string,
+  id: string
+): Promise<boolean> {
+  await lockProfile(db, orgId, STAFF_CORRECTIONS_KEY)
+  const { lines } = await readCorrections(db)
+  const left = lines.filter((l) => l.id !== id)
+  if (left.length === lines.length) return false
+  await supersedePrivateFact(db, {
+    orgId,
+    key: STAFF_CORRECTIONS_KEY,
+    factType: "owner",
+    value: { lines: left },
+    provenance: { source: "owner_stated", confidence: 1 },
+  })
+  return true
+}
+
+/**
+ * The owner's page: `GET /memory`, `POST /memory/undo`, `POST /memory/review`
+ * and `DELETE /memory/corrections/{id}`, which only the org's owner may call.
+ */
 export async function memoryRoute(
   request: Request,
   kit: Tenancy,
@@ -647,6 +678,31 @@ export async function memoryRoute(
         code: "memory.nothing_to_undo",
         message:
           "That change was already undone or has been edited since, so there is nothing left to undo.",
+        detail: {},
+      })
+    }
+    return Response.json(
+      MemoryView.parse(await kit.withOrg(at, (db) => memoryView(db)))
+    )
+  }
+  const [, , section, id = ""] = pathname.split("/")
+  if (section === "corrections" && request.method === "DELETE") {
+    if (!(await isOrgOwner(kit, owner))) {
+      return failure(403, {
+        class: "permission",
+        code: "memory.not_owner",
+        message: "Only the owner can remove how the website is worked on.",
+        detail: {},
+      })
+    }
+    const done =
+      Uuid.safeParse(id).success &&
+      (await kit.withOrg(at, (db) => removeCorrection(db, owner.orgId, id)))
+    if (!done) {
+      return failure(404, {
+        class: "resource",
+        code: "memory.correction_not_found",
+        message: "That instruction was already removed.",
         detail: {},
       })
     }

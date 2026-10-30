@@ -272,6 +272,8 @@ export type OwnerDataSource = {
   grants: () => Promise<ApprovalGrants | null>
   /** The owner's switch for one kind, read on the assistant's next action. */
   setGrant: (change: ApprovalGrantSwitch) => Promise<ApprovalGrants | null>
+  /** Removes one of the owner's corrections for staff. "stale" when it was already gone. */
+  removeCorrection: (id: string) => Promise<MemoryView | "stale" | null>
   /** Reports and alerts from the last 30 days, newest first as listed. */
   activity: () => Promise<AttentionItem[]>
   /**

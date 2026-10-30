@@ -1,4 +1,8 @@
-import { ArrowCounterClockwiseIcon, BrainIcon } from "@phosphor-icons/react"
+import {
+  ArrowCounterClockwiseIcon,
+  BrainIcon,
+  TrashIcon,
+} from "@phosphor-icons/react"
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router"
 import {
   type ApprovalGrantSwitch,
@@ -20,6 +24,7 @@ import { useRef, useState } from "react"
 import {
   getGrants,
   getMemory,
+  removeCorrection,
   reviewMemory,
   setGrant,
   undoMemory,
@@ -123,6 +128,25 @@ function Memory() {
       await router.invalidate()
     } catch {
       setStatus("That could not be saved. Nothing was changed.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function remove(id: string) {
+    setBusy(id)
+    try {
+      const out = await removeCorrection({ data: { id } })
+      setStatus(
+        out === null
+          ? "Only the owner can remove this. Nothing was changed."
+          : out === "stale"
+            ? "That was already removed."
+            : "Removed. Your next website change will not follow it."
+      )
+      await router.invalidate()
+    } catch {
+      setStatus("That could not be removed. Nothing was changed.")
     } finally {
       setBusy(null)
       announcer.current?.focus()
@@ -287,6 +311,45 @@ function Memory() {
           ))}
         </ul>
       </section>
+
+      {view.corrections.length > 0 ? (
+        <section aria-labelledby="memory-website" className="mb-8">
+          <h2 className="font-semibold text-sm" id="memory-website">
+            How your website is worked on
+          </h2>
+          <p className={`mt-1 ${META}`}>
+            What you told your assistant about building your website, in your
+            words. Every website change follows it.
+          </p>
+          <Card className="mt-2">
+            <CardContent>
+              <ul className="flex flex-col divide-y divide-border">
+                {view.corrections.map((correction) => (
+                  <li
+                    className="flex flex-wrap items-start justify-between gap-2 py-2.5 first:pt-0 last:pb-0"
+                    key={correction.id}
+                  >
+                    <span className="wrap-break-word min-w-0 flex-1 text-sm">
+                      {correction.text}
+                    </span>
+                    <Button
+                      aria-label={`Remove "${correction.text}"`}
+                      disabled={busy !== null}
+                      onClick={() => void remove(correction.id)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <TrashIcon aria-hidden />
+                      Remove
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
 
       {view.versions.length > 0 ? (
         <section aria-labelledby="memory-history">
