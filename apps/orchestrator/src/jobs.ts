@@ -45,7 +45,7 @@ export type JobRun = {
  */
 export type Handler = (run: JobRun) => Promise<
   | {
-      outcome: "ok" | "skipped"
+      outcome: "done" | "no_change"
       detail?: string
       after?: () => Promise<void>
     }
@@ -92,7 +92,14 @@ export const PAUSED_TEXT =
  * paused it; `closed` when its org was closed; `stale` when there was nothing
  * to run, which is how a redelivered message ends.
  */
-export type Ran = "ok" | "skipped" | "failed" | "paused" | "closed" | "stale"
+export type Ran =
+  | "done"
+  | "no_change"
+  | "failed"
+  | "unknown"
+  | "paused"
+  | "closed"
+  | "stale"
 
 /**
  * The job, locked, if this message may still run it: claimed, not paused,
@@ -141,14 +148,14 @@ export async function runJob(
       }
       const [run] = await db
         .insert(jobRuns)
-        .values({ jobId, orgId, runAt: job.nextRunAt, outcome: "ok" })
+        .values({ jobId, orgId, runAt: job.nextRunAt, outcome: "done" })
         .onConflictDoNothing()
         .returning({ jobId: jobRuns.jobId })
       if (!run) return "stale"
       const handler = handlers[job.kind]
       const result: Awaited<ReturnType<Handler>> = handler
         ? await handler({ db, kit, env, job, now })
-        : { outcome: "skipped", detail: "no handler" }
+        : { outcome: "no_change", detail: "no handler" }
       after = result?.after
       if (result)
         await db
@@ -177,7 +184,7 @@ export async function runJob(
           ...(next ? { nextRunAt: next } : { pausedAt: now }),
         })
         .where(eq(scheduledJobs.id, jobId))
-      return result?.outcome ?? "ok"
+      return result?.outcome ?? "done"
     })
     if (next) await lowerNextDue(env.SCHEDULE, next, env.JOBS)
     // Committed. A failure here leaves the handler's delivery rows pending.

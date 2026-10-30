@@ -38,9 +38,9 @@ export const reminderJob: Handler = async ({ db, env, job, now }) => {
   const [reminder] = job.refId
     ? await db.select().from(reminders).where(eq(reminders.id, job.refId))
     : []
-  if (!reminder) return { outcome: "skipped", detail: "gone" }
-  if (reminder.doneAt) return { outcome: "skipped", detail: "done" }
-  if (!reminder.dueAt) return { outcome: "skipped", detail: "no_due" }
+  if (!reminder) return { outcome: "no_change", detail: "gone" }
+  if (reminder.doneAt) return { outcome: "no_change", detail: "done" }
+  if (!reminder.dueAt) return { outcome: "no_change", detail: "no_due" }
 
   const [org] = await db.select({ zone: orgs.timeZone }).from(orgs)
   const lines = [`Reminder: “${reminder.title}”`]
@@ -84,7 +84,7 @@ export const reminderJob: Handler = async ({ db, env, job, now }) => {
       })
     )
   return {
-    outcome: "ok",
+    outcome: "done",
     detail: sends.length > 1 ? "in_app,email" : "in_app",
     // The Queue hears of them only once the row is committed.
     after: async () => {

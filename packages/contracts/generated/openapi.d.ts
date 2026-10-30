@@ -10703,7 +10703,7 @@ export interface components {
       /** Format: date-time */
       run_at: string
       /** @enum {string} */
-      outcome: "ok" | "skipped" | "failed"
+      outcome: "done" | "no_change" | "failed" | "unknown"
       detail: string | null
     }
     KeptLogo: {

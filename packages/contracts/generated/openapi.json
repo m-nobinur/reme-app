@@ -37445,9 +37445,10 @@
           "outcome": {
             "type": "string",
             "enum": [
-              "ok",
-              "skipped",
-              "failed"
+              "done",
+              "no_change",
+              "failed",
+              "unknown"
             ]
           },
           "detail": {

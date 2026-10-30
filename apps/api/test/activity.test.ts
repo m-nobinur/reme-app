@@ -603,7 +603,7 @@ describe("reminders and check-ins", () => {
   it("lists a quiet check-in as done with nothing sent", () => {
     const { done } = view({
       rows: rows({
-        heartbeat: { next: null, last: { at: ago(60), outcome: "skipped" } },
+        heartbeat: { next: null, last: { at: ago(60), outcome: "no_change" } },
       }),
     })
     expect(done).toEqual([

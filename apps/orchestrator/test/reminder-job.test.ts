@@ -126,7 +126,7 @@ describe.skipIf(!url)("firing a reminder", () => {
 
   it("posts to the reminder's own conversation and emails an owner who has not been in", async () => {
     const { id, jobId } = await reminder()
-    expect(await fire(jobId, new Date(DUE.getTime() + 20_000))).toBe("ok")
+    expect(await fire(jobId, new Date(DUE.getTime() + 20_000))).toBe("done")
     const key = `reminder:${id}:2026-10-20T08:00:00.000Z`
     expect(sent()).toEqual([
       {
@@ -152,7 +152,7 @@ describe.skipIf(!url)("firing a reminder", () => {
   it("posts to the newest conversation for the owner's own, and sends no email to one who typed since", async () => {
     const { jobId } = await reminder({ source: "owner", conversationId: null })
     await typed(new Date(SET.getTime() + 60 * MINUTE))
-    expect(await fire(jobId, DUE)).toBe("ok")
+    expect(await fire(jobId, DUE)).toBe("done")
     const [post, ...rest] = sent()
     expect(post).toMatchObject({ channel: "in_app" })
     expect(post).not.toHaveProperty("conversationId")
@@ -198,7 +198,7 @@ describe.skipIf(!url)("firing a reminder", () => {
       db.delete(reminders).where(eq(reminders.id, gone.id))
     )
     for (const { jobId } of [done, none, gone])
-      expect(await fire(jobId, DUE)).toBe("skipped")
+      expect(await fire(jobId, DUE)).toBe("no_change")
     expect(queue.send).not.toHaveBeenCalled()
     expect(await rows()).toEqual([])
   })
@@ -279,7 +279,7 @@ describe.skipIf(!url)("firing a reminder", () => {
     const { jobId } = await reminder()
     queue.send.mockRejectedValue(new Error("queue down"))
     vi.spyOn(console, "error").mockImplementation(() => undefined)
-    expect(await fire(jobId, DUE)).toBe("ok")
+    expect(await fire(jobId, DUE)).toBe("done")
     expect((await rows()).map((row) => row.state)).toEqual([
       "pending",
       "pending",

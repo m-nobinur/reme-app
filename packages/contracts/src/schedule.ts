@@ -19,6 +19,14 @@ export const JobKind = z.enum([
   "cos_continue",
 ])
 
+/**
+ * How a run ended. `no_change` is a run with nothing to say and posts
+ * nothing. `unknown` is a run whose result is not known (its claim ran out
+ * mid-run, or it failed after a side effect may have happened): it is never
+ * replayed blindly.
+ */
+export const JobOutcome = z.enum(["done", "no_change", "failed", "unknown"])
+
 /** Continuations one owner turn may get: the first and a second. */
 export const MAX_CONTINUATIONS = 2
 
@@ -31,7 +39,7 @@ export const CosContinue = z.strictObject({
 /**
  * `rule` is a cron expression read in `orgs.time_zone`, and null for a
  * one-off. `next_run_at` is UTC and recomputed from the rule after each run.
- * `failures` counts runs in a row that failed; the job is paused at five.
+ * `failures` counts runs in a row that failed; the job is paused at ten.
  */
 export const ScheduledJob = z.strictObject({
   id: Uuid,
@@ -59,7 +67,7 @@ export const JobRun = z.strictObject({
   job_id: Uuid,
   org_id: Uuid,
   run_at: Timestamp,
-  outcome: z.enum(["ok", "skipped", "failed"]),
+  outcome: JobOutcome,
   /** What happened, for an operator. Never shown to the owner. */
   detail: z.string().max(500).nullable(),
 })
@@ -151,6 +159,7 @@ export const OrgSchedule = z.strictObject({
 export const SetTimeZoneRequest = z.strictObject({ time_zone: TimeZone })
 
 export type JobKind = z.infer<typeof JobKind>
+export type JobOutcome = z.infer<typeof JobOutcome>
 export type CosContinue = z.infer<typeof CosContinue>
 export type ScheduledJob = z.infer<typeof ScheduledJob>
 export type JobRun = z.infer<typeof JobRun>

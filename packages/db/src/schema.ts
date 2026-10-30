@@ -1229,8 +1229,13 @@ export const scheduledJobs = pgTable(
   ]
 )
 
-/** `JobRun.outcome`. */
-export const jobOutcome = pgEnum("job_outcome", ["ok", "skipped", "failed"])
+/** `JobOutcome`. */
+export const jobOutcome = pgEnum("job_outcome", [
+  "done",
+  "no_change",
+  "failed",
+  "unknown",
+])
 
 /**
  * One row per occurrence of a job. The primary key is what makes a redelivered

@@ -293,7 +293,7 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
       })
       await db
         .insert(jobRuns)
-        .values({ jobId, orgId, runAt: new Date(0), outcome: "ok" })
+        .values({ jobId, orgId, runAt: new Date(0), outcome: "done" })
     })
     const workos = fakeWorkos({
       [session.workosOrganizationId]: [session.workosUserId],
