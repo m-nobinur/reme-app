@@ -191,7 +191,7 @@ const panel = (page: Page) => page.getByRole("complementary", { name: "Panel" })
  * nothing, until the stack folds away.
  */
 async function answer(page: Page, item: Locator) {
-  await item.getByText("Answer in the chat").click()
+  await item.getByText("Answer", { exact: true }).click()
   const stack = page.locator('[data-slot="build-questions"]')
   const card = stack.locator('[data-slot="question-tray"]')
   const send = card.getByRole("button", { name: "Send", exact: true })
@@ -260,7 +260,9 @@ async function approveVersion(
   await expect(website).toBeVisible({ timeout: WAIT.publish })
   await website.click()
   await expect(
-    panel(page).getByRole("tabpanel").getByText("Your website is live")
+    panel(page)
+      .getByRole("tabpanel")
+      .getByText(/^Live (at \S+|now)$/)
   ).toBeVisible({ timeout: WAIT.publish })
   const version = async () =>
     (await readJson<Workspace>("/workspace")).site.live?.version ?? 0
