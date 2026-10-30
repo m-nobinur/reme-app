@@ -278,7 +278,7 @@ export const CASES = [
     turns: [
       {
         mode: "act",
-        text: "Remind me to call the window supplier on Friday at 10am",
+        text: "Remind me to call the window supplier tomorrow at 10am",
       },
       { mode: "act", text: "Sorry, make that 11am" },
     ],
