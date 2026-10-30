@@ -12,7 +12,6 @@ import {
   CreateReminderInput,
   CreateReminderOutput,
   GetPreviewOutput,
-  type GrantKind,
   OfferGrantInput,
   OfferGrantOutput,
   RecordReviewInput,
@@ -36,6 +35,7 @@ import { ToolStatus } from "@workspace/ui/components/status-line"
 import { reminderTitle, type ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { formatDateTime } from "@workspace/ui/lib/format"
+import { GRANT_TEXT } from "@workspace/ui/lib/grants"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
   decisionView,
@@ -324,13 +324,6 @@ const RecordReview: ToolCallMessagePartComponent = (props) => (
     yes="They agreed, save it"
   />
 )
-
-/** What a kind's grant lets the assistant do, as the owner reads it. */
-export const GRANT_TEXT: Record<GrantKind, string> = {
-  create_reminder: "Add reminders you didn't ask for in so many words",
-  record_review: "Save a customer's review to your website",
-  connect_domain: "Connect a domain you have to your website",
-}
 
 // The yes is the tap that saves the grant, so the button says what it does.
 const OfferGrant: ToolCallMessagePartComponent = (props) => (

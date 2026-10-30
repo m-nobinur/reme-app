@@ -8,13 +8,13 @@ import {
   profileText,
 } from "@workspace/contracts"
 import { PageHeader } from "@workspace/ui/components/app-shell"
-import { GRANT_TEXT } from "@workspace/ui/components/assistant/cos-tools"
 import { memoryChangeText } from "@workspace/ui/components/assistant/memory-chip"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent } from "@workspace/ui/components/card"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { formatDateTime } from "@workspace/ui/lib/format"
+import { GRANT_TEXT } from "@workspace/ui/lib/grants"
 import { META } from "@workspace/ui/lib/utils"
 import { useRef, useState } from "react"
 import {
