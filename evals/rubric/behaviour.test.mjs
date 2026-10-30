@@ -112,3 +112,19 @@ test("a standing request saved in an earlier turn reaches the judge's profile", 
   assert.match(user, /CoS: Understood\./)
   assert.match(system, /Chief of Staff/)
 })
+
+test("the workspace read before a reply reaches the judge ahead of the owner's message", () => {
+  const turns = [
+    {
+      owner: { mode: "ask", text: "How did that go?" },
+      seen: { builds: [{ progress: ["Making photos: 3 of 3 (done)"] }] },
+      parts: [{ type: "text", text: "The photos are done." }],
+    },
+  ]
+  const { user } = judgePrompt({ turns: [] }, turns)
+  assert.ok(
+    user.indexOf("Making photos: 3 of 3 (done)") <
+      user.indexOf("Owner (ask mode): How did that go?")
+  )
+  assert.match(user, /workspace the CoS read before this reply/)
+})

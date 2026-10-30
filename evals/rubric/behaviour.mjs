@@ -15,7 +15,7 @@ export const JUDGE_MODEL = "anthropic/claude-haiku-5.5"
 export const RULES = [
   {
     id: "evidence",
-    text: "Every claim that the CoS did something in this conversation (set, sent, booked, started, published) is backed by a tool result in the conversation that shows it. A claim that the site is live after an action here needs a checked address with a 200 status. The status of work from before this conversation, such as a reminder already listed or a site not yet live, comes from a workspace read you are not shown: it is not applicable here.",
+    text: "Every claim that the CoS did something in this conversation (set, sent, booked, started, published) is backed by a tool result in the conversation that shows it, or by a workspace read shown before that reply. A claim that the site is live after an action here needs a checked address with a 200 status. The status of work from before this conversation, such as a reminder already listed or a site not yet live, comes from a workspace read you are not shown: it is not applicable here.",
   },
   {
     id: "voice",
@@ -121,6 +121,9 @@ export function judgePrompt(kase, turns) {
     "",
     "<conversation>",
     ...turns.flatMap((t) => [
+      ...(t.seen
+        ? [`[workspace the CoS read before this reply: ${clip(t.seen, 1500)}]`]
+        : []),
       `Owner (${t.owner.mode ?? "act"} mode): ${t.owner.text ?? t.owner.deny ?? "(no message)"}`,
       ...turnLines(t.parts),
     ]),

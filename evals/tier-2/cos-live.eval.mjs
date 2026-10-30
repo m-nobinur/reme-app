@@ -285,7 +285,12 @@ async function runCase(call, kase) {
       })
       continue
     }
-    if (owner.after === "build") await buildSettled(call)
+    let seen
+    if (owner.after === "build") {
+      await buildSettled(call)
+      const { builds: held, attention } = await read(call, "/workspace")
+      seen = { builds: held, attention }
+    }
     let turn
     if (owner.deny !== undefined) {
       const last = turns.at(-1)?.chunks ?? []
@@ -326,6 +331,7 @@ async function runCase(call, kase) {
     turns.push({
       owner,
       chunks,
+      seen,
       outcome: owner.cut ? "answered" : outcomeOf(chunks, response.status),
     })
   }
