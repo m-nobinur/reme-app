@@ -162,9 +162,9 @@ it("words each rule and points it where it is acted on", () => {
     {
       key: `approval-${APPROVAL}`,
       title: "Your website is ready to publish",
-      detail: "Publish by today, 4:30 PM.",
+      detail: "Due today, 4:30 PM.",
       action: {
-        label: "Review and publish",
+        label: "Review",
         focus: `approval-${APPROVAL}`,
       },
     },
@@ -183,7 +183,7 @@ it("words each rule and points it where it is acted on", () => {
     {
       key: "facts",
       title: "Ellie still needs your phone number",
-      detail: "Your website uses these. Tell Ellie in a chat.",
+      detail: "Your website shows these.",
       action: { label: "Tell Ellie", chat: true },
     },
   ])
@@ -210,7 +210,7 @@ it("words each rule and points it where it is acted on", () => {
     NOW
   ).needed
   expect(bare.map((each) => [each.title, each.detail])).toEqual([
-    ["Your website is ready to publish", "Publish within a day."],
+    ["Your website is ready to publish", "Due within a day."],
     ["A question is waiting for your answer", "Waiting for over 12 hours."],
   ])
 })
