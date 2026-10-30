@@ -329,13 +329,15 @@ describe.skipIf(!url)("the CoS turn writers, on a live connection", () => {
       pid.open()
       return writeAsTurn(db, turn, [call(turn)])
     })
+    // Handled from the start: the write fails the moment the rogue commits.
+    const lost = expect(writing).rejects.toBeInstanceOf(TurnClosed)
     try {
       await waiting(pid.shut.then(() => writer))
     } finally {
       release()
     }
     await rogue
-    await expect(writing).rejects.toBeInstanceOf(TurnClosed)
+    await lost
     expect((await log(me, turn.sessionId)).map((r) => r.seq)).toEqual([0, 1])
   })
 
@@ -559,13 +561,14 @@ describe.skipIf(!url)("the CoS turn writers, on a live connection", () => {
         TOTAL_MS
       )
     })
+    const busy = expect(opening).rejects.toBeInstanceOf(SessionBusy)
     try {
       await waiting(pid.shut.then(() => opener))
     } finally {
       release()
     }
     await rogue
-    await expect(opening).rejects.toBeInstanceOf(SessionBusy)
+    await busy
   })
 
   it("logs an abandoned turn only on its contract", async () => {
