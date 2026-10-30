@@ -17,6 +17,7 @@ import {
 import {
   type AgentProps,
   type BudgetGuard,
+  compactionAt,
   completeOnce,
   createBudgetGuard,
   createMutationQueue,
@@ -73,7 +74,7 @@ import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
 import { eventSink } from "../sink.ts"
 import { assignmentCost, turnCount } from "../state.ts"
 import { checksOf, finishRevision, GIT, SEAL_PHOTOS } from "../tail.ts"
-import { LEAD_TURN_MS, since } from "../timing.ts"
+import { LEAD_TURN_MS, LEAD_TURNS, since } from "../timing.ts"
 import {
   createWarmer,
   followPhotos,
@@ -96,7 +97,7 @@ import {
 const POLICY = { siteRoot: SITE_ROOT, readOnlyRoots: ["/opt/astro"] }
 
 // The transport, once per isolate; a missing key fails here, before a model.
-registerProviders(env)
+const { providers } = registerProviders(env)
 
 /** What this isolate knows about its conversation, keyed by instance id. */
 type Session = {
@@ -298,6 +299,9 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
     // knows what to send again.
     onCancel: (taskId, reason) =>
       tee.emit("developer.task_cancelled", { task_id: taskId, reason }),
+    // The partial marker: a report after this one says what it left undone.
+    turnCap: LEAD_TURNS,
+    onCapped: (turns) => tee.emit("developer.turn_capped", { turns }),
   })
   const budget = createBudgetGuard({
     capUsd: runtime.budget.model_usd_cap,
@@ -432,7 +436,19 @@ function render({ id }: AgentProps) {
       : route.model
   // pi-ai sends effort "none" when no level is given, so the role's effort
   // (build: medium, the Blueprint is the specification) is named here.
-  useModel(model, { thinkingLevel: route.effort })
+  // Compaction never folds the instructions, which hold the goal, the
+  // acceptance criteria and the facts; flue's summary lists the files read
+  // and changed and keeps exact error messages, where a gate failure lands.
+  // Its prompt takes no list of ours (flue 2.3.0).
+  const compaction = compactionAt(
+    providers,
+    model,
+    runtime.context.compaction_threshold_tokens
+  )
+  useModel(model, {
+    thinkingLevel: route.effort,
+    ...(compaction ? { compaction } : {}),
+  })
   // QE2: the site's sandbox, the one the Workflow provisioned and may have
   // found warm. One per site is safe because the site lock
   // (`assignments_site_writer_key`) lets one assignment at a time write it.

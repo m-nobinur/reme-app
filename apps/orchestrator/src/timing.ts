@@ -28,6 +28,14 @@ export type ToolTimings = {
 export const LEAD_TURN_MS = 45 * 60 * 1000
 
 /**
+ * The lead's model calls in one submission before it may only read and
+ * report. shortcut: four times the 8 to 10 a planned first build's lead
+ * takes, not a measured tail; set it from `model_turns` in `revise.timing`
+ * once staging has a week of builds.
+ */
+export const LEAD_TURNS = 40
+
+/**
  * A build that logs nothing for this long is stalled, and its Developer is
  * stopped and resumed. A working lead logs every model call and tool: no gap
  * in 659 Developer events on staging reached a minute (2026-10-22), and its

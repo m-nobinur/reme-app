@@ -27,6 +27,17 @@ const UPLOADS = 8
 /** Where the sandbox's axe script leaves its JSON. */
 const AXE_OUT = "/tmp/axe.json"
 
+/** The browser pass over every page, run from /tmp beside axe so the site cannot edit it. */
+const INTERACTION_SCRIPT = "/tmp/interaction.mjs"
+const INTERACTION_OUT = "/tmp/interaction.json"
+const INTERACTION = Object.values(
+  import.meta.glob("../sandbox/interaction.mjs", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>
+)[0] as string
+
 /** The starter's custom-section lint, run from /tmp so the site cannot edit it. */
 const CUSTOM_SCRIPT = "/tmp/custom-sections.mjs"
 const CUSTOM_OUT = "/tmp/custom-sections.json"
@@ -295,7 +306,8 @@ type Run = { exit_code: number; key: string | null; ms: number }
 /**
  * Axe runs in the Workflow, not here, and before the preview: while the
  * critic reads the screenshots on a planned build, or in its own step
- * otherwise. Its result is the a11y gate in `validateRevision`.
+ * otherwise, with the browser pass after it (`runInteraction`). Their
+ * results are the a11y and interaction gates in `validateRevision`.
  */
 export type Axe = Run
 
@@ -474,6 +486,30 @@ export async function runAxe(
   if (!json)
     return { exit_code: r.exitCode || 2, key: null, ms: since(started) }
   const key = `${prefix}axe.json`
+  await sites.put(key, json)
+  return { exit_code: r.exitCode, key, ms: since(started) }
+}
+
+/**
+ * Every page used in a browser, after axe in the same sandbox: three widths,
+ * the menu and footer links, the phone menu and the form sent to a test
+ * sink. The script is written to /tmp just before it runs. A run that left no
+ * JSON is reported as exit 2, which the gate fails closed on.
+ */
+export async function runInteraction(
+  sandbox: DistSandbox & Pick<TailSandbox, "writeFile">,
+  sites: Pick<DistBucket, "put">,
+  prefix: string
+): Promise<Run> {
+  const started = Date.now()
+  await sandbox.writeFile(INTERACTION_SCRIPT, INTERACTION)
+  const r = await sandbox.exec(
+    `rm -f ${INTERACTION_OUT}; node ${INTERACTION_SCRIPT} dist ${INTERACTION_OUT}`
+  )
+  const json = await sandbox.readFileBuffer(INTERACTION_OUT).catch(() => null)
+  if (!json)
+    return { exit_code: r.exitCode || 2, key: null, ms: since(started) }
+  const key = `${prefix}interaction.json`
   await sites.put(key, json)
   return { exit_code: r.exitCode, key, ms: since(started) }
 }

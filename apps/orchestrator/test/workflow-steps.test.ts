@@ -158,7 +158,7 @@ const script = {
   /** The revision a warm sandbox names, if any. */
   held: null as string | null,
   /** The lane the created event recorded; none is an instance from before lanes. */
-  lane: {} as { lane?: string; change_kind?: string | null },
+  lane: {} as { lane?: string; change_kind?: string | null; kind?: string },
   /** The steers logged before the Developer was admitted. */
   early: [] as { event_id: string; message: string; owner: boolean }[],
   /** Whether the one-call quick edit gets to a report. */
@@ -174,6 +174,13 @@ const script = {
     problem: string
     change: string
   }[][],
+  /** The severe fixes the second look saw not made. */
+  again: [] as {
+    page: string
+    section: string
+    problem: string
+    change: string
+  }[],
   /** How long ago each stall check finds the build's newest event; none left is never. */
   quiet: [] as number[],
   looks: [] as {
@@ -320,7 +327,9 @@ vi.mock("../src/critic.ts", () => ({
   critiqueRound: async ({ round }: { round: number }) => ({
     round,
     fixes: script.critic.shift() ?? [],
+    ...(round === 2 ? { again: script.again } : {}),
   }),
+  LOOKS: 3,
   repairMessage: (fixes: unknown[]) => JSON.stringify({ fixes }),
 }))
 // The outbox look is driven in deliveries.test.ts; here it is only a step.
@@ -733,6 +742,7 @@ describe("the assignment Workflow's step names", () => {
     script.lane = setup.lane ?? {}
     script.quickDone = setup.quickDone ?? true
     script.critic = [...(setup.critic ?? [])]
+    script.again = []
     script.quiet = [...(setup.quiet ?? [])]
     script.followUp = setup.followUp ?? false
     photoStep.fail = setup.photosFail ?? false
@@ -907,6 +917,40 @@ describe("the assignment Workflow's step names", () => {
     const unplanned = drive([completion])
     await unplanned.run()
     expect(unplanned.names.some((n) => n.startsWith("critique"))).toBe(false)
+  })
+
+  it("on a first site sends the severe fixes the recheck saw not made back once more, and then goes on", async () => {
+    const signals = () =>
+      dispatched
+        .map((d) => d.message as { type?: string; body?: string })
+        .filter((m) => m.type === "design.critique")
+    script.lane = full
+    script.critic = [[FIX], [FIX], [FIX]]
+    script.again = [FIX]
+    const first = drive([completion, completion, completion, completion])
+    expect(await first.run()).toMatchObject({ outcome: "preview_ready" })
+    expect(signals()).toHaveLength(2)
+    expect(JSON.parse(signals()[1]?.body ?? "")).toEqual({ fixes: [FIX] })
+    expect(first.names.filter((n) => n.startsWith("critique "))).toEqual([
+      "critique 1",
+      "critique 2",
+      "critique 3",
+    ])
+    expect(first.names).toContain("validating 3")
+  })
+
+  it("never sends a creative change back a second time", async () => {
+    const signals = () =>
+      dispatched
+        .map((d) => d.message as { type?: string; body?: string })
+        .filter((m) => m.type === "design.critique")
+    script.lane = { ...full, kind: "site.revise", change_kind: "creative" }
+    script.critic = [[FIX], [FIX]]
+    script.again = [FIX]
+    const revise = drive([completion, completion])
+    await revise.run()
+    expect(signals()).toHaveLength(1)
+    expect(revise.names).not.toContain("critique 3")
   })
 
   it("hands the gates an axe run from before the preview: the critic's step when planned, its own step otherwise", async () => {

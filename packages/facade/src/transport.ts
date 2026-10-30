@@ -347,16 +347,39 @@ export function registerProviders(
   return { transport, providers }
 }
 
+/** The registered model a `provider/model` specifier names, if any. */
+function modelOf(providers: readonly Provider[], specifier: string) {
+  const at = specifier.indexOf("/")
+  return providers
+    .find((p) => p.id === specifier.slice(0, at))
+    ?.getModels()
+    .find((m) => m.id === specifier.slice(at + 1))
+}
+
+/**
+ * flue's compaction for the spec's `compaction_threshold_tokens`: flue
+ * compacts once the context passes the model's window less `reserveTokens`,
+ * so the reserve is what puts that line at the threshold. Undefined, flue's
+ * own default, for a model it cannot find or a threshold the window does not
+ * reach past.
+ */
+export function compactionAt(
+  providers: readonly Provider[],
+  specifier: string,
+  thresholdTokens: number
+): { reserveTokens: number } | undefined {
+  const window = modelOf(providers, specifier)?.contextWindow ?? 0
+  return window > thresholdTokens
+    ? { reserveTokens: window - thresholdTokens }
+    : undefined
+}
+
 /** The host a `provider/model` specifier would dial under these providers. */
 export function outboundUrl(
   providers: readonly Provider[],
   specifier: string
 ): string {
-  const at = specifier.indexOf("/")
-  const providerId = specifier.slice(0, at)
-  const modelId = specifier.slice(at + 1)
-  const provider = providers.find((p) => p.id === providerId)
-  const model = provider?.getModels().find((m) => m.id === modelId)
+  const model = modelOf(providers, specifier)
   if (!model) {
     throw new FacadeError(
       "model.unresolved",

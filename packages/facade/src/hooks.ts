@@ -275,6 +275,14 @@ export type TurnGateOptions = {
   onToolDone?: (name: string) => void | Promise<void>
   /** Runs once per subagent the gate stopped because the lead's turn ended under it. */
   onCancel?: (taskId: string, reason: string) => void
+  /**
+   * The lead's model calls a delivery may make before the gate takes every
+   * tool away but the reads and `report_complete`, so a turn that runs long
+   * reports what it did instead of running on to the time or money stop.
+   */
+  turnCap?: number
+  /** Runs once a delivery, when the lead reaches `turnCap`. */
+  onCapped?: (turns: number) => void
 }
 
 /** Consecutive thrown tool errors with the same text before the gate ends the turn. */
@@ -285,6 +293,10 @@ export const REPEATING_FAILURE = "tool.repeating_failure"
 
 /** The reason a turn ends when the platform replaced the container under it. */
 export const SANDBOX_UPDATING = "sandbox.updating"
+
+/** What every tool but the reads and the report hears past the turn cap; one text, so a lead that keeps calling ends as a repeating failure. */
+export const TURN_CAPPED =
+  "This turn has used its model calls, so only read, grep, glob and report_complete run now. Call report_complete with what you built, and say in its summary what is left undone."
 
 /** A thrown error's identity: its message, whitespace collapsed, cut short. */
 const failureText = (error: unknown) =>
@@ -329,6 +341,8 @@ export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
   // One counter per session: "" is the lead, a task id is a child.
   const failures = new Map<string, { text: string; repeats: number }>()
   let tasksRunning = 0
+  let leadTurns = 0
+  let refusedPastCap = 0
   const childCalls = new Set<string>()
   const cancelled = new Set<string>()
   const cancel = (taskId: string, reason: string) => {
@@ -349,6 +363,10 @@ export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
     ctx,
     next
   ) => {
+    if (operation.type === "model" && !ctx.taskId) {
+      leadTurns += 1
+      if (leadTurns === options.turnCap) options.onCapped?.(leadTurns)
+    }
     if (operation.type !== "tool") return next()
     const name = operation.toolName
     const child = ctx.taskId
@@ -374,6 +392,25 @@ export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
         `Your turn is over: ${closedBy} already ended it, so ${name} did not run. Wait for the next message.`,
         { tool: name, closed_by: closedBy }
       )
+    }
+    if (
+      !child &&
+      options.turnCap !== undefined &&
+      leadTurns > options.turnCap &&
+      !READS.has(name) &&
+      name !== "report_complete"
+    ) {
+      // Counted apart from the failures, which a read in between resets.
+      refusedPastCap += 1
+      if (refusedPastCap >= REPEATED_FAILURES)
+        return ended(
+          REPEATING_FAILURE,
+          `${TURN_CAPPED} ${refusedPastCap} calls were refused, so this turn is over; the work resumes with a fresh look. Stop here.`
+        )
+      throw new FacadeError("turn.capped", "validation", TURN_CAPPED, {
+        tool: name,
+        turns: leadTurns,
+      })
     }
     if (TERMINAL.has(name) && tasksRunning > 0) {
       throw new FacadeError(
@@ -432,6 +469,8 @@ export function createTurnGate(options: TurnGateOptions = {}): TurnGate {
       closedBy = null
       failures.clear()
       cancelled.clear()
+      leadTurns = 0
+      refusedPastCap = 0
     },
     fromChild: (toolCallId) => childCalls.has(toolCallId),
   }

@@ -64,6 +64,7 @@ export { createTee, redact, scrub } from "./tee.ts"
 export type { ModelEnv, Transport } from "./transport.ts"
 export {
   buildProviders,
+  compactionAt,
   outboundUrl,
   REQUIRED,
   registerProviders,

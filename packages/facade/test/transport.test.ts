@@ -11,6 +11,7 @@ import { HOST_ROUTING } from "../src/models/price.ts"
 import { modelRouting, outputCaps } from "../src/spec.ts"
 import {
   buildProviders,
+  compactionAt,
   outboundUrl,
   selectTransport,
 } from "../src/transport.ts"
@@ -358,5 +359,25 @@ describe("a role's effort and output cap on the wire", () => {
       expect.arrayContaining(["z-ai", "amazon-bedrock", "claude-on-aws"])
     )
     expect(provider.data_collection).toBe("deny")
+  })
+})
+
+describe("compaction at the spec's threshold", () => {
+  const providers = buildProviders(
+    { OPENROUTER_API_KEY: "or-key" },
+    "direct:openrouter"
+  )
+
+  it("reserves the model's window less the threshold, so flue compacts there", () => {
+    expect(compactionAt(providers, MODEL, 150_000)).toEqual({
+      reserveTokens: 1_048_576 - 150_000,
+    })
+  })
+
+  it("leaves flue's default for a model it cannot find or a window the threshold reaches", () => {
+    expect(compactionAt(providers, "openrouter/none/such", 150_000)).toBe(
+      undefined
+    )
+    expect(compactionAt(providers, MODEL, 2_000_000)).toBe(undefined)
   })
 })

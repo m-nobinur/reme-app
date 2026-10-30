@@ -145,12 +145,20 @@ async function built(html: string, withhold: string[] = [], org?: string) {
         }),
       })
     })
-    // Axe's run over the build, clean unless a test hands the gates another.
+    // Axe's run over the build and the browser pass after it, clean unless
+    // a test hands the gates another.
     const axeKey = `${prefix}axe.json`
+    const interactionKey = `${prefix}interaction.json`
     objects.set(axeKey, new TextEncoder().encode(CLEAN))
-    const axe: { exit_code: number; key: string | null } | null = {
+    objects.set(
+      interactionKey,
+      new TextEncoder().encode('{"pages":7,"findings":[]}')
+    )
+    type Run = { exit_code: number; key: string | null }
+    const axe: (Run & { interaction?: Run }) | null = {
       exit_code: 0,
       key: axeKey,
+      interaction: { exit_code: 0, key: interactionKey },
     }
     return {
       input: { report_id: reportId, revision_id: revisionId, axe },
@@ -197,7 +205,7 @@ live("the accessibility gate before the preview", () => {
       kit,
       b.sites,
       b.ids,
-      { ...b.input, axe: { exit_code, key } },
+      { ...b.input, axe: { ...b.input.axe, exit_code, key } },
       SUFFIX
     )
     return { ...b, verdict }
@@ -244,6 +252,75 @@ live("the accessibility gate before the preview", () => {
     expect(verdict.outcome).toBe("repairing")
     expect(await none.state()).toBe("implementing")
     expect((await gated("not json", 1)).verdict.outcome).toBe("repairing")
+  })
+})
+
+live("the interaction gate before the preview", () => {
+  /** The gates over a build whose browser pass left `json` and exited `exit_code`, or did not run. */
+  const gated = async (
+    interaction: { json: string; exit_code: number } | null
+  ) => {
+    const b = await built(GOOD)
+    const key = `${b.prefix}interaction-run.json`
+    if (interaction)
+      b.objects.set(key, new TextEncoder().encode(interaction.json))
+    const { interaction: _, ...axe } = b.input.axe ?? {
+      exit_code: 0,
+      key: null,
+    }
+    const verdict = await validateRevision(
+      kit,
+      b.sites,
+      b.ids,
+      {
+        ...b.input,
+        axe: interaction
+          ? { ...axe, interaction: { exit_code: interaction.exit_code, key } }
+          : axe,
+      },
+      SUFFIX
+    )
+    return { ...b, verdict }
+  }
+
+  it("passes a clean run and writes the gate's evidence", async () => {
+    const b = await gated({ json: '{"pages":7,"findings":[]}', exit_code: 0 })
+    expect(b.verdict.outcome).toBe("preview_ready")
+    expect(b.objects.has(`${b.prefix}gates/interaction.json`)).toBe(true)
+  })
+
+  it("sends a broken page back through repairing with what broke", async () => {
+    const b = await gated({
+      json: JSON.stringify({
+        pages: 7,
+        findings: [
+          {
+            check: "menu",
+            path: "/contact/",
+            width: 390,
+            detail:
+              "the header's links are hidden and no visible button opens them",
+          },
+        ],
+      }),
+      exit_code: 1,
+    })
+    expect(b.verdict.outcome).toBe("repairing")
+    if (b.verdict.outcome !== "repairing") throw new Error("unreachable")
+    expect(b.verdict.failed.map((g) => g.gate)).toEqual(["interaction"])
+    expect(b.verdict.failed[0]?.message).toContain(
+      "menu on /contact/ at 390 px"
+    )
+    expect(await b.state()).toBe("implementing")
+  })
+
+  it("fails closed when the browser pass did not run", async () => {
+    const b = await gated(null)
+    expect(b.verdict.outcome).toBe("repairing")
+    if (b.verdict.outcome !== "repairing") throw new Error("unreachable")
+    expect(b.verdict.failed[0]?.message).toBe(
+      "the pages were not tried in a browser"
+    )
   })
 })
 

@@ -10,6 +10,7 @@ import {
   observer,
   pathRefusal,
   TOOL_RESULT_MAX_CHARS,
+  TURN_CAPPED,
 } from "../src/hooks.ts"
 
 const policy = {
@@ -698,5 +699,80 @@ describe("the turn gate", () => {
     await expect(
       gate.interceptor({ type: "model", turnId: "t" }, ctx, done("model"))
     ).resolves.toBe("model")
+  })
+})
+
+describe("the turn cap", () => {
+  const lead = {} as never
+  const child = { taskId: "task-1" } as never
+  const op = (toolName: string) => ({
+    type: "tool" as const,
+    toolCallId: `${toolName}-${Math.random()}`,
+    toolName,
+  })
+  const ran = async (): Promise<unknown> => "ran"
+  const turns = async (
+    gate: ReturnType<typeof createTurnGate>,
+    n: number,
+    ctx = lead
+  ) => {
+    for (let i = 0; i < n; i++)
+      await gate.interceptor({ type: "model", turnId: `t${i}` }, ctx, ran)
+  }
+
+  it("leaves only the reads and the report once the lead's model calls pass the cap, and says so once", async () => {
+    const capped: number[] = []
+    const gate = createTurnGate({
+      turnCap: 2,
+      onCapped: (n) => capped.push(n),
+    })
+    await turns(gate, 2)
+    // The cap's own call still acts on what it asked for.
+    await expect(gate.interceptor(op("edit"), lead, ran)).resolves.toBe("ran")
+    await turns(gate, 1)
+    await expect(gate.interceptor(op("edit"), lead, ran)).rejects.toMatchObject(
+      { code: "turn.capped", message: TURN_CAPPED }
+    )
+    await expect(gate.interceptor(op("read"), lead, ran)).resolves.toBe("ran")
+    await expect(
+      gate.interceptor(op("report_complete"), lead, ran)
+    ).resolves.toBe("ran")
+    expect(capped).toEqual([2])
+  })
+
+  it("ends the turn on the third refused call, reads between them or not", async () => {
+    const reasons: string[] = []
+    const gate = createTurnGate({
+      turnCap: 1,
+      onInterrupt: (r) => reasons.push(r),
+    })
+    await turns(gate, 2)
+    await expect(gate.interceptor(op("bash"), lead, ran)).rejects.toThrow()
+    await gate.interceptor(op("read"), lead, ran)
+    await expect(gate.interceptor(op("write"), lead, ran)).rejects.toThrow()
+    const third = (await gate.interceptor(op("bash"), lead, ran)) as {
+      terminate: boolean
+      details: { code: string }
+    }
+    expect(third).toMatchObject({
+      terminate: true,
+      details: { code: "tool.repeating_failure" },
+    })
+    expect(reasons).toEqual(["tool.repeating_failure"])
+  })
+
+  it("counts only the lead's calls, starts again each delivery, and is off without a cap", async () => {
+    const gate = createTurnGate({ turnCap: 1 })
+    await turns(gate, 5, child)
+    await expect(gate.interceptor(op("bash"), lead, ran)).resolves.toBe("ran")
+    await expect(gate.interceptor(op("edit"), child, ran)).resolves.toBe("ran")
+    await turns(gate, 2)
+    await expect(gate.interceptor(op("bash"), lead, ran)).rejects.toThrow()
+    gate.open()
+    await turns(gate, 1)
+    await expect(gate.interceptor(op("bash"), lead, ran)).resolves.toBe("ran")
+    const open = createTurnGate()
+    await turns(open, 50)
+    await expect(open.interceptor(op("bash"), lead, ran)).resolves.toBe("ran")
   })
 })
