@@ -984,7 +984,7 @@ function AnswerInputs({
 
 /**
  * A question waiting on the owner. It is answered in the chat, never here:
- * the row says it waits and `action` takes the owner to the card.
+ * the row shows the question and `action` takes the owner to the card.
  */
 function QuestionItem({ title, action }: { title: string; action: ReactNode }) {
   const id = useId()
@@ -997,7 +997,6 @@ function QuestionItem({ title, action }: { title: string; action: ReactNode }) {
       <h3 className="font-medium text-sm" id={`${id}-title`}>
         {title}
       </h3>
-      <p className={META}>Waiting on your answer</p>
       {action}
     </article>
   )
@@ -1765,7 +1764,13 @@ function YourWebsite({
             live ? "bg-primary" : "bg-muted-foreground/40"
           )}
         />
-        {live ? "Your website is live" : "Nothing is published yet"}
+        <span className="wrap-anywhere min-w-0">
+          {live
+            ? host
+              ? `Live at ${host}`
+              : "Live now"
+            : "Nothing is published yet"}
+        </span>
       </p>
       {live && (host || change) ? (
         // One row at any width: the change is an icon, the link takes the rest.

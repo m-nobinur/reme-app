@@ -103,7 +103,7 @@ const question = (title: string) => (
         className={buttonVariants({ variant: "outline", size: "sm" })}
         type="button"
       >
-        Answer in the chat
+        Answer
       </button>
     }
     title={title}
@@ -217,7 +217,7 @@ const photo = (
   alt: string | null = "A bright room after a clean"
 ) => ({ slot_id, state, alt, thumbnail })
 
-const CTX = { seed: "brightclean", assistant: "Ellie" }
+const CTX = { seed: "brightclean", assistant: "Reme" }
 
 /** A step as the api sends it. */
 const stepAt = (
@@ -290,7 +290,7 @@ const ONBOARDING_STEPS = (last: "now" | "waiting" | "done") => [
   stepAt("area", "done", { value: "South Manchester, 10 miles" }),
   stepAt("customers", "skipped"),
   stepAt("contact", "done", { value: "0161 496 0000, hello@brightclean.test" }),
-  stepAt("assistant", "done", { value: "Ellie" }),
+  stepAt("assistant", "done", { value: "Reme" }),
   stepAt("quote_form", "done", { value: "6 questions" }),
   stepAt("photos", last === "done" ? "done" : last, {
     ...(last === "done" ? { value: "4 photos" } : {}),
@@ -440,7 +440,7 @@ function SamplePanel() {
 
 /** `SamplePanel` in one line, as `apps/web` words it for that state. */
 function SamplePanelLine() {
-  return <LiveLine lead="Ellie is updating your website" tone="working" />
+  return <LiveLine lead="Reme is updating your website" tone="working" />
 }
 
 const panelCatalog: Entry[] = [
@@ -774,7 +774,7 @@ const panelCatalog: Entry[] = [
         items={[
           {
             id: "checkin",
-            text: "Ellie checked in, all clear",
+            text: "Reme checked in, all clear",
             at: NOW_ISO,
           },
           {
@@ -936,7 +936,7 @@ const panelCatalog: Entry[] = [
     name: "LiveLine building",
     render: () => (
       <div className="w-64">
-        <LiveLine lead="Ellie is building your website" tone="working" />
+        <LiveLine lead="Reme is building your website" tone="working" />
       </div>
     ),
   },
@@ -945,11 +945,11 @@ const panelCatalog: Entry[] = [
     render: () => (
       <div className="w-72">
         <LiveLine
-          lead="Ellie is building your website"
+          lead="Reme is building your website"
           lines={[
-            { lead: "Ellie is building your website" },
-            { lead: "Ellie is replying to a new enquiry" },
-            { lead: "Ellie is drafting a quote" },
+            { lead: "Reme is building your website" },
+            { lead: "Reme is replying to a new enquiry" },
+            { lead: "Reme is drafting a quote" },
             { lead: "Your changes", detail: "are ready to publish" },
           ]}
           tone="working"

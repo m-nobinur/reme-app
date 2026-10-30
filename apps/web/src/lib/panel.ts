@@ -489,7 +489,7 @@ export function panelFor(input: PanelInput): Panel | null {
 
   const tone = live ? "live" : "idle"
   // A job at work or waiting on the owner is the news, in the assistant's
-  // own words: "Ellie is building your website". Every one of them, so two
+  // own words: "Reme is building your website". Every one of them, so two
   // jobs at once each get a turn in the header.
   const jobs = [current, ...activity.now, ...blocked]
     .filter(running)

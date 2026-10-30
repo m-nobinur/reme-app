@@ -109,10 +109,7 @@ test("the empty state opens on the briefing and what to ask", async ({
   await expect(page.locator('[data-slot="aui_thread-briefing"]')).toHaveText(
     "Your website is live. Your latest changes are ready to publish."
   )
-  await expect(input(page)).toHaveAttribute(
-    "placeholder",
-    "Ask Ellie anything…"
-  )
+  await expect(input(page)).toHaveAttribute("placeholder", "Ask Reme anything…")
   await expect(page.locator(".aui-thread-welcome-suggestion")).toHaveText([
     "What changed in the new version?",
     "What do you need from me?",
@@ -189,10 +186,7 @@ test("website change mode takes the place of +, and pressing it leaves the mode"
   await expect(
     page.getByRole("button", { name: "Quick actions" })
   ).toBeVisible()
-  await expect(input(page)).toHaveAttribute(
-    "placeholder",
-    "Ask Ellie anything…"
-  )
+  await expect(input(page)).toHaveAttribute("placeholder", "Ask Reme anything…")
   await expect(input(page)).toBeFocused()
 })
 

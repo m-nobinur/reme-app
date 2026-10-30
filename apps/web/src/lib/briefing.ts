@@ -43,7 +43,7 @@ function due(at: string, now: Date): string {
 export const assistantOf = (workspace: Workspace | null) =>
   workspace?.assistantName?.trim() || "your assistant"
 
-/** `assistantOf` opening a sentence: "Ellie", or "Your assistant". */
+/** `assistantOf` opening a sentence: "Reme", or "Your assistant". */
 export const leading = (assistant: string) =>
   assistant.charAt(0).toUpperCase() + assistant.slice(1)
 
@@ -102,7 +102,7 @@ export function briefingOf(
   } else if (waiting) {
     next = `${assistant} is still waiting for your answer about ${waiting.title.toLowerCase()}.`
   } else if (questions.length === 1) {
-    next = `${assistant} has a question for you.`
+    next = "One question needs your answer."
   } else if (questions.length > 1) {
     next = `You have ${questions.length} questions to answer.`
   } else if (unpublished && !approval) {

@@ -51,7 +51,7 @@ type NotificationItem = {
   kind: EntryKind
   title: string
   /** Model or team text, bounded here rather than trusted to be short. */
-  detail: string
+  detail?: string
   at: string
   expiresAt: string | null
   onExpiry: string
@@ -112,9 +112,11 @@ function NotificationList({
                 </time>
               </div>
               <h2 className="font-medium text-base">{item.title}</h2>
-              <p className="line-clamp-3 max-w-prose text-muted-foreground text-sm">
-                {item.detail}
-              </p>
+              {item.detail ? (
+                <p className="line-clamp-3 max-w-prose text-muted-foreground text-sm">
+                  {item.detail}
+                </p>
+              ) : null}
               <p className={META}>
                 {expires ? `Open until ${expires}. ` : null}
                 {item.onExpiry}

@@ -19,6 +19,7 @@ import { RequestChange } from "@workspace/ui/components/assistant/request-change
 import { ReviewQuoteForm } from "@workspace/ui/components/assistant/review-quote-form"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { StateIcon } from "@workspace/ui/components/status-line"
+import { toolLine } from "@workspace/ui/lib/activity-copy"
 import { heldText, isHeld } from "@workspace/ui/lib/tool-state"
 
 /**
@@ -87,7 +88,7 @@ function ApprovalRequest({
         label: "Not now",
         onNo: () => respondToApproval({ approved: false }),
       }}
-      title={`Needs your approval: ${toolName.replace(/[_-]/g, " ")}`}
+      title={toolLine(toolName, "waiting")}
       yes={{
         label: "Approve",
         onYes: () => respondToApproval({ approved: true }),

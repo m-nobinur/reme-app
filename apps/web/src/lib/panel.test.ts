@@ -187,7 +187,7 @@ const firstRun = (journey: ActivitySegment[], over: Partial<Workspace> = {}) =>
     input({
       conversations: [onboardingChat],
       workspace: workspace({
-        assistantName: "Ellie",
+        assistantName: "Reme",
         activity: activity({ journey }),
         ...over,
       }),
@@ -293,7 +293,7 @@ describe("the first run", () => {
     expect(panel?.journey[0]?.line).toBeNull()
     expect(panel?.line).toEqual({
       tone: "idle",
-      lead: "Ellie is waiting for your answer",
+      lead: "Reme is waiting for your answer",
     })
     expect(panel?.suggestions).toEqual([{ kind: "onboarding", id: ONBOARDING }])
   })
@@ -358,8 +358,8 @@ describe("the first run", () => {
     expect(website?.state).toBe("now")
     // The title says what is happening now.
     expect([
-      "Ellie is writing your pages",
-      "Ellie is writing your website",
+      "Reme is writing your pages",
+      "Reme is writing your website",
     ]).toContain(website?.title)
     expect(website?.line).toBe("4 minutes so far, about 6 to 10 minutes")
     expect(website?.steps.map((each) => [each.label, each.state])).toEqual([
@@ -374,7 +374,7 @@ describe("the first run", () => {
     expect(website?.build?.assignment_id).toBe("build-first")
     expect(panel?.line).toEqual({
       tone: "working",
-      lead: "Ellie is building your website",
+      lead: "Reme is building your website",
     })
   })
 
@@ -412,7 +412,7 @@ describe("the first run", () => {
     expect(panel?.review).toBe(review)
     expect(panel?.waiting).toEqual([])
     expect(panel?.line.lead).toBe(
-      "Ellie is waiting for your approval to publish"
+      "Reme is waiting for your approval to publish"
     )
 
     // On the approvals page the review is the page's, not the segment's.
@@ -420,7 +420,7 @@ describe("the first run", () => {
       input({
         route: ROUTES.approvals,
         workspace: workspace({
-          assistantName: "Ellie",
+          assistantName: "Reme",
           builds: [build("awaiting_review", "build-first")],
           attention: [review],
           activity: activity({
@@ -441,7 +441,7 @@ describe("the first run", () => {
     ])
     const website = panel?.journey[0]
     expect(website?.title).toBe("The website build stopped")
-    expect(website?.line).toBe("Ask Ellie to try again")
+    expect(website?.line).toBe("Ask Reme to try again")
     expect(website?.steps[4]).toMatchObject({ label: "Checking", state: "now" })
     expect(panel?.line.lead).toBe("The website build stopped")
   })
@@ -510,7 +510,7 @@ describe("later jobs", () => {
   const jobs = panelFor(
     input({
       workspace: live({
-        assistantName: "Ellie",
+        assistantName: "Reme",
         activity: activity({
           now: [
             segment(
@@ -564,13 +564,13 @@ describe("later jobs", () => {
     ])
     expect(jobs?.line).toEqual({
       tone: "working",
-      lead: "Ellie is connecting Google",
+      lead: "Reme is connecting Google",
     })
   })
 
   it("gives every job at work or waiting a turn in the header", () => {
     const leads = jobs?.lines.map((each) => each.lead) ?? []
-    expect(leads[0]).toBe("Ellie is connecting Google")
+    expect(leads[0]).toBe("Reme is connecting Google")
     expect(leads.length).toBeGreaterThan(1)
     expect(new Set(leads).size).toBe(leads.length)
     expect(jobs?.lines[0]).toEqual(jobs?.line)
@@ -621,7 +621,7 @@ describe("tasks not started", () => {
     panelFor(
       input({
         workspace: live({
-          assistantName: "Ellie",
+          assistantName: "Reme",
           activity: activity({ upcoming, standing }),
         }),
       })
@@ -682,7 +682,7 @@ describe("completedOf", () => {
       live({ activity: activity({ standing: [open] }) }),
       {
         seed: ORG,
-        assistant: "Ellie",
+        assistant: "Reme",
       }
     )
     expect(rows).toEqual([
@@ -706,7 +706,7 @@ describe("completedOf", () => {
           ],
         }),
       }),
-      { seed: ORG, assistant: "Ellie" }
+      { seed: ORG, assistant: "Reme" }
     )
     expect(done.map((row) => [row.text, row.brief])).toEqual([
       [
@@ -729,7 +729,7 @@ describe("completedOf", () => {
           standing: [published("published")],
         }),
       }),
-      { seed: ORG, assistant: "Ellie" }
+      { seed: ORG, assistant: "Reme" }
     )
     expect(rows.map((row) => row.text)).toEqual(["Website published"])
   })
@@ -743,7 +743,7 @@ describe("completedOf", () => {
           standing: [segment("domain", "done", [], { id: "domain:1", names })],
         }),
       }),
-      { seed: ORG, assistant: "Ellie" }
+      { seed: ORG, assistant: "Reme" }
     )
     expect(rows.map((row) => row.text)).toEqual([
       "spark.example.invalid connected",
@@ -792,7 +792,7 @@ describe("coming up and done today", () => {
         route,
         zone,
         workspace: live({
-          assistantName: "Ellie",
+          assistantName: "Reme",
           reminderNotes: reminders,
           activity: feed,
         }),
@@ -803,12 +803,12 @@ describe("coming up and done today", () => {
     expect(at(ROUTES.home)?.upcoming.map((item) => item.text)).toEqual([
       "Call the supplier",
       "Order cloths for next week",
-      "Ellie's next check-in",
+      "Reme's next check-in",
       "fixture.example.invalid is due for renewal",
     ])
     // The reminders page lists its own.
     expect(at(ROUTES.reminders)?.upcoming.map((item) => item.text)).toEqual([
-      "Ellie's next check-in",
+      "Reme's next check-in",
       "fixture.example.invalid is due for renewal",
     ])
   })
@@ -820,7 +820,7 @@ describe("coming up and done today", () => {
           route: ROUTES.home,
           zone: ZONE,
           workspace: live({
-            assistantName: "Ellie",
+            assistantName: "Reme",
             activity: activity({
               journey,
               upcoming: feed.upcoming.slice(2, 3),
@@ -830,13 +830,13 @@ describe("coming up and done today", () => {
       )?.upcoming
     expect(withJourney([onboarding(2)])).toEqual([])
     expect(withJourney([onboarding(8, "done")])?.map((i) => i.text)).toEqual([
-      "Ellie's next check-in",
+      "Reme's next check-in",
     ])
   })
 
   it("says what finished today, a quiet check-in too", () => {
     const done = at(ROUTES.home)?.done.map((item) => item.text)
-    expect(done?.[0]).toBe("Ellie checked in, all clear")
+    expect(done?.[0]).toBe("Reme checked in, all clear")
     expect(done?.[1]).toBe("fixture.example.invalid connected")
   })
 
@@ -946,10 +946,10 @@ describe("the one line", () => {
     expect(
       line({
         live: 2,
-        assistantName: "Ellie",
+        assistantName: "Reme",
         attention: [question("Alex", "staff-1")],
       })
-    ).toEqual({ tone: "live", lead: "Ellie", detail: "has a question for you" })
+    ).toEqual({ tone: "live", lead: "Reme", detail: "has a question for you" })
   })
 })
 
@@ -1019,7 +1019,7 @@ describe("what the owner reads", () => {
   }
 
   it("holds no id, hash, raw value or staff code", () => {
-    for (const text of [...sentences("Ellie"), ...sentences(null)]) {
+    for (const text of [...sentences("Reme"), ...sentences(null)]) {
       expect(text).not.toMatch(INTERNAL)
     }
     // The pattern does catch what it is for.
@@ -1034,11 +1034,11 @@ describe("what the owner reads", () => {
   })
 
   it("names no version number, and never Reme for a named assistant", () => {
-    const named = sentences("Ellie")
+    const named = sentences("Nora")
     for (const text of named) {
       expect(text).not.toMatch(/\bReme\b|\bversion \d|\bv\d\b/i)
     }
-    expect(named.some((text) => text.includes("Ellie"))).toBe(true)
+    expect(named.some((text) => text.includes("Nora"))).toBe(true)
   })
 
   it("does not say Reme, or a name, for an assistant nobody has named", () => {

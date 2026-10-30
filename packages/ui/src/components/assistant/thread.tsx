@@ -154,7 +154,7 @@ export type ThreadProps = {
   questionPlaceholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
   briefing?: string | null | undefined
-  /** What the owner named their assistant, for "Ellie is reading your message". */
+  /** What the owner named their assistant, for "Reme is reading your message". */
   assistant?: string | null | undefined
   quickActions?: readonly ThreadQuickAction[] | undefined
   /** A new mode object focuses the composer, so each press lands there. */
@@ -1337,7 +1337,7 @@ const MessageError: FC = () => {
   )
   // Only a reply the app marked as one it can send again, and only the last.
   const retryable = useAuiState(
-    (s) => s.message.isLast && s.message.metadata.custom?.["retry"] === true
+    (s) => s.message.isLast && s.message.metadata.custom?.retry === true
   )
   return (
     <MessagePrimitive.Error>

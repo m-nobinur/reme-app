@@ -44,7 +44,7 @@ function ResetPassword() {
             <Logo />
           </Link>
         }
-        title="Your password is changed"
+        title="Password changed"
       >
         <Alert variant="success">
           You can sign in with your new password now. Any other devices that
@@ -142,13 +142,12 @@ function ResetPassword() {
           autoComplete="new-password"
           error={mismatch}
           id="confirmation"
-          label="New password again"
+          label="Confirm new password"
           minLength={PASSWORD_POLICY.minLength}
           name="confirmation"
           // Cleared as soon as they start fixing it, rather than sitting there
           // contradicting what is now on screen.
           onChange={() => setMismatch(undefined)}
-          placeholder="Type it once more"
           required
         />
 

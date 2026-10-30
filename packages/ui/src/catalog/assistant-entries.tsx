@@ -266,9 +266,9 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
     <FixtureThread
       {...props}
       settings={{
-        assistant: "Ellie",
-        placeholder: "Ask Ellie anything…",
-        questionPlaceholder: "Tell Ellie what to do instead…",
+        assistant: "Reme",
+        placeholder: "Ask Reme anything…",
+        questionPlaceholder: "Tell Reme what to do instead…",
         quickActions: OWNER_QUICK_ACTIONS,
         ...(props.stored ? { stored: props.stored } : {}),
         ...props.settings,

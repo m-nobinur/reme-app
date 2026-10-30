@@ -18,7 +18,7 @@ const segment = (
 
 const ONBOARDED = segment("onboarding", "done")
 
-/** The Website setup row for a workspace with this journey. */
+/** The Build and publish row for a workspace with this journey. */
 const websiteSetup = (
   journey: ActivitySegment[],
   over: Partial<Workspace> = {}
@@ -32,7 +32,7 @@ const websiteSetup = (
     "Wren"
   )
     .find((group) => group.id === "website")
-    ?.tasks.find((task) => task.title === "Website setup")
+    ?.tasks.find((task) => task.title === "Build and publish")
 
 it("says Waiting on you, and what for, while going live waits on the owner", () => {
   const task = websiteSetup([
@@ -88,7 +88,10 @@ it("is up next after onboarding, and says so, before any stage has begun", () =>
     segment("onboarding", "now"),
     segment("website", "upcoming"),
   ])
-  expect(task).toMatchObject({ status: "waiting", after: "Onboarding" })
+  expect(task).toMatchObject({
+    status: "waiting",
+    after: "Set up your business",
+  })
 })
 
 it("says Waiting on you, and what for, on every stage that waits on the owner", () => {
@@ -121,15 +124,15 @@ it("says Waiting on you, and what for, on every stage that waits on the owner", 
   )
   const row = (title: string) =>
     groups.flatMap((group) => group.tasks).find((task) => task.title === title)
-  expect(row("Onboarding")).toMatchObject({
+  expect(row("Set up your business")).toMatchObject({
     status: "yours",
     detail: "Answer the setup question",
   })
-  expect(row("Domain setup")).toMatchObject({
+  expect(row("Your own address")).toMatchObject({
     status: "yours",
     detail: "Make the DNS change for spark.co.uk",
   })
-  expect(row("Search Console setup")).toMatchObject({
+  expect(row("Show up on Google")).toMatchObject({
     status: "yours",
     detail: "Sign in to Google",
   })
