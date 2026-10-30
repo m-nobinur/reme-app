@@ -838,8 +838,11 @@ export async function weeklyItem(
         },
       })
     }
+    // Keyed on the newest day of data, so a Monday whose sync brought nothing
+    // new finds the last report's key already surfaced and costs no model call.
+    const newest = daily.reduce((m, r) => (r.date > m ? r.date : m), "")
     return {
-      key,
+      key: `search_report:${newest}:1`,
       report: {
         state: "active" as const,
         thisWeek: windowOf(daily, 0) ?? undefined,

@@ -16,6 +16,7 @@ import {
   type Handler,
   jobsBatch,
   MAX_FAILURES,
+  OutcomeUnknown,
   PAUSED_TEXT,
   runJob,
 } from "../src/jobs.ts"
@@ -51,6 +52,34 @@ describe("a cos_continue job", () => {
     expect(sent).toEqual([
       { kind: "cos_continue", orgId: "org-1", jobId: "job-1" },
     ])
+  })
+
+  it("tells the api when its last attempt is unknown", async () => {
+    const sent: unknown[] = []
+    await continueJob({
+      env: { AFTER_TURN: { send: async (body: unknown) => sent.push(body) } },
+      job: { id: "job-1", orgId: "org-1" },
+      earlierUnknown: true,
+    } as unknown as Parameters<Handler>[0])
+    expect(sent).toEqual([
+      { kind: "cos_continue", orgId: "org-1", jobId: "job-1", unknown: true },
+    ])
+  })
+
+  it("is unknown, not failed, when the send throws", async () => {
+    await expect(
+      continueJob({
+        env: {
+          AFTER_TURN: {
+            send: async () => {
+              throw new Error("queue away")
+            },
+          },
+        },
+        job: { id: "job-1", orgId: "org-1" },
+        earlierUnknown: false,
+      } as unknown as Parameters<Handler>[0])
+    ).rejects.toBeInstanceOf(OutcomeUnknown)
   })
 })
 
@@ -253,7 +282,7 @@ describe.skipIf(!url)("running a claimed job", () => {
     expect(job?.nextRunAt).toEqual(new Date("2026-11-05T06:30:00Z"))
   })
 
-  it("records a kind with no handler as skipped and moves on", async () => {
+  it("records a kind with no handler as no change and moves on", async () => {
     const message = await claimed(FIRST_0130, "30 1 * * *")
     expect(await runJob(kit, env, message, {}, after(FIRST_0130))).toBe(
       "no_change"
@@ -288,7 +317,7 @@ describe.skipIf(!url)("running a claimed job", () => {
     expect(org?.name).not.toBe("written by a failed run")
   })
 
-  it("pauses after five failures in a row, raises an alert and tells the owner once", async () => {
+  it("pauses after ten failures in a row, raises an alert and tells the owner once", async () => {
     const message = await claimed(FIRST_0130, "30 1 * * *")
     const failing: Handler = async () => {
       throw new Error("handler failed")
@@ -300,10 +329,12 @@ describe.skipIf(!url)("running a claimed job", () => {
       await claimAgain(message.jobId)
       ran.push(await runJob(kit, env, message, { reminder: failing }, now))
     }
-    expect(ran).toEqual(["failed", "failed", "failed", "failed", "paused"])
+    expect(ran).toEqual([...Array(MAX_FAILURES - 1).fill("failed"), "paused"])
     const { job, runs } = await read(message.jobId)
-    expect(runs.map((r) => r.outcome)).toEqual(Array(5).fill("failed"))
-    expect(job?.failures).toBe(5)
+    expect(runs.map((r) => r.outcome)).toEqual(
+      Array(MAX_FAILURES).fill("failed")
+    )
+    expect(job?.failures).toBe(MAX_FAILURES)
     expect(job?.pausedAt).not.toBeNull()
     const alerts = await kit.withOrg({ orgId }, (db) =>
       db
@@ -316,7 +347,7 @@ describe.skipIf(!url)("running a claimed job", () => {
         kind: "job.paused",
         job_id: message.jobId,
         job_kind: "reminder",
-        failures: 5,
+        failures: MAX_FAILURES,
       },
     ])
     expect(posts).toEqual([
@@ -331,6 +362,105 @@ describe.skipIf(!url)("running a claimed job", () => {
     expect(
       await runJob(kit, env, message, { reminder: failing }, new Date())
     ).toBe("stale")
+  })
+
+  it("records a no-change run and posts nothing", async () => {
+    const message = await claimed(FIRST_0130, "30 1 * * *")
+    const quiet: Handler = async () => ({
+      outcome: "no_change",
+      detail: "empty",
+    })
+    expect(
+      await runJob(kit, env, message, { reminder: quiet }, after(FIRST_0130))
+    ).toBe("no_change")
+    const { job, runs } = await read(message.jobId)
+    expect(runs).toMatchObject([{ outcome: "no_change", detail: "empty" }])
+    expect(job).toMatchObject({ failures: 0, pausedAt: null })
+    expect(posts).toEqual([])
+    const sent = await kit.withOrg({ orgId }, (db) =>
+      db.execute(sql`select count(*)::int as n from deliveries`)
+    )
+    expect(sent[0]).toEqual({ n: 0 })
+  })
+
+  it("records a run whose result is unknown, and the retry carries the note", async () => {
+    const message = await claimed(FIRST_0130, "30 1 * * *")
+    const lost: Handler = async () => {
+      throw new OutcomeUnknown("send_failed")
+    }
+    const notes: boolean[] = []
+    const retry: Handler = async ({ earlierUnknown }) => {
+      notes.push(earlierUnknown)
+      return undefined
+    }
+    expect(
+      await runJob(kit, env, message, { reminder: lost }, after(FIRST_0130))
+    ).toBe("unknown")
+    let { job, runs } = await read(message.jobId)
+    expect(runs).toMatchObject([{ outcome: "unknown", detail: "send_failed" }])
+    expect(job).toMatchObject({ failures: 1, claimedAt: null, pausedAt: null })
+
+    await claimAgain(message.jobId)
+    expect(
+      await runJob(
+        kit,
+        env,
+        message,
+        { reminder: retry },
+        after(job?.nextRunAt as Date)
+      )
+    ).toBe("done")
+    ;({ job, runs } = await read(message.jobId))
+    expect(notes).toEqual([true])
+    expect(runs.map((r) => r.outcome).sort()).toEqual(["done", "unknown"])
+
+    // Known again: the next run carries no note.
+    await claimAgain(message.jobId)
+    await runJob(
+      kit,
+      env,
+      message,
+      { reminder: retry },
+      after(job?.nextRunAt as Date)
+    )
+    expect(notes).toEqual([true, false])
+  })
+
+  it("reruns an attempt whose worker died once its claim is retaken, with the note", async () => {
+    const message = await claimed(FIRST_0130)
+    // What a worker that died mid-run leaves: the mark the run wrote first.
+    await kit.withOrg({ orgId }, (db) =>
+      db.insert(jobRuns).values({
+        jobId: message.jobId,
+        orgId,
+        runAt: FIRST_0130,
+        outcome: "unknown",
+        detail: `claim ${FIRST_0130.toISOString()}`,
+      })
+    )
+    const notes: boolean[] = []
+    const rerun: Handler = async ({ earlierUnknown }) => {
+      notes.push(earlierUnknown)
+      return undefined
+    }
+    const now = after(FIRST_0130, 21 * MINUTE)
+    // The same claim delivered again is not a rerun.
+    expect(await runJob(kit, env, message, { reminder: rerun }, now)).toBe(
+      "stale"
+    )
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(scheduledJobs)
+        .set({ claimedAt: new Date(FIRST_0130.getTime() + 20 * MINUTE) })
+        .where(eq(scheduledJobs.id, message.jobId))
+    )
+    expect(await runJob(kit, env, message, { reminder: rerun }, now)).toBe(
+      "done"
+    )
+    expect(notes).toEqual([true])
+    expect((await read(message.jobId)).runs).toMatchObject([
+      { runAt: FIRST_0130, outcome: "done" },
+    ])
   })
 
   it("pauses a closed org's job without running it", async () => {

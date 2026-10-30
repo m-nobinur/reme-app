@@ -14,7 +14,6 @@ import {
   facts,
   failureCode,
   inQuiet,
-  jobRuns,
   type OrgScopedDb,
   orgs,
   readTasks,
@@ -39,7 +38,7 @@ import {
   writerPrompt,
   writeText,
 } from "./heartbeat-write.ts"
-import type { Handler } from "./jobs.ts"
+import type { Handler, Settled } from "./jobs.ts"
 import { weeklyItem } from "./search-sync.ts"
 
 /**
@@ -463,7 +462,7 @@ const liveModels = (env: Env): Models => ({
 type Beat = Look & {
   orgId: string
   jobId: string
-  /** The run's `run_at`: the `job_runs` row this beat updates, and its delivery's slot. */
+  /** The run's `run_at`, the slot its delivery is keyed on. */
   slot: Date
   level: Exclude<Proactivity, "off">
   /** The owner typed since the last heartbeat, so the app is enough. */
@@ -478,16 +477,17 @@ type Beat = Look & {
  * later beat that day can still speak. Every model call is logged as a
  * `cos.background_step` so the CoS's daily cap counts it.
  */
-async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
+async function speak(
+  kit: Tenancy,
+  env: Env,
+  models: Models,
+  beat: Beat
+): Promise<Settled> {
   const { orgId, jobId, slot } = beat
-  const thisRun = sql`${jobRuns.jobId} = ${jobId} and ${jobRuns.runAt} = ${slot.toISOString()}::timestamptz`
-  const record = (outcome: "done" | "no_change" | "failed", detail: string) =>
-    kit.withOrg({ orgId }, (db) =>
-      db
-        .update(jobRuns)
-        .set({ outcome, detail: detail.slice(0, 500) })
-        .where(thisRun)
-    )
+  const record = (outcome: Settled["outcome"], detail: string): Settled => ({
+    outcome,
+    detail,
+  })
   const spend = (job: string, outcome: string, spent: Spent) =>
     logSpend(kit, orgId, job, outcome, spent)
   // A follow-up that a failure, the cap or a turn kept back is asked about on
@@ -597,16 +597,10 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
           }))
         )
         .onConflictDoNothing()
-    await db
-      .update(jobRuns)
-      .set({
-        outcome: "done",
-        detail: out.length > 1 ? "sent:in_app,email" : "sent:in_app",
-      })
-      .where(thisRun)
     return out
   })
   await Promise.all(sends.map((send) => send?.()))
+  return record("done", sends.length > 1 ? "sent:in_app,email" : "sent:in_app")
 }
 
 /**
@@ -614,8 +608,8 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
  * retry after a failure is timed by the backoff, not the rule. A digest that
  * throws rolls the run back, ledger included, and the run is recorded
  * failed: a source that could not be read is not a change. The models run in
- * `after`, once the ledger has committed; what they decide is written to the
- * run's `job_runs` row then.
+ * `after`, once the ledger has committed; what they decide is returned for
+ * the runner to write to the run's `job_runs` row.
  */
 export function heartbeatWith(
   sources: Source[] = SOURCES,
@@ -669,9 +663,7 @@ export function heartbeatWith(
     return {
       outcome: "done",
       detail: `new:${fresh.length}`,
-      after: async () => {
-        await speak(kit, env, models(env), beat)
-      },
+      after: () => speak(kit, env, models(env), beat),
     }
   }
 }

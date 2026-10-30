@@ -239,11 +239,16 @@ describe.skipIf(!url)("a turn cut off, and its continuation", () => {
     admin<{ id: string; content: { role: string; parts: unknown[] } }[]>`
       select id, content from conversation_messages
       where conversation_id = ${id} order by seq`
-  const run = (jobId: string, model: MockLanguageModelV4) =>
+  const run = (jobId: string, model: MockLanguageModelV4, unknown = false) =>
     continueTurn(
       bindings(),
       kit,
-      { kind: "cos_continue", orgId: me.orgId, jobId },
+      {
+        kind: "cos_continue",
+        orgId: me.orgId,
+        jobId,
+        ...(unknown && { unknown }),
+      },
       { model }
     )
 
@@ -289,6 +294,19 @@ describe.skipIf(!url)("a turn cut off, and its continuation", () => {
     // A redelivered hand-over finds its reply logged.
     expect(await run(job?.id as string, scripted().model)).toBe("done")
     expect(await jobs(id)).toHaveLength(1)
+  }, 30_000)
+
+  it("tells the continuation its earlier attempt is unknown when the job says so", async () => {
+    const id = await conversation()
+    await typed(
+      id,
+      "Check my facts and tell me my hours",
+      scripted(called("get_facts", {}), stalls("Your hours are")).model
+    )
+    const [job] = await jobs(id)
+    const next = scripted(said("Weekdays 08:00 to 18:00."))
+    expect(await run(job?.id as string, next.model, true as const)).toBe("ran")
+    expect(JSON.stringify(next.sent[0]?.prompt)).toContain(UNKNOWN_LINE)
   }, 30_000)
 
   it("marks a turn out of steps partial and queues a continuation, which a new owner message supersedes", async () => {
