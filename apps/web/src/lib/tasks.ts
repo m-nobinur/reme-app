@@ -82,7 +82,7 @@ export function groupsOf(
       title: "Getting started",
       tasks: [
         {
-          title: "Onboarding",
+          title: "Set up your business",
           detail:
             needs(onboarding) ??
             `Tell ${assistant} about your business, your services and where you work.`,
@@ -95,27 +95,27 @@ export function groupsOf(
       title: "Website",
       tasks: [
         {
-          title: "Website setup",
+          title: "Build and publish",
           detail:
             (!live && owed) ||
             `${leading(assistant)} builds your first version and you publish it.`,
           status: site,
-          ...after(site, setup, "Onboarding"),
+          ...after(site, setup, "Set up your business"),
         },
         {
-          title: "Domain setup",
+          title: "Your own address",
           detail:
             needs(address) ?? "Point a domain of your own at your website.",
           status: domain,
-          ...after(domain, site, "Website setup"),
+          ...after(domain, site, "Build and publish"),
         },
         {
-          title: "Search Console setup",
+          title: "Show up on Google",
           detail:
             needs(google) ??
             "Show Google your site so people can find it in search.",
           status: search,
-          ...after(search, domain, "Domain setup"),
+          ...after(search, domain, "Your own address"),
         },
       ],
     },
@@ -124,7 +124,7 @@ export function groupsOf(
       title: "Calendar",
       tasks: [
         {
-          title: "Calendar setup",
+          title: "Connect your calendar",
           detail: "Connect your calendar so bookings land where you work.",
           status: "waiting",
         },
