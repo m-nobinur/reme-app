@@ -44,7 +44,13 @@ import {
   retryContext,
   takeSnapshot,
 } from "./brief.ts"
-import { critiqueRound, type Fix, repairMessage } from "./critic.ts"
+import {
+  critiqueRound,
+  type Fix,
+  LOOKS,
+  type Round,
+  repairMessage,
+} from "./critic.ts"
 import {
   DELIVERIES_QUEUES,
   type DeliveryMessage,
@@ -371,11 +377,12 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // own, so a full build keeps its step list. An instance replayed from
     // before lanes existed gets the old return, with no lane: full.
     // `plan` rides it the same way: an instance from before planning gets
-    // none and builds as it did.
+    // none and builds as it did, and so does `first`.
     const route: {
       lane?: BuildLane
       change_kind?: ChangeKind | null
       plan?: boolean
+      first?: boolean
     } = await step.do("planning", () =>
       run(async (kit) => {
         await advance(kit, ids, "planning")
@@ -390,7 +397,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         const plan =
           lane === "full" &&
           (kind === "site.build" || change_kind === "creative")
-        return { lane, change_kind, plan }
+        return { lane, change_kind, plan, first: kind === "site.build" }
       })
     )
     if (route.plan) {
@@ -837,10 +844,13 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         // sandbox still holds it and the state is still `implementing`, so a
         // repair is a signal and costs none of the gate repairs. The first
         // look may send the lead back once; the second records which fixes
-        // held. Advice only: it never fails a build, and the gates decide.
-        if (route.plan && looks < 2) {
+        // held. On a first site the critic decides done: the severe fixes the
+        // second look saw not made go back once more, and a third look logs
+        // what still shows. A look that did not run sends nothing back, and
+        // the gates decide.
+        if (route.plan && looks < LOOKS) {
           looks++
-          const look = looks as 1 | 2
+          const look = looks as Round
           const seen = await step.do(`critique ${look}`, async () => {
             const taken = await takeScreenshots(
               this.env,
@@ -881,23 +891,29 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           })
           shotsOf = seen.shots
           looked = seen.axe
-          if (look === 1 && seen.fixes.length > 0) {
-            asked = seen.fixes
+          const again =
+            look === 1
+              ? seen.fixes
+              : look === 2 && route.first
+                ? (seen.again ?? [])
+                : []
+          if (again.length > 0) {
+            asked = again
             await step.do(`design repair ${round}`, async () => {
               await init(Developer, { id: ids.assignmentId }).dispatch({
                 idempotencyKey: `${ids.assignmentId}:design-repair-${round}`,
                 message: {
                   kind: "signal",
                   type: "design.critique",
-                  body: repairMessage(seen.fixes),
+                  body: repairMessage(again),
                 },
               })
-              return { fixes: seen.fixes.length }
+              return { fixes: again.length }
             })
             continue
           }
-          // Nothing to repair, or this was the check: no second look.
-          looks = 2
+          // Nothing to repair, or this was the last check: no more looks.
+          looks = LOOKS
         }
         await step.do(`validating ${round}`, () =>
           run((kit) =>

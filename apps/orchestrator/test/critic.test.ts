@@ -604,3 +604,72 @@ describe("a look that did not run", () => {
     ])
   })
 })
+
+describe("severe fixes on a first site", () => {
+  const plain = { ...fix("faq"), target: "faqHeading", how: "shorter" as const }
+  const severe = {
+    ...fix("hero"),
+    target: "heroHeading",
+    how: "other" as const,
+    severe: true,
+    before: "Spotless homes",
+  }
+  const config = {
+    values: { heroHeading: "Bright homes", faqHeading: "Questions" },
+    layout: { home: [{ kind: "hero" }, { kind: "faq" }] },
+  }
+
+  it("reads severe from the reply, and only a true", () => {
+    const row = {
+      page: "home",
+      section: "Hero",
+      problem: "The headline is cut off.",
+      change: "Shorten it.",
+    }
+    const fixes = readFixes(
+      JSON.stringify({
+        fixes: [{ ...row, severe: true }, { ...row, severe: "yes" }, row],
+      })
+    )
+    expect(fixes.map((f) => f.severe)).toEqual([true, undefined, undefined])
+    expect(criticPrompt({ blueprint: {} }).system).toContain(
+      "Mark a fix severe"
+    )
+  })
+
+  it("sends back from the second look only the severe fixes it saw not made, with what they hold now", () => {
+    const second = payloadOf(
+      { fixes: [], ran: true, held: [false, false] },
+      2,
+      [plain, severe],
+      config
+    )
+    expect(second.again).toEqual([
+      {
+        page: "home",
+        section: "hero",
+        problem: "hero breaks a rule.",
+        change: "Change hero.",
+        target: "heroHeading",
+        how: "other",
+        severe: true,
+        before: "Bright homes",
+      },
+    ])
+  })
+
+  it("sends nothing back once a severe fix is made, when a look did not run, or after the third look", () => {
+    expect(
+      payloadOf({ fixes: [], ran: true, held: [true] }, 2, [severe]).again
+    ).toBeUndefined()
+    expect(
+      payloadOf({ fixes: [], ran: false }, 2, [severe]).again
+    ).toBeUndefined()
+    const third = payloadOf({ fixes: [], ran: true, held: [false] }, 3, [
+      severe,
+    ])
+    expect(third.again).toBeUndefined()
+    // Still logged as not made, so the rest is on record.
+    expect(third.fixes?.map((f) => f.fixed)).toEqual([false])
+  })
+})
