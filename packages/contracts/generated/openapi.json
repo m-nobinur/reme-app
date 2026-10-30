@@ -30779,6 +30779,14 @@
                 "type": "string",
                 "minLength": 1
               },
+              "route": {
+                "type": "string",
+                "enum": [
+                  "owner_turn",
+                  "card_click",
+                  "deferred"
+                ]
+              },
               "usage": {
                 "type": "object",
                 "properties": {
@@ -30906,6 +30914,14 @@
                 "type": "string",
                 "minLength": 1
               },
+              "route": {
+                "type": "string",
+                "enum": [
+                  "owner_turn",
+                  "card_click",
+                  "deferred"
+                ]
+              },
               "usage": {
                 "type": "object",
                 "properties": {
@@ -31026,6 +31042,14 @@
                 "type": "string",
                 "minLength": 1
               },
+              "route": {
+                "type": "string",
+                "enum": [
+                  "owner_turn",
+                  "card_click",
+                  "deferred"
+                ]
+              },
               "usage": {
                 "type": "object",
                 "properties": {
@@ -31144,6 +31168,14 @@
               "model": {
                 "type": "string",
                 "minLength": 1
+              },
+              "route": {
+                "type": "string",
+                "enum": [
+                  "owner_turn",
+                  "card_click",
+                  "deferred"
+                ]
               },
               "usage": {
                 "type": "object",
@@ -31264,6 +31296,14 @@
                 "type": "string",
                 "minLength": 1
               },
+              "route": {
+                "type": "string",
+                "enum": [
+                  "owner_turn",
+                  "card_click",
+                  "deferred"
+                ]
+              },
               "usage": {
                 "type": "object",
                 "properties": {
@@ -31382,6 +31422,14 @@
               "model": {
                 "type": "string",
                 "minLength": 1
+              },
+              "route": {
+                "type": "string",
+                "enum": [
+                  "owner_turn",
+                  "card_click",
+                  "deferred"
+                ]
               },
               "usage": {
                 "type": "object",

@@ -699,9 +699,15 @@ const Usage = z.strictObject({
   reasoning_tokens: z.int().nonnegative().optional(),
 })
 
+/** Which kind of CoS work a call serves, each with its own model, effort and path. */
+export const CosRoute = z.enum(["owner_turn", "card_click", "deferred"])
+export type CosRoute = z.infer<typeof CosRoute>
+
 const Ran = {
   turn_id: Ulid,
   model: z.string().min(1),
+  /** The route that served the turn; absent on rows before it and on onboarding's planner. */
+  route: CosRoute.optional(),
   usage: Usage,
   cost_usd: Usd,
   tools: z.array(CosToolName),

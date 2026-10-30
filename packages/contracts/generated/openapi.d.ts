@@ -8843,6 +8843,8 @@ export interface components {
           outcome: "answered"
           turn_id: string
           model: string
+          /** @enum {string} */
+          route?: "owner_turn" | "card_click" | "deferred"
           usage: {
             input_tokens: number
             cached_input_tokens: number
@@ -8889,6 +8891,8 @@ export interface components {
           reason: "provider" | "budgetary" | "resource"
           turn_id: string
           model: string
+          /** @enum {string} */
+          route?: "owner_turn" | "card_click" | "deferred"
           usage: {
             input_tokens: number
             cached_input_tokens: number
@@ -8933,6 +8937,8 @@ export interface components {
           outcome: "gated"
           turn_id: string
           model: string
+          /** @enum {string} */
+          route?: "owner_turn" | "card_click" | "deferred"
           usage: {
             input_tokens: number
             cached_input_tokens: number
@@ -8977,6 +8983,8 @@ export interface components {
           outcome: "error"
           turn_id: string
           model: string
+          /** @enum {string} */
+          route?: "owner_turn" | "card_click" | "deferred"
           usage: {
             input_tokens: number
             cached_input_tokens: number
@@ -9021,6 +9029,8 @@ export interface components {
           outcome: "integrity"
           turn_id: string
           model: string
+          /** @enum {string} */
+          route?: "owner_turn" | "card_click" | "deferred"
           usage: {
             input_tokens: number
             cached_input_tokens: number
@@ -9065,6 +9075,8 @@ export interface components {
           outcome: "stopped"
           turn_id: string
           model: string
+          /** @enum {string} */
+          route?: "owner_turn" | "card_click" | "deferred"
           usage: {
             input_tokens: number
             cached_input_tokens: number

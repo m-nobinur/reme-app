@@ -419,6 +419,10 @@ describe("CosTurn", () => {
   it.each([
     ["an answered turn", { ...ran, outcome: "answered", first_chunk_ms: 850 }],
     [
+      "a card click's turn",
+      { ...ran, outcome: "answered", route: "card_click", first_chunk_ms: 640 },
+    ],
+    [
       "an abandoned turn",
       { outcome: "abandoned", turn_id, logged_usd: 0.002, reserved_usd: 0.008 },
     ],
@@ -436,6 +440,7 @@ describe("CosTurn", () => {
     ],
     ["more than six steps", { ...fallback, steps: 7 }],
     ["a tool it does not have", { ...fallback, tools: ["publish"] }],
+    ["a route the table does not have", { ...fallback, route: "router" }],
   ])("refuses %s", (_name, turn) => {
     expect(verdict("CosTurn", CosTurn, turn)).toEqual(REFUSED)
   })
