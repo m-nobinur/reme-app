@@ -1009,7 +1009,7 @@ function listsBack(
 }
 
 /** What `sayProblems` needs to know of a plan's turn. */
-function sayContext(
+export function sayContext(
   plan: OnboardingPlan,
   s: PlanState,
   after: Onboarding

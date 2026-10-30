@@ -25,6 +25,7 @@ import {
   planParts,
   planTurn,
   REQUIRED,
+  sayContext,
   sayProblems,
 } from "../../apps/api/src/onboarding-agent.ts"
 import { voiceProblems } from "../../apps/api/src/voice.ts"
@@ -132,7 +133,12 @@ async function ownerSays(persona, lines, shown) {
       `owner simulator: ${res.status} ${JSON.stringify(body).slice(0, 200)}`
     )
   spent += body.usage?.cost ?? 0
-  return String(body.choices?.[0]?.message?.content ?? "").trim() || "ok"
+  // The api takes at most 1000 characters of an open answer.
+  return (
+    String(body.choices?.[0]?.message?.content ?? "")
+      .trim()
+      .slice(0, 1000) || "ok"
+  )
 }
 
 const counter = (prefix) => {
@@ -300,7 +306,8 @@ async function onboard(persona, spec) {
 
   /** Every line the owner reads, planner or script, checked against the voice. */
   const spoken = (parts) => {
-    const assistantNamed = sim.facts.some((f) => f.key === "assistant.name")
+    const name = factOf(sim.facts, "assistant.name")?.name
+    const assistantNamed = Boolean(name) && name.toLowerCase() !== "reme"
     for (const part of parts) {
       if (part.type !== "text") continue
       heard.push({ text: part.text, named: assistantNamed })
@@ -368,7 +375,11 @@ async function onboard(persona, spec) {
     put([...checked.stated, ...checked.chosen])
     says.push(checked.plan.say)
     plans.push(checked.plan)
-    for (const problem of sayProblems(checked.plan.say)) flag(`say: ${problem}`)
+    for (const problem of sayProblems(
+      checked.plan.say,
+      sayContext(checked.plan, s, checked.after)
+    ))
+      flag(`say: ${problem}`)
     // A re-docked card after a side question (answer_only) is not a new ask.
     if (checked.plan.next.kind === "ask_open") asked([checked.plan.next.about])
     else if (checked.plan.next.kind !== "answer_only")
@@ -421,9 +432,11 @@ async function onboard(persona, spec) {
     }
     const current = applied(o, meant)
     // As `chat.ts` routes them: a card answer is the script's, with no
-    // model call, except a quote form sent back with changes in words.
+    // model call, except a quote form sent back with changes in words and
+    // an open question answered in them.
     let step =
-      output.answer === "changes"
+      output.answer === "changes" ||
+      (output.answer === "stated" && typeof output.text === "string")
         ? await plan(state(current, null, { kind: "card", card, output }))
         : null
     Object.assign(card, { state: "output-available", output })
@@ -484,23 +497,15 @@ async function onboard(persona, spec) {
       }
     }
     if (act?.kind === "answer") {
-      // Until the api reads an open question's answer, the words go to the planner as typed.
-      if (
-        card.type === "tool-ask_open" &&
-        !cardAnswer(card, act.output, [], sim.facts)
-      ) {
-        await typed(
-          act.output.answer === "stated"
-            ? act.output.text
-            : "I'd rather skip that one."
-        )
-        continue
-      }
       if (
         card.type === "tool-review_quote_form" &&
         act.output.answer === "changes"
       )
         quoteChanged = true
+      if (card.type === "tool-ask_design") {
+        const held = factOf(sim.facts, "media.uploads")?.items ?? []
+        put([{ key: "media.uploads", value: { items: [...held, LOGO] } }])
+      }
       if (card.type === "tool-ask_upload" && act.output.answer === "uploaded") {
         put([{ key: "media.uploads", value: { items: act.output.assets } }])
       }
@@ -532,7 +537,7 @@ async function onboard(persona, spec) {
       !lines().some(
         (l) =>
           l.from === "Assistant" &&
-          /not (yet )?(in|part of) the app|not ready in the app|isn't (in the app|ready|available)|not (ready|available) yet|doesn't exist yet|not built yet/i.test(
+          /not (yet )?(in|part of) the app|not ready in the app|isn't (in the app|ready|available)|not (ready|available) yet|doesn't exist yet|not built yet|on its way|coming soon|\bnot\b[^.!?]{0,40}\byet/i.test(
             l.text
           )
       )
@@ -670,6 +675,14 @@ const ASSETS = [
   },
 ]
 
+const LOGO = {
+  id: "5f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0e",
+  name: "logo.png",
+  content_type: "image/png",
+  bytes: 3000,
+  use: "logo",
+}
+
 /** What the owner does with a card, by the sheet's rules, or null to type. */
 function cardAction(persona, card, { quoteChanged }) {
   const input = card.input
@@ -684,6 +697,8 @@ function cardAction(persona, card, { quoteChanged }) {
     // One option per question: the owner's own preset when the tray offers it, else the first; a ticked page set stays as the tray proposed it.
     const answers = Object.fromEntries(
       input.questions.map((q) => {
+        if (q.visual === "logo") return [q.id, { logo: LOGO }]
+        if (q.visual === "photos") return [q.id, { photos: [], create: true }]
         const ids = q.card.options.map((o) => o.id)
         const mine = [persona.cards[q.id], persona.cards[q.card.step]].find(
           (id) => id && ids.includes(id)
@@ -704,7 +719,7 @@ function cardAction(persona, card, { quoteChanged }) {
     return { kind: "answer", output: { answers, skip_all: false } }
   }
   if (card.type === "tool-ask_open") {
-    return persona.cards.open === "skip" || persona.skipAll
+    return input.skippable && (persona.cards.open === "skip" || persona.skipAll)
       ? { kind: "answer", output: { answer: "skipped" } }
       : { kind: "open" }
   }
