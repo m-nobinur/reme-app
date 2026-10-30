@@ -34,6 +34,7 @@ import {
 } from "@workspace/ui/components/assistant/buy-domain"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { AlwaysAllowProvider } from "@workspace/ui/components/assistant/decision"
 import { ConnectGoogleRow } from "@workspace/ui/components/assistant/google"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { PayDialog } from "@workspace/ui/components/assistant/pay-dialog"
@@ -2809,6 +2810,20 @@ const assistantCatalog = [
       />
     ),
   })),
+  // A waiting card with the app's tap behind it, so Always allow shows.
+  {
+    name: "AlwaysAllowProvider",
+    render: () => (
+      <AlwaysAllowProvider value={() => undefined}>
+        <FixtureThread
+          height="h-[14rem]"
+          messages={[CREATE_REMINDER_STATES[2]].filter(
+            (message) => message !== undefined
+          )}
+        />
+      </AlwaysAllowProvider>
+    ),
+  },
   {
     name: "ReplyFeedback",
     render: () => <FixtureThread height="h-[30rem]" messages={RATED} rates />,
