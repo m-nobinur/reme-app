@@ -1027,6 +1027,63 @@ live("an owner deciding a review", () => {
   })
 })
 
+live("an owner cancelling a build", () => {
+  it("answers before a slow termination lands, from a block on information", async () => {
+    const orgId = await freshOrg(kit)
+    const ids = await newAssignment(kit, orgId)
+    for (const to of [
+      "briefing",
+      "planning",
+      "implementing",
+      "blocked_on_information",
+    ] as const) {
+      await advance(kit, ids, to)
+    }
+    const terminated: string[] = []
+    let land!: () => void
+    const landed = new Promise<void>((resolve) => {
+      land = resolve
+    })
+    const pending: Promise<unknown>[] = []
+    const api = new OwnerApi(
+      { waitUntil: (work: Promise<unknown>) => pending.push(work) } as never,
+      {
+        ...env,
+        ASSIGNMENTS: {
+          get: async (id: string) => ({
+            terminate: async () => {
+              await landed
+              terminated.push(id)
+            },
+          }),
+        },
+      } as unknown as Env
+    )
+
+    const res = await api.fetch(
+      new Request(
+        `https://orchestrator/assignments/${ids.assignmentId}/cancel`,
+        {
+          method: "POST",
+          headers: { ...as(orgId), "idempotency-key": crypto.randomUUID() },
+        }
+      )
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      assignment_id: ids.assignmentId,
+      state: "cancelled",
+    })
+    expect(await stateOf(ids)).toBe("cancelled")
+    expect(terminated).toEqual([])
+
+    land()
+    await Promise.all(pending)
+    expect(terminated).toEqual([ids.assignmentId])
+    expect(await stateOf(ids)).toBe("cancelled")
+  })
+})
+
 live("an owner deleting their account", () => {
   it("cancels every open build, removes the site's pointer, and answers the same again", async () => {
     const orgId = await freshOrg(kit)
