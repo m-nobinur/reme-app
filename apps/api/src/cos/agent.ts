@@ -10,6 +10,7 @@ import {
   type CosApproval,
   CosChangeRequest,
   type CosPrefix,
+  type CosRoute,
   type CosStep,
   type CosToolName,
   type CosToolResult,
@@ -128,39 +129,35 @@ export const DEFAULT_MODEL = "openai/gpt-6.1-sol"
 export const OUTAGE_MODEL = "anthropic/claude-sonnet-5.5"
 
 /**
- * Which model, effort and path serves each kind of CoS work (CM1). The turn
- * runner reads `routeOf`; a row with `enabled: false` is recorded, not used.
- * `effort: null` is the model's own default (medium).
+ * Which model, effort and path serves each kind of CoS work (CM1). Every
+ * call takes `owner_turn` until `COS_ROUTES` switches another row on, which
+ * waits for the behaviour judge to score it level. `effort: null` is the
+ * model's own default (medium).
  */
 export const ROUTES = {
-  /** Every turn the owner is waiting on, today's only CoS work. */
-  owner_turn: {
-    model: DEFAULT_MODEL,
-    effort: null,
-    path: "stream",
-    enabled: true,
-  },
-  /** Approve, decline or pick on a card. Not enabled until the cache-read ratio and latency are measured on recorded turns. */
-  card_click: {
-    model: DEFAULT_MODEL,
-    effort: "low",
-    path: "stream",
-    enabled: false,
-  },
-  /** A deadline over a day with no owner waiting. Not enabled: the batch client waits for its first consumer (EV). */
-  deferred: {
-    model: `${DEFAULT_MODEL}:batch`,
-    effort: null,
-    path: "batch",
-    enabled: false,
-  },
-} as const
+  /** Every turn the owner is waiting on. */
+  owner_turn: { model: DEFAULT_MODEL, effort: null, path: "stream" },
+  /** Approve, decline or pick on a card: the same model, so the cache holds, for a faster first chunk. */
+  card_click: { model: DEFAULT_MODEL, effort: "low", path: "stream" },
+  /**
+   * A deadline over a day with no owner waiting. No caller: `:batch` runs
+   * only on OpenRouter's asynchronous Batch API, which the AI SDK provider
+   * does not call, and a CoS turn is a streamed tool loop.
+   */
+  deferred: { model: `${DEFAULT_MODEL}:batch`, effort: null, path: "batch" },
+} as const satisfies Record<
+  CosRoute,
+  { model: string; effort: "low" | null; path: "stream" | "batch" }
+>
 
-type CosTask = keyof typeof ROUTES
-
-/** The route for `task`, or the owner-turn route while its own row is not enabled. */
-export const routeOf = (task: CosTask) =>
-  ROUTES[task].enabled ? ROUTES[task] : ROUTES.owner_turn
+/** The route serving `task`: its own when `switched` (`COS_ROUTES`) names it, else `owner_turn`. */
+export const routeOf = (task: CosRoute, switched = ""): CosRoute =>
+  switched
+    .split(",")
+    .map((name) => name.trim())
+    .includes(task)
+    ? task
+    : "owner_turn"
 
 /**
  * The run's limits, from every CoS turn staging ran on main d626d0f, the
@@ -1037,6 +1034,8 @@ export const newRunState = (): RunState => ({
 export type AgentTurn = {
   turn: Turn
   kit: Tenancy
+  /** The routing row its model came from, recorded on its `cos.turn`. */
+  route: CosRoute
   tools: ToolContext
   price: Price
   /** What the turn reserved; its steps stop before they could pass it. */

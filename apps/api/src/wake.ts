@@ -397,6 +397,7 @@ export async function wakeTurn(
     opened,
     model,
     modelId,
+    route: cos.route,
     newMessageId: () => `wake_${opened.turn.turnId}`,
     post,
   })
