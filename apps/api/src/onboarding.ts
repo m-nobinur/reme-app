@@ -645,7 +645,10 @@ const seeded = <T>(
 
 const SHOWN = 4
 
-/** What a tray question shows: the first four of the seeded pool, never two that look alike. */
+/**
+ * What a tray question shows: the first four of the seeded pool, never two
+ * that look alike unless that would leave a card under the two it needs.
+ */
 function firstOf<T>(
   o: Onboarding,
   kind: string,
@@ -653,13 +656,14 @@ function firstOf<T>(
   id: (t: T) => string,
   alike: (t: T) => string
 ): T[] {
+  const order = seeded(o.orgId, kind, pool, id)
   const kept: T[] = []
-  for (const each of seeded(o.orgId, kind, pool, id)) {
+  for (const each of order) {
     if (kept.length < SHOWN && !kept.some((k) => alike(k) === alike(each))) {
       kept.push(each)
     }
   }
-  return kept
+  return kept.length >= 2 ? kept : order.slice(0, 2)
 }
 
 /** The org's stored images, from `media.uploads`. */
