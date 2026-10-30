@@ -1580,15 +1580,15 @@ export function cosAgent(
     // The instructions and tools come first and never change, and only the
     // turn's context and the owner's newest message follow the history, so
     // each call repeats the last one's prefix. Both keys name the prefix
-    // version and the org, so a new conversation's first call lands where
-    // the org's last one left that prefix warm: OpenRouter sticks a
-    // session_id to its provider from its first success (10 minutes idle
-    // ends it), and OpenAI routes a prompt_cache_key to the machine holding
-    // the prefix. One owner sends far fewer than the 15 calls a minute a key
-    // takes before OpenAI spreads it. The key is a hash, so no tenancy id
-    // leaves for the provider.
+    // version only, so every org's call lands where any org's last one left
+    // the shared instructions and tools warm: OpenRouter sticks a session_id
+    // to its provider from its first success (10 minutes idle ends it), and
+    // OpenAI routes a prompt_cache_key to the machine holding the prefix and
+    // separates reuse between keys. A per-org key left every new or idle org
+    // cold. shortcut: one key takes about 15 calls a minute before OpenAI
+    // spreads it; shard it by org hash when traffic passes that.
     prepareCall: async (call) => {
-      const key = await sha256(`${PREFIX_VERSION}:${run.turn.orgId}`)
+      const key = await sha256(PREFIX_VERSION)
       return {
         ...call,
         providerOptions: {
