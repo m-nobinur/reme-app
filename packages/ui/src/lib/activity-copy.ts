@@ -580,6 +580,24 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: ["Saved your choice"],
     fail: ["save your choice"],
   },
+  read_skill: {
+    kind: "thinking",
+    working: ["Going over how I do this", "Checking my notes on this"],
+    done: ["Checked my notes on this"],
+    fail: ["go over my notes"],
+  },
+  save_correction: {
+    kind: "thinking",
+    working: ["Noting that for your website", "Making a note for your site"],
+    done: ["Noted that for your website"],
+    fail: ["note that for your website"],
+  },
+  schedule_skill: {
+    kind: "reminder",
+    working: ["Setting up your weekly round-up"],
+    done: ["Updated your weekly round-up"],
+    fail: ["set up your weekly round-up"],
+  },
 }
 
 /** What a tool's line says, whatever the part's state, the turn's end or the time. */

@@ -20,6 +20,7 @@
     "@workspace/db": "workspace:*",
     "@workspace/facade": "workspace:*",
     "@workspace/gates": "workspace:*",
+    "@workspace/skills": "workspace:*",
     "@workspace/starter-site": "workspace:*",
     "ai": "7.0.143",
     "hono": "4.13.13",

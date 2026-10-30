@@ -1,4 +1,8 @@
-import { PRIVATE_FACT_KEYS } from "@workspace/contracts"
+import {
+  PRIVATE_FACT_KEYS,
+  STAFF_CORRECTIONS_KEY,
+  StaffCorrections,
+} from "@workspace/contracts"
 import { eq, sql } from "drizzle-orm"
 import { facts } from "./schema.ts"
 import type { OrgScopedDb } from "./tenancy.ts"
@@ -123,6 +127,14 @@ export async function currentFact(db: OrgScopedDb, key: string) {
     .from(facts)
     .where(sql`${facts.key} = ${key} and ${facts.validTo} is null`)
   return row
+}
+
+/** The owner's corrections for every staff member; none when unreadable. */
+export async function readCorrections(
+  db: OrgScopedDb
+): Promise<StaffCorrections> {
+  const row = await currentFact(db, STAFF_CORRECTIONS_KEY)
+  return StaffCorrections.safeParse(row?.value).data ?? { lines: [] }
 }
 
 /** One key's versions, newest first. */

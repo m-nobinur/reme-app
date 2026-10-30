@@ -12,6 +12,7 @@
   "orchestrator-probe": 5,
   "facade-unit": 110,
   "gates-unit": 125,
+  "skills-unit": 7,
   "router-unit": 63,
   "router-unit+db": 63,
   "starter-site": 336,

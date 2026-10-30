@@ -3,6 +3,7 @@ import type { Brief } from "./brief.ts"
 import {
   assignmentGoal,
   buildRules,
+  correctionRules,
   DESIGN_RULES,
   DIRECTION_LIBRARY,
   goalTainted,
@@ -85,6 +86,7 @@ export function instructions(brief: Brief, budgetUsd: number): string {
         ]
       : []),
     ...buildRules(revising, facts, goalTainted(brief, revising)),
+    ...correctionRules(brief.corrections),
     "",
     `Canonical facts (snapshot ${brief.snapshot.snapshot_id}):`,
     facts
@@ -130,6 +132,7 @@ export function sectionInstructions(brief: Brief, budgetUsd: number): string {
     BUILD_MARK,
     "This is a revision. The site is restored as it is live; you change only what the change request asks and keep everything else exactly as it is.",
     ...buildRules(true, facts, true),
+    ...correctionRules(brief.corrections),
     "",
     `Canonical facts (snapshot ${brief.snapshot.snapshot_id}):`,
     facts

@@ -88,10 +88,11 @@ export type ContextPolicy = {
  * labelled data that starts no turn. Version 14 may add a line when events
  * logged away from the chat start a turn of their own. Version 15 may add a
  * line naming the kinds the owner lets run with no card, and one for a kind
- * to offer.
+ * to offer. Version 16 may add a line when a procedure's schedule starts the
+ * turn.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "15",
+  version: "16",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,

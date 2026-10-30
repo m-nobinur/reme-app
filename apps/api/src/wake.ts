@@ -44,13 +44,16 @@ import {
  * to, which logged its items as a `schedule` event first. `slot` is the
  * job's due time and keys the post and the run's `job_runs` row. A heartbeat
  * adds `beat`: whether to email, the contacts its trusted facts hold, the
- * Search report's chip, and the follow-ups it asks about (`task:` keys).
+ * Search report's chip, and the follow-ups it asks about (`task:` keys). A
+ * procedure's schedule, such as `weekly_report`, adds `skill`, the
+ * procedure the turn follows; its posts count with the events'.
  */
 export type WakeJob = {
   kind: "cos_wake"
   orgId: string
   jobId: string
   slot: string
+  skill?: string
   beat?: {
     email: boolean
     trusted: string[]
@@ -250,7 +253,7 @@ export async function wakeTurn(
       null,
       facts,
       false,
-      "wake"
+      job.skill ? { skill: job.skill } : "wake"
     )
     const turn: Turn = { ...session, turnId: newUlid() }
     await beginTurn(db, turn, {

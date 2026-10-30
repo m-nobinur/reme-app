@@ -66,6 +66,8 @@ export type Brief = {
   continues?: "build" | "revise"
   /** A retry after a provider failure: the Developer starts on the fallback model. */
   fallback?: true
+  /** The owner's corrections for the Developer, each their sentence as typed. */
+  corrections?: string[]
 }
 
 /**

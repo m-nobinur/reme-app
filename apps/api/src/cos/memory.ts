@@ -315,10 +315,15 @@ export async function readProfile(
  * Takes the profile's writer lock, the one `supersedeFact` takes, so two
  * writers (the tool, the page, reflection) cannot both start from the same
  * version. Call it before `readProfile` and keep to the one transaction.
+ * Another private fact read and rewritten whole takes it by its own key.
  */
-export async function lockProfile(db: OrgScopedDb, orgId: string) {
+export async function lockProfile(
+  db: OrgScopedDb,
+  orgId: string,
+  key = OWNER_PROFILE_KEY
+) {
   await db.execute(
-    sql`select pg_advisory_xact_lock(5, hashtext(${`${orgId}:${OWNER_PROFILE_KEY}`}::text))`
+    sql`select pg_advisory_xact_lock(5, hashtext(${`${orgId}:${key}`}::text))`
   )
 }
 

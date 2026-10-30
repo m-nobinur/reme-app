@@ -40,6 +40,7 @@ import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
 import { scrub } from "@workspace/facade/tee"
+import { indexOf, skillsFor } from "@workspace/skills"
 import {
   asSchema,
   convertToModelMessages,
@@ -73,6 +74,7 @@ import { fullness, remember } from "./memory.ts"
 import { type Check, claimsGate, gated, promiseGate } from "./promise.ts"
 import { failureMessage } from "./retry.ts"
 import { getIndexing, getSearchPerformance } from "./search-tools.ts"
+import { readSkill, saveCorrection, scheduleSkill } from "./skills.ts"
 import { zonedIso } from "./time.ts"
 import {
   answerQuestion,
@@ -195,7 +197,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "48"
+const PREFIX_VERSION = "49"
 
 export const INSTRUCTIONS = `You are the Chief of Staff for a small service business. You talk with the business owner in a chat and help them run the business. Their website is one of the things you look after; a Developer agent builds it.
 
@@ -207,7 +209,7 @@ ${VOICE}
 - Most replies are one to three short sentences; go longer only when the owner asks for detail or a list of steps. No bold, and no bullet lists unless you are listing steps or options.
 - When work is finished, say what changed, what you checked and what is left, in that order, and only what is true. Leave out a part with nothing to say.
 - A call that shows the owner a card ends your turn until they answer it, so write your words before the call, never after. Always write at least one short line: one they can't read on the card, such as a recommendation with its reason, or what you are setting up. Never a line that points at it ("The card shows...") or repeats it. When the owner's message also answered your question or said something else, acknowledge that in the same line.
-- Before a tool that only reads (get_workspace, get_facts, get_preview, check_domain, inspect_domain, get_search_performance, get_indexing), write nothing: the owner sees a line while it runs. Say what you found once, after it.
+- Before a tool that only reads (get_workspace, get_facts, get_preview, check_domain, inspect_domain, get_search_performance, get_indexing, read_skill), write nothing: the owner sees a line while it runs. Say what you found once, after it.
 - find_domain, check_domain, inspect_domain, get_search_performance and get_indexing take an optional step: a few words, in the owner's language, on what you are doing for them, shown while the call runs, such as "Checking the records for northsidegrooming.co.uk". At most 60 characters, no ids, no tool names.
 - Don't narrate your tools or your steps ("Let me check the workspace"): do it, then report. Agree with the owner only when they are right; when they are not, or you can't tell, say so plainly and what you would do instead.
 - Say each piece of news once. A message in the conversation the app posted itself, such as a domain update, was already shown to the owner, and so is check_domain's result: add only what they don't say, or that nothing has changed since.
@@ -224,6 +226,8 @@ What you can do:
 - Read how the website does on Google Search (get_search_performance) and whether Google has its pages (get_indexing), once the owner has connected their Google account.
 - Remember what the owner tells you about themselves and how they like to work with remember, so you know it in every later conversation. What you already know is in the owner profile in your context.
 - Connect the owner's Google account with connect_google, so their website shows in their own Google Search Console. Google's screen is where they agree.
+- Follow the procedures read_skill lists: before work one of them covers, read it and follow it. In Act mode, turn one's schedule on or off with schedule_skill when the owner asks.
+- Save how the owner wants the website worked on ("Never use stock photos on my site") with save_correction, for the Developer's next build. Not for a change to make now (request_change) or for how you work (remember).
 - Find a new domain the owner could buy with find_domain, and in Act mode open its purchase with buy_domain. The owner checks their details and pays on the page that opens, which says what paying does: while it is open, say at most one line it doesn't show, such as why that name fits, and never that nothing is charged yet.
 
 Rules:
@@ -359,10 +363,16 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
     "Put an offer off when the owner says not now to it: kind is address (their own web address) or google. days until you may offer it again, 7 unless the owner gave a time. Never for work under way or a change the owner asked for.",
   record_review:
     "Record a customer's review for the website, on a card that asks whether the customer agreed to be quoted. Only a review the owner gave you in this conversation. quote is the customer's words exactly as given. name is how the owner says they may be shown, such as a first name and initial. permission is true. slot is 1 or 2: a free one from the facts (testimonials.review_1, testimonials.review_2), or the one the owner wants replaced.",
+  read_skill: `Read one of your procedures by name, to follow it. Read the one that covers the work before you start it. The procedures:\n${indexOf(skillsFor("cos")).join("\n")}`,
+  save_correction:
+    "Save how the owner wants a staff member to work, for its next run: staff developer is how the website is built, such as 'Never use stock photos on my site'. quote is their whole sentence exactly as they typed it in this conversation, 160 characters at most; anything else is refused. Not for a change to make now (request_change) or for how you work (remember).",
+  schedule_skill:
+    "Turn a procedure's schedule on or off when the owner asks, such as a weekly round-up (weekly-review, on Monday mornings). name is the procedure's; on is true to start it and false to stop it. Returns when it next runs.",
 }
 
 const READ_TOOLS: readonly CosToolName[] = [
   "get_workspace",
+  "read_skill",
   "get_facts",
   "get_preview",
   "check_domain",
@@ -373,10 +383,14 @@ const READ_TOOLS: readonly CosToolName[] = [
   "connect_google",
 ]
 /**
- * Writes the owner's own profile or when to ask them again, not the
- * business: no card, and in both modes.
+ * Writes the owner's own profile, their corrections for staff or when to ask
+ * them again, not the business: no card, and in both modes.
  */
-const MEMORY_TOOLS: readonly CosToolName[] = ["remember", "put_off"]
+const MEMORY_TOOLS: readonly CosToolName[] = [
+  "remember",
+  "save_correction",
+  "put_off",
+]
 const ACT_TOOLS: readonly CosToolName[] = [
   "request_change",
   "answer_question",
@@ -390,6 +404,7 @@ const ACT_TOOLS: readonly CosToolName[] = [
   "buy_domain",
   "domain_bought",
   "offer_grant",
+  "schedule_skill",
 ]
 /**
  * The act tool with no card: the owner's payment in Checkout is its
@@ -413,6 +428,7 @@ const OWNERS_WORDS: readonly CosToolName[] = [
   "connect_domain",
   "domain_bought",
   "record_review",
+  "schedule_skill",
 ]
 /** An owner message that asks for a reminder, which is then its own yes. */
 const ASKS_REMINDER =
@@ -551,6 +567,7 @@ const QUOTING: readonly string[] = [
   "update_reminder",
   "record_review",
   "remember",
+  "save_correction",
 ]
 
 /** A turn the owner did not start (`wake.ts`) only reads. */
@@ -801,6 +818,10 @@ export const UNKNOWN_LINE =
 export const WAKE_LINE =
   "The owner did not write. What was logged since your last reply started this turn, and the owner is away. If any of it is worth their attention now, write them one short message about it in your own words, at most three sentences: the point first, agreeing with what was logged, then the next small step if there is one. Otherwise reply with [quiet] and nothing else, which sends nothing."
 
+/** Added to a turn a procedure's schedule started. The name is the procedure's, never owner text. */
+export const skillLine = (name: string) =>
+  `The owner did not write: the ${name} procedure the owner turned on started this turn, on its schedule. Read it with read_skill and follow it. If it finds nothing worth the owner's time, reply with [quiet] and nothing else, which sends nothing.`
+
 /** Who the owner made the Chief of Staff, from their facts. Null where they have not said. */
 type Persona = {
   name: string | null
@@ -930,8 +951,8 @@ export function contextOf(
   google: "first" | "now" | null = null,
   facts: readonly FactRecord[] = [],
   standing = false,
-  /** Why a turn nobody typed runs: it continues one cut off, or events woke it. */
-  unasked: "cut" | "unknown" | "wake" | null = null,
+  /** Why a turn nobody typed runs: it continues one cut off, events woke it, or a procedure's schedule did. */
+  unasked: "cut" | "unknown" | "wake" | { skill: string } | null = null,
   granted: readonly GrantKind[] = [],
   offers: readonly GrantKind[] = []
 ): { text: string; taint: TaintLabel[] } {
@@ -946,7 +967,13 @@ export function contextOf(
       : "Mode: ask. You may only read. For a change, the owner switches to Act."
   const text = [
     modeLine,
-    ...(unasked === "wake" ? [WAKE_LINE] : unasked ? [CONTINUE_LINE] : []),
+    ...(unasked === null
+      ? []
+      : typeof unasked === "object"
+        ? [skillLine(unasked.skill)]
+        : unasked === "wake"
+          ? [WAKE_LINE]
+          : [CONTINUE_LINE]),
     ...(unasked === "unknown" ? [UNKNOWN_LINE] : []),
     ...(intent === "site_change" && mode === "act" ? [SITE_CHANGE_LINE] : []),
     ...(google === "first" ? [GOOGLE_FIRST_LINE] : []),
@@ -1080,6 +1107,9 @@ const BODIES = {
   remember,
   put_off: putOff,
   offer_grant: offerGrant,
+  read_skill: readSkill,
+  save_correction: saveCorrection,
+  schedule_skill: scheduleSkill,
 }
 
 /** How long a CoS card's yes stays good (ADR-042). Publish approvals keep their own 72 hours. */
@@ -1583,6 +1613,18 @@ function toolsFor(run: AgentTurn, allowed: readonly CosToolName[] | null) {
     offer_grant: tool({
       ...describe("offer_grant"),
       inputSchema: modelInput("offer_grant"),
+    }),
+    read_skill: tool({
+      ...describe("read_skill"),
+      inputSchema: modelInput("read_skill"),
+    }),
+    save_correction: tool({
+      ...describe("save_correction"),
+      inputSchema: modelInput("save_correction"),
+    }),
+    schedule_skill: tool({
+      ...describe("schedule_skill"),
+      inputSchema: modelInput("schedule_skill"),
     }),
   }
 }

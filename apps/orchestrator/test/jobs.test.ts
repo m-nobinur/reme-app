@@ -19,6 +19,7 @@ import {
   OutcomeUnknown,
   PAUSED_TEXT,
   runJob,
+  skillJob,
 } from "../src/jobs.ts"
 import type { JobMessage, JobsQueueMessage } from "../src/schedule.ts"
 import { freshOrg, kit } from "./fixture.ts"
@@ -37,6 +38,26 @@ describe("backoff", () => {
   it("doubles from two minutes and stops at an hour", () => {
     expect([1, 2, 3, 4, 5, 6, 7].map(backoffMinutes)).toEqual([
       2, 4, 8, 16, 32, 60, 60,
+    ])
+  })
+})
+
+describe("a weekly_report job", () => {
+  it("is a proactive turn that follows the weekly review", async () => {
+    const sent: unknown[] = []
+    const nextRunAt = new Date("2026-11-02T08:00:00Z")
+    await skillJob({
+      env: { AFTER_TURN: { send: async (body: unknown) => sent.push(body) } },
+      job: { id: "job-1", orgId: "org-1", kind: "weekly_report", nextRunAt },
+    } as unknown as Parameters<Handler>[0])
+    expect(sent).toEqual([
+      {
+        kind: "cos_wake",
+        orgId: "org-1",
+        jobId: "job-1",
+        slot: "2026-11-02T08:00:00.000Z",
+        skill: "weekly-review",
+      },
     ])
   })
 })
