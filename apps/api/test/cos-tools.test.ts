@@ -52,8 +52,8 @@ import {
   deleteReminder,
   domainBought,
   findDomain,
+  getChange,
   getFacts,
-  getPreview,
   getWorkspace,
   inspectDomain,
   newContact,
@@ -259,12 +259,16 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
   let realFetch: typeof fetch
   let me: Owner
   let other: Owner
+  let changer: Owner
+  let blank: Owner
 
   beforeAll(async () => {
     realFetch = globalThis.fetch
     globalThis.fetch = stubJwksFetch()
     me = await owner(kit, url as string, "cos-tools")
     other = await owner(kit, url as string, "cos-other")
+    changer = await owner(kit, url as string, "cos-changer")
+    blank = await owner(kit, url as string, "cos-blank")
   }, 60_000)
 
   afterAll(async () => {
@@ -581,11 +585,174 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     })
   })
 
-  describe("get_preview", () => {
-    it("answers ready with the version and expiry, and no link", async () => {
+  describe("get_change", () => {
+    /** A report as the orchestrator logs one; `extra` is what a case adds or drops. */
+    const reported = (
+      who: Owner,
+      assignmentId: string,
+      revisionId: string,
+      extra: Record<string, unknown> = {}
+    ) => ({
+      report_id: crypto.randomUUID(),
+      org_id: who.orgId,
+      assignment_id: assignmentId,
+      session_id: crypto.randomUUID(),
+      revision_id: revisionId,
+      summary: "Reworded the hero heading and subheading.",
+      changes: [{ path: "src/site-config.ts", reason: "New hero words" }],
+      screenshots: [],
+      checks: [{ check: "astro build", exit_code: 0, output_key: null }],
+      risks: [],
+      decisions_needed: [],
+      reported_at: AT,
+      ...extra,
+    })
+
+    it("reads a published change's record and the changes before it, with no call to the builder", async () => {
+      const s = seed(kit, changer)
+      const earlier = await s.assignment("published", { kind: "site.revise" })
+      await s.event(earlier, "assignment.created", {
+        lane: "quick",
+        label: "your phone number",
+      })
+      const build = await s.assignment("published", { kind: "site.revise" })
+      await s.event(build, "assignment.created", {
+        lane: "quick",
+        label: "your hero text",
+      })
+      const revision = await s.revision(build, 2)
+      await s.event(
+        build,
+        "assignment.completion_reported",
+        reported(changer, build, revision, {
+          text_changes: [
+            {
+              before: "We clean homes",
+              after: "Professional home cleaning in Bristol",
+              pages: ["/"],
+            },
+          ],
+          text_changes_left: 2,
+          left_out: [
+            {
+              field: "business.insurance",
+              answer_schema: { type: "string" },
+              options: null,
+              question: "Are you insured?",
+            },
+          ],
+        })
+      )
+      await s.deployment(revision, await s.approval(build, revision, 1, true))
+      const stub = stubOrchestrator()
+      const found = kept(
+        "get_change",
+        await getChange(context(changer, stub), { ref: build })
+      )
+      expect(found).toEqual({
+        outcome: "found",
+        ref: build,
+        label: "your hero text",
+        asked: "Build the site from the canonical facts.",
+        state: "published",
+        done: "Reworded the hero heading and subheading.",
+        as_asked: true,
+        text_changes: [
+          {
+            before: "We clean homes",
+            after: "Professional home cleaning in Bristol",
+            pages: ["/"],
+          },
+        ],
+        text_changes_left: 2,
+        left_out: ["Are you insured?"],
+        preview: null,
+        live_now: true,
+        published_at: expect.any(String),
+        recorded: true,
+        recent: [
+          {
+            ref: earlier,
+            label: "your phone number",
+            state: "published",
+            at: expect.any(String),
+          },
+        ],
+      })
+      expect(stub.calls).toHaveLength(0)
+      // Left out, it is the latest change, and a change not live says so.
+      expect(await getChange(context(changer), {})).toMatchObject({
+        ref: build,
+      })
+      expect(await getChange(context(changer), { ref: earlier })).toMatchObject(
+        {
+          live_now: false,
+          published_at: null,
+          recent: [],
+        }
+      )
+    })
+
+    it("says a change from before text changes were recorded was not", async () => {
+      const s = seed(kit, me)
+      const build = await s.assignment("published")
+      const revision = await s.revision(build, 41)
+      await s.event(
+        build,
+        "assignment.completion_reported",
+        reported(me, build, revision)
+      )
+      const output = kept(
+        "get_change",
+        await getChange(context(me), { ref: build })
+      )
+      expect(output).toMatchObject({
+        outcome: "found",
+        label: null,
+        done: "Reworded the hero heading and subheading.",
+        recorded: false,
+        left_out: [],
+        live_now: false,
+      })
+      expect(output).not.toHaveProperty("text_changes", expect.anything())
+    })
+
+    it("says a change with no report yet has no account and nothing recorded", async () => {
+      const s = seed(kit, me)
+      const build = await s.assignment("implementing")
+      expect(await getChange(context(me), { ref: build })).toMatchObject({
+        outcome: "found",
+        state: "being built",
+        done: null,
+        recorded: false,
+        preview: null,
+      })
+    })
+
+    it("answers none when the business has no change", async () => {
+      const output = kept("get_change", await getChange(context(blank), {}))
+      expect(output).toEqual({ outcome: "none" })
+    })
+
+    it("refuses another org's change without calling the builder", async () => {
+      const s = seed(kit, other)
+      const theirs = await s.assignment("published")
+      const stub = stubOrchestrator()
+      const output = kept(
+        "get_change",
+        await getChange(context(me, stub), { ref: theirs })
+      )
+      expect(output).toMatchObject({
+        outcome: "refused",
+        error: { class: "resource", code: "assignment.not_found" },
+      })
+      expect(stub.calls).toHaveLength(0)
+    })
+
+    it("gives a change that waits on the owner its preview's expiry, and no link", async () => {
       const s = seed(kit, me)
       const build = await s.assignment("preview_ready")
-      const revision = await s.revision(build, 3)
+      const revision = await s.revision(build, 43)
       const stub = stubOrchestrator(() =>
         Response.json({
           revision_id: revision,
@@ -595,38 +762,40 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         })
       )
       const output = kept(
-        "get_preview",
-        await getPreview(context(me, stub), { assignment_id: build })
+        "get_change",
+        await getChange(context(me, stub), { ref: build })
       )
-      expect(output).toEqual({
-        outcome: "ready",
-        assignment_id: build,
-        version: 3,
-        expires_at: AT,
+      expect(output).toMatchObject({
+        outcome: "found",
+        state: "ready for the owner to look over",
+        preview: { expires_at: AT },
+        live_now: false,
       })
-      await s.state(build, "cancelled")
+      expect(stub.calls).toHaveLength(1)
     })
 
-    it("refuses as the closed shape when there is no preview yet", async () => {
+    it("refuses as the closed shape when the builder has no preview, and throws when it is down", async () => {
       const s = seed(kit, me)
-      const build = await s.assignment("implementing")
-      const stub = stubOrchestrator(() =>
+      const build = await s.assignment("preview_ready")
+      await s.revision(build, 42)
+      const building = stubOrchestrator(() =>
         Response.json(
           {
             class: "validation",
             code: "revision.building",
             message: "This revision has no artifact to preview yet.",
-            detail: { revision_id: crypto.randomUUID(), url: HTTPS },
+            detail: {},
             occurred_at: AT,
           },
           { status: 409 }
         )
       )
-      const output = kept(
-        "get_preview",
-        await getPreview(context(me, stub), { assignment_id: build })
-      )
-      expect(output).toEqual({
+      expect(
+        kept(
+          "get_change",
+          await getChange(context(me, building), { ref: build })
+        )
+      ).toEqual({
         outcome: "refused",
         error: {
           class: "validation",
@@ -634,44 +803,11 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           message: "This revision has no artifact to preview yet.",
         },
       })
-      await s.state(build, "cancelled")
-    })
-
-    it("throws, never refuses, when the builder names a revision the org does not hold", async () => {
-      const s = seed(kit, me)
-      const build = await s.assignment("preview_ready")
-      const stub = stubOrchestrator(() =>
-        Response.json({
-          revision_id: crypto.randomUUID(),
-          url: HTTPS,
-          screenshots: [HTTPS, HTTPS, HTTPS],
-          expires_at: AT,
-        })
-      )
-      const failed = await getPreview(context(me, stub), {
-        assignment_id: build,
+      const down = stubOrchestrator(() => new Response("down", { status: 503 }))
+      const failed = await getChange(context(me, down), {
+        ref: build,
       }).catch((error: unknown) => error)
       expect(failed).toBeInstanceOf(ToolFailed)
-      expect((failed as ToolFailed).error).toMatchObject({
-        class: "integrity",
-        code: "orchestrator.off_contract",
-      })
-    })
-
-    it("refuses another org's build without calling the orchestrator", async () => {
-      const s = seed(kit, other)
-      const theirs = await s.assignment("preview_ready")
-      const stub = stubOrchestrator()
-      const output = kept(
-        "get_preview",
-        await getPreview(context(me, stub), { assignment_id: theirs })
-      )
-      expect(output).toMatchObject({
-        outcome: "refused",
-        error: { class: "resource", code: "assignment.not_found" },
-      })
-      expect(stub.calls).toHaveLength(0)
-      await s.state(theirs, "cancelled")
     })
   })
 

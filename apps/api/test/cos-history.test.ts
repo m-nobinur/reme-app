@@ -166,9 +166,9 @@ const tools = {
     inputSchema: COS_TOOLS.get_facts.input,
     outputSchema: COS_TOOLS.get_facts.output,
   }),
-  get_preview: tool({
-    inputSchema: COS_TOOLS.get_preview.input,
-    outputSchema: COS_TOOLS.get_preview.output,
+  get_change: tool({
+    inputSchema: COS_TOOLS.get_change.input,
+    outputSchema: COS_TOOLS.get_change.output,
   }),
   request_change: tool({
     inputSchema: COS_TOOLS.request_change.input,
@@ -208,6 +208,7 @@ const RELEASED: Record<
   "14": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "15": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "16": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "17": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
 }
 
 describe("CONTEXT_POLICY", () => {
@@ -373,6 +374,56 @@ describe("deriveCosMessages", () => {
       "assistant",
       "tool",
     ])
+  })
+
+  it("replays a turn logged before get_change replaced get_preview", async () => {
+    const ready = {
+      outcome: "ready",
+      assignment_id: BUILD,
+      version: 3,
+      expires_at: "2026-09-27T10:00:00.000Z",
+    }
+    const call = {
+      type: "tool-get_preview",
+      toolCallId: "functions.get_preview:0",
+      state: "output-available",
+      input: { assignment_id: BUILD },
+      output: ready,
+    }
+    const events = session(
+      context(TURN_1, "First turn."),
+      said(TURN_1, "m1", "Is the preview ready?"),
+      [
+        "cos.tool_result",
+        {
+          turn_id: TURN_1,
+          tool_call_id: call.toolCallId,
+          tool: "get_preview",
+          output: ready,
+        },
+      ],
+      replied(TURN_1, "a1", [
+        { type: "step-start" },
+        call,
+        { type: "text", text: "It is ready.", state: "done" },
+      ]),
+      ["cos.turn", { turn_id: TURN_1 }],
+      context(TURN_2, "Second turn."),
+      said(TURN_2, "m2", "What did it change?")
+    )
+    const { messages } = deriveCosMessages(events, CONTEXT_POLICY)
+    expect(messages.find((m) => m.id === "a1")?.parts).toContainEqual(call)
+    const model = await convertToModelMessages(messages, { tools })
+    expect(model.map((m) => m.role)).toEqual([
+      "user",
+      "assistant",
+      "tool",
+      "user",
+      "user",
+    ])
+    expect(JSON.stringify(model.find((m) => m.role === "tool"))).toContain(
+      "get_preview"
+    )
   })
 
   describe("a result for a reused call id", () => {

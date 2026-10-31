@@ -13,7 +13,7 @@ import type {
 // given back sits in a field named `ref`, which the instructions say is
 // never said to the owner.
 
-const STATE: Record<AssignmentState, string> = {
+export const STATE: Record<AssignmentState, string> = {
   queued: "waiting its turn",
   briefing: "being planned",
   planning: "being planned",

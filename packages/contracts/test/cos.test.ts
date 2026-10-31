@@ -9,6 +9,7 @@ import {
   COS_TOOLS,
   CosApproval,
   CosCompaction,
+  CosContext,
   CosFeedback,
   CosMessage,
   CosToolName,
@@ -20,7 +21,6 @@ import {
   CreateReminderOutput,
   GetChangeInput,
   GetChangeOutput,
-  GetPreviewOutput,
   GetReviewInput,
   GetReviewOutput,
   RecordReviewInput,
@@ -66,7 +66,7 @@ describe("COS_TOOLS", () => {
     const all = [
       "get_workspace",
       "get_facts",
-      "get_preview",
+      "get_change",
       "request_change",
       "answer_question",
       "create_reminder",
@@ -174,13 +174,14 @@ describe("AnswerQuestionInput", () => {
 
 describe("CosToolResult", () => {
   // The branches are written out, so each is checked against its tool.
-  it("has one branch per tool, each with that tool's output", () => {
+  it("has one branch per tool, each with that tool's output, then the retired get_preview", () => {
     const branches = CosToolResult.options.map((o) => o.shape)
-    expect(branches.map((b) => b.tool.value)).toStrictEqual(
-      Object.keys(COS_TOOLS)
-    )
-    for (const b of branches) {
-      expect(b.output).toBe(COS_TOOLS[b.tool.value].output)
+    expect(branches.map((b) => b.tool.value)).toStrictEqual([
+      ...Object.keys(COS_TOOLS),
+      "get_preview",
+    ])
+    for (const b of branches.slice(0, -1)) {
+      expect(b.output).toBe(COS_TOOLS[b.tool.value as CosToolName].output)
     }
   })
 
@@ -190,36 +191,47 @@ describe("CosToolResult", () => {
   })
 })
 
-describe("GetPreviewOutput", () => {
-  it.each([
-    ["a ready preview", samples.GetPreviewOutput],
-    [
-      "a refusal",
-      {
-        outcome: "refused",
-        error: {
-          class: "validation",
-          code: "preview.not_ready",
-          message: "This build has no preview yet.",
-        },
-      },
-    ],
-  ])("accepts %s", (_name, output) => {
-    expect(verdict("GetPreviewOutput", GetPreviewOutput, output)).toEqual(
-      ACCEPTED
-    )
+describe("a turn logged before get_change replaced get_preview", () => {
+  const preview = {
+    outcome: "ready",
+    assignment_id: "3c4d5e6f-7081-4c8d-9e0f-3a4b5c6d7e8f",
+    version: 3,
+    expires_at: "2026-08-27T09:30:00+01:00",
+  }
+
+  it("replays its get_preview result", () => {
+    const logged = {
+      ...(samples.CosToolResult as object),
+      tool_call_id: "functions.get_preview:0",
+      tool: "get_preview",
+      output: preview,
+    }
+    expect(verdict("CosToolResult", CosToolResult, logged)).toEqual(ACCEPTED)
+    expect(
+      verdict("CosToolResult", CosToolResult, {
+        ...logged,
+        output: { ...preview, url: "https://example.com" },
+      })
+    ).toEqual(REFUSED)
   })
 
   it.each([
     [
-      "a ready preview with a link",
-      { ...(samples.GetPreviewOutput as object), url: "https://example.com" },
+      "CosContext",
+      CosContext,
+      { ...(samples.CosContext as object), active_tools: ["get_preview"] },
     ],
-    ["a refusal with no error", { outcome: "refused" }],
-  ])("refuses %s", (_name, output) => {
-    expect(verdict("GetPreviewOutput", GetPreviewOutput, output)).toEqual(
-      REFUSED
-    )
+    [
+      "CosTurn",
+      CosTurn,
+      { ...(samples.CosTurn as object), tools: ["get_preview"] },
+    ],
+  ] as const)("replays a %s that names it", (name, schema, value) => {
+    expect(verdict(name, schema, value)).toEqual(ACCEPTED)
+  })
+
+  it("is no tool the CoS can call", () => {
+    expect(CosToolName.safeParse("get_preview").success).toBe(false)
   })
 })
 
@@ -437,7 +449,6 @@ describe("the refusal a tool shows the model", () => {
   it.each([
     ["RequestChangeOutput", RequestChangeOutput],
     ["AnswerQuestionOutput", AnswerQuestionOutput],
-    ["GetPreviewOutput", GetPreviewOutput],
     ["GetChangeOutput", GetChangeOutput],
     ["AskDeveloperOutput", AskDeveloperOutput],
     ["GetReviewOutput", GetReviewOutput],

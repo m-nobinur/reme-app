@@ -387,6 +387,33 @@ export const CASES = [
     },
   },
   {
+    pending: "the assistant can read what a change replaced",
+    name: "before-and-after",
+    turns: [
+      { mode: "act", text: "Change the hero text, use professional copy" },
+      {
+        mode: "ask",
+        text: "What was the line before and what is now?",
+        after: "build",
+      },
+    ],
+    check: ([, asked]) => {
+      const problems = [...noActs(asked), ...replied(asked)]
+      const reads = called(asked, "get_change")
+      if (reads.length !== 1)
+        problems.push(`expected one get_change call, got ${reads.length}`)
+      const pairs = reads[0]?.output?.text_changes ?? []
+      const reply = text(asked)
+      if (pairs.length === 0 && !CANT_SEE.test(reply))
+        problems.push("nothing was recorded and the reply does not say so")
+      for (const { before, after } of pairs)
+        for (const words of [before, after])
+          if (words && !reply.includes(words))
+            problems.push(`the reply leaves out the recorded "${words}"`)
+      return problems
+    },
+  },
+  {
     pending: "the reply goes by the workspace, not an earlier update",
     // The workspace holds no review, so the update the owner quotes is stale.
     name: "stale-approval-notice",
@@ -433,6 +460,9 @@ export const CASES = [
 
 const STILL_AT_WORK =
   /\b(?:still|currently)\s+(?:building|being built|working|under way|in progress)\b/i
+
+const CANT_SEE =
+  /\b(?:can(?:not|['’]t)|unable|not able|don['’]t have)\b[^.]*\b(?:see|tell|find|read|say)\b/i
 
 const TELLS_TO_APPROVE =
   /\b(?:tap|click|press|hit|open)\s+(?:the\s+)?(?:approve|publish|review)\b|\bwaiting (?:for|on) your approval\b/i
