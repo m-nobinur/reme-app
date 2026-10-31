@@ -49,6 +49,7 @@ const { reportComplete } = await import("../src/agents/developer.ts")
 const ORG = "10000001-0000-4000-8000-000000000000"
 let state = "implementing"
 const emitted: string[] = []
+const reports: Record<string, unknown>[] = []
 const current = {
   runtime: {
     spec: {
@@ -65,13 +66,16 @@ const current = {
       }),
   },
   tee: {
-    emit: (type: string) => emitted.push(type),
+    emit: (type: string, payload: Record<string, unknown>) => {
+      emitted.push(type)
+      reports.push(payload)
+    },
     flush: async () => undefined,
   },
 }
 type Run = (args: unknown) => Promise<{ output: string; terminate: boolean }>
 const run = (reportComplete(current as never) as unknown as { run: Run }).run
-const call = (left_out?: unknown[]) =>
+const call = (left_out?: unknown[], notes?: unknown[]) =>
   run({
     data: {
       summary: "Built",
@@ -79,6 +83,7 @@ const call = (left_out?: unknown[]) =>
       risks: [],
       decisions_needed: [],
       left_out,
+      notes,
     },
     harness: { sandbox: {} },
     step: { do: (_: string, fn: () => Promise<unknown>) => fn() },
@@ -89,6 +94,7 @@ describe("report_complete", () => {
     sent.length = 0
     finished.length = 0
     emitted.length = 0
+    reports.length = 0
   })
 
   it("builds, reports and wakes the Workflow while the build is implementing", async () => {
@@ -98,6 +104,19 @@ describe("report_complete", () => {
     expect(emitted).toEqual(["assignment.completion_reported"])
     expect(sent).toHaveLength(1)
     expect(result.terminate).toBe(true)
+  })
+
+  it("carries the notes into the stored report", async () => {
+    state = "implementing"
+    const notes = [{ about: "no prices", why: "No fact gives a price." }]
+    await call(undefined, notes)
+    expect(reports[0]?.notes).toEqual(notes)
+  })
+
+  it("stores a report without notes as before", async () => {
+    state = "implementing"
+    await call()
+    expect(reports[0]).not.toHaveProperty("notes")
   })
 
   it("refuses a left-out item the owner could not be asked, before it builds", async () => {

@@ -900,6 +900,7 @@ export const reportComplete = (current: Session) =>
         decisions_needed: true,
         left_out: true,
         as_asked: true,
+        notes: true,
       })
     ),
     harness: true,
@@ -961,6 +962,7 @@ export const reportComplete = (current: Session) =>
           })),
         }),
         ...(data.as_asked === false && { as_asked: false }),
+        ...(data.notes?.length && { notes: data.notes }),
         reported_at: new Date().toISOString(),
       })
       // Model output: nothing downstream may promote it (§28.3).
