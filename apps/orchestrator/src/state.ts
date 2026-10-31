@@ -1,5 +1,6 @@
 import {
   type AssignmentState,
+  CompletionReport,
   HANDOFF_STATUS,
   HandoffResult,
   TERMINAL_STATES,
@@ -201,11 +202,15 @@ export async function lastEventAt(
 }
 
 /** What an ending assignment hands back to the CoS. The goal may quote the owner. */
-function handoffResult(
+async function handoffResult(
+  db: OrgScopedDb,
   row: Row,
   to: AssignmentState,
   reason?: string
-): HandoffResult {
+): Promise<HandoffResult> {
+  const evidence: HandoffResult["evidence"] = [
+    { kind: "record", table: "assignments", id: row.id },
+  ]
   const said =
     to === "published"
       ? "Done and live"
@@ -214,10 +219,42 @@ function handoffResult(
         : to === "cancelled"
           ? "Cancelled before it was finished"
           : "Stopped without finishing"
+  let summary = `${said}: ${row.goal}`
+  if (to === "published") {
+    const [event] = await db
+      .select({ payload: events.payload })
+      .from(events)
+      .where(
+        sql`${events.assignmentId} = ${row.id} and ${events.type} = 'assignment.completion_reported'`
+      )
+      .orderBy(sql`${events.eventId} desc`)
+      .limit(1)
+    const report = CompletionReport.safeParse(event?.payload).data
+    if (report) {
+      const first = report.text_changes?.[0]
+      evidence.push({
+        kind: "record",
+        table: "site_revisions",
+        id: report.revision_id,
+      })
+      summary = [
+        summary,
+        report.summary,
+        first &&
+          (!first.before
+            ? `Added "${first.after}"`
+            : !first.after
+              ? `Removed "${first.before}"`
+              : `"${first.before}" became "${first.after}"`),
+      ]
+        .flatMap((part) => (part ? [part.replace(/\.+$/, "")] : []))
+        .join(". ")
+    }
+  }
   return HandoffResult.parse({
     outcome: HANDOFF_STATUS[to],
-    summary: `${said}: ${row.goal}`.slice(0, 1500),
-    evidence: [{ kind: "record", table: "assignments", id: row.id }],
+    summary: summary.slice(0, 1500),
+    evidence,
     metadata: { kind: row.kind, state: to, ...(reason && { reason }) },
   })
 }
@@ -296,7 +333,7 @@ export async function transition(
     ? await assignmentCost(db, row.id)
     : undefined
   const result = TERMINAL_STATES.includes(to)
-    ? handoffResult(row, to, input.reason)
+    ? await handoffResult(db, row, to, input.reason)
     : undefined
   try {
     await db
