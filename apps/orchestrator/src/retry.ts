@@ -210,10 +210,15 @@ export type Note = { key: string; text: string; questions?: BuildQuestions }
 export const OFFER_LINE =
   "I left out a few things I didn't know yet. Want me to add these?"
 
+/** Details the assistant asks for once its own work needs them, never beside a draft. */
+const LATER =
+  /^(?:hours\.|business\.prices$|business\.enquiries$|owner\.priorities$)/
+
 /**
  * What this build left out (`left_out` on its last report) as one stack of
  * skippable questions: each one `ask_chief` would take, about a fact that is
- * still missing, once per fact. None when nothing is left to offer.
+ * still missing and not one for `LATER`, once per fact. None when nothing is
+ * left to offer.
  */
 async function offerOf(
   db: OrgScopedDb,
@@ -231,7 +236,12 @@ async function offerOf(
   const questions: BuildQuestion[] = []
   for (const item of items) {
     if (questions.some((q) => q.field === item.field)) continue
-    if (refuseQuestion(item) || (await currentFact(db, item.field))) continue
+    if (
+      LATER.test(item.field) ||
+      refuseQuestion(item) ||
+      (await currentFact(db, item.field))
+    )
+      continue
     questions.push({
       id: crypto.randomUUID(),
       text: item.question.trim(),

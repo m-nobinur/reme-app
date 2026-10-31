@@ -1578,8 +1578,6 @@ const STEP_LABELS: Partial<
     assistant: "Your assistant",
     website: "Website",
     quote_form: "Quote requirements",
-    prices: "Your prices",
-    day_to_day: "Your day to day",
     photos: "Photos",
     look: "Look and feel",
   },
@@ -1643,8 +1641,6 @@ const ONBOARDING_ASKS: Readonly<Record<string, string>> = {
   assistant: "What should your assistant be like?",
   website: "Would you like a website?",
   quote_form: "What do you need to know to quote?",
-  prices: "What do your usual jobs cost?",
-  day_to_day: "How do enquiries reach you?",
   photos: "Do you have photos to use?",
   look: "How should your website look?",
 }

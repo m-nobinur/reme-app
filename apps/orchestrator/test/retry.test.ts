@@ -680,6 +680,11 @@ live("a failed owner build's retry", () => {
             ask("business.parking", "Can customers park near you?"),
             // Never put to the owner: it names a field.
             ask("business.guarantee", "What is business.guarantee?"),
+            // The assistant's to ask once its work needs it, not a draft's.
+            ask(
+              "hours.weekday",
+              "What days and hours are you open for calls and enquiries?"
+            ),
           ],
           reported_at: new Date().toISOString(),
         },
