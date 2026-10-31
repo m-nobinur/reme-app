@@ -88,12 +88,12 @@ export type Approved = { review: ReadyReview; at: string }
  * (the panel, an expiry, a replacement). In a chat (`saidAt` given) the line
  * works until the assistant says something after the approval, its live
  * message, with `published` once that version is live, since the load check
- * runs a while after; then it stays, done (`live`), so an approval never
- * leaves the chat. Elsewhere it goes once the version is live.
+ * runs a while after; then it goes, since the live message says it.
+ * Elsewhere it goes once the version is live.
  */
 type ReadyCard =
   | { kind: "review"; review: ReadyReview }
-  | { kind: "approved"; version: number; published: boolean; live: boolean }
+  | { kind: "approved"; version: number; published: boolean }
   | null
 
 export function readyCard(
@@ -108,12 +108,9 @@ export function readyCard(
   if (!approvedHere) return null
   const { version } = approvedHere.review
   const published = (live ?? 0) >= version
-  if (saidAt === undefined) {
-    return published
-      ? null
-      : { kind: "approved", version, published, live: false }
-  }
-  const said =
-    saidAt !== null && Date.parse(saidAt) > Date.parse(approvedHere.at)
-  return { kind: "approved", version, published: published || said, live: said }
+  const gone =
+    saidAt === undefined
+      ? published
+      : saidAt !== null && Date.parse(saidAt) > Date.parse(approvedHere.at)
+  return gone ? null : { kind: "approved", version, published }
 }

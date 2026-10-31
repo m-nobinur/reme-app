@@ -693,7 +693,7 @@ export async function sayLive(
   siteId: string,
   url: string
 ): Promise<void> {
-  const host = url.replace(/^https?:\/\//, "").replace(/\/$/, "")
+  const visit = url.startsWith("https://") ? "Visit your website" : null
   // Past finding out already: the owner is picking or buying a name, put it
   // off or said no. Then the line says the site is live and asks nothing.
   const settled = await kit.withOrg({ orgId }, async (db) => {
@@ -706,11 +706,12 @@ export async function sayLive(
   })
   const own = settled ? null : await ownAddress(kit, orgId)
   const where = own?.dns_host?.name ?? own?.registrar
+  // No address in the words: the button opens the site.
   const text = await writeUpdate(env, kit, orgId, {
-    facts: { host, ...(own && { address: own.name }), ...(where && { where }) },
+    facts: { ...(own && { address: own.name }), ...(where && { where }) },
     template: own
-      ? `Your website is live at ${host}. Your email is on ${own.name}, so I'll put the site there.${where ? ` It's with ${where}.` : ""}`
-      : `Your website is live at ${host}.`,
+      ? `Congratulations, your website is live. Your email is on ${own.name}, so I'll put the site there.${where ? ` It's with ${where}.` : ""}`
+      : `Congratulations, your website is live. Customers can now find you online and ask for a quote at any time. ${visit ? `You can view it with the ${visit} button, or ask me to open it.` : "Ask me any time to open it."}`,
   })
   const connect = own && `Connect ${own.name}`
   const posted = await postAssistantMessage(kit, {
@@ -726,9 +727,9 @@ export async function sayLive(
             },
           }
         : {
-            ...(url.startsWith("https://") && {
+            ...(visit && {
               button: {
-                label: "Visit your website",
+                label: visit,
                 action: { kind: "open", url },
               },
             }),
