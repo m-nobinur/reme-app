@@ -115,6 +115,26 @@
   --tw-duration: var(--duration-slow);
   transition-duration: var(--duration-slow);
 }
+/* Narrower than `thin`: Chrome draws ::-webkit-scrollbar only when scrollbar-width is unset. */
+@utility scrollbar-hairline {
+  @supports selector(::-webkit-scrollbar) {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+    &::-webkit-scrollbar {
+      width: 4px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+      border-radius: 9999px;
+      background: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+    }
+    &:hover::-webkit-scrollbar-thumb {
+      background: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+    }
+  }
+}
 
 @theme inline {
   --font-heading: var(--font-sans);
