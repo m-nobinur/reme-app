@@ -84,8 +84,7 @@ const HINT: Partial<Record<string, string>> = {
  * the names written for this business, or a few plain ones without them.
  */
 const nameIdeas = (written: readonly string[] | undefined) => [
-  "Reme",
-  ...(written?.length ? written : ["Ava", "Reme", "Marcus"]),
+  ...new Set(["Reme", ...(written?.length ? written : ["Ava", "Marcus"])]),
 ]
 
 /** Name ideas, a tap each to fill the name field. */

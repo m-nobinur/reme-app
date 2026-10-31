@@ -38,6 +38,7 @@ import {
   worstWrite,
   writeText,
 } from "./heartbeat-write.ts"
+import { PICK_LINES } from "./planner.ts"
 import { inputOf, refuseQuestion } from "./question.ts"
 import { QUICK_EDITED } from "./quick.ts"
 import { workKey } from "./sandbox.ts"
@@ -128,14 +129,18 @@ const PAGE_NAMES = new Map<string, string>(
   PLANNED_PAGES.map((p) => [p.id, p.label])
 )
 
-/** The planned pages by the names the owner picked them by, and whether each service has one. */
+/**
+ * The planned pages by the names the owner picked them by, whether each
+ * service has one, and the card's lines on the picked pages that are sections.
+ */
 function plannedPages(blueprint: unknown) {
-  const pages =
-    Blueprint.safeParse(blueprint).data?.pages.map((p) => p.page) ?? []
+  const plan = Blueprint.safeParse(blueprint).data
+  const pages = plan?.pages.map((p) => p.page) ?? []
   const named = pages
     .filter((id) => id !== "service")
     .flatMap((id) => PAGE_NAMES.get(id) ?? [])
-  return { named, each: pages.includes("service") }
+  const sections = (plan?.features ?? []).filter((l) => PICK_LINES.has(l))
+  return { named, each: pages.includes("service"), sections }
 }
 
 /** What a change says about itself: the owner's short name for it, and the new words of a copy change. */
@@ -184,14 +189,18 @@ export function readyText(
     )
   }
   const next = "Have a look below."
-  const { named, each } = plannedPages(blueprint)
+  const { named, each, sections } = plannedPages(blueprint)
   if (named.length === 0) return `Your draft is ready. ${next}`
   const list =
     named.length === 1
       ? named[0]
       : `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`
   const plus = each ? ", plus a page for each service" : ""
-  return `Your draft is ready, with ${list} pages${plus}. ${next}`
+  return [
+    `Your draft is ready, with ${list} pages${plus}.`,
+    ...sections,
+    next,
+  ].join(" ")
 }
 
 /** A chat line to post, and with a ready line, what the build left out to offer. */
@@ -201,10 +210,15 @@ export type Note = { key: string; text: string; questions?: BuildQuestions }
 export const OFFER_LINE =
   "I left out a few things I didn't know yet. Want me to add these?"
 
+/** Details the assistant asks for once its own work needs them, never beside a draft. */
+const LATER =
+  /^(?:hours\.|business\.prices$|business\.enquiries$|owner\.priorities$)/
+
 /**
  * What this build left out (`left_out` on its last report) as one stack of
  * skippable questions: each one `ask_chief` would take, about a fact that is
- * still missing, once per fact. None when nothing is left to offer.
+ * still missing and not one for `LATER`, once per fact. None when nothing is
+ * left to offer.
  */
 async function offerOf(
   db: OrgScopedDb,
@@ -222,7 +236,12 @@ async function offerOf(
   const questions: BuildQuestion[] = []
   for (const item of items) {
     if (questions.some((q) => q.field === item.field)) continue
-    if (refuseQuestion(item) || (await currentFact(db, item.field))) continue
+    if (
+      LATER.test(item.field) ||
+      refuseQuestion(item) ||
+      (await currentFact(db, item.field))
+    )
+      continue
     questions.push({
       id: crypto.randomUUID(),
       text: item.question.trim(),

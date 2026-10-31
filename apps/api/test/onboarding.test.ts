@@ -234,8 +234,6 @@ describe("the onboarding steps", () => {
       "business.proof",
       "industry",
       "quote_form",
-      "business.prices",
-      "business.enquiries",
       "contact",
       "assistant",
       "build_for_me",

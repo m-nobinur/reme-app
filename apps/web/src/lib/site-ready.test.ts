@@ -70,14 +70,13 @@ it("asks, then says approved, then asks again for a newer version", () => {
     kind: "approved",
     version: 2,
     published: false,
-    live: false,
   }
   expect(readyCard(v2, here, 1)).toEqual(publishing)
   expect(readyCard(null, here, 1)).toEqual(publishing)
   expect(readyCard(v3, here, 1)).toEqual({ kind: "review", review: v3 })
 })
 
-it("holds the publishing line until the assistant says it is live, then keeps it done", () => {
+it("holds the publishing line until the assistant says it is live, then lets it go", () => {
   const v1 = {
     approvalId: "a",
     revisionId: "rev-a",
@@ -90,7 +89,6 @@ it("holds the publishing line until the assistant says it is live, then keeps it
     kind: "approved",
     version: 1,
     published: false,
-    live: false,
   })
   // Off the chat, it goes once the version is live.
   expect(readyCard(null, here, 1)).toBeNull()
@@ -99,15 +97,9 @@ it("holds the publishing line until the assistant says it is live, then keeps it
     kind: "approved",
     version: 1,
     published: true,
-    live: false,
   })
-  // Said live: the approval stays in the chat, as its result.
-  expect(readyCard(null, here, 1, "2026-10-28T22:02:52Z")).toEqual({
-    kind: "approved",
-    version: 1,
-    published: true,
-    live: true,
-  })
+  // Said live: the live message says it, so the line goes.
+  expect(readyCard(null, here, 1, "2026-10-28T22:02:52Z")).toBeNull()
 })
 
 describe("awaitsReadyLine", () => {

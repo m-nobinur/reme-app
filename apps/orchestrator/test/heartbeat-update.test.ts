@@ -73,7 +73,9 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
           sayLive({}, pool, orgId, "site-1", "https://sparkle.example.test/"),
         () => "site.live:site-1"
       )
-    ).toEqual(["Your website is live at sparkle.example.test."])
+    ).toEqual([
+      "Congratulations, your website is live. Customers can now find you online and ask for a quote at any time. You can view it with the Visit your website button, or ask me to open it.",
+    ])
   })
 
   /** The parts and the address task of a fresh org after `sayLive`, with `email` as its business email. */
@@ -172,7 +174,7 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
     })
     const { parts, task } = await liveFor("hello@sparkleclean.co.uk")
     expect(parts.find((p) => p.type === "text")).toMatchObject({
-      text: "Your website is live at sparkle.example.test. Your email is on sparkleclean.co.uk, so I'll put the site there. It's with 123-Reg.",
+      text: "Congratulations, your website is live. Your email is on sparkleclean.co.uk, so I'll put the site there. It's with 123-Reg.",
     })
     expect(parts.find((p) => p.type === "data-button")?.data).toEqual({
       label: "Connect sparkleclean.co.uk",

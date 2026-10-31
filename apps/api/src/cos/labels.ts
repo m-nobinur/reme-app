@@ -143,6 +143,7 @@ export function workspaceLabels(workspace: CosWorkspace) {
       ),
       ...(b.timing && {
         wait: b.timing.range,
+        minutes_so_far: b.timing.running_minutes,
         ...(b.timing.overdue && { longer_than_usual: true }),
         ...(b.timing.quiet_minutes >= QUIET_MINUTES && {
           minutes_since_last_work: b.timing.quiet_minutes,

@@ -17,6 +17,7 @@ import {
   segmentKind,
   segmentLine,
   segmentTitle,
+  setupTitle,
   stepKind,
   stepLabel,
   stepName,
@@ -303,6 +304,27 @@ export function completedOf(
   )
 }
 
+/** The setting-up steps that are the assistant's and the website's own; the rest are the business's. */
+const SETUP_PARTS: readonly {
+  part: "assistant" | "website"
+  steps: readonly string[]
+}[] = [
+  { part: "assistant", steps: ["assistant"] },
+  { part: "website", steps: ["website", "photos", "look"] },
+]
+
+/** Where a part of setting up stands from its steps; null before any is reached. */
+function partState(
+  steps: readonly ActivityStep[]
+): ActivitySegment["state"] | null {
+  if (steps.some((s) => s.state === "waiting")) return "waiting"
+  if (steps.some((s) => s.state === "now")) return "now"
+  if (!steps.some((s) => s.state === "done")) return null
+  return steps.every((s) => s.state === "done" || s.state === "skipped")
+    ? "done"
+    : "now"
+}
+
 const running = (segment: ActivitySegment | undefined) =>
   segment?.state === "now" ||
   segment?.state === "waiting" ||
@@ -383,6 +405,39 @@ export function panelFor(input: PanelInput): Panel | null {
       }),
       build,
     }
+  }
+
+  /**
+   * Setting up as the owner meets it: the business, then the assistant, then
+   * the website, each its own group once one of its steps is reached.
+   */
+  const setupViews = (segment: ActivitySegment): SegmentView[] => {
+    const whole = view(segment)
+    const partOf = (id: string) =>
+      SETUP_PARTS.find((each) => each.steps.includes(id))?.part ?? "business"
+    return (["business", "assistant", "website"] as const).flatMap((part) => {
+      const steps = segment.steps.filter((step) => partOf(step.id) === part)
+      const state = partState(steps)
+      if (!state) return []
+      const ids = new Set(steps.map((step) => step.id))
+      const deciding = steps.some(
+        (step) => step.id === "website" && step.state !== "done"
+      )
+      const title = (stands: ActivitySegment["state"]) =>
+        part === "business"
+          ? (segmentTitle({ ...segment, state: stands }, ctx) ?? "")
+          : setupTitle(part, stands, deciding, segment, ctx)
+      return [
+        {
+          ...whole,
+          id: part === "business" ? segment.id : `${segment.id}:${part}`,
+          state,
+          title: title(state),
+          working: title("now"),
+          steps: whole.steps.filter((step) => ids.has(step.id)),
+        },
+      ]
+    })
   }
 
   // The journey: the segment under way, its finished ones under Completed.
@@ -560,7 +615,11 @@ export function panelFor(input: PanelInput): Panel | null {
   return {
     line,
     lines: turns.length > 1 ? turns : [line],
-    journey: current ? [view(current)] : [],
+    journey: current
+      ? current.kind === "onboarding"
+        ? setupViews(current)
+        : [view(current)]
+      : [],
     now: activity.now.map(view),
     blocked: blocked.map(view),
     waiting,

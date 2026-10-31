@@ -35,7 +35,7 @@ import {
   WaitingOnYou,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
-import { DoneIcon, StateIcon } from "@workspace/ui/components/status-line"
+import { DoneIcon } from "@workspace/ui/components/status-line"
 import {
   Tabs,
   TabsContent,
@@ -70,7 +70,7 @@ import {
   type Suggestion,
 } from "@/lib/panel"
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
-import { useBusinessZone, useLiveWorkspace } from "@/lib/workspace"
+import { useLiveWorkspace } from "@/lib/workspace"
 import { useFollowStep } from "./follow-step"
 import { everyMinute, thisMoment } from "./minute-clock"
 
@@ -412,17 +412,14 @@ function Suggested({ suggestion }: { suggestion: Suggestion }) {
 }
 
 /**
- * The zone times show in: the business's, which reminders run on and the
- * assistant says, else the reader's. Null on the server and while hydrating,
- * so the server renders no reminder times rather than ones the browser
+ * The zone times show in: the reader's own. The business's zone schedules
+ * the work, never what the screen says. Null on the server and while
+ * hydrating, so the server renders no times rather than ones the browser
  * would then replace.
  */
 const noSubscription = () => () => undefined
-export function useBrowserZone(): string | null {
-  const reader = useSyncExternalStore(noSubscription, browserZone, () => null)
-  const business = useBusinessZone()
-  return reader && (business ?? reader)
-}
+export const useBrowserZone = (): string | null =>
+  useSyncExternalStore(noSubscription, browserZone, () => null)
 
 /** A written reminder with its own Done and Delete, shown done while either write runs. */
 export function Completable({
@@ -621,9 +618,6 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       ) : null}
     </Segment>
   )
-  // The first run's segment waits on the owner (the publish review) or is at work.
-  const held = panel.journey.filter((each) => each.state === "waiting")
-  const going = panel.journey.filter((each) => each.state !== "waiting")
   const row = (each: SegmentView) => (
     <div className="py-3" key={each.id}>
       {segment(each)}
@@ -631,16 +625,22 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   )
   const activity = (
     <>
-      {/* What waits on the owner comes first: the first run's publish
-          review, every question and approval, then the jobs blocked on them.
-          The first three kinds never sit behind "Show more": links and the
-          pill focus them by their anchors. */}
+      {/* One list: the header already says what waits, so no group repeats
+          it. The first run's segments come first, then every question and
+          approval, which never sit behind "Show more" (links and the pill
+          focus them by their anchors), the jobs blocked on them, then the
+          rest at work. */}
       <WaitingOnYou
-        icon={<StateIcon state="waiting" />}
-        limit={Math.max(SHOWN.now, held.length + panel.waiting.length)}
+        error={stale}
+        icon={
+          <PulseIcon aria-hidden className="size-4 text-muted-foreground" />
+        }
+        limit={Math.max(SHOWN.now, panel.journey.length + panel.waiting.length)}
+        onRetry={refresh}
         status={status}
+        title="Now"
       >
-        {held.map(row)}
+        {panel.journey.map(row)}
         {panel.waiting.map((item) =>
           item.kind === "approval" ? (
             <div
@@ -663,17 +663,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
           ) : null
         )}
         {panel.blocked.map(row)}
-      </WaitingOnYou>
-      <WaitingOnYou
-        error={stale}
-        icon={
-          <PulseIcon aria-hidden className="size-4 text-muted-foreground" />
-        }
-        limit={SHOWN.now}
-        onRetry={refresh}
-        title="Now"
-      >
-        {[...going, ...panel.now].map(row)}
+        {panel.now.map(row)}
       </WaitingOnYou>
       {panel.upNext ? (
         <UpNext text={panel.upNext.text}>

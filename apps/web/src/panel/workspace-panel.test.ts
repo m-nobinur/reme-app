@@ -43,7 +43,10 @@ vi.mock("@tanstack/react-router", () => ({
 }))
 vi.mock("@/lib/workspace", () => ({
   useLiveWorkspace: () => live,
-  useBusinessZone: () => null,
+}))
+vi.mock("@workspace/ui/lib/zone", async (actual) => ({
+  ...(await actual<typeof import("@workspace/ui/lib/zone")>()),
+  browserZone: () => "Europe/London",
 }))
 vi.mock("@/lib/api/server", () => server)
 
@@ -187,12 +190,40 @@ it("says what finished, and no Now list when nothing waits", async () => {
   expect(container.textContent).not.toContain("Now")
 })
 
+it("shows a time in the reader's zone, not the business's", async () => {
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    live: 2,
+    host: "fixture.example.invalid",
+    timeZone: "Asia/Dhaka",
+    activity: {
+      journey: [],
+      now: [],
+      waiting: [],
+      upcoming: [],
+      done: [
+        {
+          id: "checkin:last",
+          kind: "checkin",
+          state: "done",
+          steps: [{ id: "message", state: "skipped" }],
+          at: "2026-10-31T14:00:00.000Z",
+        },
+      ],
+    },
+  }
+  await render()
+  // London is UTC+0 on 31 October; Dhaka would say 8:00 PM.
+  expect(container.textContent).toContain("2:00 PM")
+  expect(container.textContent).not.toContain("8:00 PM")
+})
+
 const section = (title: string) =>
   [...container.querySelectorAll("section")].find((each) =>
     each.querySelector("h2")?.textContent?.startsWith(title)
   )
 
-it("puts a job waiting on the owner under Waiting on you, never Now", async () => {
+it("puts a job waiting on the owner first under Now, with no group of its own", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     activity: {
@@ -212,10 +243,9 @@ it("puts a job waiting on the owner under Waiting on you, never Now", async () =
     },
   }
   await render()
-  expect(section("Waiting on you")?.textContent).toContain(
-    "Your website is ready"
-  )
-  expect(section("Now")).toBeUndefined()
+  // The header already says what waits, so no heading says it again.
+  expect(section("Now")?.textContent).toContain("Your website is ready")
+  expect(section("Waiting on you")).toBeUndefined()
 })
 
 it("offers the next task not started as Up next, with its button into the chat", async () => {

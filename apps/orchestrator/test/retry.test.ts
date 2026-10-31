@@ -140,6 +140,21 @@ describe("what the owner reads", () => {
       "Your draft is ready. Have a look below."
     )
   })
+
+  it("says what became of each page the owner picked that is a section", () => {
+    const sections = {
+      ...plan,
+      pages: ["home", "quote"].map((page) => ({ ...plan.pages[0], page })),
+      features: [
+        ...plan.features.slice(0, 2),
+        "Your FAQ is a section on the home page.",
+        "Your reviews section is left out until you have a review to show. Send me one or two from your customers and I'll add it.",
+      ],
+    }
+    expect(readyText("site.build", sections)).toBe(
+      "Your draft is ready, with Home and Request a quote pages. Your FAQ is a section on the home page. Your reviews section is left out until you have a review to show. Send me one or two from your customers and I'll add it. Have a look below."
+    )
+  })
 })
 
 describe("a change's ready line", () => {
@@ -665,6 +680,11 @@ live("a failed owner build's retry", () => {
             ask("business.parking", "Can customers park near you?"),
             // Never put to the owner: it names a field.
             ask("business.guarantee", "What is business.guarantee?"),
+            // The assistant's to ask once its work needs it, not a draft's.
+            ask(
+              "hours.weekday",
+              "What days and hours are you open for calls and enquiries?"
+            ),
           ],
           reported_at: new Date().toISOString(),
         },

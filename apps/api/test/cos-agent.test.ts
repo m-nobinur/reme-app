@@ -4396,10 +4396,26 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         calls({ id: "call_f2", tool: "get_facts", input: {} }),
         said("Here are your details.")
       )
-      await turn(me, typed(id, "What do you know about us?"), { model })
-      expect(await resultsOf(id, "get_facts")).toHaveLength(1)
-      expect(JSON.stringify(sent[2]?.prompt)).toContain("(repeated)")
-      expect(sent[2]?.toolChoice).toEqual({ type: "none" })
+      const logged = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined)
+      try {
+        const done = await turn(me, typed(id, "What do you know about us?"), {
+          model,
+        })
+        expect(await resultsOf(id, "get_facts")).toHaveLength(1)
+        expect(JSON.stringify(sent[2]?.prompt)).toContain("(repeated)")
+        expect(sent[2]?.toolChoice).toEqual({ type: "none" })
+        // The screen reads it as a repeat, and it is no stream error.
+        expect(
+          done.chunks.flatMap((c) =>
+            c.type === "tool-output-error" ? [c.errorText] : []
+          )
+        ).toEqual([expect.stringMatching(/^tool_failed \(repeated\)/)])
+        expect(String(logged.mock.calls)).not.toContain("cos.stream_error")
+      } finally {
+        logged.mockRestore()
+      }
     })
 
     it("has the last step a turn allows only write, so the turn ends in words", async () => {

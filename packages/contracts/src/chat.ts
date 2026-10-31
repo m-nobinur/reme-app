@@ -99,6 +99,13 @@ export const TOOL_UNKNOWN = "unknown_outcome"
 export const APPROVAL_EXPIRED = "approval_expired"
 
 /**
+ * How the error text begins for a call the turn had already run with the
+ * same input: refused, its first run's result stands, and the screen shows
+ * nothing for it.
+ */
+export const TOOL_REPEATED = `${TOOL_FAILED} (repeated)`
+
+/**
  * What a tool's error text says happened. Only a `TOOL_FAILED` line, which
  * names its code as `tool_failed (<code>)`, is `failed`. Every other text is
  * `unknown`, a future or unrecognised one included, and so is an older

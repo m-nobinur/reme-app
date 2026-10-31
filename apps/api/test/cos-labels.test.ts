@@ -180,6 +180,7 @@ describe("the workspace the CoS reads", () => {
       })
     ).toMatchObject({
       wait: "about 39 to 47 minutes",
+      minutes_so_far: 38,
       longer_than_usual: true,
       minutes_since_last_work: 12,
       restarted: {
@@ -197,7 +198,10 @@ describe("the workspace the CoS reads", () => {
         range: "about 6 to 10 minutes",
       },
     })
-    expect(onTime).toMatchObject({ wait: "about 6 to 10 minutes" })
+    expect(onTime).toMatchObject({
+      wait: "about 6 to 10 minutes",
+      minutes_so_far: 4,
+    })
     expect(onTime).not.toHaveProperty("longer_than_usual")
     expect(onTime).not.toHaveProperty("minutes_since_last_work")
   })

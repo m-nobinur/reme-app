@@ -1242,7 +1242,7 @@ const WAITING: Partial<Record<ActivitySegment["kind"], string>> = {
 /** What an owner task waits for, by the step that waits. */
 const STEP_WAITING: Readonly<Record<string, string>> = {
   find_out: "your answer",
-  choose: "your choice of name",
+  choose: "your choice of web address",
   purchase: "your payment",
   records: "your DNS change",
   ownership: "your DNS change",
@@ -1290,6 +1290,31 @@ const namesOf = (segment: ActivitySegment, ctx: CopyContext): Names => {
     provider: cleanArg(n?.provider),
     step: currentStep(segment)?.id ?? null,
   }
+}
+
+/**
+ * The heading of the assistant's or the website's group while setting up.
+ * The website's is about deciding until the owner has said yes.
+ */
+export function setupTitle(
+  part: "assistant" | "website",
+  state: ActivitySegment["state"],
+  deciding: boolean,
+  segment: ActivitySegment,
+  ctx: CopyContext
+): string {
+  const done = state === "done"
+  if (part === "assistant") {
+    if (!done) return "Setting up your assistant"
+    return ctx.assistant
+      ? `${ctx.assistant} is ready`
+      : "Your assistant is ready"
+  }
+  if (done) return "Your website is planned"
+  const { business } = namesOf(segment, ctx)
+  return deciding
+    ? `A website for ${business ?? "your business"}`
+    : "Planning your website"
 }
 
 /**
@@ -1578,8 +1603,6 @@ const STEP_LABELS: Partial<
     assistant: "Your assistant",
     website: "Website",
     quote_form: "Quote requirements",
-    prices: "Your prices",
-    day_to_day: "Your day to day",
     photos: "Photos",
     look: "Look and feel",
   },
@@ -1643,8 +1666,6 @@ const ONBOARDING_ASKS: Readonly<Record<string, string>> = {
   assistant: "What should your assistant be like?",
   website: "Would you like a website?",
   quote_form: "What do you need to know to quote?",
-  prices: "What do your usual jobs cost?",
-  day_to_day: "How do enquiries reach you?",
   photos: "Do you have photos to use?",
   look: "How should your website look?",
 }

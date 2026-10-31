@@ -761,6 +761,7 @@ answer it is sure of replaces the browser's guess. The owner changes it through 
 `set_time_zone` ("I'm in Bristol, UK time please"), never through `remember`. A zone a later browser
 reports is ignored. The Now line names the business's zone and the weekday. `GET /workspace`
 carries `time_zone`, so the web shows reminder times in the zone the assistant says them in.
+Amended 2026-10-31: the screen shows every time in the reader's browser zone; the business's zone schedules check-ins, reminders and the heartbeat, and is the one the assistant speaks business hours and bookings in.
 
 **Reminders.** `create_reminder` runs with no card when one of the owner's last three messages asks
 for a reminder, and is keyed by its turn and call as the owner's-words tools are; otherwise it still

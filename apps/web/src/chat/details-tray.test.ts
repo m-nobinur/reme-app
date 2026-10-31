@@ -116,3 +116,25 @@ it("Pick for me keeps the name being typed and a pick made, and fills the rest",
     skip_all: true,
   })
 })
+
+it("offers each name idea once, Reme first", async () => {
+  const slot = document.createElement("div")
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  document.body.appendChild(slot)
+  const root = createRoot(container)
+  await act(async () =>
+    root.render(createElement(Chat, { slot, addResult: vi.fn() }))
+  )
+  unmount = async () => {
+    await act(async () => root.unmount())
+    container.remove()
+    slot.remove()
+  }
+
+  const ideas = [
+    ...slot.querySelectorAll('[aria-label="Name ideas"] button'),
+  ].map((each) => each.textContent)
+  expect(ideas[0]).toBe("Reme")
+  expect(new Set(ideas).size).toBe(ideas.length)
+})

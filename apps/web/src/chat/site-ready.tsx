@@ -67,7 +67,6 @@ export function SiteReadyCard({
     return (
       <SiteReady
         approved
-        live={card.kind === "approved" && card.live}
         published={card.kind === "approved" && card.published}
         className={className}
         docked={docked}
@@ -163,6 +162,6 @@ export function ChatSiteReadyCard() {
     now
   )
   return empty || waiting ? null : (
-    <SiteReadyCard className="mx-2" saidAt={saidAt} sentAt={sentAt} />
+    <SiteReadyCard className="mx-2 -mt-2" saidAt={saidAt} sentAt={sentAt} />
   )
 }

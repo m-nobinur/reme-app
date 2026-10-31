@@ -41,8 +41,6 @@ export const ONBOARDING_STEPS = [
   "customers",
   "proof",
   "quote_form",
-  "prices",
-  "day_to_day",
   "contact",
   "assistant",
   "website",
@@ -59,8 +57,6 @@ const STEP_OF: Record<string, StepId> = {
   "service_area.text": "area",
   "business.audience": "customers",
   "business.proof": "proof",
-  "business.prices": "prices",
-  "business.enquiries": "day_to_day",
   contact: "contact",
   assistant: "assistant",
   build_for_me: "website",
@@ -92,8 +88,6 @@ function settled(
   const email = factValue(o.facts, "business.email")?.address
   const audience = factValue(o.facts, "business.audience")?.text
   const proof = factValue(o.facts, "business.proof")?.text
-  const prices = factValue(o.facts, "business.prices")?.text
-  const enquiries = factValue(o.facts, "business.enquiries")?.text
   const area = factValue(o.facts, "service_area.text")?.text
   const quote = factValue(o.facts, "quote.form")?.fields
   const look = voiceOf(o)
@@ -126,16 +120,6 @@ function settled(
   // What sets them apart is optional too, and settles the same way.
   if (proof) out.proof = done(proof)
   else if (passed("business.proof")) out.proof = skipped
-  // The prices and the day to day come after the quote questions, so only
-  // reaching the contact card passes them.
-  const passedLater = (key: FactValueKey) =>
-    o.passed.includes(key) ||
-    (asked[key] ?? 0) >= OPTIONAL_ASKS ||
-    Boolean(out.contact)
-  if (prices) out.prices = done(prices)
-  else if (passedLater("business.prices")) out.prices = skipped
-  if (enquiries) out.day_to_day = done(enquiries)
-  else if (passedLater("business.enquiries")) out.day_to_day = skipped
   if (mode(o) === "assistant") out.website = done()
   if (manual) {
     // The owner skipped the website: nothing the build needs is asked.

@@ -1210,11 +1210,8 @@ export const STEPS: readonly Step[] = [
       call("tool-ask_open", AskOpenInput.parse({ about: "quote.form" }), newId),
     ],
   },
-  // What a business assistant needs beyond the site, each asked once and
-  // skippable: the prices it quotes from, and how the work reaches the
-  // owner today with what they want taken off their plate.
-  askFact("business.prices"),
-  askFact("business.enquiries"),
+  // Prices, hours and how enquiries arrive are the assistant's to ask once
+  // its work needs them, never here.
   askDetails("contact"),
   askDetails("assistant"),
   askChoice("build_for_me", "site.build_mode"),

@@ -263,10 +263,6 @@ export function useLiveWorkspaceState(
 }
 
 /** The live workspace, for anything under the /app frame. */
-/** The business's zone from the frame's workspace, or null outside the frame or before one is set. */
-export const useBusinessZone = (): string | null =>
-  useContext(LiveWorkspace)?.workspace?.timeZone ?? null
-
 export function useLiveWorkspace(): Live {
   const live = useContext(LiveWorkspace)
   if (!live) {

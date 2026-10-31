@@ -138,9 +138,12 @@ function rerunGate(checks: readonly Check[]): LanguageModelMiddleware {
                   }
                 } else if (value.type !== "stream-start") {
                   seen(value)
-                  // Its own ids, so its blocks never meet the first call's.
+                  // Its own block ids, so they never meet the first call's. A
+                  // tool input's id is its call's, so it stays.
                   controller.enqueue(
-                    "id" in value && typeof value.id === "string"
+                    "id" in value &&
+                      typeof value.id === "string" &&
+                      !value.type.startsWith("tool-")
                       ? { ...value, id: `${value.id}:${reruns}` }
                       : value
                   )
