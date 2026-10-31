@@ -115,23 +115,36 @@
   --tw-duration: var(--duration-slow);
   transition-duration: var(--duration-slow);
 }
-/* Narrower than `thin`: Chrome draws ::-webkit-scrollbar only when scrollbar-width is unset. */
+/* Shown only while `data-scrolling` marks the scroller, and narrower than `thin` where WebKit
+   allows: Chrome draws ::-webkit-scrollbar only when scrollbar-width and scrollbar-color are unset. */
 @utility scrollbar-hairline {
+  scrollbar-color: transparent transparent;
+  &[data-scrolling] {
+    scrollbar-color: color-mix(
+        in oklab,
+        var(--muted-foreground) 45%,
+        transparent
+      )
+      transparent;
+  }
   @supports selector(::-webkit-scrollbar) {
     scrollbar-width: auto;
     scrollbar-color: auto;
-    &::-webkit-scrollbar {
-      width: 4px;
+    &[data-scrolling] {
+      scrollbar-color: auto;
     }
-    &::-webkit-scrollbar-track {
+    &::-webkit-scrollbar {
+      width: 2px;
+    }
+    &::-webkit-scrollbar-track,
+    &::-webkit-scrollbar-thumb {
       background: transparent;
     }
     &::-webkit-scrollbar-thumb {
       border-radius: 9999px;
-      background: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
     }
-    &:hover::-webkit-scrollbar-thumb {
-      background: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+    &[data-scrolling]::-webkit-scrollbar-thumb {
+      background: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
     }
   }
 }
