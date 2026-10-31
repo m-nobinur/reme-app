@@ -23,6 +23,7 @@ import {
   type ComponentProps,
   type MouseEvent,
   type ReactNode,
+  type UIEvent,
   useCallback,
   useEffect,
   useId,
@@ -37,6 +38,19 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 function remember(cookie: string, open: boolean) {
   // biome-ignore lint/suspicious/noDocumentCookie: one preference the server has to read on the next request, which the Cookie Store API cannot promise in every browser this app supports.
   document.cookie = `${cookie}=${open ? "open" : "closed"}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`
+}
+
+const settling = new WeakMap<HTMLElement, number>()
+
+/** Marks a scroller `data-scrolling` until it rests, so `scrollbar-hairline` shows only then. */
+function markScrolling(event: UIEvent<HTMLElement>) {
+  const scroller = event.currentTarget
+  scroller.dataset.scrolling = ""
+  clearTimeout(settling.get(scroller))
+  settling.set(
+    scroller,
+    window.setTimeout(() => delete scroller.dataset.scrolling, 800)
+  )
 }
 
 /**
@@ -459,6 +473,7 @@ function WorkspaceShell({
                     )
               )}
               id={panelId}
+              onScroll={markScrolling}
               onClick={
                 floating
                   ? closeOnLink(() => setFloatOpen(false))
