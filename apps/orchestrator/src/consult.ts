@@ -23,7 +23,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
-import { completeOnce, modelRouting, ROLES } from "@workspace/facade"
+import { completeOnce, effortOf, modelRouting } from "@workspace/facade"
 import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
@@ -461,7 +461,7 @@ async function consult(
   const started = Date.now()
   const reply = await complete(env, {
     model,
-    effort: ROLES.quick_section.effort,
+    effort: effortOf("quick_section", model),
     maxTokens,
     ...prompt,
     ...(images?.length ? { images } : {}),
