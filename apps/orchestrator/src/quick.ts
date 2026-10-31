@@ -411,6 +411,7 @@ export async function quickEdit(input: {
       // finding, it travels with the report.
       risks: copyFindings(tail.build.output),
       decisions_needed: [],
+      ...tail.text,
       reported_at: new Date().toISOString(),
     })
     await kit.withOrg({ orgId: ids.orgId }, (db) =>

@@ -13,6 +13,7 @@ import {
 import { CUSTOM_CHECK, limit } from "@workspace/gates"
 import { SITE_ROOT } from "./revise.ts"
 import { QUOTE_FORM_FILE, quoteFormFile } from "./seed.ts"
+import { recordTextChanges } from "./text-changes.ts"
 import { since } from "./timing.ts"
 
 /**
@@ -449,6 +450,10 @@ export async function finishRevision(input: {
     }
   })
 
+  const text = await steps.do("text changes", () =>
+    recordTextChanges({ kit, sites, orgId, assignmentId, prefix })
+  )
+
   const source = await steps.do("upload source", async () => {
     const started = Date.now()
     const r = await run(
@@ -462,7 +467,7 @@ export async function finishRevision(input: {
     return { key: `${prefix}source.tar.zst`, ms: since(started) }
   })
 
-  return { revisionId, check, build, manifest, custom, source }
+  return { revisionId, check, build, manifest, custom, source, text }
 }
 
 /**

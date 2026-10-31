@@ -928,7 +928,7 @@ export const reportComplete = (current: Session) =>
       }
       const sandbox = harness.sandbox
       const toolStarted = Date.now()
-      const { revisionId, check, build, manifest, custom, source } =
+      const { revisionId, check, build, manifest, custom, source, text } =
         await finishRevision({
           steps: step,
           sandbox,
@@ -963,6 +963,7 @@ export const reportComplete = (current: Session) =>
         }),
         ...(data.as_asked === false && { as_asked: false }),
         ...(data.notes?.length && { notes: data.notes }),
+        ...text,
         reported_at: new Date().toISOString(),
       })
       // Model output: nothing downstream may promote it (§28.3).

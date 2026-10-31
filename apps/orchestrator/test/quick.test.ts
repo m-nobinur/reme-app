@@ -30,7 +30,17 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     return "e"
   },
 }))
-const tail = { fails: false as boolean }
+const PAIRS = {
+  text_changes: [
+    {
+      before: "Weekly cleaning in Fairhaven",
+      after: "Come home to breathing room.",
+      pages: ["/"],
+    },
+  ],
+  text_changes_left: 2,
+}
+const tail = { fails: false as boolean, text: PAIRS as object }
 vi.mock("../src/tail.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/tail.ts")>()),
   finishRevision: async ({
@@ -54,6 +64,7 @@ vi.mock("../src/tail.ts", async (importOriginal) => ({
       manifest: { files: 3, reused: 2, bytes: 10, ms: 1 },
       custom: { exit_code: 0, key: null, ms: 1 },
       source: { key: "k", ms: 1 },
+      text: tail.text,
     }
   },
 }))
@@ -260,6 +271,21 @@ describe("quickEdit", () => {
     calls.length = 0
     appended.length = 0
     tail.fails = false
+    tail.text = PAIRS
+  })
+
+  it("carries the tail's text changes onto the report, and none when the tail found none", async () => {
+    replies.push(reply([HERO]), reply([HERO]))
+    await edit()
+    tail.text = {}
+    disk.set("/workspace/site/src/site-config.ts", CONFIG)
+    await edit()
+    const [first, second] = appended
+      .filter((e) => e.type === "assignment.completion_reported")
+      .map((e) => e.payload)
+    expect(first).toMatchObject(PAIRS)
+    expect(second).not.toHaveProperty("text_changes")
+    expect(second).not.toHaveProperty("text_changes_left")
   })
 
   it("edits, builds and reports with one Haiku call", async () => {
