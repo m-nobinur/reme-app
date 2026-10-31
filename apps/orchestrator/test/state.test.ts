@@ -1,5 +1,10 @@
-import { type AssignmentState, TERMINAL_STATES } from "@workspace/contracts"
 import {
+  type AssignmentState,
+  CompletionReport,
+  TERMINAL_STATES,
+} from "@workspace/contracts"
+import {
+  appendEvent,
   assignments,
   assignmentTransitions,
   conversations,
@@ -615,6 +620,66 @@ live("the handoff result", () => {
         taint: ["inferred", "untrusted_input"],
       },
     ])
+  })
+
+  const report = (
+    ids: { orgId: string; assignmentId: string },
+    summary: string,
+    extra: Record<string, unknown> = {}
+  ) =>
+    kit.withOrg({ orgId: ids.orgId }, (db) =>
+      appendEvent(db, {
+        orgId: ids.orgId,
+        assignmentId: ids.assignmentId,
+        staffId: null,
+        type: "assignment.completion_reported",
+        payload: CompletionReport.parse({
+          report_id: crypto.randomUUID(),
+          org_id: ids.orgId,
+          assignment_id: ids.assignmentId,
+          session_id: crypto.randomUUID(),
+          revision_id: crypto.randomUUID(),
+          summary,
+          changes: [{ path: "src/site-config.ts", reason: "Reworded" }],
+          screenshots: [],
+          checks: [{ check: "astro build", exit_code: 0, output_key: null }],
+          risks: [],
+          decisions_needed: [],
+          reported_at: new Date().toISOString(),
+          ...extra,
+        }),
+      })
+    )
+
+  it("hands back the newest report's summary and first text change", async () => {
+    const ids = await newAssignment(await freshOrg())
+    await walk(ids, PATH.awaiting_review)
+    await report(ids, "Older account")
+    await report(ids, "Rewrote the hero.", {
+      text_changes: [
+        { before: "Welcome", after: "Spotless homes", pages: ["/"] },
+        { before: "Call", after: "Book", pages: ["/"] },
+      ],
+    })
+    await walk(ids, ["release_candidate", "published"])
+    expect(await resultOf(ids)).toMatchObject({
+      summary:
+        'Done and live: probe. Rewrote the hero. "Welcome" became "Spotless homes"',
+      evidence: [
+        { kind: "record", table: "assignments", id: ids.assignmentId },
+        { kind: "record", table: "site_revisions" },
+      ],
+    })
+  })
+
+  it("keeps the replaced text for a superseded draft even with a report", async () => {
+    const ids = await newAssignment(await freshOrg())
+    await walk(ids, PATH.awaiting_review)
+    await report(ids, "Rewrote the hero.")
+    await cancel(kit, ids, "superseded")
+    expect(await resultOf(ids)).toMatchObject({
+      summary: "Replaced by a newer change: probe",
+    })
   })
 
   it("waits in the row with no chat, or a turn open", async () => {
