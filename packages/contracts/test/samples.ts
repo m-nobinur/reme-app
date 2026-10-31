@@ -12,6 +12,53 @@ const ULID = "01JZ8QK5M7N9P0R2T4V6W8X0Y2"
 const REVISION = "6f708192-a3b4-4f80-8132-6d7e8f900112"
 const CONVERSATION = "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d"
 const SHA = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+const REVIEW = "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e"
+
+const GET_CHANGE = {
+  outcome: "found",
+  ref: ASSIGNMENT,
+  label: "your hero text",
+  asked: "Change the hero text, use professional copy",
+  state: "ready for review",
+  done: "Rewrote the hero title and subtitle in a professional tone.",
+  as_asked: true,
+  text_changes: [
+    {
+      before: "We clean houses",
+      after: "Spotless homes, every visit",
+      pages: ["/"],
+    },
+  ],
+  left_out: [],
+  preview: { expires_at: LATER },
+  live_now: false,
+  published_at: null,
+  recorded: true,
+  recent: [{ ref: REVISION, label: null, state: "live", at: NOW }],
+}
+
+const SITE_REVIEW = {
+  review_id: REVIEW,
+  org_id: ORG,
+  revision_id: REVISION,
+  version: 3,
+  verdict: "A clear, trustworthy site; the contact page needs work.",
+  strengths: ["The hero says what you do and where"],
+  findings: [
+    {
+      id: "f1",
+      severity: "high",
+      area: "forms",
+      page: "/contact",
+      quote: null,
+      issue: "The quote form has no label on the postcode field.",
+      fix: "Add a visible Postcode label.",
+      from: "check",
+    },
+  ],
+  findings_left: 0,
+}
+
 const REGISTRANT = {
   registrant: {
     name: "Jane Smith",
@@ -1124,6 +1171,31 @@ export const samples: Record<ContractName, unknown> = {
     version: 3,
     expires_at: LATER,
   },
+  GetChangeInput: { ref: ASSIGNMENT },
+  GetChangeOutput: GET_CHANGE,
+  AskDeveloperInput: {
+    mode: "answer",
+    question: "Why are there no prices on the services page?",
+    pages: ["/services"],
+  },
+  AskDeveloperOutput: {
+    outcome: "answered",
+    answer:
+      "Prices were left off because no prices were given; each service invites a quote instead.",
+    about: "live",
+    building: false,
+    sources: [
+      { kind: "notes", ref: "no prices on the services page" },
+      { kind: "page", ref: "/services" },
+    ],
+    sure: true,
+  },
+  GetReviewInput: { ref: REVIEW },
+  GetReviewOutput: (({ org_id: _o, revision_id: _r, ...review }) => ({
+    outcome: "found",
+    ...review,
+  }))(SITE_REVIEW),
+  SiteReview: SITE_REVIEW,
   ImageSlot: {
     id: "about_team",
     page: "about",
