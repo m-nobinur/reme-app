@@ -436,6 +436,17 @@ export const CASES = [
     },
   },
   {
+    pending: "small talk is answered in kind, with no status",
+    name: "small-talk",
+    turns: [{ mode: "ask", text: "Hey how's it going" }],
+    check: ([turn]) => {
+      const problems = [...noActs(turn), ...replied(turn)]
+      if (STATUS_LINE.test(text(turn)))
+        problems.push("the reply to a greeting gives a status")
+      return problems
+    },
+  },
+  {
     pending: "the owner can allow an action from a card",
     name: "dont-ask-me-again",
     turns: [
@@ -528,6 +539,9 @@ const STILL_AT_WORK =
 
 const CANT_SEE =
   /\b(?:can(?:not|['’]t)|unable|not able|don['’]t have)\b[^.]*\b(?:see|tell|find|read|say)\b/i
+
+const STATUS_LINE =
+  /\b(?:monitoring|watching|no change|nothing (?:you need|for you) to do|needs nothing from you)\b/i
 
 const TELLS_TO_APPROVE =
   /\b(?:tap|click|press|hit|open)\s+(?:the\s+)?(?:approve|publish|review)\b|\bwaiting (?:for|on) your approval\b/i
