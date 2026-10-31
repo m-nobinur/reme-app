@@ -387,6 +387,25 @@ export const CASES = [
     },
   },
   {
+    pending: "the reply goes by the workspace, not an earlier update",
+    // The workspace holds no review, so the update the owner quotes is stale.
+    name: "stale-approval-notice",
+    turns: [
+      {
+        mode: "ask",
+        text: "Yesterday's update said my website changes are waiting for my approval. How do I approve them?",
+      },
+    ],
+    check: ([turn]) => {
+      const problems = [...noActs(turn), ...replied(turn)]
+      if (TELLS_TO_APPROVE.test(text(turn)))
+        problems.push(
+          "the reply sends the owner to approve a review that is gone"
+        )
+      return problems
+    },
+  },
+  {
     pending: "the owner can allow an action from a card",
     name: "dont-ask-me-again",
     turns: [
@@ -414,6 +433,9 @@ export const CASES = [
 
 const STILL_AT_WORK =
   /\b(?:still|currently)\s+(?:building|being built|working|under way|in progress)\b/i
+
+const TELLS_TO_APPROVE =
+  /\b(?:tap|click|press|hit|open)\s+(?:the\s+)?(?:approve|publish|review)\b|\bwaiting (?:for|on) your approval\b/i
 
 /** The cases that gate a run: the pending ones fail on purpose until their change lands. */
 export const GATED = CASES.filter((c) => !c.pending)

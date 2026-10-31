@@ -6,8 +6,6 @@ import {
   type TaskStepName,
 } from "@workspace/contracts"
 import {
-  approvals,
-  assignments,
   conversationMessages,
   deliveries,
   eq,
@@ -17,6 +15,7 @@ import {
   inQuiet,
   logEvent,
   type OrgScopedDb,
+  openApprovals,
   orgs,
   readTasks,
   reminders,
@@ -112,23 +111,13 @@ const questions: Source = async (db) =>
 
 /** Reviews of the site that have waited on the owner for more than a day. */
 const approvalsWaiting: Source = async (db, now) => {
-  const rows = await db
-    .select({
-      id: approvals.id,
-      action: approvals.actionKind,
-      at: approvals.requestedAt,
-      expires: approvals.expiresAt,
-    })
-    .from(approvals)
-    // A superseded or cancelled build's approval is never decided; the owner can act only on a build in review.
-    .innerJoin(assignments, eq(assignments.id, approvals.assignmentId))
-    .where(
-      sql`${approvals.decision} is null and ${assignments.state} in ('awaiting_review', 'blocked_on_approval') and ${approvals.requestedAt} <= ${ago(now, DAY)}::timestamptz and ${approvals.expiresAt} > ${iso(now)}::timestamptz`
-    )
-  return rows.map((row) => ({
+  const waiting = (await openApprovals(db, now)).filter(
+    ({ row }) => row.requestedAt.getTime() <= now.getTime() - DAY
+  )
+  return waiting.map(({ row }) => ({
     key: `approval:${row.id}:1`,
-    since: iso(row.at),
-    facts: { action: row.action, expires_at: iso(row.expires) },
+    since: iso(row.requestedAt),
+    facts: { action: row.actionKind, expires_at: iso(row.expiresAt) },
   }))
 }
 
