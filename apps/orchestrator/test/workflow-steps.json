@@ -821,6 +821,12 @@
       "not registered",
       "say failed"
     ],
+    "registration errored": [
+      "payment 1",
+      "register",
+      "not registered",
+      "say failed"
+    ],
     "bought, never served": [
       "payment 1",
       "register",

@@ -121,6 +121,7 @@ const registrarDown = () =>
 const transient = (error: unknown) =>
   !(error instanceof DomainError) ||
   error.name === "stripe.unavailable" ||
+  error.name === "registrar.unavailable" ||
   /^cloudflare\.(5\d\d|429)$/.test(error.name)
 
 // ---------------------------------------------------------------------------
@@ -875,9 +876,31 @@ export type Registering =
 /**
  * After the payment: the name checked again, live, and refused when it was
  * taken or its cost rose over the cap (the hold released, the owner told);
- * otherwise the registration started.
+ * otherwise the registration started. A refusal no retry can change fails
+ * the purchase the same way; an outage is left to the step's retries.
  */
 export async function startRegistration(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  domainId: string
+): Promise<Registering> {
+  try {
+    return await beginRegistration(env, kit, orgId, domainId)
+  } catch (error) {
+    if (transient(error)) throw error
+    const say = await registrationFailed(
+      env,
+      kit,
+      orgId,
+      domainId,
+      (error as DomainError).name
+    )
+    return { gone: false, say }
+  }
+}
+
+async function beginRegistration(
   env: Env,
   kit: Tenancy,
   orgId: string,
@@ -982,7 +1005,7 @@ export async function registrationFailed(
       reason,
     })
   )
-  return giveUp(
+  const say = await giveUp(
     env,
     kit,
     orgId,
@@ -990,6 +1013,8 @@ export async function registrationFailed(
     "payment_released",
     `I couldn't register ${row.name}, so your card wasn't charged and the hold on it is released.`
   )
+  await alert(kit, orgId, domainId, "domain.registration_failed")
+  return say
 }
 
 /** An alert for something only we can fix; the owner is not asked to act. */

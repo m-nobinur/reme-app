@@ -47,8 +47,15 @@ vi.mock("../src/domain-buy.ts", async (importOriginal) => {
     abandonUnpaid: async () => {
       script.calls.push("abandon")
     },
-    startRegistration: async () => script.buy.started,
-    readRegistration: async () => script.buy.reads.shift() ?? { gone: true },
+    startRegistration: async () => {
+      if (script.buy.started instanceof Error) throw script.buy.started
+      return script.buy.started
+    },
+    readRegistration: async () => {
+      const read = script.buy.reads.shift() ?? { gone: true }
+      if (read instanceof Error) throw read
+      return read
+    },
     registrationFailed: async (...args: unknown[]) => {
       script.calls.push(`not registered ${String(args[4])}`)
       return say("failed")
@@ -456,6 +463,32 @@ describe("the domain Workflow, buying", () => {
     expect(names).toEqual(steps.DomainWorkflow["registration failed"])
     expect(result).toEqual({ outcome: "failed" })
     expect(script.calls).toEqual(["not registered failed", "say failed"])
+  })
+
+  it("releases the hold when the registration's steps run out of retries", async () => {
+    script.buy.payments = ["paid"]
+    script.buy.started = new Error("cloudflare.503")
+    const { names, result } = await buy()
+    expect(names).toEqual(steps.DomainWorkflow["registration errored"])
+    expect(result).toEqual({ outcome: "failed" })
+    expect(script.calls).toEqual([
+      "not registered cloudflare.503",
+      "say failed",
+    ])
+
+    script.calls.length = 0
+    script.buy.payments = ["paid"]
+    script.buy.started = {
+      gone: false,
+      say: null,
+      status: { state: "pending", completed: false },
+    }
+    script.buy.reads = [new Error("cloudflare.429")]
+    expect((await buy()).result).toEqual({ outcome: "failed" })
+    expect(script.calls).toEqual([
+      "not registered cloudflare.429",
+      "say failed",
+    ])
   })
 
   it("gives up on a registration still unfinished when the hold nears its end", async () => {
