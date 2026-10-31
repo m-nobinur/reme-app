@@ -125,6 +125,7 @@ export function quickPrompt(
     "- Where a rule below says to call a tool or ask_chief, leave that part out and say so in summary.",
     "- summary is one sentence for the owner saying what changed.",
     ...stableRules(),
+    "- Wording the change request gives in quotes goes in as written, even where a copy rule above would word it differently; a correction below may still set its case. The rules on prices, unsupported claims and reviews still hold.",
     ...correctionRules(corrections),
   ].join("\n")
   const user = [
@@ -156,6 +157,21 @@ export function wordsOf(edits: readonly { newText: string }[]): string | null {
   return /^[\p{L}\p{N} ,.'’&!?£%-]{3,80}$/u.test(plain) ? plain : null
 }
 
+/** Text as a reader compares it: case, curly quotes, heading asterisks and spacing aside. */
+const fold = (s: string) =>
+  s.toLowerCase().replace(/[‘’]/g, "'").replace(/\*/g, "").replace(/\s+/g, " ")
+
+/**
+ * The wording a change request quotes that none of the files has yet: what a
+ * copy edit has to add. Quoted text already there is what the owner points at.
+ */
+function askedWording(goal: string, files: Record<string, string>): string[] {
+  const have = Object.values(files).map(fold)
+  return [...goal.matchAll(/"([^"\n]{3,200})"|“([^”\n]{3,200})”/g)]
+    .map((m) => fold(m[1] ?? m[2] ?? "").replace(/[.!,;:\s]+$/, ""))
+    .filter((q) => q && !have.some((f) => f.includes(q)))
+}
+
 /**
  * The model's reply applied to the files it may touch: every edit for a
  * file in one `applyEdits` batch, so a refusal writes nothing. Returns the
@@ -164,7 +180,8 @@ export function wordsOf(edits: readonly { newText: string }[]): string | null {
 export function applyQuick(
   kind: OneCallKind,
   files: Record<string, string>,
-  reply: string
+  reply: string,
+  goal = ""
 ): {
   summary: string
   changed: Record<string, string>
@@ -203,6 +220,16 @@ export function applyQuick(
     throw new Error(
       "The edits changed nothing. Make the change the request asks for."
     )
+  }
+  if (kind === "copy") {
+    const after = Object.values({ ...files, ...changed }).map(fold)
+    const missing = askedWording(goal, files).find(
+      (q) => !after.some((f) => f.includes(q))
+    )
+    if (missing)
+      throw new Error(
+        `The edits leave out the wording the request quotes: "${missing}". Use it as written.`
+      )
   }
   return {
     summary: parsed.data.summary,
@@ -332,7 +359,7 @@ export async function quickEdit(input: {
             schema: SCHEMA,
           })
           await logTurn(kit, ids, spec.staff_id, role, reply)
-          applied = applyQuick(kind, files, reply.text)
+          applied = applyQuick(kind, files, reply.text, brief.goal)
           break
         } catch (thrown) {
           error = message(thrown).slice(0, 1000)
