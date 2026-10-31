@@ -620,6 +620,11 @@ describe("pages the starter has no file for", () => {
     alt: `Finished job ${n}`,
   })
   const UPLOADS = fact("media.uploads", { items: [1, 2, 3, 4].map(photo) })
+  const REVIEW = fact("testimonials.review_1", {
+    quote: "Spotless every time.",
+    name: "Jo",
+    permission: true,
+  })
   const picking = (ids: string[], ...more: FactRecord[]) => [
     ...CLEANING,
     fact("site.pages", { ids }),
@@ -706,10 +711,18 @@ describe("pages the starter has no file for", () => {
     ["testimonials", "Your reviews are a section on the home page."],
     ["faq", "Your FAQ is a section on the home page."],
   ])("makes %s a home page section and says so", (id, line) => {
-    const made = fallback(picking(["home", id]))
+    const made = fallback(picking(["home", id], REVIEW))
     expect(home(made)).toContain(id)
     expect(made.features).toContain(line)
     expect(made.pages.map((p) => p.page)).not.toContain(id)
+  })
+
+  it("leaves reviews out until one is held, and says so", () => {
+    const made = fallback(picking(["home", "testimonials"]))
+    expect(home(made)).not.toContain("testimonials")
+    expect(made.features).toContain(
+      "Your reviews section is left out until you have a review to show. Send me one or two from your customers and I'll add it."
+    )
   })
 
   it("puts a section the pack's home order lacks where it belongs", () => {
@@ -735,7 +748,7 @@ describe("pages the starter has no file for", () => {
       "contact",
       "quote",
     ]
-    const made = fallback(picking(everything, UPLOADS))
+    const made = fallback(picking(everything, UPLOADS, REVIEW))
     expect(made.pages.map((p) => p.page)).toEqual([
       "home",
       "about",
@@ -755,7 +768,7 @@ describe("pages the starter has no file for", () => {
   })
 
   it("drops the model's own line about a picked section, which the note covers", () => {
-    const facts = picking(["home", "testimonials"])
+    const facts = picking(["home", "testimonials"], REVIEW)
     const made = fallback(facts)
     const said = withOwnerChoices(
       {

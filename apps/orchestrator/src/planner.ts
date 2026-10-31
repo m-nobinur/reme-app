@@ -165,24 +165,50 @@ const HOME_ORDER: SectionKind[] = [
   "cta_band",
 ]
 
+/** Whether the facts can fill the sections that are the owner's own or nothing. */
+const heldFor = (facts: readonly FactRecord[]) => ({
+  gallery: ownerPhotos(facts).length > 0,
+  testimonials: facts.some((f) => f.key.startsWith("testimonials.review_")),
+})
+
 /**
  * What the owner picked that the starter has no page for: each becomes a
- * home page section. A gallery is the owner's own photos or nothing, so
- * without uploads it is not planned.
+ * home page section. A gallery is the owner's own photos and reviews are
+ * their customers' words, so without them neither is planned.
  */
 function pickedSections(facts: readonly FactRecord[]): {
   kind: SectionKind
   planned: boolean
 }[] {
   const picked = factValue(facts, "site.pages")?.ids ?? []
-  const photos = ownerPhotos(facts).length > 0
+  const held = heldFor(facts)
   return picked
     .filter((id): id is keyof typeof SECTION_PICKS => id in SECTION_PICKS)
     .map((id) => ({
       kind: SECTION_PICKS[id],
-      planned: id !== "gallery" || photos,
+      planned: !(id in held) || held[id as keyof typeof held],
     }))
 }
+
+/** The card line that says what became of each picked section, by kind and whether it was planned. */
+export const PICK_NOTES = {
+  gallery:
+    "Your gallery is a section on the home page, built from your own photos.",
+  faq: "Your FAQ is a section on the home page.",
+  testimonials: "Your reviews are a section on the home page.",
+} as const
+const LEFT_OUT = {
+  gallery:
+    "Your gallery needs photos of your work, so it is left out for now. Upload some and I'll add it.",
+  testimonials:
+    "Your reviews section is left out until you have a review to show. Send me one or two from your customers and I'll add it.",
+} as const
+
+/** Every line `pickNotes` may write. */
+export const PICK_LINES: ReadonlySet<string> = new Set([
+  ...Object.values(PICK_NOTES),
+  ...Object.values(LEFT_OUT),
+])
 
 /** What a feature line about each picked section says, which its note replaces. */
 const ABOUT_SECTION = {
@@ -194,13 +220,9 @@ const ABOUT_SECTION = {
 /** The card lines that say what became of each picked page that is not a page. */
 const pickNotes = (facts: readonly FactRecord[]): string[] =>
   pickedSections(facts).map(({ kind, planned }) =>
-    !planned
-      ? "Your gallery needs photos of your work, so it is left out for now. Upload some and I'll add it."
-      : kind === "gallery"
-        ? "Your gallery is a section on the home page, built from your own photos."
-        : kind === "faq"
-          ? "Your FAQ is a section on the home page."
-          : "Your reviews are a section on the home page."
+    planned
+      ? PICK_NOTES[kind as keyof typeof PICK_NOTES]
+      : LEFT_OUT[kind as keyof typeof LEFT_OUT]
   )
 
 /**
@@ -593,14 +615,16 @@ export function fallbackBlueprint(input: {
     library.find((d) => d.id === owner.direction) ??
     leastUsed(directionsFor(industry, library), recent)
   const uploads = ownerPhotos(facts)
-  // A gallery is the owner's photos or nothing; a picked section the pack's
-  // home order lacks goes in before the first section that follows it.
+  // A gallery is the owner's photos and reviews their customers' words, or
+  // nothing; a picked section the pack's home order lacks goes in before the
+  // first section that follows it.
+  const held = heldFor(facts)
   const pickedKinds = pickedSections(facts)
     .filter((s) => s.planned)
     .map((s) => s.kind)
   const pages = wantedPages(facts).map((page) => {
     const order = (pack.order[page] ?? [{ kind: "hero" as const }]).filter(
-      ({ kind }) => kind !== "gallery" || uploads.length > 0
+      ({ kind }) => !(kind in held) || held[kind as keyof typeof held]
     ) as { kind: SectionKind; variant?: string }[]
     if (page === "home") {
       for (const kind of pickedKinds) {
@@ -952,7 +976,7 @@ export function plannerPrompt(input: {
     ...pickedSections(facts).map(({ kind, planned }) =>
       planned
         ? `Picked as home page sections: ${kind} (planned).`
-        : `Picked as home page sections: ${kind} (not planned: the owner has no photos).`
+        : `Picked as home page sections: ${kind} (not planned: the owner has no ${kind === "gallery" ? "photos" : "reviews"}).`
     ),
     "",
     "The owner's own choices:",

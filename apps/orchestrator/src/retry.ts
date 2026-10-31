@@ -38,6 +38,7 @@ import {
   worstWrite,
   writeText,
 } from "./heartbeat-write.ts"
+import { PICK_LINES } from "./planner.ts"
 import { inputOf, refuseQuestion } from "./question.ts"
 import { QUICK_EDITED } from "./quick.ts"
 import { workKey } from "./sandbox.ts"
@@ -128,14 +129,18 @@ const PAGE_NAMES = new Map<string, string>(
   PLANNED_PAGES.map((p) => [p.id, p.label])
 )
 
-/** The planned pages by the names the owner picked them by, and whether each service has one. */
+/**
+ * The planned pages by the names the owner picked them by, whether each
+ * service has one, and the card's lines on the picked pages that are sections.
+ */
 function plannedPages(blueprint: unknown) {
-  const pages =
-    Blueprint.safeParse(blueprint).data?.pages.map((p) => p.page) ?? []
+  const plan = Blueprint.safeParse(blueprint).data
+  const pages = plan?.pages.map((p) => p.page) ?? []
   const named = pages
     .filter((id) => id !== "service")
     .flatMap((id) => PAGE_NAMES.get(id) ?? [])
-  return { named, each: pages.includes("service") }
+  const sections = (plan?.features ?? []).filter((l) => PICK_LINES.has(l))
+  return { named, each: pages.includes("service"), sections }
 }
 
 /** What a change says about itself: the owner's short name for it, and the new words of a copy change. */
@@ -184,14 +189,18 @@ export function readyText(
     )
   }
   const next = "Have a look below."
-  const { named, each } = plannedPages(blueprint)
+  const { named, each, sections } = plannedPages(blueprint)
   if (named.length === 0) return `Your draft is ready. ${next}`
   const list =
     named.length === 1
       ? named[0]
       : `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`
   const plus = each ? ", plus a page for each service" : ""
-  return `Your draft is ready, with ${list} pages${plus}. ${next}`
+  return [
+    `Your draft is ready, with ${list} pages${plus}.`,
+    ...sections,
+    next,
+  ].join(" ")
 }
 
 /** A chat line to post, and with a ready line, what the build left out to offer. */
