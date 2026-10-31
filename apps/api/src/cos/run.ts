@@ -29,6 +29,7 @@ import {
   NotRun,
   type RunState,
   runTool,
+  ToolError,
   toolErrorText,
 } from "./agent.ts"
 import {
@@ -224,6 +225,8 @@ export async function streamTurn(
       if (error instanceof Error && error.message === ERROR_TEXT) {
         return ERROR_TEXT
       }
+      // A tool's own line, which the screen reads back; the tool logged it.
+      if (error instanceof ToolError) return error.message
       // A provider's status and code say whether it was a rate limit or a
       // refusal, and its message what a name alone does not, cut and scrubbed.
       const { statusCode, code } = (error ?? {}) as {

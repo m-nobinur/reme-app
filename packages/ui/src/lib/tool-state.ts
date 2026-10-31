@@ -17,6 +17,7 @@ import {
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
   TOOL_CALL_CANCELLED,
+  TOOL_REPEATED,
   toolErrorKind,
 } from "@workspace/contracts"
 import { askable, saidInChat } from "@workspace/ui/lib/answer"
@@ -82,6 +83,10 @@ export function supersededBy(
   while (cancelled(calls[at - count - 1])) count += 1
   return count
 }
+
+/** A call refused as a repeat of one its turn already ran: the first one's result stands. */
+export const isRepeat = (part: { isError?: boolean; result?: unknown }) =>
+  Boolean(part.isError) && errorOf(part.result).startsWith(TOOL_REPEATED)
 
 /** A turn's error when the session behind it has ended; the thread offers sign-in. */
 export const SESSION_ENDED =

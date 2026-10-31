@@ -20,7 +20,7 @@ import { ReviewQuoteForm } from "@workspace/ui/components/assistant/review-quote
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { StateIcon } from "@workspace/ui/components/status-line"
 import { toolLine } from "@workspace/ui/lib/activity-copy"
-import { heldText, isHeld } from "@workspace/ui/lib/tool-state"
+import { heldText, isHeld, isRepeat } from "@workspace/ui/lib/tool-state"
 
 /**
  * The approval half of the owner attention contract, in the transcript.
@@ -132,6 +132,7 @@ export const OWNER_CARDS: Record<string, ToolCallMessagePartComponent> = {
 const Approval: ToolCallMessagePartComponent = (props) => {
   const { approval, respondToApproval, toolName } = props
   const held = useAuiState((s) => isHeld(s.message.parts, props.toolCallId))
+  if (isRepeat(props)) return null
   const Owned = Object.hasOwn(OWNER_CARDS, toolName)
     ? OWNER_CARDS[toolName]
     : Object.hasOwn(COS_READS, toolName)

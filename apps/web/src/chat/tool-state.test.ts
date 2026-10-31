@@ -6,6 +6,8 @@ import {
   GetChangeOutput,
   OwnerChangeRequest,
   RequestChangeOutput,
+  TOOL_FAILED,
+  TOOL_REPEATED,
 } from "@workspace/contracts"
 import { phoneText } from "@workspace/ui/lib/facts"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -19,6 +21,7 @@ import {
   decisionView,
   detailsText,
   isHeld,
+  isRepeat,
   isRetried,
   readView,
   showsProgress,
@@ -513,4 +516,14 @@ it("folds cancelled cards of one kind into the card that replaced them", () => {
   expect(supersededBy(messages, "create_reminder", "c")).toBe(2)
   // The last of its kind, even cancelled, keeps its own line.
   expect(supersededBy(messages, "buy_domain", "x")).toBe(0)
+})
+
+it("knows a call refused as a repeat, which shows nothing, from any other failure", () => {
+  const failed = (error: string) => ({ isError: true, result: { error } })
+  expect(isRepeat(failed(`${TOOL_REPEATED}: find_domain already ran`))).toBe(
+    true
+  )
+  expect(isRepeat(failed(`${TOOL_FAILED} (cos.integrity): no`))).toBe(false)
+  expect(isRepeat(failed(CANCELLED))).toBe(false)
+  expect(isRepeat({ result: { error: TOOL_REPEATED } })).toBe(false)
 })

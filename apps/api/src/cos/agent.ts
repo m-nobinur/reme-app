@@ -25,6 +25,7 @@ import {
   type RecordReviewInput,
   type TaintLabel,
   TOOL_FAILED,
+  TOOL_REPEATED,
   TOOL_UNKNOWN,
   type ToneId,
 } from "@workspace/contracts"
@@ -1291,6 +1292,9 @@ export function callRepeated(
   return new Set(ran).size < ran.length
 }
 
+/** A tool's error as the model and the screen read it: `toolErrorText`'s line, never a stream error. */
+export class ToolError extends Error {}
+
 /** A call the turn already ran with the same input: not run again, and the model is told so. */
 export class RepeatedCall extends Error {
   constructor(readonly toolName: string) {
@@ -1421,7 +1425,7 @@ export async function runTool(
  */
 export function toolErrorText(error: unknown): string {
   if (error instanceof RepeatedCall) {
-    return `${TOOL_FAILED} (repeated): ${error.toolName} already ran with this input in this turn, and its result is above, so it did not run again. Do not repeat it: answer the owner.`
+    return `${TOOL_REPEATED}: ${error.toolName} already ran with this input in this turn, and its result is above, so it did not run again. Do not call it again. Finish your reply without repeating anything you already said or asked.`
   }
   if (error instanceof NotRun && error.reason === "expired") {
     return `${APPROVAL_EXPIRED}: the owner's yes on this card has expired or no longer matches what the card showed, so nothing was done. Tell the owner and offer to propose it again.`
@@ -1509,7 +1513,7 @@ function toolsFor(run: AgentTurn, allowed: readonly CosToolName[] | null) {
             })
           )
         }
-        throw new Error(toolErrorText(error))
+        throw new ToolError(toolErrorText(error))
       }
     }
   const describe = (name: CosToolName) => ({
