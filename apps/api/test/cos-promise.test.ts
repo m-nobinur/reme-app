@@ -116,6 +116,38 @@ describe("the promise gate", () => {
     expect(steps).toHaveLength(2)
   })
 
+  it("keeps a re-run's streamed tool input on the call it becomes", async () => {
+    const streamed: Part[] = [
+      { type: "stream-start", warnings: [] },
+      { type: "tool-input-start", id: "c1", toolName: "set_up" },
+      { type: "tool-input-delta", id: "c1", delta: "{}" },
+      { type: "tool-input-end", id: "c1" },
+      ...called.slice(1),
+    ]
+    const { model } = scripted(
+      said("I'll set that up now."),
+      streamed,
+      said("Done.")
+    )
+    const result = streamText({
+      model: gated(model, [promiseGate(async () => true)]),
+      prompt: "Set it up",
+      tools: {
+        set_up: tool({
+          description: "Sets it up",
+          inputSchema: z.object({}),
+          execute: async () => "done",
+        }),
+      },
+      stopWhen: ({ steps }) => steps.length >= 3,
+    })
+    const ids = new Set<string>()
+    for await (const chunk of result.toUIMessageStream()) {
+      if ("toolCallId" in chunk) ids.add(chunk.toolCallId)
+    }
+    expect([...ids]).toEqual(["c1"])
+  })
+
   it("runs a model that keeps promising at most twice more, then lets the turn end", async () => {
     const { model, prompts } = scripted(said("I'll do it."))
     const { done, ran } = run(model, async () => true)
