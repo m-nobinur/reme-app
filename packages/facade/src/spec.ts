@@ -51,6 +51,12 @@ export const ROLES = {
 
 export type Role = keyof typeof ROLES
 
+/** Haiku standing in for the primary model (development, staging) thinks at high on the primary's roles. */
+export const effortOf = (role: Role, model: string): Effort =>
+  ROLES[role].model === "sonnet" && model === MODELS.haiku
+    ? "high"
+    : ROLES[role].effort
+
 const FALLBACK_MAX_OUTPUT_TOKENS = 16_384
 
 /**
@@ -98,7 +104,7 @@ export function roleOf(
   }
   return {
     model: route.model,
-    effort: ROLES[role].effort,
+    effort: effortOf(role, route.model),
     maxTokens: route.max_output_tokens,
   }
 }

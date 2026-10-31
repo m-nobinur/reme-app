@@ -10,6 +10,7 @@ import {
 import {
   completeOnce,
   type Effort,
+  effortOf,
   type ModelEnv,
   modelRouting,
   ROLES,
@@ -773,7 +774,7 @@ export async function critiqueRound(input: {
       complete: input.complete ?? ((call) => completeOnce(env, call)),
       route: {
         model: route?.model ?? "",
-        effort: ROLES[role].effort,
+        effort: effortOf(role, route?.model ?? ""),
         maxTokens: route?.max_output_tokens ?? ROLES[role].maxTokens,
       },
       sessionId: ids.assignmentId,

@@ -49,6 +49,7 @@ export type {
   UnsignedSpec,
 } from "./spec.ts"
 export {
+  effortOf,
   loggableSpec,
   MODELS,
   modelRouting,

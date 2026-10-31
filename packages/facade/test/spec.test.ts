@@ -145,6 +145,21 @@ describe("the roles", () => {
     expect(resolveRuntime(spec, KEY).effort).toBe("medium")
   })
 
+  it("think at high on the primary's roles when Haiku is the primary", () => {
+    const haiku = "openrouter/anthropic/claude-haiku-5.5"
+    const routing = modelRouting({ REME_MODEL_DEFAULT: haiku })
+    const spec = signSpec({ ...unsigned(), model_routing: routing }, KEY)
+    const effort = (r: Role) => roleOf(spec, r).effort
+    expect(
+      ["plan", "build", "page", "critic", "quick_section"].map((r) =>
+        effort(r as Role)
+      )
+    ).toEqual(["high", "high", "high", "high", "high"])
+    expect(
+      ["copy", "critic_recheck", "quick_copy"].map((r) => effort(r as Role))
+    ).toEqual(["low", "low", "low"])
+  })
+
   it("refuse a spec that does not route one", () => {
     const { page: _page, ...rest } = modelRouting({}, "A")
     const spec = signSpec({ ...unsigned(), model_routing: rest }, KEY)
