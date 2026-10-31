@@ -103,10 +103,11 @@ export function duration(ms: number): string {
   return minutes ? `${minutes} min ${seconds % 60} s` : `${seconds} s`
 }
 
-/** Whole days, hours or minutes, said short: `3 days`, `2 hr`, `25 min`. */
+/** Whole days, hours and minutes, or minutes, said short: `3 days`, `1 hr 40 min`, `25 min`. */
 const span = (minutes: number) => {
   if (minutes < 60) return `${minutes} min`
-  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} hr`
+  if (minutes < 24 * 60)
+    return `${Math.floor(minutes / 60)} hr${minutes % 60 ? ` ${minutes % 60} min` : ""}`
   const days = Math.floor(minutes / (24 * 60))
   return `${days} day${days === 1 ? "" : "s"}`
 }
