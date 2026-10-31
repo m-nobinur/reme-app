@@ -40,6 +40,10 @@ vi.mock("../src/tail.ts", async (importOriginal) => ({
       manifest: { files: 3, reused: 0, bytes: 10, ms: 1 },
       custom: { exit_code: 0, key: null, ms: 1 },
       source: { key: "k", ms: 1 },
+      text: {
+        text_changes: [{ before: "Old", after: "New", pages: ["/"] }],
+        text_changes_left: 1,
+      },
     }
   },
 }))
@@ -102,6 +106,10 @@ describe("report_complete", () => {
     const result = await call()
     expect(finished).toHaveLength(1)
     expect(emitted).toEqual(["assignment.completion_reported"])
+    expect(reports[0]).toMatchObject({
+      text_changes: [{ before: "Old", after: "New", pages: ["/"] }],
+      text_changes_left: 1,
+    })
     expect(sent).toHaveLength(1)
     expect(result.terminate).toBe(true)
   })
