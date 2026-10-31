@@ -6,6 +6,7 @@ import {
   OwnerAnswerText,
 } from "@workspace/contracts"
 import {
+  appendEvent,
   appendSessionEvent,
   assignments,
   domains,
@@ -42,6 +43,7 @@ import { readSkill, saveCorrection, scheduleSkill } from "../src/cos/skills.ts"
 import { wallToUtc } from "../src/cos/time.ts"
 import {
   answerQuestion as answerTool,
+  askDeveloper,
   boughtSaid,
   buyDomain,
   CONNECT_RETRY_MS,
@@ -54,6 +56,7 @@ import {
   findDomain,
   getChange,
   getFacts,
+  getReview,
   getWorkspace,
   inspectDomain,
   newContact,
@@ -808,6 +811,136 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         ref: build,
       }).catch((error: unknown) => error)
       expect(failed).toBeInstanceOf(ToolFailed)
+    })
+  })
+
+  describe("ask_developer", () => {
+    it("asks the orchestrator with the owner's question and returns its answer", async () => {
+      const answered = {
+        outcome: "answered",
+        answer: "Prices vary by home, so the site asks for a quote.",
+        about: "live",
+        building: false,
+        sources: [{ kind: "notes", ref: "no prices" }],
+        sure: true,
+      }
+      const stub = stubOrchestrator(() => Response.json(answered))
+      const input = { mode: "answer" as const, question: "Why no prices?" }
+      expect(
+        kept("ask_developer", await askDeveloper(context(me, stub), input))
+      ).toEqual(answered)
+      const [call] = stub.calls
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/site/ask"
+      )
+      expect(call?.body).toEqual(input)
+    })
+
+    it("returns a started review as it is", async () => {
+      const started = {
+        outcome: "review_started",
+        ref: crypto.randomUUID(),
+        seconds: 90,
+      }
+      const stub = stubOrchestrator(() => Response.json(started))
+      expect(
+        kept(
+          "ask_developer",
+          await askDeveloper(context(me, stub), {
+            mode: "review",
+            question: "Check my site",
+          })
+        )
+      ).toEqual(started)
+    })
+  })
+
+  describe("get_review", () => {
+    const stored = new Map<string, unknown>()
+    const reading = (who: Owner) => {
+      const ctx = context(who)
+      return {
+        ...ctx,
+        env: {
+          ...ctx.env,
+          SITES: {
+            get: async (key: string) =>
+              stored.has(key) ? { json: async () => stored.get(key) } : null,
+          },
+        } as unknown as Env,
+      }
+    }
+    const log = (who: Owner, type: string, payload: Record<string, unknown>) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        appendEvent(db, {
+          orgId: who.orgId,
+          assignmentId: null,
+          staffId: null,
+          type,
+          payload,
+        })
+      )
+    const report = (who: Owner, revision: string) => ({
+      review_id: crypto.randomUUID(),
+      org_id: who.orgId,
+      revision_id: revision,
+      version: 2,
+      verdict: "Clear and easy to act on.",
+      strengths: ["The call to action is plain."],
+      findings: [
+        {
+          id: "f1",
+          severity: "medium",
+          area: "copy",
+          page: "/",
+          quote: "Weekly house cleaning",
+          issue: "The heading does not say where.",
+          fix: "Name the town.",
+          from: "review",
+        },
+      ],
+      findings_left: 0,
+    })
+
+    it("reads the newest review's stored report, without its tenancy ids, and says when one runs", async () => {
+      const who = await owner(kit, url as string, "cos-get-review")
+      const ctx = reading(who)
+      expect(await getReview(ctx, {})).toEqual({ outcome: "none" })
+      const first = crypto.randomUUID()
+      const key = `sites/${who.orgId}/${first}/review.json`
+      const review = report(who, first)
+      stored.set(key, review)
+      await log(who, "site.review_started", { revision_id: first })
+      expect(kept("get_review", await getReview(ctx, {}))).toEqual({
+        outcome: "running",
+        ref: first,
+      })
+      await log(who, "site.reviewed", { revision_id: first, key })
+      const { org_id: _, revision_id: __, ...shown } = review
+      expect(kept("get_review", await getReview(ctx, {}))).toEqual({
+        outcome: "found",
+        ...shown,
+      })
+      const second = crypto.randomUUID()
+      await log(who, "site.review_started", { revision_id: second })
+      expect((await getReview(ctx, {})).outcome).toBe("running")
+      expect((await getReview(ctx, { ref: first })).outcome).toBe("found")
+      await log(who, "site.review_failed", { revision_id: second })
+      expect(kept("get_review", await getReview(ctx, { ref: second }))).toEqual(
+        { outcome: "none" }
+      )
+    })
+
+    it("reads nothing outside the org's own prefix, nor another org's review", async () => {
+      const who = await owner(kit, url as string, "cos-get-review-foreign")
+      const revision = crypto.randomUUID()
+      const foreign = `sites/${other.orgId}/${revision}/review.json`
+      stored.set(foreign, report(other, revision))
+      await log(who, "site.reviewed", { revision_id: revision, key: foreign })
+      expect(await getReview(reading(who), {})).toEqual({ outcome: "none" })
+      expect(await getReview(reading(me), { ref: revision })).toEqual({
+        outcome: "none",
+      })
     })
   })
 

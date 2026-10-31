@@ -3,6 +3,8 @@ import {
   type AnswerQuestionCall,
   AnswerQuestionInput,
   type AnswerQuestionOutput,
+  type AskDeveloperInput,
+  AskDeveloperOutput,
   BoughtElsewhereOutput,
   BuildStopCause,
   BuildSummary,
@@ -35,6 +37,8 @@ import {
   GateResult,
   type GetChangeInput,
   GetChangeOutput,
+  type GetReviewInput,
+  type GetReviewOutput,
   InformationAnswer,
   type InspectDomainInput,
   type InspectDomainOutput,
@@ -53,6 +57,7 @@ import {
   type ReviewFactKey,
   type SetTimeZoneInput,
   type SetTimeZoneOutput,
+  SiteReview,
   TERMINAL_STATES,
   type UpdateReminderInput,
   type UpdateReminderOutput,
@@ -639,6 +644,63 @@ async function previewExpiry(
   )
   if (!answered.ok) return refused(answered)
   return { expires_at: PreviewLink.parse(await answered.json()).expires_at }
+}
+
+/** How long an answer may take: one model call over the site's stored record. */
+const ASK_TIMEOUT_MS = 30_000
+
+/**
+ * A question about the owner's website, or a review of it, asked of the
+ * orchestrator, which reads the stored record of the version the owner can
+ * see. It changes nothing, so it runs with no card in both modes.
+ */
+export async function askDeveloper(
+  { env, owner }: ToolContext,
+  input: AskDeveloperInput
+): Promise<AskDeveloperOutput> {
+  return domainAnswer(
+    await bridge(env, owner, "/site/ask", {
+      body: input,
+      signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
+    }),
+    AskDeveloperOutput.parse
+  )
+}
+
+/** A review started this long ago with no report never finished. */
+const REVIEW_LAPSE_MS = 30 * 60_000
+
+/**
+ * The newest review, or the one `ref` names (its version's revision), from
+ * the orchestrator's events (`consult.ts`) and the report it stored under
+ * the org's own prefix. A ref from another org finds no event.
+ */
+export async function getReview(
+  { env, kit, owner }: Pick<ToolContext, "env" | "kit" | "owner">,
+  { ref }: GetReviewInput
+): Promise<GetReviewOutput> {
+  const [latest] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db.execute<{ type: string; revision_id: string; key: unknown; at: Date }>(
+      sql`select type, payload->>'revision_id' as revision_id, payload->>'key' as key, occurred_at as at
+        from ${events}
+        where type in ('site.review_started', 'site.reviewed', 'site.review_failed')
+          ${ref ? sql`and payload->>'revision_id' = ${ref}` : sql``}
+        order by event_id desc limit 1`
+    )
+  )
+  if (latest?.type === "site.review_started") {
+    return Date.now() - new Date(latest.at).getTime() < REVIEW_LAPSE_MS
+      ? { outcome: "running", ref: latest.revision_id }
+      : { outcome: "none" }
+  }
+  const key = latest?.type === "site.reviewed" ? String(latest.key) : ""
+  if (!key.startsWith(`sites/${owner.orgId}/`)) return { outcome: "none" }
+  const stored = await env.SITES.get(key)
+  // Gone with its revision once retention swept it.
+  const review = SiteReview.safeParse(await stored?.json()).data
+  if (!review) return { outcome: "none" }
+  const { org_id: _, revision_id: __, ...shown } = review
+  return { outcome: "found", ...shown }
 }
 
 /**

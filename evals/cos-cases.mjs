@@ -46,6 +46,9 @@ export const FACTS = [
   },
 ]
 
+/** Why each site question case is pending: the eval owner's org has no site to ask about. */
+const SITE_CASE = "a staging recording on an org with a built site"
+
 export const CASES = [
   {
     name: "missing-facts",
@@ -456,6 +459,68 @@ export const CASES = [
       return problems
     },
   },
+  {
+    pending: SITE_CASE,
+    // The build's notes say why the site shows no prices; the answer rests on them.
+    name: "ask-why",
+    turns: [{ mode: "ask", text: "Why doesn't my website show any prices?" }],
+    check: ([turn]) => {
+      const problems = [...noActs(turn), ...replied(turn)]
+      const [asked, ...more] = called(turn, "ask_developer")
+      if (!asked || more.length > 0 || asked.input?.mode !== "answer")
+        problems.push("it did not ask about the site once, in answer mode")
+      else if (!(asked.output?.sources ?? []).some((s) => s.kind === "notes"))
+        problems.push("the answer does not rest on the build's notes")
+      return problems
+    },
+  },
+  {
+    pending: SITE_CASE,
+    name: "review-start-voice",
+    turns: [
+      {
+        mode: "ask",
+        text: "Can you check over my website and tell me what could be better?",
+      },
+    ],
+    check: ([turn]) => [...noActs(turn), ...startsReview(turn)],
+  },
+  {
+    pending: SITE_CASE,
+    // The report arrives as its own message once the review finishes.
+    name: "review-report-voice",
+    turns: [
+      { mode: "ask", text: "Please review my website and send me a report." },
+      { read: true, wait: 240 },
+    ],
+    check: ([turn, report]) => {
+      const said = text(report)
+      const problems = [...startsReview(turn), ...replied(report)]
+      if (said.split(/[.!?]+(?:\s|$)/).filter((x) => x.trim()).length > 4)
+        problems.push("the report runs past four sentences")
+      if ((said.match(/\?/g) ?? []).length !== 1 || !/\?\s*$/.test(said))
+        problems.push("the report does not end on one offer")
+      if (INTERNALS.test(said) || /\bf\d+\b/.test(said))
+        problems.push("the report names internals or a finding's id")
+      return problems
+    },
+  },
+  {
+    pending: SITE_CASE,
+    // A question while the review runs is answered as any other.
+    name: "review-follow-up",
+    turns: [
+      { mode: "ask", text: "Can you review my website for me?" },
+      { mode: "ask", text: "What are our opening hours on weekdays?" },
+    ],
+    check: ([, asked]) => [
+      ...noActs(asked),
+      ...statesHours(asked),
+      ...(called(asked, "ask_developer").length > 0
+        ? ["it asked about the site again instead of answering"]
+        : []),
+    ],
+  },
 ]
 
 const STILL_AT_WORK =
@@ -559,6 +624,35 @@ const statesHours = (parts) => {
 }
 
 const replied = (parts) => (text(parts).trim() ? [] : ["no reply text"])
+
+/** Words the owner must never read about how the work is done. */
+const INTERNALS =
+  /\b(?:developer|assignment|lane|tool|workflow|agent|ask_developer|review_started|ref)\b/i
+
+/**
+ * One review started, and a reply of the assistant's own: under 40 words,
+ * saying it runs and roughly how long, inviting the owner to carry on, and
+ * naming nothing of how it is done.
+ */
+function startsReview(parts) {
+  const said = text(parts)
+  const [asked, ...more] = called(parts, "ask_developer")
+  const problems = []
+  if (!asked || more.length > 0 || asked.input?.mode !== "review")
+    problems.push("it did not start one review")
+  if (said.split(/\s+/).filter(Boolean).length >= 40)
+    problems.push("the start reply is 40 words or more")
+  if (!/\b(?:minutes?|seconds?|moment|shortly|soon)\b/i.test(said))
+    problems.push("the start reply gives no rough wait")
+  if (
+    !/\b(?:meantime|meanwhile|anything else|carry on|feel free|in the mean ?time)\b/i.test(
+      said
+    )
+  )
+    problems.push("the start reply does not invite the owner to carry on")
+  if (INTERNALS.test(said)) problems.push("the start reply names internals")
+  return problems
+}
 
 /** One request_change for the owner's approval, carrying `wording`. */
 function proposed(parts, wording) {

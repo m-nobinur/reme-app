@@ -91,10 +91,10 @@ export type ContextPolicy = {
  * to offer. Version 16 may add a line when a procedure's schedule starts the
  * turn. Version 17 swaps the preview tool for one that reads a change's
  * record, and adds the line that puts this turn's workspace over earlier
- * messages.
+ * messages. Version 18 reads the results of ask_developer and get_review.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "17",
+  version: "18",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,

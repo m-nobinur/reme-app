@@ -598,6 +598,18 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: ["Updated your weekly round-up"],
     fail: ["set up your weekly round-up"],
   },
+  ask_developer: {
+    kind: "checking",
+    working: ["Looking over your website", "Going over your website"],
+    done: ["Looked over your website"],
+    fail: ["look over your website"],
+  },
+  get_review: {
+    kind: "checking",
+    working: ["Opening the report on your website"],
+    done: ["Opened the report on your website"],
+    fail: ["open the report on your website"],
+  },
 }
 
 /** What a tool's line says, whatever the part's state, the turn's end or the time. */
