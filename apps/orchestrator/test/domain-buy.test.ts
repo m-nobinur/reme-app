@@ -835,6 +835,62 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     })
   })
 
+  it("closes the purchase when the registrar refuses the registration for good", async () => {
+    const p = await paid()
+    const net = globalThis.fetch
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL, init?: RequestInit) =>
+        init?.method === "POST" && String(input) === `${SANDBOX}/registrations`
+          ? Promise.resolve(
+              Response.json(
+                { success: false, errors: [{ code: 10000 }], result: null },
+                { status: 403 }
+              )
+            )
+          : net(input, init)
+      )
+    )
+    const started = await startRegistration(p.env, kit, p.orgId, p.row.id)
+    expect(started).toMatchObject({
+      gone: false,
+      say: {
+        text: `I couldn't register ${p.name}, so your card wasn't charged and the hold on it is released.`,
+      },
+    })
+    expect(started).not.toHaveProperty("status")
+    expect(p.net.pi).toMatchObject({ status: "canceled" })
+    expect(await rowOf(p.orgId, p.name)).toMatchObject({
+      state: "failed",
+      registrant: null,
+      registration: { outcome: "payment_released" },
+    })
+    expect(await typesOf(p.orgId, "alert.raised")).toEqual(["alert.raised"])
+    const tasks = await kit.withOrg({ orgId: p.orgId }, (db) => readTasks(db))
+    const step = tasks
+      .find((t) => t.kind === "address")
+      ?.steps.find((s) => s.step === "purchase")
+    expect(step?.state).toBe("pending")
+  })
+
+  it("keeps a registrar outage for the Workflow to retry", async () => {
+    const p = await paid()
+    const net = globalThis.fetch
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL, init?: RequestInit) =>
+        init?.method === "POST" && String(input) === `${SANDBOX}/registrations`
+          ? Promise.resolve(Response.json({ success: false }, { status: 503 }))
+          : net(input, init)
+      )
+    )
+    await expect(
+      startRegistration(p.env, kit, p.orgId, p.row.id)
+    ).rejects.toThrow("cloudflare.503")
+    expect((await rowOf(p.orgId, p.name)).state).toBe("verifying")
+    expect(p.net.pi).toMatchObject({ status: "requires_capture" })
+  })
+
   it("raises an alert, not a failure, when the renewal cannot be set up", async () => {
     const p = await paid()
     await startRegistration(p.env, kit, p.orgId, p.row.id)
