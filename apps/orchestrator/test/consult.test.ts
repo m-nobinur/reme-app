@@ -1,4 +1,4 @@
-import { appendEvent, events, sql } from "@workspace/db"
+import { appendEvent, eq, events, siteRevisions, sql } from "@workspace/db"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import {
   answerPrompt,
@@ -13,6 +13,7 @@ import {
   startReview,
   tellReview,
 } from "../src/consult.ts"
+import { deleteRevisionFiles } from "../src/retention.ts"
 import { advance } from "../src/state.ts"
 import { freshOrg } from "./fixture.ts"
 import { kit, previewed } from "./site.ts"
@@ -383,5 +384,19 @@ live("asking about a draft", () => {
       key: reviewKey(site.orgId, site.revisionId),
       findings: 1,
     })
+    // Retention takes the report with the rest of its revision's files.
+    const [retired] = await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db
+        .update(siteRevisions)
+        .set({ status: "retired", retireAfter: new Date(Date.now() - 1000) })
+        .where(eq(siteRevisions.id, site.revisionId))
+        .returning()
+    )
+    await kit.withOrg({ orgId: site.orgId }, (db) =>
+      deleteRevisionFiles(site.store.SITES, db, retired as never)
+    )
+    expect(site.store.objects.has(reviewKey(site.orgId, site.revisionId))).toBe(
+      false
+    )
   })
 })
