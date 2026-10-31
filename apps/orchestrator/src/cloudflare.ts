@@ -144,6 +144,7 @@ import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 export { RemeSandbox, SandboxEgress, SandboxPool } from "./container.ts"
 export { DomainWorkflow } from "./domain-workflow.ts"
 export { ElsewhereWorkflow } from "./elsewhere-workflow.ts"
+export { ReviewWorkflow } from "./review-workflow.ts"
 export { SearchSyncWorkflow, SearchWorkflow } from "./search-workflow.ts"
 
 /** The owner's route tree: the bridge routes alone, behind `ownerAuth`. */

@@ -57,7 +57,7 @@ export async function publishedSource(
 }
 
 /** The states a draft waits on the owner in: its review, or the park a lapsed review moves it to. */
-const DRAFT_STATES = ["awaiting_review", "blocked_on_approval"]
+export const DRAFT_STATES = ["awaiting_review", "blocked_on_approval"]
 
 /**
  * A change to a site that is not live yet starts from the owner's draft, its

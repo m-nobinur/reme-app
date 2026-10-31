@@ -97,6 +97,12 @@
       "name": "reme-elsewhere",
       "binding": "ELSEWHERE",
       "class_name": "ElsewhereWorkflow"
+    },
+    // One instance per site version under review (src/review-workflow.ts).
+    {
+      "name": "reme-review",
+      "binding": "REVIEWS",
+      "class_name": "ReviewWorkflow"
     }
   ],
   // The hourly retention sweep (ADR-032), created by the `scheduled` handler
@@ -259,6 +265,11 @@
           "name": "reme-elsewhere-production",
           "binding": "ELSEWHERE",
           "class_name": "ElsewhereWorkflow"
+        },
+        {
+          "name": "reme-review-production",
+          "binding": "REVIEWS",
+          "class_name": "ReviewWorkflow"
         }
       ],
       "kv_namespaces": [
