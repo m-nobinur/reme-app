@@ -74,7 +74,7 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
         () => "site.live:site-1"
       )
     ).toEqual([
-      "Congratulations, your website is live. Customers can now find you online and ask for a quote at any time. You can view it with the Visit your website button, or ask me to open it.",
+      "Congratulations, your website is live. Customers can now find you online. You can view it with the Visit your website button, or ask me to open it.",
     ])
   })
 

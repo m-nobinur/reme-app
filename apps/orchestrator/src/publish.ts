@@ -711,7 +711,7 @@ export async function sayLive(
     facts: { ...(own && { address: own.name }), ...(where && { where }) },
     template: own
       ? `Congratulations, your website is live. Your email is on ${own.name}, so I'll put the site there.${where ? ` It's with ${where}.` : ""}`
-      : `Congratulations, your website is live. Customers can now find you online and ask for a quote at any time. ${visit ? `You can view it with the ${visit} button, or ask me to open it.` : "Ask me any time to open it."}`,
+      : `Congratulations, your website is live. Customers can now find you online. ${visit ? `You can view it with the ${visit} button, or ask me to open it.` : "Ask me any time to open it."}`,
   })
   const connect = own && `Connect ${own.name}`
   const posted = await postAssistantMessage(kit, {
