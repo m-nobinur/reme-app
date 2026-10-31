@@ -176,6 +176,30 @@ describe("applyQuick", () => {
       applyQuick("copy", FILES, reply([{ ...HERO, newText: HERO.oldText }]))
     ).toThrow()
   })
+
+  it("refuses a copy edit that leaves out the wording the owner quotes", () => {
+    const goal = 'Change the hero to say "Come home to breathing room."'
+    const capitals = {
+      ...HERO,
+      newText: 'heroHeading: "WEEKLY CLEANING IN FAIRHAVEN"',
+    }
+    expect(() => applyQuick("copy", FILES, reply([capitals]), goal)).toThrow(
+      /leave out the wording the request quotes: "come home to breathing room"/
+    )
+    // Its case, curly quotes and a heading's asterisks may differ.
+    const styled = {
+      ...HERO,
+      newText: 'heroHeading: "COME HOME TO *BREATHING ROOM*"',
+    }
+    expect(
+      applyQuick("copy", FILES, reply([styled]), goal).changed
+    ).toBeDefined()
+    // Quoted text the file already has is what the owner points at.
+    const removal = 'Replace "Weekly cleaning in Fairhaven" with "Come home"'
+    expect(() =>
+      applyQuick("copy", FILES, reply([HERO]), removal)
+    ).not.toThrow()
+  })
 })
 
 describe("copyFindings", () => {
