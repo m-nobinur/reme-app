@@ -32,6 +32,18 @@ const STATE: Record<AssignmentState, string> = {
   cancelled: "cancelled",
 }
 
+/** The states a build waits on the owner in, as the model reads them. */
+export const IN_REVIEW: ReadonlySet<string> = new Set(
+  (
+    [
+      "preview_ready",
+      "awaiting_review",
+      "release_candidate",
+      "blocked_on_approval",
+    ] as const
+  ).map((state) => STATE[state])
+)
+
 const DOMAIN: Record<DomainState, string> = {
   awaiting_payment: "waiting for payment",
   awaiting_dns: "waiting for the owner to add the records",

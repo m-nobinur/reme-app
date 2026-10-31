@@ -6,6 +6,7 @@ import {
   type LanguageModelMiddleware,
   wrapLanguageModel,
 } from "ai"
+import { IN_REVIEW } from "./labels.ts"
 
 type WrapStream = NonNullable<LanguageModelMiddleware["wrapStream"]>
 type Result = Awaited<ReturnType<WrapStream>>
@@ -39,7 +40,7 @@ export const MAX_RERUNS = 2
 
 /** What the model is told after a claim nothing it was shown backs; the claims follow. */
 export const CLAIMS_NOTE =
-  "Your reply says something is done, or states a detail about the business, that nothing you were shown backs. Say only what a tool result in this turn, the facts or the owner's words show; check with a tool if you can, or say plainly you are not sure. Do not repeat the claim. It was:"
+  "Your reply says something is done or waits on the owner, or states a detail about the business, that nothing you were shown backs. Say only what a tool result in this turn, the workspace, the facts or the owner's words show; check with a tool if you can, or say plainly you are not sure. Do not repeat the claim. It was:"
 
 /** Two calls' usage as one step's: counts added, anything else as the later call has it. */
 function added<T>(first: T, later: T): T {
@@ -193,9 +194,27 @@ export function doneClaims(said: string): string[] {
     })
 }
 
-/** The workspace as `workspaceLabels` shows it, as far as a done state reads it. */
+/** A thing said to wait on the owner, or a site said not to be live. Conditions and futures are not claims, as for `DONE`. */
+const PENDING =
+  /\b(?:waiting (?:for|on) your (?:approval|answer)|ready (?:for you )?to publish|tap publish|(?:not|isn['’]t) live yet|needs? your (?:approval|answer))\b/i
+
+/** Every pending state `said` states as so: questions, conditions and futures aside. */
+export function pendingClaims(said: string): string[] {
+  return said
+    .split(/(?<=[.!?])\s+|\n+/)
+    .filter((line) => !line.trim().endsWith("?"))
+    .flatMap((line) => {
+      const m = PENDING.exec(line)
+      return m && !NOT_DONE.test(line.slice(0, m.index)) ? [m[0]] : []
+    })
+}
+
+/** The workspace as `workspaceLabels` shows it, as far as a done or pending state reads it. */
 type Workspace = {
   site?: { live?: unknown }
+  builds?: { state?: unknown }[]
+  questions?: unknown[]
+  reviews_waiting?: unknown
   domains?: { state?: unknown }[]
   reminders?: unknown[]
 }
@@ -242,6 +261,21 @@ const backs = (
     )
   if (/connected/i.test(claim)) return connected || evidence.length > 0
   return evidence.length > 0 || (workspace?.reminders?.length ?? 0) > 0
+}
+
+/**
+ * Whether the workspace the turn read agrees that something waits: a review
+ * or a build in a review state, an open question, or a site not yet live.
+ * With no workspace in the turn there is nothing to disagree with.
+ */
+const waits = (claim: string, workspace: Workspace | null) => {
+  if (!workspace) return true
+  if (/live/i.test(claim)) return workspace.site?.live === false
+  if (/answer/i.test(claim)) return (workspace.questions?.length ?? 0) > 0
+  return (
+    Number(workspace.reviews_waiting) > 0 ||
+    (workspace.builds?.some((b) => IN_REVIEW.has(String(b.state))) ?? false)
+  )
 }
 
 /**
@@ -320,9 +354,10 @@ export function readClaims(
   prompt: Prompt
 ): { unbacked: string[]; unclear: string[]; seen: unknown[] } {
   const { seen, evidence, workspace } = shownIn(prompt)
-  const unbacked = doneClaims(said).filter(
-    (c) => !backs(c, evidence, workspace)
-  )
+  const unbacked = [
+    ...doneClaims(said).filter((c) => !backs(c, evidence, workspace)),
+    ...pendingClaims(said).filter((c) => !waits(c, workspace)),
+  ]
   const unclear: string[] = []
   const shown = new Set(
     contentClaimsIn(JSON.stringify(seen)).map((c) => `${c.kind}:${c.key}`)

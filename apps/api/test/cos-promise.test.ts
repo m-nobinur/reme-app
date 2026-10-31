@@ -300,6 +300,57 @@ describe("the claims gate", () => {
     expect(asked).toEqual([])
   })
 
+  it("runs a pending state again unless the workspace shows it", async () => {
+    const { asked, unsure } = jev(true)
+    const site = (live: boolean) => ({ address: "tidy.reme.site", live })
+    const none = { site: site(true), builds: [], questions: [] }
+    const table: [string, object, boolean][] = [
+      [
+        "It's waiting for your approval.",
+        { ...none, reviews_waiting: 0 },
+        true,
+      ],
+      [
+        "It's waiting for your approval.",
+        { ...none, reviews_waiting: 1 },
+        false,
+      ],
+      [
+        "Your change is ready to publish.",
+        {
+          ...none,
+          reviews_waiting: 0,
+          builds: [{ state: "ready for the owner to look over" }],
+        },
+        false,
+      ],
+      ["Tap Publish when you're ready.", { ...none, reviews_waiting: 0 }, true],
+      ["Your website is not live yet.", none, true],
+      ["Your website is not live yet.", { ...none, site: site(false) }, false],
+      ["Tidy Co needs your answer.", none, true],
+      [
+        "Tidy Co needs your answer.",
+        { ...none, questions: [{ about: "phone number" }] },
+        false,
+      ],
+      // A condition, a future, a question or no workspace claims nothing.
+      ["Once you approve it, it goes live.", none, false],
+      ["Is it waiting for your approval?", none, false],
+      ["Once it's ready to publish, tap Publish.", none, false],
+    ]
+    for (const [reply, workspace, reran] of table) {
+      const note = await claimsGate(unsure)(
+        reply,
+        shown(withWorkspace(workspace))
+      )
+      expect(note !== null, `${reply} ${JSON.stringify(workspace)}`).toBe(reran)
+    }
+    expect(
+      await claimsGate(unsure)("It's waiting for your approval.", shown("Hi"))
+    ).toBe(null)
+    expect(asked).toEqual([])
+  })
+
   it("reads the workspace block the agent's context writes, labels and all", async () => {
     const context = (live: boolean, domain: "active" | "verifying") =>
       contextOf("ask", {

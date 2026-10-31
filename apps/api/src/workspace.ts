@@ -28,13 +28,12 @@ import {
   WorkspaceStatus,
 } from "@workspace/contracts"
 import {
-  approvals,
   assignments,
   currentFacts,
   domains,
-  eq,
   events,
   type OrgScopedDb,
+  openApprovals,
   orgs,
   reminders,
   siteRevisions,
@@ -587,27 +586,10 @@ export async function readLane(
   return (rows[0]?.lane as string | undefined) === "quick" ? "quick" : "full"
 }
 
-/**
- * Revision approvals the orchestrator would take a decision on now, soonest
- * expiry first: undecided, on a build awaiting review and in date, or on a
- * build the sweep parked, where a late decision still counts (ADR-032). One
- * that expired before the hourly sweep parked it is left out, since until
- * then the orchestrator refuses it.
- */
 export async function readApprovals(
   db: OrgScopedDb
 ): Promise<Extract<AttentionItem, { kind: "approval" }>[]> {
-  const rows = await db
-    // A review opens only on a revision that passed the gates, which is
-    // numbered by then; the filter says so to the type.
-    .select({ row: approvals, version: sql<number>`${siteRevisions.version}` })
-    .from(approvals)
-    .innerJoin(siteRevisions, eq(siteRevisions.id, approvals.revisionId))
-    .innerJoin(assignments, eq(assignments.id, approvals.assignmentId))
-    .where(
-      sql`${approvals.decision} is null and ${siteRevisions.version} is not null and ((${assignments.state} = 'awaiting_review' and ${approvals.expiresAt} > now()) or ${assignments.state} = 'blocked_on_approval')`
-    )
-    .orderBy(approvals.expiresAt)
+  const rows = await openApprovals(db)
   // The generated photos each build placed, from its newest `site.photos` event.
   const ids = rows.flatMap(({ row }) =>
     row.assignmentId ? [row.assignmentId] : []
