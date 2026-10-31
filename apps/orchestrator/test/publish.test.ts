@@ -68,6 +68,7 @@ const {
   writePointer,
 } = await import("../src/publish.ts")
 const { PublishWorkflow } = await import("../src/cloudflare.ts")
+const { digest } = await import("../src/heartbeat.ts")
 const { takeSnapshot } = await import("../src/brief.ts")
 const {
   addRevision,
@@ -109,6 +110,21 @@ live("a review", () => {
         Date.parse(first.request.requested_at)) /
       3_600_000
     expect(hours).toBe(72)
+  })
+
+  it("is announced by the heartbeat only while its build is still in review", async () => {
+    const { orgId, ids } = await previewed()
+    const { request } = await requestReview(kit, ids)
+    const later = new Date(Date.now() + 25 * 3_600_000)
+    const waiting = () =>
+      kit.withOrg({ orgId }, async (db) =>
+        (await digest(db, later)).filter((i) => i.key.startsWith("approval:"))
+      )
+    expect((await waiting()).map((i) => i.key)).toEqual([
+      `approval:${request.approval_id}:1`,
+    ])
+    await advance(kit, ids, "cancelled", { reason: "superseded" })
+    expect(await waiting()).toEqual([])
   })
 
   it("waits for the accessibility gate, which runs after the preview", async () => {

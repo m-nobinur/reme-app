@@ -7,6 +7,7 @@ import {
 } from "@workspace/contracts"
 import {
   approvals,
+  assignments,
   conversationMessages,
   deliveries,
   eq,
@@ -119,8 +120,10 @@ const approvalsWaiting: Source = async (db, now) => {
       expires: approvals.expiresAt,
     })
     .from(approvals)
+    // A superseded or cancelled build's approval is never decided; the owner can act only on a build in review.
+    .innerJoin(assignments, eq(assignments.id, approvals.assignmentId))
     .where(
-      sql`${approvals.decision} is null and ${approvals.requestedAt} <= ${ago(now, DAY)}::timestamptz and ${approvals.expiresAt} > ${iso(now)}::timestamptz`
+      sql`${approvals.decision} is null and ${assignments.state} in ('awaiting_review', 'blocked_on_approval') and ${approvals.requestedAt} <= ${ago(now, DAY)}::timestamptz and ${approvals.expiresAt} > ${iso(now)}::timestamptz`
     )
   return rows.map((row) => ({
     key: `approval:${row.id}:1`,
