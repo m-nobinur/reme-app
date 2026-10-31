@@ -49,6 +49,7 @@ export function storage() {
         return bytes
           ? {
               arrayBuffer: async () => bytes.slice().buffer,
+              text: async () => new TextDecoder().decode(bytes),
               json: async () => JSON.parse(new TextDecoder().decode(bytes)),
             }
           : null

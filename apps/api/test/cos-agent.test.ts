@@ -95,6 +95,7 @@ import {
   redacted,
   repairedCall,
   reservation,
+  riskOf,
   routeOf,
   SETS_RULE,
   SITE_CHANGE_LINE,
@@ -922,6 +923,20 @@ describe("the CoS's model and price", () => {
     }
   })
 
+  it("asks about the site in both modes with no card, never in a turn nobody typed, which still reads a review", async () => {
+    expect(activeTools("ask")).toContain("ask_developer")
+    expect(activeTools("act")).toContain("ask_developer")
+    expect(activeTools("ask", true)).not.toContain("ask_developer")
+    expect(activeTools("ask", true)).toContain("get_review")
+    expect(
+      await riskOf(
+        "ask_developer",
+        { mode: "review", question: "Check my site" },
+        {} as never
+      )
+    ).toBe("read")
+  })
+
   it("labels a reminder call with the owner's words before it has an output", () => {
     const pending = {
       role: "assistant",
@@ -1576,7 +1591,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await shownAsStored(me, id, done.chunks)
   })
 
-  it("gives Ask mode the read tools, remember, save_correction and put_off", async () => {
+  it("gives Ask mode the read tools, ask_developer, remember, save_correction and put_off", async () => {
     const id = await conversation(me)
     const { model, sent } = scripted(said("Here is what I can see."))
     await turn(me, typed(id, "What can you do?", "ask"), { model })
@@ -1584,12 +1599,14 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       (t) => (t as { name: string }).name
     )
     expect(names.sort()).toEqual([
+      "ask_developer",
       "check_domain",
       "connect_google",
       "find_domain",
       "get_change",
       "get_facts",
       "get_indexing",
+      "get_review",
       "get_search_performance",
       "get_workspace",
       "inspect_domain",

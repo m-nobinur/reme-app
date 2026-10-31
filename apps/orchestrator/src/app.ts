@@ -1,4 +1,5 @@
 import {
+  AskDeveloperInput,
   type BuildLane,
   BuildSummary,
   type ChangeKind,
@@ -67,6 +68,7 @@ import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
 import { creationChoices, hideFacts, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
+import { askDeveloper } from "./consult.ts"
 import {
   boughtElsewhere,
   buy,
@@ -905,6 +907,28 @@ ownerOnly.post("/site/takedown", async (c) => {
   await revokeDomains(c.env, c.get("kit"), orgId)
   await disconnectSearch(c.env, c.get("kit"), orgId, true)
   return c.body(null, 204)
+})
+
+/**
+ * The assistant asking about the owner's website (consult.ts): an answer
+ * from the stored record of the version the owner can see, or a review of it
+ * started in the background. Reads only; the org is the bridge's.
+ */
+ownerOnly.post("/site/ask", async (c) => {
+  const input = AskDeveloperInput.safeParse(
+    await c.req.json().catch(() => null)
+  )
+  if (!input.success) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "ask.malformed",
+      message: "mode is answer or review, with the owner's question.",
+      detail: {},
+    })
+  }
+  return c.json(
+    await askDeveloper(c.env, c.get("kit"), c.get("orgId"), input.data)
+  )
 })
 
 /** A domain route's refusal, as the §28.1 envelope. */

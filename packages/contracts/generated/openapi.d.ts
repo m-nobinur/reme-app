@@ -5785,6 +5785,8 @@ export interface components {
         | "read_skill"
         | "save_correction"
         | "schedule_skill"
+        | "ask_developer"
+        | "get_review"
         | "get_preview"
       )[]
       text: string
@@ -6253,6 +6255,8 @@ export interface components {
           | "read_skill"
           | "save_correction"
           | "schedule_skill"
+          | "ask_developer"
+          | "get_review"
           | "get_preview"
         description: string
         input_schema: {
@@ -8929,6 +8933,127 @@ export interface components {
           turn_id: string
           tool_call_id: string
           /** @constant */
+          tool: "ask_developer"
+          output:
+            | {
+                /** @constant */
+                outcome: "answered"
+                answer: string
+                /** @enum {string} */
+                about: "live" | "draft"
+                building: boolean
+                sources: {
+                  /** @enum {string} */
+                  kind: "page" | "notes" | "check" | "facts" | "change"
+                  ref: string
+                }[]
+                sure: boolean
+              }
+            | {
+                /** @constant */
+                outcome: "review_started"
+                /** Format: uuid */
+                ref: string
+                seconds: number
+              }
+            | {
+                /** @constant */
+                outcome: "review_running"
+                /** Format: uuid */
+                ref: string
+              }
+            | {
+                /** @constant */
+                outcome: "no_site"
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "get_review"
+          output:
+            | {
+                /** Format: uuid */
+                review_id: string
+                version: number
+                verdict: string
+                strengths: string[]
+                findings: {
+                  id: string
+                  /** @enum {string} */
+                  severity: "high" | "medium" | "low"
+                  /** @enum {string} */
+                  area:
+                    | "copy"
+                    | "design"
+                    | "accessibility"
+                    | "links"
+                    | "forms"
+                    | "search"
+                    | "content"
+                  page: string
+                  quote: string | null
+                  issue: string
+                  fix: string
+                  /** @enum {string} */
+                  from: "check" | "review"
+                }[]
+                findings_left: number
+                /** @constant */
+                outcome: "found"
+              }
+            | {
+                /** @constant */
+                outcome: "running"
+                /** Format: uuid */
+                ref: string
+              }
+            | {
+                /** @constant */
+                outcome: "none"
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
           tool: "get_preview"
           output:
             | {
@@ -9010,6 +9135,8 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "ask_developer"
+            | "get_review"
             | "get_preview"
           )[]
           steps: number
@@ -9059,6 +9186,8 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "ask_developer"
+            | "get_review"
             | "get_preview"
           )[]
           steps: number
@@ -9106,6 +9235,8 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "ask_developer"
+            | "get_review"
             | "get_preview"
           )[]
           steps: number
@@ -9153,6 +9284,8 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "ask_developer"
+            | "get_review"
             | "get_preview"
           )[]
           steps: number
@@ -9200,6 +9333,8 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "ask_developer"
+            | "get_review"
             | "get_preview"
           )[]
           steps: number
@@ -9247,6 +9382,8 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "ask_developer"
+            | "get_review"
             | "get_preview"
           )[]
           steps: number

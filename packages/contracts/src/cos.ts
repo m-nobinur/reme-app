@@ -779,6 +779,8 @@ export const COS_TOOLS = {
   read_skill: { input: ReadSkillInput, output: ReadSkillOutput },
   save_correction: { input: SaveCorrectionInput, output: SaveCorrectionOutput },
   schedule_skill: { input: ScheduleSkillInput, output: ScheduleSkillOutput },
+  ask_developer: { input: AskDeveloperInput, output: AskDeveloperOutput },
+  get_review: { input: GetReviewInput, output: GetReviewOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -1022,6 +1024,16 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     ...Called,
     tool: z.literal("schedule_skill"),
     output: COS_TOOLS.schedule_skill.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("ask_developer"),
+    output: COS_TOOLS.ask_developer.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("get_review"),
+    output: COS_TOOLS.get_review.output,
   }),
   z.strictObject({
     ...Called,
