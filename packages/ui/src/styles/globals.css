@@ -215,6 +215,8 @@
   --animate-status-turn: status-turn 2s ease-in-out infinite;
   --animate-status-meet: status-meet 1.6s ease-in-out infinite;
   --animate-status-swing: status-swing 1.4s ease-in-out infinite;
+  /* The newest chat update's icon: a bell's ring, twice, as it arrives. */
+  --animate-update-ring: status-swing 1.4s ease-in-out 2;
   --animate-status-lift: status-lift 1.4s ease-in-out infinite;
   --animate-status-breathe: status-breathe 1.8s ease-in-out infinite;
   --animate-status-reveal: status-reveal var(--duration-slow)

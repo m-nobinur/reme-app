@@ -891,7 +891,9 @@ const UPDATE_KINDS: Partial<Record<Action, StatusKind>> = {
 
 /**
  * Above a message the app posted on its own (a `srv_` id): its kind's icon,
- * else the bell, "Update" and when it landed, on the device's clock.
+ * else the bell, "Update" and when it landed, on the device's clock. The
+ * newest update in the thread is in the primary colour, its icon ringing as
+ * it arrives.
  */
 const UpdateLabel: FC = () => {
   const kind = useAuiState((s) => {
@@ -903,17 +905,26 @@ const UpdateLabel: FC = () => {
     return (action && UPDATE_KINDS[action]) ?? null
   })
   const at = useAuiState((s) => sentAt(s.message))
+  const latest = useAuiState(
+    (s) =>
+      s.thread.messages.filter((m) => m.id.startsWith("srv_")).at(-1)?.id ===
+      s.message.id
+  )
+  const icon = cn(
+    "size-3.5",
+    latest && "origin-top text-primary motion-safe:animate-update-ring"
+  )
   return (
     <p
       data-slot="aui_update-label"
       className="mb-1 flex items-center gap-1.5 text-[0.8125rem] text-muted-foreground"
     >
       {kind ? (
-        <StatusIcon className="size-3.5" kind={kind} still />
+        <StatusIcon className={icon} kind={kind} still />
       ) : (
-        <StateIcon className="size-3.5" state="notifications" />
+        <StateIcon className={icon} state="notifications" />
       )}
-      Update
+      <span className={cn(latest && "font-medium text-primary")}>Update</span>
       <span aria-hidden>·</span>
       <time className="tabular-nums" dateTime={at}>
         {formatTime(new Date(at))}

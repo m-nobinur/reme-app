@@ -61,6 +61,15 @@ test("a posted message carries Update, its kind and its time; a reply does not",
     [0, 1].map((n) => labels.nth(n).locator("svg").innerHTML())
   )
   expect(globe).not.toBe(bell)
+  // Only the newest update is in the primary colour, its icon ringing.
+  await expect(labels.nth(0).locator("svg")).not.toHaveClass(
+    /animate-update-ring/
+  )
+  await expect(labels.nth(1).locator("svg")).toHaveClass(/animate-update-ring/)
+  await expect(labels.nth(1).getByText("Update")).toHaveClass(/text-primary/)
+  await expect(labels.nth(0).getByText("Update")).not.toHaveClass(
+    /text-primary/
+  )
   // Its words are a normal reply, with its button under them.
   await expect(replies(page).nth(1)).toContainText(
     "Your website is live at sparkle-clean.co.uk."
