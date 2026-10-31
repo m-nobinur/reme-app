@@ -39,7 +39,7 @@ import {
   WorkspaceStatus,
 } from "./owner.ts"
 import { Refused } from "./refused.ts"
-import { GateName } from "./report.ts"
+import { CompletionReport, GateName, SiteReview } from "./report.ts"
 import {
   ConnectGoogleInput,
   ConnectGoogleOutput,
@@ -270,6 +270,106 @@ export const CosChangeRequest = OwnerChangeRequest.extend({
       'A few words, in the owner\'s language, of what this change does, such as "Adding the new photos to the home page". At most 60 characters. The panel shows it while the change is made; no ids, no versions.'
     ),
 })
+
+/** `get_change`'s input: a build's ref from the workspace or from `recent`; left out, the latest change. */
+export const GetChangeInput = z.strictObject({ ref: Uuid.optional() })
+
+const ChangeLabel = BuildSummary.shape.label.unwrap().nullable()
+const ChangeState = z.string().min(1).max(40)
+
+/**
+ * `get_change`'s output: what a change was asked to do, the Developer's own
+ * account (`done`), and what the pages show changed (`text_changes`, read by
+ * code). `recorded` is false for a change from before text changes were
+ * recorded. `recent` is the few changes before it, newest first.
+ */
+export const GetChangeOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("found"),
+    ref: Uuid,
+    label: ChangeLabel,
+    asked: BuildSummary.shape.goal,
+    state: ChangeState,
+    done: Text(500).nullable(),
+    as_asked: z.boolean(),
+    text_changes: CompletionReport.shape.text_changes,
+    text_changes_left: CompletionReport.shape.text_changes_left,
+    left_out: z.array(InformationRequest.shape.question.unwrap()).max(10),
+    preview: z.strictObject({ expires_at: Timestamp }).nullable(),
+    live_now: z.boolean(),
+    published_at: Timestamp.nullable(),
+    recorded: z.boolean(),
+    recent: z
+      .array(
+        z.strictObject({
+          ref: Uuid,
+          label: ChangeLabel,
+          state: ChangeState,
+          at: Timestamp,
+        })
+      )
+      .max(5),
+  }),
+  z.strictObject({ outcome: z.literal("none") }),
+  Refused,
+])
+
+/**
+ * `ask_developer`'s input: `answer` for a question about the site, answered
+ * inside the turn; `review` to start a review that reports back later.
+ */
+export const AskDeveloperInput = z.strictObject({
+  mode: z.enum(["answer", "review"]),
+  /** The owner's question, or for a review what to focus on; their words. */
+  question: Text(500),
+  /** Routes to look at, when the owner named pages. */
+  pages: z.array(z.string().min(1).max(120)).max(5).optional(),
+})
+
+/**
+ * `ask_developer`'s output. `about` is the version the answer read;
+ * `building` says a change is under way, so the answer may soon be stale;
+ * `sure` is false when the stored record could not settle it. One review
+ * runs per version at a time, so a repeat is `review_running`.
+ */
+export const AskDeveloperOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("answered"),
+    answer: Text(1200),
+    about: z.enum(["live", "draft"]),
+    building: z.boolean(),
+    sources: z
+      .array(
+        z.strictObject({
+          kind: z.enum(["page", "notes", "check", "facts", "change"]),
+          ref: z.string().min(1).max(120),
+        })
+      )
+      .max(6),
+    sure: z.boolean(),
+  }),
+  z.strictObject({
+    outcome: z.literal("review_started"),
+    ref: Uuid,
+    seconds: z.int().positive(),
+  }),
+  z.strictObject({ outcome: z.literal("review_running"), ref: Uuid }),
+  z.strictObject({ outcome: z.literal("no_site") }),
+  Refused,
+])
+
+/** `get_review`'s input: a review's ref from `ask_developer`; left out, the latest review. */
+export const GetReviewInput = z.strictObject({ ref: Uuid.optional() })
+
+/** `get_review`'s output: the stored review, without its tenancy and revision ids. */
+export const GetReviewOutput = z.discriminatedUnion("outcome", [
+  SiteReview.omit({ org_id: true, revision_id: true }).extend({
+    outcome: z.literal("found"),
+  }),
+  z.strictObject({ outcome: z.literal("running"), ref: Uuid }),
+  z.strictObject({ outcome: z.literal("none") }),
+  Refused,
+])
 
 /** `get_preview`'s input: the build whose preview to check. */
 export const GetPreviewInput = z.strictObject({ assignment_id: Uuid })
@@ -1023,6 +1123,12 @@ export const CosEvent = z.strictObject({
 export type CosWorkspace = z.infer<typeof CosWorkspace>
 export type CosFacts = z.infer<typeof CosFacts>
 export type CosChangeRequest = z.infer<typeof CosChangeRequest>
+export type GetChangeInput = z.infer<typeof GetChangeInput>
+export type GetChangeOutput = z.infer<typeof GetChangeOutput>
+export type AskDeveloperInput = z.infer<typeof AskDeveloperInput>
+export type AskDeveloperOutput = z.infer<typeof AskDeveloperOutput>
+export type GetReviewInput = z.infer<typeof GetReviewInput>
+export type GetReviewOutput = z.infer<typeof GetReviewOutput>
 export type GetPreviewInput = z.infer<typeof GetPreviewInput>
 export type GetPreviewOutput = z.infer<typeof GetPreviewOutput>
 export type AnswerQuestionInput = z.infer<typeof AnswerQuestionInput>

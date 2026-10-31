@@ -4,6 +4,8 @@ import { RequestChangeOutput } from "../src/chat.ts"
 import {
   AnswerQuestionInput,
   AnswerQuestionOutput,
+  AskDeveloperInput,
+  AskDeveloperOutput,
   COS_TOOLS,
   CosApproval,
   CosCompaction,
@@ -16,7 +18,11 @@ import {
   CosTurn,
   CosWorkspace,
   CreateReminderOutput,
+  GetChangeInput,
+  GetChangeOutput,
   GetPreviewOutput,
+  GetReviewInput,
+  GetReviewOutput,
   RecordReviewInput,
   RecordReviewOutput,
 } from "../src/cos.ts"
@@ -217,6 +223,135 @@ describe("GetPreviewOutput", () => {
   })
 })
 
+describe("GetChangeOutput", () => {
+  const found = samples.GetChangeOutput as Record<string, unknown>
+  const pair = { before: "a", after: "b", pages: ["/"] }
+
+  it.each([
+    ["a found change", found],
+    [
+      "a change from before text changes were recorded",
+      (({ text_changes: _t, ...rest }) => ({ ...rest, recorded: false }))(
+        found
+      ),
+    ],
+    [
+      "eight pairs and a count left",
+      { ...found, text_changes: Array(8).fill(pair), text_changes_left: 4 },
+    ],
+    ["no change yet", { outcome: "none" }],
+  ])("accepts %s", (_name, output) => {
+    expect(verdict("GetChangeOutput", GetChangeOutput, output)).toEqual(
+      ACCEPTED
+    )
+  })
+
+  it.each([
+    ["nine pairs", { ...found, text_changes: Array(9).fill(pair) }],
+    [
+      "six recent changes",
+      { ...found, recent: Array(6).fill((found.recent as unknown[])[0]) },
+    ],
+    [
+      "eleven left out",
+      { ...found, left_out: Array(11).fill("What are your prices?") },
+    ],
+    ["a done over 500", { ...found, done: "a".repeat(501) }],
+    ["an org id", { ...found, org_id: found.ref }],
+  ])("refuses %s", (_name, output) => {
+    expect(verdict("GetChangeOutput", GetChangeOutput, output)).toEqual(REFUSED)
+  })
+
+  it.each([
+    ["no ref", {}, ACCEPTED],
+    ["a ref", samples.GetChangeInput, ACCEPTED],
+    ["an assignment id", { assignment_id: found.ref }, REFUSED],
+  ])("input with %s", (_name, input, expected) => {
+    expect(verdict("GetChangeInput", GetChangeInput, input)).toEqual(expected)
+  })
+})
+
+describe("ask_developer", () => {
+  const input = samples.AskDeveloperInput as Record<string, unknown>
+  const answered = samples.AskDeveloperOutput as Record<string, unknown>
+  const REF = "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e"
+
+  it.each([
+    ["a question", input],
+    ["a review with no pages", { mode: "review", question: "Check my site" }],
+  ])("accepts %s as input", (_name, value) => {
+    expect(verdict("AskDeveloperInput", AskDeveloperInput, value)).toEqual(
+      ACCEPTED
+    )
+  })
+
+  it.each([
+    ["a blank question", { ...input, question: "   " }],
+    ["a question over 500", { ...input, question: "a".repeat(501) }],
+    ["six pages", { ...input, pages: Array(6).fill("/") }],
+    ["another mode", { ...input, mode: "fix" }],
+  ])("refuses %s as input", (_name, value) => {
+    expect(verdict("AskDeveloperInput", AskDeveloperInput, value)).toEqual(
+      REFUSED
+    )
+  })
+
+  it.each([
+    ["an answer", answered],
+    ["a review started", { outcome: "review_started", ref: REF, seconds: 90 }],
+    ["a review running", { outcome: "review_running", ref: REF }],
+    ["no site", { outcome: "no_site" }],
+  ])("accepts %s", (_name, value) => {
+    expect(verdict("AskDeveloperOutput", AskDeveloperOutput, value)).toEqual(
+      ACCEPTED
+    )
+  })
+
+  it.each([
+    ["an answer over 1200", { ...answered, answer: "a".repeat(1201) }],
+    [
+      "seven sources",
+      { ...answered, sources: Array(7).fill({ kind: "page", ref: "/" }) },
+    ],
+    [
+      "a review taking no time",
+      { outcome: "review_started", ref: REF, seconds: 0 },
+    ],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("AskDeveloperOutput", AskDeveloperOutput, value)).toEqual(
+      REFUSED
+    )
+  })
+})
+
+describe("get_review", () => {
+  const found = samples.GetReviewOutput as Record<string, unknown>
+
+  it.each([
+    ["a stored review", found],
+    ["a review still running", { outcome: "running", ref: found.review_id }],
+    ["no review", { outcome: "none" }],
+  ])("accepts %s", (_name, value) => {
+    expect(verdict("GetReviewOutput", GetReviewOutput, value)).toEqual(ACCEPTED)
+  })
+
+  it("refuses a review that shows the model its org", () => {
+    expect(
+      verdict("GetReviewOutput", GetReviewOutput, {
+        ...found,
+        org_id: found.review_id,
+      })
+    ).toEqual(REFUSED)
+  })
+
+  it.each([
+    ["no ref", {}],
+    ["a ref", samples.GetReviewInput],
+  ])("takes %s", (_name, value) => {
+    expect(verdict("GetReviewInput", GetReviewInput, value)).toEqual(ACCEPTED)
+  })
+})
+
 describe("CosWorkspace", () => {
   it("replays a workspace read stored before builds carried progress and stops", () => {
     const {
@@ -303,6 +438,9 @@ describe("the refusal a tool shows the model", () => {
     ["RequestChangeOutput", RequestChangeOutput],
     ["AnswerQuestionOutput", AnswerQuestionOutput],
     ["GetPreviewOutput", GetPreviewOutput],
+    ["GetChangeOutput", GetChangeOutput],
+    ["AskDeveloperOutput", AskDeveloperOutput],
+    ["GetReviewOutput", GetReviewOutput],
     ["CreateReminderOutput", CreateReminderOutput],
     ["RecordReviewOutput", RecordReviewOutput],
   ] as const)("%s takes code, class and message only", (name, schema) => {

@@ -2059,6 +2059,62 @@ export interface components {
           /** @constant */
           answer: "skipped"
         }
+    AskDeveloperInput: {
+      /** @enum {string} */
+      mode: "answer" | "review"
+      question: string
+      pages?: string[]
+    }
+    AskDeveloperOutput:
+      | {
+          /** @constant */
+          outcome: "answered"
+          answer: string
+          /** @enum {string} */
+          about: "live" | "draft"
+          building: boolean
+          sources: {
+            /** @enum {string} */
+            kind: "page" | "notes" | "check" | "facts" | "change"
+            ref: string
+          }[]
+          sure: boolean
+        }
+      | {
+          /** @constant */
+          outcome: "review_started"
+          /** Format: uuid */
+          ref: string
+          seconds: number
+        }
+      | {
+          /** @constant */
+          outcome: "review_running"
+          /** Format: uuid */
+          ref: string
+        }
+      | {
+          /** @constant */
+          outcome: "no_site"
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     AskFactInput:
       | {
           /** @constant */
@@ -5463,6 +5519,16 @@ export interface components {
         question: string
       }[]
       as_asked?: boolean
+      text_changes?: {
+        before: string
+        after: string
+        pages: string[]
+      }[]
+      text_changes_left?: number
+      notes?: {
+        about: string
+        why: string
+      }[]
       /** Format: date-time */
       reported_at: string
     }
@@ -10632,6 +10698,66 @@ export interface components {
         weights: (100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900)[]
       }
     }
+    GetChangeInput: {
+      /** Format: uuid */
+      ref?: string
+    }
+    GetChangeOutput:
+      | {
+          /** @constant */
+          outcome: "found"
+          /** Format: uuid */
+          ref: string
+          label: string | null
+          asked: string
+          state: string
+          done: string | null
+          as_asked: boolean
+          text_changes?: {
+            before: string
+            after: string
+            pages: string[]
+          }[]
+          text_changes_left?: number
+          left_out: string[]
+          preview: {
+            /** Format: date-time */
+            expires_at: string
+          } | null
+          live_now: boolean
+          published_at: string | null
+          recorded: boolean
+          recent: {
+            /** Format: uuid */
+            ref: string
+            label: string | null
+            state: string
+            /** Format: date-time */
+            at: string
+          }[]
+        }
+      | {
+          /** @constant */
+          outcome: "none"
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     GetIndexingInput: {
       url?: string
       step?: string
@@ -10694,6 +10820,69 @@ export interface components {
           version: number
           /** Format: date-time */
           expires_at: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
+    GetReviewInput: {
+      /** Format: uuid */
+      ref?: string
+    }
+    GetReviewOutput:
+      | {
+          /** Format: uuid */
+          review_id: string
+          version: number
+          verdict: string
+          strengths: string[]
+          findings: {
+            id: string
+            /** @enum {string} */
+            severity: "high" | "medium" | "low"
+            /** @enum {string} */
+            area:
+              | "copy"
+              | "design"
+              | "accessibility"
+              | "links"
+              | "forms"
+              | "search"
+              | "content"
+            page: string
+            quote: string | null
+            issue: string
+            fix: string
+            /** @enum {string} */
+            from: "check" | "review"
+          }[]
+          findings_left: number
+          /** @constant */
+          outcome: "found"
+        }
+      | {
+          /** @constant */
+          outcome: "running"
+          /** Format: uuid */
+          ref: string
+        }
+      | {
+          /** @constant */
+          outcome: "none"
         }
       | {
           /** @constant */
@@ -13338,6 +13527,38 @@ export interface components {
       config_version: number
       canonical_host?: string
       origin_host?: string
+    }
+    SiteReview: {
+      /** Format: uuid */
+      review_id: string
+      /** Format: uuid */
+      org_id: string
+      /** Format: uuid */
+      revision_id: string
+      version: number
+      verdict: string
+      strengths: string[]
+      findings: {
+        id: string
+        /** @enum {string} */
+        severity: "high" | "medium" | "low"
+        /** @enum {string} */
+        area:
+          | "copy"
+          | "design"
+          | "accessibility"
+          | "links"
+          | "forms"
+          | "search"
+          | "content"
+        page: string
+        quote: string | null
+        issue: string
+        fix: string
+        /** @enum {string} */
+        from: "check" | "review"
+      }[]
+      findings_left: number
     }
     SiteRevision: {
       /** Format: uuid */
