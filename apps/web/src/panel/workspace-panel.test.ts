@@ -192,7 +192,7 @@ const section = (title: string) =>
     each.querySelector("h2")?.textContent?.startsWith(title)
   )
 
-it("puts a job waiting on the owner under Waiting on you, never Now", async () => {
+it("puts a job waiting on the owner first under Now, with no group of its own", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     activity: {
@@ -212,10 +212,9 @@ it("puts a job waiting on the owner under Waiting on you, never Now", async () =
     },
   }
   await render()
-  expect(section("Waiting on you")?.textContent).toContain(
-    "Your website is ready"
-  )
-  expect(section("Now")).toBeUndefined()
+  // The header already says what waits, so no heading says it again.
+  expect(section("Now")?.textContent).toContain("Your website is ready")
+  expect(section("Waiting on you")).toBeUndefined()
 })
 
 it("offers the next task not started as Up next, with its button into the chat", async () => {

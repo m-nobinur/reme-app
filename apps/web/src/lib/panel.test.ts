@@ -118,10 +118,11 @@ const ONBOARDING_STEPS = [
   "work",
   "area",
   "customers",
+  "proof",
+  "quote_form",
   "contact",
   "assistant",
-  "quote_form",
-  "photos",
+  "website",
   "look",
 ]
 const WEBSITE_STEPS = [
@@ -266,15 +267,14 @@ describe("the first run", () => {
       "Setting up Fixture Clean",
     ]).toContain(setup?.title)
     expect(setup?.line).toBeNull()
+    // The business alone: the assistant and the website wait their turn.
     expect(setup?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Services", "done"],
       ["Where do you work?", "now"],
       ["Customers", "next"],
-      ["Contact details", "next"],
-      ["Your assistant", "next"],
+      ["What sets you apart", "next"],
       ["Quote requirements", "next"],
-      ["Photos", "next"],
-      ["Look and feel", "next"],
+      ["Contact details", "next"],
     ])
 
     // The next fact lands: its step ticks, and the next one opens.
@@ -287,10 +287,31 @@ describe("the first run", () => {
     expect(later?.line).toBeNull()
   })
 
+  it("gives the assistant and the website a group each once reached", () => {
+    const assistant = firstRun([onboarding(6)])?.journey ?? []
+    expect(assistant.map((each) => [each.title, each.state])).toEqual([
+      [expect.stringMatching(/Fixture Clean/), "done"],
+      ["Setting up your assistant", "now"],
+    ])
+    expect(assistant[1]?.steps.map((each) => each.label)).toEqual([
+      "What should your assistant be like?",
+    ])
+    const website = firstRun([onboarding(8, "waiting")])?.journey ?? []
+    expect(website.map((each) => [each.title, each.state])).toEqual([
+      [expect.stringMatching(/Fixture Clean/), "done"],
+      ["Reme is ready", "done"],
+      ["Planning your website", "waiting"],
+    ])
+    expect(website[2]?.steps.map((each) => each.state)).toEqual([
+      "done",
+      "waiting",
+    ])
+  })
+
   it("says the owner's turn, and the pill waits on them", () => {
-    const panel = firstRun([onboarding(7, "waiting")])
-    expect(panel?.journey[0]?.steps.at(-1)?.state).toBe("waiting")
-    expect(panel?.journey[0]?.line).toBeNull()
+    const panel = firstRun([onboarding(8, "waiting")])
+    expect(panel?.journey.at(-1)?.steps.at(-1)?.state).toBe("waiting")
+    expect(panel?.journey.at(-1)?.line).toBeNull()
     expect(panel?.line).toEqual({
       tone: "idle",
       lead: "Reme is waiting for your answer",
@@ -301,7 +322,7 @@ describe("the first run", () => {
   it("moves finished onboarding to Completed and opens the website", () => {
     const panel = firstRun(
       [
-        onboarding(8, "done"),
+        onboarding(9, "done"),
         {
           ...segment(
             "website",
@@ -351,7 +372,7 @@ describe("the first run", () => {
     expect(panel?.done).toEqual([
       expect.objectContaining({
         text: "Fixture Clean set up",
-        brief: "Services, service area, customers and 5 more",
+        brief: "Services, service area, customers and 6 more",
       }),
     ])
 
@@ -382,7 +403,7 @@ describe("the first run", () => {
     const review = approval("build-first")
     const panel = firstRun(
       [
-        onboarding(8, "done"),
+        onboarding(9, "done"),
         segment("website", "done", along(WEBSITE_STEPS, 6), BUSINESS),
         segment(
           "golive",
@@ -436,7 +457,7 @@ describe("the first run", () => {
 
   it("keeps a failed segment open and says what happens next", () => {
     const panel = firstRun([
-      onboarding(8, "done"),
+      onboarding(9, "done"),
       segment("website", "failed", along(WEBSITE_STEPS, 4), BUSINESS),
     ])
     const website = panel?.journey[0]
@@ -448,7 +469,7 @@ describe("the first run", () => {
 
   it("shows a build step at work by its name, which the title already says, and speaks it in full", () => {
     const panel = firstRun([
-      onboarding(8, "done"),
+      onboarding(9, "done"),
       segment("website", "now", along(WEBSITE_STEPS, 2), BUSINESS),
     ])
     const writing = panel?.journey[0]?.steps[2]
@@ -460,7 +481,7 @@ describe("the first run", () => {
       each.id === "writing" ? { ...each, count: { done: 2, total: 6 } } : each
     )
     const panel = firstRun([
-      onboarding(8, "done"),
+      onboarding(9, "done"),
       segment("website", "now", steps, BUSINESS),
     ])
     const [planning, photos, writing] = panel?.journey[0]?.steps ?? []
@@ -829,7 +850,7 @@ describe("coming up and done today", () => {
         })
       )?.upcoming
     expect(withJourney([onboarding(2)])).toEqual([])
-    expect(withJourney([onboarding(8, "done")])?.map((i) => i.text)).toEqual([
+    expect(withJourney([onboarding(9, "done")])?.map((i) => i.text)).toEqual([
       "Reme's next check-in",
     ])
   })
@@ -993,7 +1014,7 @@ describe("what the owner reads", () => {
             workspace: workspace({
               assistantName,
               activity: activity({
-                journey: [onboarding(8, "done"), each],
+                journey: [onboarding(9, "done"), each],
                 now: [each],
                 done: [each],
               }),

@@ -447,6 +447,9 @@ describe("segment copy", () => {
     expect(pillLine(address("records"), ctx)).toBe(
       "Reme is waiting for your DNS change"
     )
+    expect(pillLine(address("choose"), ctx)).toBe(
+      "Reme is waiting for your choice of web address"
+    )
     // As many changes as the card listed, and no number when none is known.
     expect(segmentLine(address("records", undefined, 3), ctx)).toBe(
       "3 changes to make at 123-reg"
