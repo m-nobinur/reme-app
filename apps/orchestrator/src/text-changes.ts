@@ -18,6 +18,9 @@ export type TextChanges = Pick<
 const MAX_PAIRS = 8
 const MAX_PAGES = 5
 const MAX_CHARS = 300
+/** Pages read for one record, and the largest page read. Past either, nothing is recorded. */
+const MAX_READ = 40
+const MAX_BYTES = 1_000_000
 
 type Pair = { before: string; after: string }
 type Block = { node: string; text: string }
@@ -126,7 +129,9 @@ export async function changeBase(
 }
 
 type Sites = {
-  get: (key: string) => Promise<{ text: () => Promise<string> } | null>
+  get: (
+    key: string
+  ) => Promise<{ size?: number; text: () => Promise<string> } | null>
 }
 
 /**
@@ -144,10 +149,10 @@ export async function recordTextChanges(input: {
   prefix: string
 }): Promise<TextChanges> {
   const { kit, sites, orgId, prefix } = input
-  const base = await kit.withOrg({ orgId }, (db) => changeBase(db, input))
-  if (!base) return {}
-  const root = `sites/${orgId}/${base}/`
   try {
+    const base = await kit.withOrg({ orgId }, (db) => changeBase(db, input))
+    if (!base) return {}
+    const root = `sites/${orgId}/${base}/`
     const manifest = async (at: string) => {
       const object = await sites.get(`${at}manifest.json`)
       return object
@@ -160,13 +165,17 @@ export async function recordTextChanges(input: {
     const files = Object.keys(now)
       .filter((f) => f.endsWith(".html") && was[f] && was[f] !== now[f])
       .sort()
+    // A rewrite of the whole site is not an edit worth a record, and reading it would cost more than the record is worth.
+    if (files.length > MAX_READ) return {}
     const pages = await Promise.all(
       files.map(async (file) => {
         const [before, after] = await Promise.all([
           sites.get(`${root}dist/${file}`),
           sites.get(`${prefix}dist/${file}`),
         ])
-        return before && after
+        const sized = (object: typeof before) =>
+          (object?.size ?? 0) <= MAX_BYTES
+        return before && after && sized(before) && sized(after)
           ? { file, before: await before.text(), after: await after.text() }
           : null
       })
