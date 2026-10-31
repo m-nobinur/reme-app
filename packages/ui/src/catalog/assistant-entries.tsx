@@ -1306,17 +1306,33 @@ const COS_READ_STATES: ThreadMessageLike[] = [
     isError: true,
     result: { error: TOOL_CALL_CANCELLED },
   }),
-  cosCall("get_preview", "preview_ready", {
-    args: { assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
+  cosCall("get_change", "change_found", {
+    args: { ref: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
     result: {
-      outcome: "ready",
-      assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
-      version: 4,
-      expires_at: LATER,
+      outcome: "found",
+      ref: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
+      label: "your hero text",
+      asked: "Make the hero text professional",
+      state: "ready for the owner to look over",
+      done: "Reworded the hero heading and subheading.",
+      as_asked: true,
+      text_changes: [
+        {
+          before: "We clean homes",
+          after: "Professional home cleaning in Bristol",
+          pages: ["/"],
+        },
+      ],
+      left_out: [],
+      preview: { expires_at: LATER },
+      live_now: false,
+      published_at: null,
+      recorded: true,
+      recent: [],
     },
   }),
-  cosCall("get_preview", "preview_none", {
-    args: { assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
+  cosCall("get_change", "change_none", {
+    args: { ref: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e" },
     result: {
       outcome: "refused",
       error: {

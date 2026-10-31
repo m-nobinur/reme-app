@@ -371,13 +371,9 @@ export const GetReviewOutput = z.discriminatedUnion("outcome", [
   Refused,
 ])
 
-/** `get_preview`'s input: the build whose preview to check. */
-export const GetPreviewInput = z.strictObject({ assignment_id: Uuid })
-
 /**
- * `get_preview`'s output: the preview's version and expiry, or why there is
- * none, such as a build with no preview yet. No URLs: the tool UI fetches
- * the signed links.
+ * The retired `get_preview`'s output, kept so its logged results replay:
+ * the preview's version and expiry, or why there is none.
  */
 export const GetPreviewOutput = z.discriminatedUnion("outcome", [
   z.strictObject({
@@ -756,7 +752,7 @@ export const ApprovalGrantSwitch = z.strictObject({
 export const COS_TOOLS = {
   get_workspace: { input: Empty, output: CosWorkspace },
   get_facts: { input: Empty, output: CosFacts },
-  get_preview: { input: GetPreviewInput, output: GetPreviewOutput },
+  get_change: { input: GetChangeInput, output: GetChangeOutput },
   request_change: { input: CosChangeRequest, output: RequestChangeOutput },
   answer_question: { input: AnswerQuestionCall, output: AnswerQuestionOutput },
   create_reminder: { input: CreateReminderInput, output: CreateReminderOutput },
@@ -790,6 +786,9 @@ export const CosToolName = z.enum(
   Object.keys(COS_TOOLS) as [CosToolName, ...CosToolName[]]
 )
 
+/** A tool name in a logged payload: a current tool, or one retired since whose turns still replay. */
+const LoggedToolName = z.enum([...CosToolName.options, "get_preview"])
+
 const Usage = z.strictObject({
   input_tokens: z.int().nonnegative(),
   cached_input_tokens: z.int().nonnegative(),
@@ -810,7 +809,7 @@ const Ran = {
   route: CosRoute.optional(),
   usage: Usage,
   cost_usd: Usd,
-  tools: z.array(CosToolName),
+  tools: z.array(LoggedToolName),
   steps: z.int().min(0).max(6),
   /** Null when no model call was made. */
   first_chunk_ms: z.int().nonnegative().nullable(),
@@ -845,7 +844,7 @@ export const CosPrefix = z.strictObject({
   instructions: z.string().min(1),
   tools: z.array(
     z.strictObject({
-      name: CosToolName,
+      name: LoggedToolName,
       description: z.string().min(1),
       input_schema: JsonObject,
     })
@@ -862,7 +861,7 @@ export const CosContext = z.strictObject({
   prefix_sha256: Sha256,
   context_policy_version: z.string().min(1),
   mode: ChatRequest.shape.mode,
-  active_tools: z.array(CosToolName),
+  active_tools: z.array(LoggedToolName),
   text: z.string().min(1),
   reserved_usd: Usd,
 })
@@ -906,8 +905,8 @@ export const CosToolResult = z.discriminatedUnion("tool", [
   }),
   z.strictObject({
     ...Called,
-    tool: z.literal("get_preview"),
-    output: COS_TOOLS.get_preview.output,
+    tool: z.literal("get_change"),
+    output: COS_TOOLS.get_change.output,
   }),
   z.strictObject({
     ...Called,
@@ -1024,6 +1023,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     tool: z.literal("schedule_skill"),
     output: COS_TOOLS.schedule_skill.output,
   }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("get_preview"),
+    output: GetPreviewOutput,
+  }),
 ])
 
 /** The `cos.step` payload: a step's response messages as the SDK holds them. Model-written, so `inferred`. */
@@ -1129,7 +1133,6 @@ export type AskDeveloperInput = z.infer<typeof AskDeveloperInput>
 export type AskDeveloperOutput = z.infer<typeof AskDeveloperOutput>
 export type GetReviewInput = z.infer<typeof GetReviewInput>
 export type GetReviewOutput = z.infer<typeof GetReviewOutput>
-export type GetPreviewInput = z.infer<typeof GetPreviewInput>
 export type GetPreviewOutput = z.infer<typeof GetPreviewOutput>
 export type AnswerQuestionInput = z.infer<typeof AnswerQuestionInput>
 export type AnswerQuestionOutput = z.infer<typeof AnswerQuestionOutput>

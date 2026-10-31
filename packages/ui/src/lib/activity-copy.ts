@@ -403,11 +403,11 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: ["Found your details"],
     fail: ["look up your details"],
   },
-  get_preview: {
+  get_change: {
     kind: "checking",
-    working: ["Checking the preview", "Looking at your preview"],
-    done: ["Checked the preview"],
-    fail: ["check the preview"],
+    working: ["Looking at what changed", "Checking your change"],
+    done: ["Checked what changed"],
+    fail: ["check what changed"],
   },
   request_change: {
     kind: "building",

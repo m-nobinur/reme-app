@@ -5761,7 +5761,7 @@ export interface components {
       active_tools: (
         | "get_workspace"
         | "get_facts"
-        | "get_preview"
+        | "get_change"
         | "request_change"
         | "answer_question"
         | "create_reminder"
@@ -5785,6 +5785,7 @@ export interface components {
         | "read_skill"
         | "save_correction"
         | "schedule_skill"
+        | "get_preview"
       )[]
       text: string
       reserved_usd: number
@@ -6228,7 +6229,7 @@ export interface components {
         name:
           | "get_workspace"
           | "get_facts"
-          | "get_preview"
+          | "get_change"
           | "request_change"
           | "answer_question"
           | "create_reminder"
@@ -6252,6 +6253,7 @@ export interface components {
           | "read_skill"
           | "save_correction"
           | "schedule_skill"
+          | "get_preview"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -6977,16 +6979,44 @@ export interface components {
           turn_id: string
           tool_call_id: string
           /** @constant */
-          tool: "get_preview"
+          tool: "get_change"
           output:
             | {
                 /** @constant */
-                outcome: "ready"
+                outcome: "found"
                 /** Format: uuid */
-                assignment_id: string
-                version: number
-                /** Format: date-time */
-                expires_at: string
+                ref: string
+                label: string | null
+                asked: string
+                state: string
+                done: string | null
+                as_asked: boolean
+                text_changes?: {
+                  before: string
+                  after: string
+                  pages: string[]
+                }[]
+                text_changes_left?: number
+                left_out: string[]
+                preview: {
+                  /** Format: date-time */
+                  expires_at: string
+                } | null
+                live_now: boolean
+                published_at: string | null
+                recorded: boolean
+                recent: {
+                  /** Format: uuid */
+                  ref: string
+                  label: string | null
+                  state: string
+                  /** Format: date-time */
+                  at: string
+                }[]
+              }
+            | {
+                /** @constant */
+                outcome: "none"
               }
             | {
                 /** @constant */
@@ -8895,6 +8925,40 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "get_preview"
+          output:
+            | {
+                /** @constant */
+                outcome: "ready"
+                /** Format: uuid */
+                assignment_id: string
+                version: number
+                /** Format: date-time */
+                expires_at: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosToolStarted: {
       tool_call_id: string
       approval_id: string
@@ -8922,7 +8986,7 @@ export interface components {
           tools: (
             | "get_workspace"
             | "get_facts"
-            | "get_preview"
+            | "get_change"
             | "request_change"
             | "answer_question"
             | "create_reminder"
@@ -8946,6 +9010,7 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "get_preview"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8970,7 +9035,7 @@ export interface components {
           tools: (
             | "get_workspace"
             | "get_facts"
-            | "get_preview"
+            | "get_change"
             | "request_change"
             | "answer_question"
             | "create_reminder"
@@ -8994,6 +9059,7 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "get_preview"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -9016,7 +9082,7 @@ export interface components {
           tools: (
             | "get_workspace"
             | "get_facts"
-            | "get_preview"
+            | "get_change"
             | "request_change"
             | "answer_question"
             | "create_reminder"
@@ -9040,6 +9106,7 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "get_preview"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -9062,7 +9129,7 @@ export interface components {
           tools: (
             | "get_workspace"
             | "get_facts"
-            | "get_preview"
+            | "get_change"
             | "request_change"
             | "answer_question"
             | "create_reminder"
@@ -9086,6 +9153,7 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "get_preview"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -9108,7 +9176,7 @@ export interface components {
           tools: (
             | "get_workspace"
             | "get_facts"
-            | "get_preview"
+            | "get_change"
             | "request_change"
             | "answer_question"
             | "create_reminder"
@@ -9132,6 +9200,7 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "get_preview"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -9154,7 +9223,7 @@ export interface components {
           tools: (
             | "get_workspace"
             | "get_facts"
-            | "get_preview"
+            | "get_change"
             | "request_change"
             | "answer_question"
             | "create_reminder"
@@ -9178,6 +9247,7 @@ export interface components {
             | "read_skill"
             | "save_correction"
             | "schedule_skill"
+            | "get_preview"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -10788,38 +10858,6 @@ export interface components {
       | {
           /** @constant */
           connected: false
-        }
-      | {
-          /** @constant */
-          outcome: "refused"
-          error: {
-            /** @enum {string} */
-            class:
-              | "validation"
-              | "permission"
-              | "transient"
-              | "resource"
-              | "provider"
-              | "integrity"
-              | "security"
-              | "budgetary"
-            code: string
-            message: string
-          }
-        }
-    GetPreviewInput: {
-      /** Format: uuid */
-      assignment_id: string
-    }
-    GetPreviewOutput:
-      | {
-          /** @constant */
-          outcome: "ready"
-          /** Format: uuid */
-          assignment_id: string
-          version: number
-          /** Format: date-time */
-          expires_at: string
         }
       | {
           /** @constant */

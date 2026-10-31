@@ -3,7 +3,7 @@ import {
   TOOL_CALL_CANCELLED as CANCELLED,
   CreateReminderOutput,
   CreateReminderRequest,
-  GetPreviewOutput,
+  GetChangeOutput,
   OwnerChangeRequest,
   RequestChangeOutput,
 } from "@workspace/contracts"
@@ -220,16 +220,11 @@ it("reads every state of a reminder the owner is asked to add", () => {
 
 it("reads every state of a tool that only looks", () => {
   const view = (part: object) =>
-    readView({ args: {}, ...part }, GetPreviewOutput)
-  const ready = {
-    outcome: "ready",
-    assignment_id: "5b0f6c1e-8d2a-4f3b-9c4d-2e1a7b6c5d4e",
-    version: 4,
-    expires_at: "2026-09-28T18:00:00.000Z",
-  }
+    readView({ args: {}, ...part }, GetChangeOutput)
+  const none = { outcome: "none" }
   expect(view({})).toEqual({ state: "working" })
-  expect(view({ result: ready })).toEqual({ state: "done", output: ready })
-  expect(view({ result: { outcome: "ready" } })).toEqual({ state: "failed" })
+  expect(view({ result: none })).toEqual({ state: "done", output: none })
+  expect(view({ result: { outcome: "found" } })).toEqual({ state: "failed" })
   expect(view({ isError: true, result: { error: CANCELLED } })).toEqual({
     state: "cancelled",
   })

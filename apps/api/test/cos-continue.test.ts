@@ -319,7 +319,7 @@ describe.skipIf(!url)("a turn cut off, and its continuation", () => {
   it("marks a turn out of steps partial and queues a continuation, which a new owner message supersedes", async () => {
     const id = await conversation()
     const previews = Array.from({ length: 5 }, (_, i) =>
-      called("get_preview", { assignment_id: crypto.randomUUID() }, `call_${i}`)
+      called("get_change", { ref: crypto.randomUUID() }, `call_${i}`)
     )
     await typed(
       id,

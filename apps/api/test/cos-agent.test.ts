@@ -1051,8 +1051,8 @@ describe("the CoS's model and price", () => {
     expectTypeOf<InputOf<"answer_question">>().toEqualTypeOf<
       z.infer<typeof COS_TOOLS.answer_question.input>
     >()
-    expectTypeOf<InputOf<"get_preview">>().toEqualTypeOf<
-      z.infer<typeof COS_TOOLS.get_preview.input>
+    expectTypeOf<InputOf<"get_change">>().toEqualTypeOf<
+      z.infer<typeof COS_TOOLS.get_change.input>
     >()
   })
 })
@@ -1587,9 +1587,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "check_domain",
       "connect_google",
       "find_domain",
+      "get_change",
       "get_facts",
       "get_indexing",
-      "get_preview",
       "get_search_performance",
       "get_workspace",
       "inspect_domain",
@@ -3030,13 +3030,14 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
 
   it("never logs an unknown tool outcome as a refusal: the model reads it as unknown", async () => {
     const s = seed(kit, me)
-    const build = await s.assignment("implementing")
+    const build = await s.assignment("preview_ready")
+    await s.revision(build, 1)
     const id = await conversation(me)
     const { model, sent } = scripted(
       calls({
         id: "call_pv",
-        tool: "get_preview",
-        input: { assignment_id: build },
+        tool: "get_change",
+        input: { ref: build },
       }),
       said("I could not confirm the preview.")
     )
@@ -3965,13 +3966,14 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
 
   it("tells the model a transient tool failure is unknown, never that it was refused", async () => {
     const s = seed(kit, me)
-    const build = await s.assignment("implementing")
+    const build = await s.assignment("preview_ready")
+    await s.revision(build, 2)
     const id = await conversation(me)
     const { model, sent } = scripted(
       calls({
         id: "call_pv",
-        tool: "get_preview",
-        input: { assignment_id: build },
+        tool: "get_change",
+        input: { ref: build },
       }),
       said("I could not confirm it.")
     )
@@ -4388,8 +4390,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       const previews = Array.from({ length: 5 }, (_, i) =>
         calls({
           id: `call_p${i}`,
-          tool: "get_preview",
-          input: { assignment_id: crypto.randomUUID() },
+          tool: "get_change",
+          input: { ref: crypto.randomUUID() },
         })
       )
       const { model, sent } = scripted(...previews, said("No preview yet."))

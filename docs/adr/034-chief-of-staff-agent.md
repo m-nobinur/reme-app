@@ -73,7 +73,7 @@ below.
 
 ### Tools
 
-`get_workspace`, `get_facts` and `get_preview` read. `request_change`, `answer_question` and, with
+`get_workspace`, `get_facts` and `get_change` read. `request_change`, `answer_question` and, with
 reminders, `create_reminder` act. Each act tool is `'user-approval'` in the agent's map. There is no
 publish tool. Publishing stays the owner's button on a bound version.
 

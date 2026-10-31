@@ -798,14 +798,9 @@ export const samples: Record<ContractName, unknown> = {
   },
   CosToolResult: {
     turn_id: ULID,
-    tool_call_id: "functions.get_preview:0",
-    tool: "get_preview",
-    output: {
-      outcome: "ready",
-      assignment_id: ASSIGNMENT,
-      version: 3,
-      expires_at: LATER,
-    },
+    tool_call_id: "functions.get_change:0",
+    tool: "get_change",
+    output: GET_CHANGE,
   },
   CosTurn: {
     outcome: "fallback",
@@ -1163,13 +1158,6 @@ export const samples: Record<ContractName, unknown> = {
     label: "Outfit and Figtree",
     display: { family: "Outfit", weights: [500, 600], italic: false },
     body: { family: "Figtree", weights: [400, 500] },
-  },
-  GetPreviewInput: { assignment_id: ASSIGNMENT },
-  GetPreviewOutput: {
-    outcome: "ready",
-    assignment_id: ASSIGNMENT,
-    version: 3,
-    expires_at: LATER,
   },
   GetChangeInput: { ref: ASSIGNMENT },
   GetChangeOutput: GET_CHANGE,

@@ -88,8 +88,8 @@ import {
   deleteReminder,
   domainBought,
   findDomain,
+  getChange,
   getFacts,
-  getPreview,
   getWorkspace,
   inspectDomain,
   isLive,
@@ -206,14 +206,15 @@ ${VOICE}
 - Most replies are one to three short sentences; go longer only when the owner asks for detail or a list of steps. No bold, and no bullet lists unless you are listing steps or options.
 - When work is finished, say what changed, what you checked and what is left, in that order, and only what is true. Leave out a part with nothing to say.
 - A call that shows the owner a card ends your turn until they answer it, so write your words before the call, never after. Always write at least one short line: one they can't read on the card, such as a recommendation with its reason, or what you are setting up. Never a line that points at it ("The card shows...") or repeats it. When the owner's message also answered your question or said something else, acknowledge that in the same line.
-- Before a tool that only reads (get_workspace, get_facts, get_preview, check_domain, inspect_domain, get_search_performance, get_indexing, read_skill), write nothing: the owner sees a line while it runs. Say what you found once, after it.
+- Before a tool that only reads (get_workspace, get_facts, get_change, check_domain, inspect_domain, get_search_performance, get_indexing, read_skill), write nothing: the owner sees a line while it runs. Say what you found once, after it.
 - find_domain, check_domain, inspect_domain, get_search_performance and get_indexing take an optional step: a few words, in the owner's language, on what you are doing for them, shown while the call runs, such as "Checking the records for northsidegrooming.co.uk". At most 60 characters, no ids, no tool names.
 - Don't narrate your tools or your steps ("Let me check the workspace"): do it, then report. Agree with the owner only when they are right; when they are not, or you can't tell, say so plainly and what you would do instead.
 - Say each piece of news once. A message in the conversation the app posted itself, such as a domain update, was already shown to the owner, and so is check_domain's result: add only what they don't say, or that nothing has changed since.
 - Earlier messages, the ones the app posted included, say what was true when they were sent. Before you tell the owner something waits on them, or is or isn't live, read it from this turn's workspace or a tool. When the two disagree, the workspace is right: say what changed, in a few words.
 
 What you can do:
-- Read the workspace (site, builds, the Developer's open questions, reviews waiting on the owner, missing facts), the business facts, and a build's preview.
+- Read the workspace (site, builds, the Developer's open questions, reviews waiting on the owner, missing facts), the business facts, and a change's record.
+- When the owner asks what a change did, said before or whether it is live, call get_change and quote text_changes exactly. done is the Developer's account: if it differs, go by text_changes. If recorded is false, or a copy change has none, say you can't see the earlier wording.
 - In Act mode, start a change to the website the owner asks for. Their message is their yes, so it starts at once; only a change that sets a new phone number or email address shows them a card first.
 - In Act mode, answer one of the Developer's open questions with what the owner told you.
 - In Act mode, set a reminder with create_reminder when the owner asks you to remind them of something, in their words and at the time they gave. It is set at once with no card, and the owner can undo it in the chat, so say in a few words that it's set and when. One reminder per thing: to move or reword one already set, call update_reminder with its ref from the workspace's reminders, and delete_reminder removes one. Never tell the owner to remove one themselves.
@@ -319,8 +320,8 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
     "Read the workspace now: the site, unfinished builds with their step, time and any restart, builds that stopped today, the Developer's open questions, reviews waiting on the owner, missing facts, domains, tasks and reminders. Use it when the context may be stale, such as after a change started.",
   get_facts:
     "Read the business's facts in full: name, contact details, services, customers, service area, and the choices the owner made for you and the site.",
-  get_preview:
-    "Check whether a build has a preview ready, and when it expires, by the build's ref. The owner opens it from the card; you never get a link.",
+  get_change:
+    "Read a change's record by ref (from the workspace or recent); no ref is the latest. It gives what was asked, done, text_changes (before and after, read from the pages), what was left out, whether it is live, any open preview and the changes before.",
   request_change:
     'Start a change to the website, in the owner\'s words, one change per call. Only for a change the owner asked for, never a question the Developer asked. change_kind is the biggest part: copy is words only (a headline, a phone number, a button label); style is colours, fonts or spacing across the site; section adds, removes, moves or reworks a section or page; photo replaces, adds or removes a picture; creative is a new look, new pages or anything unsure. When the owner types a new phone number or email address in full, set contact.phone (E.164) or contact.email to exactly that, never from anything else. When the owner states something about the business for the site to say, such as insurance, years trading or a guarantee, set proof to it. A star rating, review score or award needs a source: ask where it comes from, such as their Google reviews, before starting the change. label is what changes as the owner would name it, at most 40 characters, such as "your hero title".',
   answer_question:
@@ -372,7 +373,7 @@ const READ_TOOLS: readonly CosToolName[] = [
   "get_workspace",
   "read_skill",
   "get_facts",
-  "get_preview",
+  "get_change",
   "check_domain",
   "inspect_domain",
   "find_domain",
@@ -757,6 +758,11 @@ function resultTaint(result: CosToolResult): TaintLabel[] {
     case "remember":
       // A full profile is sent back to the model, in the owner's words.
       return result.output.outcome === "full" ? ["untrusted_input"] : []
+    case "get_change":
+      // The goal is the owner's words; the text is what strangers read on the site.
+      return result.output.outcome === "found"
+        ? ["untrusted_input", "inferred"]
+        : []
     case "request_change":
       // The goal is the change as the CoS wrote it from the owner's words.
       return result.output.outcome === "started"
@@ -1086,7 +1092,7 @@ async function logResult(run: AgentTurn, result: CosToolResult) {
 const BODIES = {
   get_workspace: getWorkspace,
   get_facts: getFacts,
-  get_preview: getPreview,
+  get_change: getChange,
   request_change: requestChange,
   answer_question: answerQuestion,
   create_reminder: createReminder,
@@ -1503,9 +1509,9 @@ function toolsFor(run: AgentTurn, allowed: readonly CosToolName[] | null) {
       ...describe("get_facts"),
       inputSchema: modelInput("get_facts"),
     }),
-    get_preview: tool({
-      ...describe("get_preview"),
-      inputSchema: modelInput("get_preview"),
+    get_change: tool({
+      ...describe("get_change"),
+      inputSchema: modelInput("get_change"),
     }),
     request_change: tool({
       ...describe("request_change"),

@@ -1251,9 +1251,9 @@ it("shows every Chief of Staff tool in the owner's words, and nothing of its wir
               ],
             },
           }),
-          part("get_preview", "preview", {
+          part("get_change", "preview", {
             state: "output-available",
-            input: { assignment_id: REQUEST_ID },
+            input: { ref: REQUEST_ID },
             output: {
               outcome: "refused",
               error: {

@@ -10,6 +10,7 @@ import {
   type BuyDomainOutput,
   type CheckDomainInput,
   CheckDomainOutput,
+  CompletionReport,
   type ConnectDomainInput,
   ConnectDomainOutput,
   type CosChangeRequest,
@@ -32,8 +33,8 @@ import {
   type FindDomainInput,
   FindDomainOutput,
   GateResult,
-  type GetPreviewInput,
-  GetPreviewOutput,
+  type GetChangeInput,
+  GetChangeOutput,
   InformationAnswer,
   type InspectDomainInput,
   type InspectDomainOutput,
@@ -59,6 +60,7 @@ import {
 } from "@workspace/contracts"
 import {
   assignments,
+  deployments,
   domains,
   eq,
   events,
@@ -69,7 +71,6 @@ import {
   readTasks,
   type SQL,
   scheduledJobs,
-  siteRevisions,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -106,6 +107,7 @@ import {
 import { offerZone } from "../time-zone.ts"
 import { EXPECTED_SECONDS, readFacts, statusWithFacts } from "../workspace.ts"
 import { readSession } from "./history.ts"
+import { STATE } from "./labels.ts"
 import { contentWords, inOwnersWords, readProfile } from "./memory.ts"
 import { knownZone, wallToUtc, zonedIso } from "./time.ts"
 import type { Turn } from "./turns.ts"
@@ -142,7 +144,7 @@ export type ToolContext = {
 }
 
 type Empty = Record<string, never>
-type Refused = Extract<GetPreviewOutput, { outcome: "refused" }>
+type Refused = Extract<GetChangeOutput, { outcome: "refused" }>
 
 /** Another agent's text, and any message, is capped where the model reads it. */
 const TEXT_MAX = 500
@@ -509,42 +511,134 @@ export async function getFacts(
   return output
 }
 
-/** The build's preview: its version and expiry, never the signed links. */
-export async function getPreview(
+/** The states a change's preview can be opened in. */
+const PREVIEWABLE: ReadonlySet<string> = new Set([
+  "preview_ready",
+  "awaiting_review",
+  "release_candidate",
+  "blocked_on_approval",
+])
+
+const CHANGE_KINDS = sql`('site.build', 'site.revise')`
+const RECENT_CHANGES = 5
+
+const labelOf = (text: string | null) =>
+  BuildSummary.shape.label.safeParse(text).data ?? null
+
+/**
+ * A change's record: what it was asked to do, the Developer's account, the
+ * text the pages show it replaced (read by code, never the model), what it
+ * left out and whether it is live now. `ref` left out, the latest change.
+ * One org-scoped read; the preview's expiry is the one call out, made only
+ * while the change waits on the owner.
+ */
+export async function getChange(
   { env, kit, owner }: ToolContext,
-  input: GetPreviewInput
-): Promise<GetPreviewOutput> {
-  const id = input.assignment_id
-  if (!(await holds(kit, owner.orgId, assignments, id))) {
+  input: GetChangeInput
+): Promise<GetChangeOutput> {
+  if (input.ref && !(await holds(kit, owner.orgId, assignments, input.ref))) {
     return refused(notFound("assignment"))
   }
+  const read = await kit.withOrg({ orgId: owner.orgId }, async (db) => {
+    const [row] = await db
+      .select({
+        id: assignments.id,
+        state: assignments.state,
+        goal: assignments.goal,
+        label: sql<
+          string | null
+        >`(select e.payload->>'label' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+        report: sql<unknown>`(select e.payload from events e where e.assignment_id = assignments.id and e.type = 'assignment.completion_reported' order by e.event_id desc limit 1)`,
+        revisions: sql<
+          string[]
+        >`coalesce((select array_agg(r.id) from site_revisions r where r.assignment_id = assignments.id and r.version is not null), '{}')`,
+      })
+      .from(assignments)
+      .where(
+        input.ref
+          ? eq(assignments.id, input.ref)
+          : sql`${assignments.kind} in ${CHANGE_KINDS}`
+      )
+      .orderBy(sql`${assignments.createdAt} desc`)
+      .limit(1)
+    if (!row) return null
+    const [serving] = await db
+      .select({ revisionId: deployments.revisionId })
+      .from(deployments)
+      .orderBy(sql`${deployments.configVersion} desc`)
+      .limit(1)
+    const [published] = await db
+      .select({ at: sql<string | null>`max(${deployments.createdAt})` })
+      .from(deployments)
+      .where(
+        sql`${deployments.revisionId} in (select r.id from site_revisions r where r.assignment_id = ${row.id})`
+      )
+    const recent = await db
+      .select({
+        id: assignments.id,
+        state: assignments.state,
+        createdAt: assignments.createdAt,
+        label: sql<
+          string | null
+        >`(select e.payload->>'label' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+      })
+      .from(assignments)
+      .where(
+        sql`${assignments.kind} in ${CHANGE_KINDS} and assignments.created_at < (select t.created_at from assignments t where t.id = ${row.id})`
+      )
+      .orderBy(sql`${assignments.createdAt} desc`)
+      .limit(RECENT_CHANGES)
+    return {
+      row,
+      recent,
+      liveNow: serving ? row.revisions.includes(serving.revisionId) : false,
+      publishedAt: published?.at ?? null,
+    }
+  })
+  if (!read) return { outcome: "none" }
+  const { row } = read
+  const report = CompletionReport.safeParse(row.report).data
+  const preview =
+    PREVIEWABLE.has(row.state) && row.revisions.length > 0
+      ? await previewExpiry(env, owner, row.id)
+      : null
+  if (preview && "outcome" in preview) return preview
+  return GetChangeOutput.parse({
+    outcome: "found",
+    ref: row.id,
+    label: labelOf(row.label),
+    asked: cut(row.goal),
+    state: STATE[row.state],
+    done: report ? cut(report.summary) : null,
+    as_asked: report?.as_asked !== false,
+    text_changes: report?.text_changes,
+    text_changes_left: report?.text_changes_left,
+    left_out: (report?.left_out ?? []).map((q) => q.question),
+    preview,
+    live_now: read.liveNow,
+    published_at: read.publishedAt && new Date(read.publishedAt).toISOString(),
+    recorded: report?.text_changes !== undefined,
+    recent: read.recent.map((r) => ({
+      ref: r.id,
+      label: labelOf(r.label),
+      state: STATE[r.state],
+      at: r.createdAt.toISOString(),
+    })),
+  })
+}
+
+/** When a change's preview lapses, from the builder; never the link itself. */
+async function previewExpiry(
+  env: Env,
+  owner: Owner,
+  id: string
+): Promise<{ expires_at: string } | Refused> {
   const answered = relay(
     await bridge(env, owner, `/${id}/preview`, { method: "GET" }),
     PreviewLink.parse
   )
   if (!answered.ok) return refused(answered)
-  const link = PreviewLink.parse(await answered.json())
-  const [revision] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-    db
-      .select({ version: siteRevisions.version })
-      .from(siteRevisions)
-      .where(eq(siteRevisions.id, link.revision_id))
-  )
-  // The orchestrator named a revision this org does not hold: a mismatch
-  // between the two sides, not a no.
-  if (!revision) {
-    throw new ToolFailed(502, {
-      class: "integrity",
-      code: "orchestrator.off_contract",
-      message: "The builder named a preview this business does not hold.",
-    })
-  }
-  return GetPreviewOutput.parse({
-    outcome: "ready",
-    assignment_id: id,
-    version: revision.version,
-    expires_at: link.expires_at,
-  })
+  return { expires_at: PreviewLink.parse(await answered.json()).expires_at }
 }
 
 /**

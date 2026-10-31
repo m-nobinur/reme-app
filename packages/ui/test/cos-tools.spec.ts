@@ -23,8 +23,8 @@ test("reads say what they looked at, and a finished one shows nothing", async ({
   await expect(entry.locator('[data-slot="cos-read-facts"]')).toHaveText([
     /^Stopped (looking up your details|checking your business details)$/,
   ])
-  // A refused preview is finished too; the reply says what came back.
-  await expect(entry.locator('[data-slot="cos-read-preview"]')).toHaveCount(0)
+  // A change's record and a refusal are finished too; the reply says what came back.
+  await expect(entry.locator('[data-slot="cos-read-change"]')).toHaveCount(0)
   // The reply says what a read found, so nothing opens onto the raw result.
   await expect(
     entry.locator('[data-slot^="cos-read-"]').getByRole("button")

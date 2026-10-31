@@ -11,7 +11,7 @@ import {
   CosWorkspace,
   CreateReminderInput,
   CreateReminderOutput,
-  GetPreviewOutput,
+  GetChangeOutput,
   OfferGrantInput,
   OfferGrantOutput,
   RecordReviewInput,
@@ -113,11 +113,11 @@ const FactsRead: ToolCallMessagePartComponent = (props) => (
   />
 )
 
-const PreviewRead: ToolCallMessagePartComponent = (props) => (
+const ChangeRead: ToolCallMessagePartComponent = (props) => (
   <Read
-    slot="cos-read-preview"
-    tool="get_preview"
-    view={readView(props, GetPreviewOutput)}
+    slot="cos-read-change"
+    tool="get_change"
+    view={readView(props, GetChangeOutput)}
   />
 )
 
@@ -358,7 +358,7 @@ export const COS_QUIET: Record<string, ToolCallMessagePartComponent> = {
 export const COS_READS: Record<string, ToolCallMessagePartComponent> = {
   get_workspace: WorkspaceRead,
   get_facts: FactsRead,
-  get_preview: PreviewRead,
+  get_change: ChangeRead,
   check_domain: DomainRead,
 }
 
