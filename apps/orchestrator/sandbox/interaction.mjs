@@ -192,6 +192,8 @@ async function useForm(page, path) {
       ),
       submit.click({ timeout: WAIT_MS }),
     ])
+    // Closing the page while the sink still loads hung Chromium in 4 of 15 sandbox runs.
+    await page.waitForLoadState("load", { timeout: WAIT_MS })
   } catch {
     find("form", path, PHONE, "pressing the submit button sent nothing")
   }
