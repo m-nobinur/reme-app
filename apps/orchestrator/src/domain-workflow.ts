@@ -40,7 +40,7 @@ import {
   withKit,
 } from "./domain-flow.ts"
 import { hold, probe } from "./probe.ts"
-import { registrarLive } from "./registrar.ts"
+import { type RegistrationStatus, registrarLive } from "./registrar.ts"
 import { startSearchForDomain } from "./search-start.ts"
 
 const MINUTE = 60 * 1000
@@ -174,22 +174,32 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
         }
       }
 
-      const begun = await step.do("register", () =>
-        withKit(env, (k) => startRegistration(env, k, orgId, domainId))
-      )
-      if (begun.gone) return { outcome: "removed" }
-      await say("say refused", begun.say)
-      if (!begun.status) return { outcome: "failed" }
-      let status = begun.status
-      for (let n = 1; !status.completed; n++) {
-        await step.sleep(`registering ${n}`, registrationWait(n))
-        const read = await step.do(`registration ${n}`, () =>
-          withKit(env, (k) => readRegistration(env, k, orgId, domainId))
+      let status: RegistrationStatus
+      try {
+        const begun = await step.do("register", () =>
+          withKit(env, (k) => startRegistration(env, k, orgId, domainId))
         )
-        if (read.gone) return { outcome: "removed" }
-        status = read.status
-        // The hold lapses at 7 days; release it before then.
-        if (!status.completed && read.at >= started + HOLD_MS) break
+        if (begun.gone) return { outcome: "removed" }
+        await say("say refused", begun.say)
+        if (!begun.status) return { outcome: "failed" }
+        status = begun.status
+        for (let n = 1; !status.completed; n++) {
+          await step.sleep(`registering ${n}`, registrationWait(n))
+          const read = await step.do(`registration ${n}`, () =>
+            withKit(env, (k) => readRegistration(env, k, orgId, domainId))
+          )
+          if (read.gone) return { outcome: "removed" }
+          status = read.status
+          // The hold lapses at 7 days; release it before then.
+          if (!status.completed && read.at >= started + HOLD_MS) break
+        }
+      } catch (error) {
+        // Every retry of a step spent: the purchase closes as a failed registration.
+        status = {
+          state: "failed",
+          completed: true,
+          error: { code: (error as Error).message, message: "" },
+        }
       }
       if (status.state !== "succeeded") {
         const message = await step.do("not registered", () =>
