@@ -43,7 +43,10 @@ vi.mock("@tanstack/react-router", () => ({
 }))
 vi.mock("@/lib/workspace", () => ({
   useLiveWorkspace: () => live,
-  useBusinessZone: () => null,
+}))
+vi.mock("@workspace/ui/lib/zone", async (actual) => ({
+  ...(await actual<typeof import("@workspace/ui/lib/zone")>()),
+  browserZone: () => "Europe/London",
 }))
 vi.mock("@/lib/api/server", () => server)
 
@@ -185,6 +188,34 @@ it("says what finished, and no Now list when nothing waits", async () => {
     "Your assistant checked in, all clear"
   )
   expect(container.textContent).not.toContain("Now")
+})
+
+it("shows a time in the reader's zone, not the business's", async () => {
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    live: 2,
+    host: "fixture.example.invalid",
+    timeZone: "Asia/Dhaka",
+    activity: {
+      journey: [],
+      now: [],
+      waiting: [],
+      upcoming: [],
+      done: [
+        {
+          id: "checkin:last",
+          kind: "checkin",
+          state: "done",
+          steps: [{ id: "message", state: "skipped" }],
+          at: "2026-10-31T14:00:00.000Z",
+        },
+      ],
+    },
+  }
+  await render()
+  // London is UTC+0 on 31 October; Dhaka would say 8:00 PM.
+  expect(container.textContent).toContain("2:00 PM")
+  expect(container.textContent).not.toContain("8:00 PM")
 })
 
 const section = (title: string) =>

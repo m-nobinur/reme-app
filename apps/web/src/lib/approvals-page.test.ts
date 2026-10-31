@@ -34,7 +34,6 @@ vi.mock("@tanstack/react-router", () => ({
 }))
 const refresh = vi.fn(async () => undefined)
 vi.mock("@/lib/workspace", () => ({
-  useBusinessZone: () => null,
   useLiveWorkspace: () => ({
     workspace: { ...EMPTY_WORKSPACE, attention: [APPROVAL] },
     refresh,
