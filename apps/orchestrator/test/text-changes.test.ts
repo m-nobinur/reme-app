@@ -130,11 +130,17 @@ describe("recordTextChanges", () => {
   const run = async (options: {
     kind?: string
     objects: Record<string, string>
+    /** The stored size reported for every object. */
+    size?: number
+    dbFails?: boolean
   }) => {
     const db = {
       select: () => ({
         from: () => ({
-          where: async () => [{ kind: options.kind ?? "site.revise" }],
+          where: async () => {
+            if (options.dbFails) throw new Error("connection reset")
+            return [{ kind: options.kind ?? "site.revise" }]
+          },
         }),
       }),
     }
@@ -147,7 +153,9 @@ describe("recordTextChanges", () => {
         get: async (key: string) => {
           reads.push(key)
           const body = options.objects[key]
-          return body === undefined ? null : { text: async () => body }
+          return body === undefined
+            ? null
+            : { size: options.size, text: async () => body }
         },
       },
       orgId: ORG,
@@ -193,6 +201,38 @@ describe("recordTextChanges", () => {
     const gone = stored(page({ hero: "Old" }), page({ hero: "New" }))
     delete gone[`${OLD}dist/index.html`]
     expect((await run({ objects: gone })).result).toEqual({})
+  })
+
+  it("records nothing, and does not fail, when the database read fails", async () => {
+    const objects = stored(page({ hero: "Old" }), page({ hero: "New" }))
+    expect((await run({ objects, dbFails: true })).result).toEqual({})
+  })
+
+  it("reads no page of more than a megabyte", async () => {
+    const objects = stored(page({ hero: "Old" }), page({ hero: "New" }))
+    expect((await run({ objects, size: 1_000_001 })).result).toEqual({})
+    expect((await run({ objects, size: 1_000_000 })).result).toMatchObject({
+      text_changes: [{ before: "Old", after: "New" }],
+    })
+  })
+
+  it("reads no pages at all when more than forty changed", async () => {
+    const names = Array.from({ length: 41 }, (_, i) => `p${i}/index.html`)
+    const files = (digit: string) =>
+      Object.fromEntries(names.map((name) => [name, hash(digit)]))
+    const objects = {
+      [`${OLD}manifest.json`]: manifest(files("1")),
+      [`${NEW}manifest.json`]: manifest(files("2")),
+      ...Object.fromEntries(
+        names.flatMap((name) => [
+          [`${OLD}dist/${name}`, page({ hero: "Old" })],
+          [`${NEW}dist/${name}`, page({ hero: "New" })],
+        ])
+      ),
+    }
+    const { result, reads } = await run({ objects })
+    expect(result).toEqual({})
+    expect(reads.filter((key) => key.includes("/dist/"))).toEqual([])
   })
 
   it("records nothing, and does not fail, when a manifest does not parse", async () => {
