@@ -470,6 +470,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       title: n.title,
       due: n.due_at && zonedIso(new Date(n.due_at), zone),
     })),
+    buying: buyConfigured(env),
     expected_seconds: status.expected_seconds,
     expected_range: {
       quick: rangeOf(status.expected_seconds, "quick"),

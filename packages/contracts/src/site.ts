@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { Timestamp, Uuid } from "./common.ts"
+import { Text } from "./text.ts"
 
 /**
  * `SiteRevision` (ADR-031). `version` is the site's own counter, so the owner
@@ -193,6 +194,22 @@ export const SitePointer = z.strictObject({
 export const RedirectPointer = z.strictObject({ redirect_to: Hostname })
 
 /**
+ * A pointer for an owner's domain whose records are in before the site is
+ * published, under `host:{hostname}`: the router answers a coming-soon page
+ * with the business's name and contact, never indexed and never carrying
+ * `SITE_HEADER`, so no check reads it as the site. Activation replaces it.
+ * The org travels in the value so only its own removal deletes it.
+ */
+export const HoldingPointer = z.strictObject({
+  org_id: Uuid,
+  holding: z.strictObject({
+    name: Text(120),
+    phone: Text(40).optional(),
+    email: Text(254).optional(),
+  }),
+})
+
+/**
  * The header the router puts on an HTML page it serves for a published host,
  * from the pointer it served by, so the publisher's probe can tell which
  * version answered before judging it. Sent only to a request carrying a valid
@@ -240,6 +257,7 @@ export type ComponentManifest = z.infer<typeof ComponentManifest>
 export type PreviewClaim = z.infer<typeof PreviewClaim>
 export type SitePointer = z.infer<typeof SitePointer>
 export type RedirectPointer = z.infer<typeof RedirectPointer>
+export type HoldingPointer = z.infer<typeof HoldingPointer>
 export type SiteField = z.infer<typeof SiteField>
 export type SiteFields = z.infer<typeof SiteFields>
 

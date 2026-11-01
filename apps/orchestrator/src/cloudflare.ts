@@ -64,6 +64,7 @@ import {
   restoreRoutes,
   type Say,
   sweepDomains,
+  tellPublished,
 } from "./domain-flow.ts"
 import { SAY_RETRIES } from "./domain-workflow.ts"
 import { JOBS_QUEUES, jobsBatch } from "./jobs.ts"
@@ -1482,6 +1483,16 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
     const served = deployment
       ? (await step.do("pointer", point)).host
       : target.host
+    // A domain ready before this publish goes live on it now.
+    if (deployment && !rollback) {
+      try {
+        await step.do("tell domains", () =>
+          run((kit) => tellPublished(this.env, kit, orgId))
+        )
+      } catch {
+        // A domain waiting reads the deployment again within the hour.
+      }
+    }
 
     // The content gate runs on the live HTML with the facts the assignment
     // was validated against; a rollback has no assignment and takes the

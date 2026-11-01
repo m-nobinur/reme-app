@@ -731,6 +731,34 @@ describe("a custom domain", () => {
     expect(reads).toEqual([])
   })
 
+  it("answers a domain waiting for the first publish with its coming-soon page", async () => {
+    pointers.set(`host:${DOMAIN}`, {
+      org_id: DOMAIN_ORG,
+      holding: {
+        name: "Sparkle <Cleaning>",
+        phone: "020 7946 0000",
+        email: "hi@sparkle.example",
+      },
+    })
+    for (const path of ["/", "/services/"]) {
+      const res = await get(DOMAIN, path)
+      expect(res.status, path).toBe(200)
+      expect(res.headers.get(SITE_HEADER), path).toBeNull()
+      expect(res.headers.get("x-robots-tag"), path).toBe("noindex")
+      expect(res.headers.get("cache-control"), path).toBe("no-store")
+      const page = await res.text()
+      expect(page).toContain("<h1>Sparkle &lt;Cleaning&gt;</h1>")
+      expect(page).toContain("Our new website is almost here.")
+      expect(page).toContain('href="tel:02079460000"')
+      expect(page).toContain('href="mailto:hi@sparkle.example"')
+    }
+    expect(await (await get(DOMAIN, "/robots.txt")).text()).toBe(
+      "User-agent: *\nDisallow: /\n"
+    )
+    expect((await get(DOMAIN, "/.well-known/x")).status).toBe(404)
+    expect(reads).toEqual([])
+  })
+
   it("answers a KV miss on the slug host of an org with an active domain with the 301", async () => {
     inPostgres(true)
     const res = await get(SLUG_HOST, "/contact/?a=1")

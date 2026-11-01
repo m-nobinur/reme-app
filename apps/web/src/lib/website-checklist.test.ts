@@ -130,6 +130,29 @@ it("offers Google's own sign-in once the owner's domain is live, never a chat li
   ).toBeNull()
 })
 
+it("offers Google once a domain of the owner's own is connecting, even before the first publish", () => {
+  const connecting = (step: string, state: "waiting" | "next") =>
+    seg("address", "waiting", {
+      id: "d",
+      names: { domain: "spark.co.uk" },
+      steps: [{ id: step, state }],
+    })
+  const google = (domain: ActivitySegment, live: number | null) =>
+    checklistFor(
+      workspace([domain], { live } as Partial<Workspace>),
+      ZONE,
+      NOW
+    ).at(-1)
+  for (const live of [3, null]) {
+    expect(google(connecting("records", "waiting"), live)).toMatchObject({
+      line: "Not connected",
+      action: { kind: "google", label: "Connect Google" },
+    })
+  }
+  // A purchase still waiting for payment is not a domain of their own yet.
+  expect(google(connecting("purchase", "waiting"), 3)?.action).toBeNull()
+})
+
 it("shows an address waiting on the owner, a bought one with its renewal, and Google signing in", () => {
   const waiting = (step: string) =>
     seg("address", "waiting", {

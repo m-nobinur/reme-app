@@ -886,7 +886,9 @@ export async function chat(
             jevAsksGoogle(env.OPENROUTER_API_KEY as string, said)
         : null
   const domainLive =
-    loaded?.workspace.domains?.some((d) => d.state === "active") ?? false
+    loaded?.workspace.domains?.some((d) =>
+      ["awaiting_dns", "verifying", "active"].includes(d.state)
+    ) ?? false
   const google: Promise<"first" | "now" | null> =
     turn.kind === "message" && googleFirstOf && loaded
       ? googleFirstOf(turn.text).then(

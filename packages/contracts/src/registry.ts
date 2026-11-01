@@ -198,6 +198,7 @@ import {
 import {
   ComponentManifest,
   DeploymentManifest,
+  HoldingPointer,
   PreviewClaim,
   RedirectPointer,
   SiteFields,
@@ -360,6 +361,7 @@ export const contracts = {
   RecordReviewInput,
   RecordReviewOutput,
   RedirectPointer,
+  HoldingPointer,
   RemoveDomainInput,
   RemoveDomainOutput,
   RequestChangeOutput,

@@ -12266,6 +12266,10 @@
                 "maxLength": 253,
                 "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
               },
+              "change_at_publish": {
+                "type": "boolean",
+                "const": true
+              },
               "apply_url": {
                 "type": "string",
                 "maxLength": 2000,
@@ -19528,6 +19532,10 @@
                 "maxLength": 253,
                 "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
               },
+              "change_at_publish": {
+                "type": "boolean",
+                "const": true
+              },
               "apply_url": {
                 "type": "string",
                 "maxLength": 2000,
@@ -23037,6 +23045,9 @@
                       ],
                       "additionalProperties": false
                     }
+                  },
+                  "buying": {
+                    "type": "boolean"
                   },
                   "expected_seconds": {
                     "type": "object",
@@ -28693,6 +28704,10 @@
                         "maxLength": 253,
                         "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
                       },
+                      "change_at_publish": {
+                        "type": "boolean",
+                        "const": true
+                      },
                       "apply_url": {
                         "type": "string",
                         "maxLength": 2000,
@@ -30645,6 +30660,10 @@
                         "type": "string",
                         "maxLength": 253,
                         "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                      },
+                      "change_at_publish": {
+                        "type": "boolean",
+                        "const": true
                       },
                       "apply_url": {
                         "type": "string",
@@ -33628,6 +33647,9 @@
               ],
               "additionalProperties": false
             }
+          },
+          "buying": {
+            "type": "boolean"
           },
           "expected_seconds": {
             "type": "object",
@@ -39258,6 +39280,49 @@
           "summary",
           "evidence",
           "metadata"
+        ],
+        "additionalProperties": false
+      },
+      "HoldingPointer": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "org_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "holding": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "\\S"
+              },
+              "phone": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "pattern": "\\S"
+              },
+              "email": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 254,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "org_id",
+          "holding"
         ],
         "additionalProperties": false
       },

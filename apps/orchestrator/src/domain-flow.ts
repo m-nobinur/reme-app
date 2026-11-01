@@ -17,6 +17,8 @@ import {
 } from "@workspace/contracts"
 import {
   appendEvent,
+  currentFact,
+  deployments,
   domainHeldElsewhere,
   domains,
   eq,
@@ -68,7 +70,10 @@ import type { Observed } from "./probe.ts"
 import {
   activeDeployment,
   dropDomainPointers,
+  dropHolding,
   otherHost,
+  type RoutesEnv,
+  writeHolding,
   writePointer,
 } from "./publish.ts"
 import { rdapLookup } from "./rdap.ts"
@@ -123,6 +128,21 @@ export const DEADLINE_MS = 72 * 60 * 60 * 1000
  */
 export const NUDGE_AFTER_MS = 24 * 60 * 60 * 1000
 const MINUTE = 60 * 1000
+const DAY = 24 * 60 * MINUTE
+/** A claim proven ready before the site's first publish waits this long for it, then frees the name. */
+export const PUBLISH_WAIT_MS = 30 * DAY
+/** One reminder for a domain ready this long and still waiting for the first publish. */
+export const REMIND_AFTER_MS = 7 * DAY
+
+/**
+ * When a claim whose records are not yet proven fails: 72 hours from the
+ * claim or the site's first publish, whichever is later. Never longer before
+ * a publish, since an unproven claim holds the name from every other org;
+ * only a claim proven ready waits longer, for the publish (`PUBLISH_WAIT_MS`).
+ */
+export const deadlineOf = (claimedAt: number, publishedAt: number | null) =>
+  Math.max(claimedAt, publishedAt ?? claimedAt) + DEADLINE_MS
+
 /**
  * How long a look waits for a `check` nudge before looking again, by how long
  * the claim has been connecting: every minute for the first half hour, while
@@ -162,6 +182,139 @@ const connecting = (state: DomainState) =>
 async function readDomain(db: OrgScopedDb, domainId: string) {
   const [row] = await db.select().from(domains).where(eq(domains.id, domainId))
   return row
+}
+
+/** When the site was first published, or null while it never has been. */
+async function firstPublished(db: OrgScopedDb): Promise<number | null> {
+  const [row] = await db
+    .select({
+      at: sql<
+        number | null
+      >`(extract(epoch from min(${deployments.createdAt})) * 1000)::float8`,
+    })
+    .from(deployments)
+  return row?.at ?? null
+}
+
+/** Whether a claim is ready and waiting for the site's first publish to go live. */
+export async function domainWaiting(db: OrgScopedDb): Promise<boolean> {
+  const [row] = await db
+    .select({ id: domains.id })
+    .from(domains)
+    .where(
+      sql`${domains.state} in ('awaiting_dns', 'verifying') and ${domains.lastCheck}->>'status' = 'valid'`
+    )
+    .limit(1)
+  return !!row
+}
+
+/** The hosts a claim answers on: its name, and `www` unless it is a subdomain. */
+function hostsOf(row: Pick<DomainRow, "name" | "cfIds">): string[] {
+  const ids = row.cfIds as CfIds & { worker_www?: string }
+  return [row.name, ...(ids.www || ids.worker_www ? [`www.${row.name}`] : [])]
+}
+
+const textOf = (value: unknown, key: string) => {
+  const found = (value as Record<string, unknown> | undefined)?.[key]
+  return typeof found === "string" && found.trim() ? found.trim() : undefined
+}
+
+/**
+ * The coming-soon page on `hosts` while the site has never been published,
+ * with the business's name and contact as the facts hold them now. True once
+ * it has been published, when nothing is written.
+ */
+async function holdHosts(
+  env: RoutesEnv,
+  kit: Tenancy,
+  orgId: string,
+  hosts: readonly string[],
+  fallbackName: string
+): Promise<boolean> {
+  const found = await kit.withOrg({ orgId }, async (db) => ({
+    published: (await firstPublished(db)) !== null,
+    name: textOf((await currentFact(db, "business.name"))?.value, "name"),
+    e164: textOf((await currentFact(db, "business.phone"))?.value, "e164"),
+    email: textOf((await currentFact(db, "business.email"))?.value, "address"),
+  }))
+  if (found.published) return true
+  const phone = found.e164?.replace(/^\+44/, "0")
+  await writeHolding(env, orgId, hosts, {
+    name: (found.name ?? fallbackName).slice(0, 120),
+    ...(phone && { phone }),
+    ...(found.email && { email: found.email }),
+  })
+  return false
+}
+
+export type Waiting =
+  | { gone: true }
+  | { gone: false; published: boolean; at: number }
+
+/**
+ * For a claim ready before the site was published: whether it has been now,
+ * its coming-soon page kept up meanwhile. The page goes up only on a name
+ * proven the org's, its records valid (with the ownership TXT a guarded
+ * claim needs) or bought here, so nobody's page shows on a name they do not hold.
+ */
+export async function publishState(
+  env: RoutesEnv,
+  kit: Tenancy,
+  orgId: string,
+  domainId: string
+): Promise<Waiting> {
+  const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
+  if (!row || !connecting(row.state)) return { gone: true }
+  const proven =
+    row.origin === "purchased" ||
+    DomainCheck.safeParse(row.lastCheck).data?.status === "valid"
+  const published = proven
+    ? await holdHosts(env, kit, orgId, hostsOf(row), row.name)
+    : (await kit.withOrg({ orgId }, firstPublished)) !== null
+  return { gone: false, published, at: Date.now() }
+}
+
+/** The one reminder for a domain ready and still waiting for the first publish. */
+export async function waitingNote(
+  env: { OPENROUTER_API_KEY?: string },
+  kit: Tenancy,
+  orgId: string,
+  domainId: string
+): Promise<Say | null> {
+  const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
+  if (!row || !connecting(row.state)) return null
+  return {
+    key: `${domainId}:waiting`,
+    text: await writeUpdate(env, kit, orgId, {
+      facts: { domain: row.name },
+      template: `${row.name} is ready and waiting for your website. Publish your draft whenever you're happy with it, and it goes live there.`,
+    }),
+  }
+}
+
+/**
+ * The site's publish told to every claim still connecting, so one ready and
+ * waiting goes live now. One not waiting yet reads the deployment itself.
+ */
+export async function tellPublished(
+  env: Env,
+  kit: Tenancy,
+  orgId: string
+): Promise<void> {
+  const rows = await kit.withOrg({ orgId }, (db) =>
+    db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(sql`${domains.state} in ('awaiting_dns', 'verifying')`)
+  )
+  for (const { id } of rows) {
+    try {
+      const instance = await env.DOMAINS.get(domainInstanceId(id))
+      await instance.sendEvent({ type: "published", payload: {} })
+    } catch {
+      // Not running: nothing waits on it.
+    }
+  }
 }
 
 /** The newest claim `where` picks, with its org's slug host, in one read. */
@@ -611,6 +764,8 @@ export type Seen =
       at: number
       status: DomainCheck["status"]
       ready: boolean
+      /** When the site was first published, which starts the records' deadline. */
+      published_at: number | null
       /** The row moved on this look: the owner's quiet period starts over. */
       changed?: boolean
       /** What to tell the owner, which the probe adds when the check changed. */
@@ -630,7 +785,11 @@ export async function look(
   domainId: string,
   refresh?: boolean
 ): Promise<Observed<Seen>> {
-  const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
+  const read = await kit.withOrg({ orgId }, async (db) => ({
+    row: await readDomain(db, domainId),
+    publishedAt: await firstPublished(db),
+  }))
+  const { row } = read
   if (!row || !connecting(row.state)) return { result: { gone: true } }
   const seen = await currentCheck(env, row, refresh)
   let check = seen.check
@@ -643,6 +802,7 @@ export async function look(
     at: Date.now(),
     status: check.status,
     ready,
+    published_at: read.publishedAt,
   }
   // A failed read is no news: nothing stored moves, and the next look reads again.
   if (check.status === "unknown_error") return { result }
@@ -814,7 +974,7 @@ export async function activateDomain(
     return { ...claim, replaced }
   })
   if (!done) return false
-  await writePointer(env, kit, orgId, done.row.siteId, done.slug)
+  await writePointer(env, kit, orgId, done.row.siteId, done.slug, false)
   await setRoutes(env, claimHosts(done.row.name, done.row.cfIds as CfIds), true)
   for (const old of done.replaced) await stopServing(env, kit, orgId, old)
   return true
@@ -854,6 +1014,8 @@ export async function served(
   let google: "added" | "moved" | null = null
   let letGo = slug
   if (ready) {
+    // Only now do the slug host and the other half send visitors on.
+    await writePointer(env, kit, orgId, row.siteId, slug)
     google = await moveGoogle(env, kit, orgId, slug)
     if (replaced && google) {
       const moved = await moveGoogle(env, kit, orgId, replaced)
@@ -932,11 +1094,12 @@ export async function notServed(
  */
 export async function expireDomain(
   env: RouteEnv &
-    Pick<Env, "SITE_HOST_SUFFIX"> & { OPENROUTER_API_KEY?: string },
+    Pick<Env, "SITE_HOST_SUFFIX"> &
+    RoutesEnv & { OPENROUTER_API_KEY?: string },
   kit: Tenancy,
   orgId: string,
   domainId: string,
-  reason: "timeout" | "held"
+  reason: "timeout" | "held" | "unpublished"
 ): Promise<Say | null> {
   const found = await kit.withOrg({ orgId }, async (db) => {
     const claim = await readClaim(db, env, eq(domains.id, domainId))
@@ -955,9 +1118,23 @@ export async function expireDomain(
   })
   if (!found) return null
   await dropHostnames(env, found.row)
+  await dropHolding(env, orgId, hostsOf(found.row))
   const where = ` Your site stays on ${found.slug}.`
   const name = found.row.name
   const facts = { domain: name, site: found.slug }
+  const again: ServerButton = {
+    label: "Try again",
+    action: { kind: "ask", text: `Connect ${name} to my website again.` },
+  }
+  if (reason === "unpublished")
+    return {
+      key: `${domainId}:failed`,
+      text: await writeUpdate(env, kit, orgId, {
+        facts: { domain: name, days: "30" },
+        template: `Your website isn't published yet, so I've let go of ${name} for now. Ask me to connect it again whenever you're ready.`,
+      }),
+      button: again,
+    }
   return reason === "held"
     ? {
         key: `${domainId}:failed`,
@@ -972,10 +1149,7 @@ export async function expireDomain(
           facts: { ...facts, days: "3" },
           template: `I didn't see the records for ${name} within 3 days, so I've stopped watching.${where} Ask me again any time.`,
         }),
-        button: {
-          label: "Try again",
-          action: { kind: "ask", text: `Connect ${name} to my website again.` },
-        },
+        button: again,
       }
 }
 
@@ -1101,7 +1275,13 @@ export async function connect(
   const pointed = alreadyPointsAtUs(inspection)
   let claimed:
     | Refusal
-    | { id: string; created: boolean; needsTxt: boolean; ownership: unknown }
+    | {
+        id: string
+        created: boolean
+        needsTxt: boolean
+        ownership: unknown
+        published: boolean
+      }
   try {
     claimed = await kit.withOrg({ orgId }, async (db) => {
       // One connect per org at a time, so two cannot both count 2 pending and
@@ -1127,14 +1307,8 @@ export async function connect(
           "domain.in_use",
           `${name} is already live on this site.`
         )
-      if (held) return { ...held, created: false }
-      if (!(await activeDeployment(db, orgId)))
-        return refuse(
-          409,
-          "resource",
-          "site.not_published",
-          "Publish the site first, then connect a domain to it."
-        )
+      const published = (await firstPublished(db)) !== null
+      if (held) return { ...held, created: false, published }
       const [pending] = await db
         .select({ n: sql<number>`count(*)::int` })
         .from(domains)
@@ -1179,7 +1353,13 @@ export async function connect(
         type: "domain.connect_requested",
         payload: { domain_id: row.id, name, approval_id: approvalId },
       })
-      return { id: row.id, created: true, needsTxt, ownership: {} }
+      return {
+        id: row.id,
+        created: true,
+        needsTxt,
+        ownership: {},
+        published,
+      }
     })
   } catch (error) {
     if (pgCode(error) === "23505")
@@ -1192,6 +1372,11 @@ export async function connect(
     throw error
   }
   if ("refused" in claimed) return claimed
+  // Its current site stays up until ours is published: the change waits too.
+  const inUse = Object.values(inspection.hosts).some(
+    (h) => h.cname || h.a.length + h.aaaa.length > 0
+  )
+  const later = !claimed.published && inUse && !pointed
   let ownership = claimed.ownership as Ownership
   if (claimed.created) {
     // A guarded claim needs its hostnames now, for their TXT; claimed before
@@ -1219,7 +1404,12 @@ export async function connect(
     await kit.withOrg({ orgId }, (db) => syncTasks(db, orgId, { changes }))
     return {
       status,
-      output: ConnectDomainOutput.parse({ ...base, steps, ...link }),
+      output: ConnectDomainOutput.parse({
+        ...base,
+        steps,
+        ...link,
+        ...(later && { change_at_publish: true }),
+      }),
     }
   }
   if (!claimed.needsTxt) {
@@ -1544,16 +1734,25 @@ export async function repoint(
   orgId: string,
   domainId: string
 ): Promise<void> {
-  const claim = await kit.withOrg({ orgId }, (db) =>
-    readClaim(db, env, eq(domains.id, domainId))
-  )
+  const claim = await kit.withOrg({ orgId }, async (db) => {
+    const found = await readClaim(db, env, eq(domains.id, domainId))
+    return (
+      found && {
+        ...found,
+        deployed: !!(await activeDeployment(db, found.row.siteId)),
+      }
+    )
+  })
   if (!claim) return
   const { row, slug } = claim
   if (row.state === "removed") {
     // Only a domain that went live has pointers; a later live claim on the
-    // same name is put back by the `writePointer` below.
+    // same name is put back by the `writePointer` below. One removed before
+    // that may hold its coming-soon page.
     if (row.activatedAt) await dropDomainPointers(env, row.primaryHost, orgId)
+    else await dropHolding(env, orgId, hostsOf(row))
   } else if (row.state !== "active") return
+  if (!claim.deployed) return
   try {
     await writePointer(env, kit, orgId, row.siteId, slug)
   } catch (error) {
@@ -1581,15 +1780,21 @@ export async function sweepDomains(
   orgId: string,
   hour: string
 ): Promise<Say[]> {
-  const stale = new Date(Date.now() - DEADLINE_MS - 60 * MINUTE).toISOString()
-  const rows = await kit.withOrg({ orgId }, (db) =>
-    db
+  const now = Date.now()
+  const rows = await kit.withOrg({ orgId }, async (db) => {
+    const publishedAt = await firstPublished(db)
+    const held = await db
       .select()
       .from(domains)
       .where(
-        sql`${domains.state} = 'active' or (${domains.state} in ('awaiting_dns', 'verifying') and ${domains.origin} = 'connected' and ${domains.createdAt} < ${stale}::timestamptz)`
+        sql`${domains.state} = 'active' or (${domains.state} in ('awaiting_dns', 'verifying') and ${domains.origin} = 'connected')`
       )
-  )
+    return held.filter(
+      (row) =>
+        !connecting(row.state) ||
+        deadlineOf(row.createdAt.getTime(), publishedAt) + 60 * MINUTE < now
+    )
+  })
   const says: Say[] = []
   for (const row of rows) {
     if (connecting(row.state)) {
