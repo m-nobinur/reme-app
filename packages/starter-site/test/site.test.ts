@@ -7,6 +7,7 @@ import {
   QUOTE_TRAP_FIELD,
   SiteFields,
 } from "@workspace/contracts"
+import sharp from "sharp"
 import { beforeAll, describe, expect, test } from "vitest"
 import { layout, pageFields } from "../src/page-fields"
 import {
@@ -24,7 +25,7 @@ import {
   ROOT,
   readPages,
 } from "./build"
-import { FILLED, NO_PROOF } from "./fixture"
+import { FILLED, NO_PHOTOS, NO_PROOF } from "./fixture"
 import { ALLOWED, validateJsonLd } from "./jsonld"
 
 const REQUIRED_FACTS = [
@@ -678,18 +679,74 @@ describe("the head", () => {
     }
   })
 
-  test("every indexed page shows a picture and a large card when a link to it is shared", () => {
-    for (const page of pagesOf(filled).filter((p) => p.file !== "404.html")) {
-      const content = (attr: "name" | "property", key: string) =>
-        page.elements.find((el) => el.tag === "meta" && el.attrs[attr] === key)
-          ?.attrs.content
-      expect(content("property", "og:image"), page.file).toMatch(
-        new RegExp(`^${ORIGIN}/_astro/.+\\.jpg$`)
+  describe("the picture a shared link shows", () => {
+    let headed: Built | undefined
+    let bare: Built | undefined
+    beforeAll(async () => {
+      ;[headed, bare] = await Promise.all([
+        build({
+          site: {
+            ...FILLED,
+            aboutImage: "/uploads/about.jpg",
+            aboutImageAlt: "The team at the door",
+          },
+          // Unlike the grey stand-ins, which the build stores as one file.
+          files: {
+            "src/assets/uploads/about.jpg": await sharp({
+              create: {
+                width: 640,
+                height: 480,
+                channels: 3,
+                background: { r: 40, g: 90, b: 60 },
+              },
+            })
+              .jpeg()
+              .toBuffer(),
+          },
+        }),
+        build({ site: NO_PHOTOS }),
+      ])
+    }, 120_000)
+    const cards = (built: Built | undefined) =>
+      Object.fromEntries(
+        pagesOf(built)
+          .filter((p) => p.file !== "404.html")
+          .map((page) => {
+            const content = (attr: "name" | "property", key: string) =>
+              page.elements.find(
+                (el) => el.tag === "meta" && el.attrs[attr] === key
+              )?.attrs.content
+            return [
+              page.file,
+              {
+                image: content("property", "og:image"),
+                card: content("name", "twitter:card"),
+              },
+            ]
+          })
       )
-      expect(content("name", "twitter:card"), page.file).toBe(
-        "summary_large_image"
+
+    test("is the page's header photo, else the hero's, on a large card", () => {
+      const pages = cards(headed)
+      const photo = new RegExp(`^${ORIGIN}/_astro/.+\\.jpg$`)
+      for (const [file, { image, card }] of Object.entries(pages)) {
+        expect(image, file).toMatch(photo)
+        expect(card, file).toBe("summary_large_image")
+      }
+      expect(pages["about/index.html"].image).not.toBe(
+        pages["index.html"].image
       )
-    }
+      expect(pages["contact/index.html"].image).toBe(pages["index.html"].image)
+    })
+
+    test("is the site's mark on a small card on a site with no photo", () => {
+      for (const [file, { image, card }] of Object.entries(cards(bare))) {
+        expect(image, file).toMatch(
+          new RegExp(`^${ORIGIN}/_astro/icon-512\\.\\w+\\.png$`)
+        )
+        expect(card, file).toBe("summary")
+      }
+    })
   })
 })
 

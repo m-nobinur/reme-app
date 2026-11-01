@@ -535,6 +535,40 @@ function leastUsed(
   return candidates.reduce((best, d) => (uses(d) < uses(best) ? d : best))
 }
 
+const paletteUses = (id: string, recent: readonly RecentDesign[]) =>
+  recent.filter((r) => r.palette === id).length
+
+/** The direction's palette recent sites used least, the first such in its order. */
+function leastUsedPalette(
+  direction: DesignDirection,
+  recent: readonly RecentDesign[]
+): DesignDirection["palettes"][number] {
+  return direction.palettes.reduce((best, id) =>
+    paletteUses(id, recent) < paletteUses(best, recent) ? id : best
+  )
+}
+
+/**
+ * The plan with a palette fewer recent sites in the industry share: when the
+ * owner picked none and the plan's preset is used more than the direction's
+ * least used, that one instead, so two businesses in a trade do not look alike.
+ */
+function unsharedPalette(
+  blueprint: Blueprint,
+  facts: readonly FactRecord[],
+  recent: readonly RecentDesign[],
+  library: readonly DesignDirection[]
+): Blueprint {
+  const direction = library.find((d) => d.id === blueprint.direction)
+  const { palette } = blueprint
+  if (!direction || palette.kind !== "preset" || ownerChoices(facts).palette)
+    return blueprint
+  const least = leastUsedPalette(direction, recent)
+  return paletteUses(least, recent) < paletteUses(palette.id, recent)
+    ? { ...blueprint, palette: { kind: "preset", id: least } }
+    : blueprint
+}
+
 const PURPOSE: Record<PlannedKind, string> = {
   hero: "Says what the business does and where, with the call to action",
   trust_strip: "Short proof lines, only from what the owner told us",
@@ -993,7 +1027,7 @@ export function fallbackBlueprint(input: {
   const fonts = owner.fonts ?? direction.fonts
   const palette = owner.palette ?? {
     kind: "preset" as const,
-    id: direction.palettes[0] as (typeof direction.palettes)[number],
+    id: leastUsedPalette(direction, recent),
   }
   const pairLabel = FONT_PAIRS.find((p) => p.id === fonts)?.label ?? fonts
   const colours =
@@ -1338,7 +1372,12 @@ export async function plan(input: {
       if (!parsed.success) {
         throw new Error(z.prettifyError(parsed.error).slice(0, 2000))
       }
-      const blueprint = withOwnerChoices(parsed.data, input.facts)
+      const blueprint = unsharedPalette(
+        withOwnerChoices(parsed.data, input.facts),
+        input.facts,
+        input.recent,
+        library
+      )
       const wrong = problems(blueprint, { facts: input.facts, library })
       if (wrong.length > 0) throw new Error(wrong.join("\n"))
       return { blueprint, source: "model", calls, errors }

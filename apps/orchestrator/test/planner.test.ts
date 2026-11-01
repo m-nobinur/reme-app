@@ -5,6 +5,7 @@ import {
   PALETTES,
   SECTION_VARIANTS,
 } from "@workspace/contracts"
+import type { RecentDesign } from "@workspace/db"
 import { describe, expect, it, vi } from "vitest"
 
 import { blueprintLayout, blueprintLines } from "../src/blueprint.ts"
@@ -240,7 +241,12 @@ describe("the fallback Blueprint", () => {
       { ...STAND_IN_DIRECTIONS[0], id: "bright_local" } as DesignDirection,
     ]
     const recent = [
-      { direction: "calm_daylight", hero: "wash", services: "photo_cards" },
+      {
+        direction: "calm_daylight",
+        hero: "wash",
+        services: "photo_cards",
+        palette: "forest",
+      },
     ]
     expect(
       fallbackBlueprint({ facts: CLEANING, recent, library: two }).direction
@@ -1071,6 +1077,39 @@ describe("planning a build", () => {
     expect(made.blueprint.palette).toEqual({ kind: "preset", id: "sage" })
   })
 
+  it("gives two businesses in one trade different palettes unless the owner picked one", async () => {
+    const planFor = async (facts: FactRecord[], designs: RecentDesign[]) =>
+      (
+        await plan({
+          complete: scripted([replyFor(CLEANING)]).complete,
+          route: ROUTE,
+          sessionId: "s",
+          facts,
+          recent: designs,
+          previous: null,
+          library: LIBRARY,
+        })
+      ).blueprint
+    const first = await planFor(CLEANING, [])
+    if (first.palette.kind !== "preset") throw new Error("not a preset")
+    const recent = [
+      {
+        direction: first.direction,
+        hero: null,
+        services: null,
+        palette: first.palette.id,
+      },
+    ]
+    const other = business("cleaning", "Other Co (fictional)")
+    const second = await planFor(other, recent)
+    expect(second.palette).not.toEqual(first.palette)
+    expect(
+      fallbackBlueprint({ facts: other, recent, library: LIBRARY }).palette
+    ).not.toEqual(first.palette)
+    const picked = [...other, fact("site.palette", { id: first.palette.id })]
+    expect((await planFor(picked, recent)).palette).toEqual(first.palette)
+  })
+
   it("re-plans from the current Blueprint and the owner's words, and keeps it on failure", async () => {
     const current = fallbackBlueprint({
       facts: CLEANING,
@@ -1096,8 +1135,18 @@ describe("planning a build", () => {
 describe("the prompt", () => {
   it("puts the stable parts in the system part and the diversity note last", () => {
     const recent = [
-      { direction: "calm_daylight", hero: "wash", services: "photo_cards" },
-      { direction: "calm_daylight", hero: "wash", services: "photo_cards" },
+      {
+        direction: "calm_daylight",
+        hero: "wash",
+        services: "photo_cards",
+        palette: "forest",
+      },
+      {
+        direction: "calm_daylight",
+        hero: "wash",
+        services: "photo_cards",
+        palette: "forest",
+      },
     ]
     const a = plannerPrompt({
       facts: CLEANING,

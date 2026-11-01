@@ -52,6 +52,13 @@ import {
 /** The most one run may move the key's usage. */
 const SPEND_CAP_USD = 0.4
 
+/** `COS_CASES`, a comma list of case names, narrows a run to those cases. */
+// biome-ignore lint/suspicious/noUndeclaredEnvVars: not read by any turbo task
+export const ONLY = process.env.COS_CASES?.split(",").map((name) => name.trim())
+const chosen = (cases) =>
+  ONLY ? cases.filter((kase) => ONLY.includes(kase.name)) : cases
+const gated = chosen(GATED)
+
 /**
  * How far the logged sum may sit from the bill: 5%, and never under a tenth
  * of a cent. Eleven turns bill a few cents, so 5% of that is less than one
@@ -270,14 +277,23 @@ async function storedParts(call, id) {
 
 /** One case in a new conversation: each owner turn, what came back, and how it ended. */
 async function runCase(call, kase) {
+  if (kase.facts) {
+    const stated = await call("POST", "/facts", { facts: kase.facts })
+    if (!stated.ok) {
+      console.error(
+        `      skipped ${kase.name}: its facts were refused (${stated.status})`
+      )
+      return []
+    }
+  }
   const made = await call("POST", "/conversations", {})
   if (made.status !== 201)
     throw new Error(`POST /conversations: ${made.status}`)
   const { id } = await made.json()
   const turns = []
   for (const owner of kase.turns) {
+    if (owner.wait) await sleep(owner.wait * 1000)
     if (owner.read) {
-      await sleep(owner.wait * 1000)
       turns.push({
         owner,
         parts: await storedParts(call, id),
@@ -429,11 +445,16 @@ export async function liveRun({ pending = false } = {}) {
         }
       }
     }
-    await runCases(GATED)
+    await runCases(gated)
     // The run approved nothing, so every one of these is unapproved. Counted
     // before the pending cases, whose builds settle and are cancelled.
     run.builds = (await builds(call)).count
-    if (pending && !run.stopped) await runCases(CASES.filter((c) => c.pending))
+    if (pending && !run.stopped)
+      await runCases(
+        chosen(CASES.filter((c) => c.pending)).toSorted(
+          (a, b) => Boolean(a.facts) - Boolean(b.facts)
+        )
+      )
     run.spentUsd = await spentSince(before)
     // biome-ignore lint/suspicious/noUndeclaredEnvVars: not read by any turbo task
     const url = process.env.E2E_DATABASE_URL
@@ -468,7 +489,7 @@ export default async function cosLive(given) {
     return
   }
   const run = given ?? (await liveRun())
-  const rows = GATED.map((kase) => {
+  const rows = gated.map((kase) => {
     const ran = run.cases.find((c) => c.name === kase.name)
     const turns = (ran?.turns ?? []).map((t) => ({
       outcome: t.outcome,
@@ -490,7 +511,7 @@ export default async function cosLive(given) {
   const lines = [
     "## Tier 2: Chief of Staff on staging",
     "",
-    `${green.length} of ${GATED.length} cases, ${fabrications.length} fabrications, ${run.builds ?? "unknown"} unapproved builds, key usage moved $${run.spentUsd.toFixed(4)} (cap $${SPEND_CAP_USD.toFixed(2)}).`,
+    `${green.length} of ${gated.length} cases, ${fabrications.length} fabrications, ${run.builds ?? "unknown"} unapproved builds, key usage moved $${run.spentUsd.toFixed(4)} (cap $${SPEND_CAP_USD.toFixed(2)}).`,
     run.bill.line,
     "",
     "| Case | Tools per turn | Result |",
@@ -511,8 +532,8 @@ export default async function cosLive(given) {
   }
   const failures = [
     run.stopped,
-    green.length < GATED.length &&
-      `${green.length} of ${GATED.length} cases passed`,
+    green.length < gated.length &&
+      `${green.length} of ${gated.length} cases passed`,
     fabrications.length > 0 && `${fabrications.length} fabrication(s)`,
     run.builds !== 0 && `${run.builds ?? "unknown"} unapproved build(s)`,
     run.bill.off && "the logged sum is not within 5% of the bill",

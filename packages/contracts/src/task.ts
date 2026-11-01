@@ -11,6 +11,18 @@ import { Text } from "./text.ts"
 /** What a task is for: the site's own address, or Google Search Console. */
 export const TaskKind = z.enum(["address", "google"])
 
+/**
+ * A tip the assistant offers once: the site shows a personal email address,
+ * or a phone number from another part of the country than the business.
+ */
+export const TipKind = z.enum(["business_email", "local_phone"])
+
+/** The tips given so far, a private fact: each kind is offered once, ever. */
+export const TIPS_KEY = "assistant.tips"
+export const Tips = z.strictObject({
+  given: z.array(TipKind).max(TipKind.options.length),
+})
+
 /** `later` is put off until `later_until`; `declined` is the owner saying no. */
 export const TaskState = z.enum(["active", "done", "declined", "later"])
 
@@ -121,6 +133,7 @@ export const OwnerTask = z.discriminatedUnion("kind", [
 ])
 
 export type TaskKind = z.infer<typeof TaskKind>
+export type TipKind = z.infer<typeof TipKind>
 export type TaskState = z.infer<typeof TaskState>
 export type TaskStepState = z.infer<typeof TaskStepState>
 export type TaskBlockedOn = z.infer<typeof TaskBlockedOn>

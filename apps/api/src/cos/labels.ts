@@ -198,6 +198,7 @@ export function workspaceLabels(workspace: CosWorkspace) {
         ),
       })),
     }),
+    ...(workspace.tips?.length && { tips: workspace.tips }),
     // The one list of what the owner has to do, as the panel shows it.
     ...(waiting?.length && {
       waiting_on_owner: waiting.map((w) => w.title),

@@ -92,7 +92,7 @@ const INTERNALS =
   /\/(?:workspace|opt|tmp)\b|\bgit\b|\brepository\b|\bsandbox\b|\bcontainer\b|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/i
 
 /** Keys the owner picks or confirms elsewhere, never types: no question asks for one. */
-const PICKED: readonly string[] = [
+export const PICKED: readonly string[] = [
   ...CHOICE_FACT_KEYS,
   ...REVIEW_FACT_KEYS,
   ...CONTENT_FACT_KEYS,

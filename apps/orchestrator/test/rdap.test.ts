@@ -59,6 +59,19 @@ describe("rdapLookup", () => {
     })
   })
 
+  // #530: a registry knows the domain, never a host under it.
+  it("asks about a subdomain's registered domain", async () => {
+    stub({
+      "https://data.iana.org/rdap/dns.json": bootstrap,
+      "https://rdap.nominet.uk/uk/domain/sparkleclean.co.uk": () =>
+        Response.json(registrar("123-Reg Limited t/a 123-reg")),
+    })
+    expect(await rdapLookup("book.sparkleclean.co.uk")).toEqual({
+      registered: true,
+      registrar: "123-reg",
+    })
+  })
+
   it("reads 404 as free", async () => {
     stub({
       "https://data.iana.org/rdap/dns.json": bootstrap,

@@ -17,6 +17,7 @@ import {
   openTask,
   orgs,
   readTasks,
+  readTipsGiven,
   reminders,
   setStep,
   sql,
@@ -497,6 +498,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         missing_facts: expect.any(Array),
         domains: [],
         tasks: [],
+        tips: [],
         waiting: [],
         reminders: [],
         // No Stripe keys in the test env: purchases are off, so none is offered.
@@ -3233,6 +3235,34 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(await kit.withOrg({ orgId: fresh.orgId }, readTasks)).toHaveLength(
         2
       )
+    })
+  })
+
+  describe("put_off, for a tip", () => {
+    it("remembers the tip for good, makes no task, and keeps the others", async () => {
+      const fresh = await owner(kit, url as string, "cos-put-off-tip")
+      const at = { orgId: fresh.orgId }
+      const output = kept(
+        "put_off",
+        await putOff(context(fresh), { kind: "local_phone", days: 3 })
+      )
+      expect(output).toMatchObject({ outcome: "put_off" })
+      await putOff(context(fresh), { kind: "business_email" })
+      await putOff(context(fresh), { kind: "local_phone" })
+      expect(await kit.withOrg(at, readTipsGiven)).toEqual([
+        "local_phone",
+        "business_email",
+      ])
+      expect(await kit.withOrg(at, readTasks)).toEqual([])
+    })
+
+    it("lists no tip in the workspace of a site that is not live", async () => {
+      const fresh = await owner(kit, url as string, "cos-tips-not-live")
+      const workspace = kept(
+        "get_workspace",
+        await getWorkspace(context(fresh), {})
+      )
+      expect(workspace.tips).toEqual([])
     })
   })
 

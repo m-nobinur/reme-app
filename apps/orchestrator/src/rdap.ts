@@ -1,4 +1,4 @@
-import { DomainError } from "./domains.ts"
+import { DomainError, registrableOf } from "./domains.ts"
 
 /**
  * RDAP, the registries' public answer to "is this name registered, and who
@@ -73,16 +73,17 @@ function registrarOf(body: {
 /**
  * Whether `name` is registered and with whom. Null when IANA lists no RDAP
  * server for its ending, so the caller falls back on DNS. Throws
- * `rdap.unavailable` for a server that is down or rate-limiting.
- *
- * shortcut: asks about the name as given, so a subdomain reads as free; the
- * callers pass an owner's domain, not a host under it. Reduce to the
- * registrable name with the public suffix list if that ever bites.
+ * `rdap.unavailable` for a server that is down or rate-limiting. A host
+ * under a domain is asked about as that domain: a registry knows
+ * sparkleclean.co.uk, never book.sparkleclean.co.uk (#530).
  */
 export async function rdapLookup(name: string): Promise<Registration | null> {
-  const base = await registryOf(name)
+  const domain = registrableOf(name)
+  const base = await registryOf(domain)
   if (!base) return null
-  const response = await cachedGet(`${base}domain/${encodeURIComponent(name)}`)
+  const response = await cachedGet(
+    `${base}domain/${encodeURIComponent(domain)}`
+  )
   if (response.status === 404) {
     await response.body?.cancel()
     return { registered: false }

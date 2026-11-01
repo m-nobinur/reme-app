@@ -2,6 +2,9 @@ import {
   PRIVATE_FACT_KEYS,
   STAFF_CORRECTIONS_KEY,
   StaffCorrections,
+  TIPS_KEY,
+  type TipKind,
+  Tips,
 } from "@workspace/contracts"
 import { eq, sql } from "drizzle-orm"
 import { facts } from "./schema.ts"
@@ -135,6 +138,33 @@ export async function readCorrections(
 ): Promise<StaffCorrections> {
   const row = await currentFact(db, STAFF_CORRECTIONS_KEY)
   return StaffCorrections.safeParse(row?.value).data ?? { lines: [] }
+}
+
+/** The tips already given; none when unreadable. */
+export async function readTipsGiven(db: OrgScopedDb): Promise<TipKind[]> {
+  const row = await currentFact(db, TIPS_KEY)
+  return Tips.safeParse(row?.value).data?.given ?? []
+}
+
+/** Marks a tip as given, so it is never offered again. */
+export async function recordTip(
+  db: OrgScopedDb,
+  orgId: string,
+  kind: TipKind
+): Promise<void> {
+  // The lock `writeVersion` takes, held from the read so two tips cannot lose one.
+  await db.execute(
+    sql`select pg_advisory_xact_lock(5, hashtext(${`${orgId}:${TIPS_KEY}`}::text))`
+  )
+  const given = await readTipsGiven(db)
+  if (given.includes(kind)) return
+  await supersedePrivateFact(db, {
+    orgId,
+    key: TIPS_KEY,
+    factType: "owner",
+    value: { given: [...given, kind] },
+    provenance: { source: "inferred", confidence: 1 },
+  })
 }
 
 /** One key's versions, newest first. */

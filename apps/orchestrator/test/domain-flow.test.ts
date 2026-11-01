@@ -608,6 +608,20 @@ describe("inspecting a name the owner has", () => {
     })
   })
 
+  // #530: book.<domain> read as unregistered, because the registry was asked about the host.
+  it("reads a subdomain as its registered domain's, with that domain's registrar", async () => {
+    noCache()
+    stubNet({
+      [BOOTSTRAP]: registry,
+      [`${RDAP}/${NAME}`]: held("123-Reg Limited t/a 123-reg"),
+    })
+    expect(await inspectDomain(`book.${NAME}`)).toMatchObject({
+      name: `book.${NAME}`,
+      registered: true,
+      registrar: "123-reg",
+    })
+  })
+
   it("never names a wholesale registrar, and hints at nameservers the registry lacks", async () => {
     const plain = "plainclean.co.uk"
     noCache()

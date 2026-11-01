@@ -22,7 +22,8 @@ props:
     type: "{ src: string; alt: string }"
     required: false
     description: "The picture a link to the page shows: the page's header photo.
-      Without one, the home hero's."
+      Without one, the home hero's, else the site's mark, which shows the logo
+      when there is one."
 constraints:
   - The Base layout renders it; a page passes these props to Base.
   - JSON-LD comes from src/structured-data.ts and is LocalBusiness, Service,

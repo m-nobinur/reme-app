@@ -650,7 +650,7 @@ async function tieBreak(
  * shortcut: knows a two-letter ending's common second levels only; use the
  * public suffix list if a host is ever cut wrong.
  */
-function registrableOf(host: string): string {
+export function registrableOf(host: string): string {
   const labels = bare(host).split(".")
   const second = labels.at(-2) ?? ""
   const keep =

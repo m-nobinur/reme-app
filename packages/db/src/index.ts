@@ -46,6 +46,8 @@ export {
   currentFacts,
   factVersions,
   readCorrections,
+  readTipsGiven,
+  recordTip,
   supersedeFact,
   supersedePrivateFact,
 } from "./facts.ts"
