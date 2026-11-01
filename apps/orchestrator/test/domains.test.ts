@@ -77,7 +77,7 @@ describe("provider detection", () => {
       provider: {
         id: "123-reg",
         name: "123-reg",
-        settings_url: "https://www.123-reg.co.uk/secure/",
+        settings_url: "https://www.123-reg.co.uk/secure/cpanel/domain/overview",
       },
     })
   })
@@ -97,7 +97,11 @@ describe("provider detection", () => {
   })
 
   it.each([
-    ["ns.123-reg.co.uk", "123-reg", "https://www.123-reg.co.uk/secure/"],
+    [
+      "ns.123-reg.co.uk",
+      "123-reg",
+      "https://www.123-reg.co.uk/secure/cpanel/domain/overview",
+    ],
     [
       "ns1043.ui-dns.com",
       "ionos",
@@ -112,9 +116,15 @@ describe("provider detection", () => {
     [
       "ns1.dns-parking.com",
       "hostinger",
-      "https://hpanel.hostinger.com/domains",
+      "https://hpanel.hostinger.com/domain/plain.co.uk/dns",
     ],
-    ["ns1.vercel-dns.com", "vercel", "https://vercel.com/dashboard/domains"],
+    ["ns1.vercel-dns.com", "vercel", "https://vercel.com/~/domains"],
+    [
+      "ns51.worldnic.com",
+      "network-solutions",
+      "https://www.networksolutions.com/my-account/domain-center",
+    ],
+    ["ns0.transip.net", "transip", "https://www.transip.eu/cp/domain-hosting/"],
     [
       "ns-1982.awsdns-55.co.uk",
       "route-53",
@@ -1079,9 +1089,9 @@ describe("Domain Connect apply page", () => {
   })
 
   it("names GoDaddy's page once GoDaddy says our template is live there", async () => {
-    const GODADDY_TEMPLATE =
+    const GODADDY =
       "https://domainconnect.api.godaddy.com/v2/domainTemplates/providers/remeai.co.uk/services/website"
-    stubNet({ [GODADDY_TEMPLATE]: () => new Response(null, { status: 200 }) })
+    stubNet({ [GODADDY]: () => new Response(null, { status: 200 }) })
     expect(await applyBase("sparklecleanbristol.co.uk")).toBe(
       "dcc.godaddy.com/manage"
     )

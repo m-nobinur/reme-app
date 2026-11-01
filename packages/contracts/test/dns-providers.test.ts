@@ -74,6 +74,28 @@ describe("the DNS provider registry", () => {
     )
   })
 
+  it.each([
+    ["hostinger", "https://hpanel.hostinger.com/domain/bnwise.tech/dns"],
+    ["porkbun", "https://porkbun.com/account/dns/bnwise.tech"],
+    [
+      "namesilo",
+      "https://www.namesilo.com/account_domain_manage_dns.php?domain=bnwise.tech",
+    ],
+    [
+      "spaceship",
+      "https://www.spaceship.com/application/advanced-dns-application/manage/bnwise.tech/",
+    ],
+    [
+      "digitalocean",
+      "https://cloud.digitalocean.com/networking/domains/bnwise.tech",
+    ],
+    ["ovh", "https://manager.eu.ovhcloud.com/#/web/domain/bnwise.tech/zone"],
+    ["name-com", "https://www.name.com/account/domain/details/bnwise.tech#dns"],
+    ["hover", "https://www.hover.com/control_panel/domain/bnwise.tech/dns"],
+  ])("links %s to the domain's own DNS page", (id, link) => {
+    expect(dnsProvider(id)?.settingsUrl("bnwise.tech")).toBe(link)
+  })
+
   it("reads a registrar as RDAP spells it", () => {
     expect(
       registrarIn("Squarespace Domains II LLC", ["Squarespace Domains"])
