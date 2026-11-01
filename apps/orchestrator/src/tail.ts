@@ -1,6 +1,8 @@
 import {
   DeploymentManifest,
+  DOCUMENTS_KEY,
   type FactRecord,
+  SiteDocuments,
   siteHost,
 } from "@workspace/contracts"
 import {
@@ -11,9 +13,17 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import { CUSTOM_CHECK, limit } from "@workspace/gates"
+import {
+  blockChanges,
+  missingOwnerContent,
+  readDocuments,
+  redirectsFor,
+  routeOf,
+} from "./change.ts"
+import { DOCUMENTS_DIR } from "./documents.ts"
 import { SITE_ROOT } from "./revise.ts"
 import { QUOTE_FORM_FILE, quoteFormFile } from "./seed.ts"
-import { recordTextChanges } from "./text-changes.ts"
+import { changeBase, recordTextChanges } from "./text-changes.ts"
 import { since } from "./timing.ts"
 
 /**
@@ -68,8 +78,16 @@ type DistBucket = {
   put: (key: string, value: Uint8Array | ArrayBuffer) => Promise<unknown>
 }
 
-/** An earlier revision's artifact: where its files are and the hash of each. */
-export type Previous = { base: string; files: Record<string, string> }
+/** An earlier revision's artifact: where its files are and the hash of each, its routes and its redirects. */
+export type Previous = {
+  base: string
+  files: Record<string, string>
+  paths?: string[]
+  redirects?: Record<string, string>
+}
+
+/** Where the sitemap reads each page's last change, by route; the platform's, written before every build. */
+export const LASTMOD_FILE = "src/content/lastmod.json"
 
 /**
  * The site's newest earlier revision whose manifest is still in R2, or null.
@@ -103,6 +121,8 @@ async function previousArtifact(
       return {
         base: manifestKey.replace(/manifest\.json$/, ""),
         files: parsed.data.files,
+        paths: parsed.data.routes.map((r) => r.path),
+        redirects: parsed.data.redirects ?? {},
       }
   }
   return null
@@ -379,6 +399,17 @@ export async function finishRevision(input: {
     `${SITE_ROOT}/${QUOTE_FORM_FILE}`,
     quoteFormFile(input.facts)
   )
+  const documents = await steps.do("documents", () =>
+    recordDocuments({ run, sandbox, kit, sites, orgId, assignmentId })
+  )
+  const dropped = documents.json
+    ? missingOwnerContent(input.facts, JSON.parse(documents.json))
+    : []
+  if (dropped.length > 0) {
+    throw new Error(
+      `The owner's own words for the site (site.content ${dropped.join(", ")}) are missing or reworded in the page documents. Put each back word for word as an owner block, then report again.`
+    )
+  }
   const check = await steps.do("astro check", async (): Promise<Check> => {
     const started = Date.now()
     const r = await run(tailed("./node_modules/.bin/astro check"))
@@ -471,10 +502,17 @@ export async function finishRevision(input: {
       site_id: orgId,
       org_id: orgId,
       routes: uploaded.routes,
+      redirects: redirectsFor(
+        previous?.paths ?? [],
+        uploaded.routes.map((r) => r.path),
+        previous?.redirects
+      ),
       headers: siteHeaders(await inlineScriptHashes(pages.stdout)),
       files: uploaded.files,
       built_at: new Date().toISOString(),
     })
+    if (documents.json)
+      await sites.put(`${prefix}${DOCUMENTS_KEY}`, documents.json)
     await sites.put(`${prefix}manifest.json`, JSON.stringify(parsed))
     return {
       files: Object.keys(uploaded.files).length,
@@ -501,7 +539,71 @@ export async function finishRevision(input: {
     return { key: `${prefix}source.tar.zst`, ms: since(started) }
   })
 
-  return { revisionId, check, build, manifest, custom, source, text }
+  return {
+    revisionId,
+    check,
+    build,
+    manifest,
+    custom,
+    source,
+    text: { ...text, ...(documents.blocks && { blocks: documents.blocks }) },
+  }
+}
+
+/**
+ * The page documents as this build leaves them, and what changed in them
+ * since the revision the change started from, read before the build so the
+ * sitemap's lastmod can name the pages that changed. A base from before
+ * documents were uploaded records no blocks. Never throws: a record that
+ * could not be read must not fail the build it describes.
+ */
+async function recordDocuments(input: {
+  run: (command: string) => Promise<{ exitCode: number; stdout: string }>
+  sandbox: Pick<TailSandbox, "readFileBuffer" | "writeFile">
+  kit: Tenancy
+  sites: R2Bucket
+  orgId: string
+  assignmentId: string
+}) {
+  const { run, sandbox, kit, sites, orgId } = input
+  const read = async (path: string) =>
+    new TextDecoder().decode(
+      await sandbox.readFileBuffer(`${SITE_ROOT}/${path}`)
+    )
+  try {
+    const listed = await run(
+      `find ${DOCUMENTS_DIR} -name '*.json' -type f 2>/dev/null | sort`
+    )
+    const docs = await readDocuments(
+      listed.stdout.split("\n").filter(Boolean),
+      read
+    )
+    if (Object.keys(docs).length === 0) return { json: null, blocks: null }
+    const base = await kit.withOrg({ orgId }, (db) => changeBase(db, input))
+    const stored = base
+      ? await sites.get(`sites/${orgId}/${base}/${DOCUMENTS_KEY}`)
+      : null
+    const was = stored
+      ? SiteDocuments.safeParse(await stored.json().catch(() => null)).data
+      : undefined
+    const blocks = was ? blockChanges(was, docs) : null
+    const today = new Date().toISOString().slice(0, 10)
+    const stamped: Record<string, string> = JSON.parse(
+      await read(LASTMOD_FILE).catch(() => "{}")
+    )
+    for (const page of Object.keys(docs)) {
+      const route = routeOf(page)
+      if (!stamped[route] || blocks?.some((b) => b.page === page))
+        stamped[route] = today
+    }
+    await sandbox.writeFile(
+      `${SITE_ROOT}/${LASTMOD_FILE}`,
+      `${JSON.stringify(stamped, null, 2)}\n`
+    )
+    return { json: JSON.stringify(docs), blocks }
+  } catch {
+    return { json: null, blocks: null }
+  }
 }
 
 /**

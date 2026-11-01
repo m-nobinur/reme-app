@@ -34,7 +34,35 @@ const GET_CHANGE = {
   live_now: false,
   published_at: null,
   recorded: true,
-  recent: [{ ref: REVISION, label: null, state: "live", at: NOW }],
+  edit_type: "update_content",
+  targets: [{ page: "home", section: "hero" }],
+  checks: [
+    {
+      check: "The home page hero reads Spotless homes, every visit",
+      passed: true,
+      why: "The hero heading on home is Spotless homes, every visit.",
+    },
+  ],
+  blocks: [
+    {
+      page: "home",
+      section: "hero",
+      block: null,
+      change: "changed",
+      before: "We clean houses",
+      after: "Spotless homes, every visit",
+    },
+  ],
+  recent: [
+    {
+      ref: REVISION,
+      label: null,
+      state: "live",
+      at: NOW,
+      edit_type: null,
+      pages: [],
+    },
+  ],
 }
 
 const SITE_REVIEW = {

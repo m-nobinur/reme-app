@@ -57,6 +57,10 @@ export const DeploymentManifest = z.strictObject({
   headers: z.record(z.string().min(1), z.string()),
   /** File under the artifact prefix to its sha256, hex. */
   files: z.record(z.string().min(1), z.string().regex(/^[0-9a-f]{64}$/)),
+  /** A removed page's old path to where it went, answered with a 301. */
+  redirects: z
+    .record(z.string().regex(/^\/.*\/$/), z.string().regex(/^\/.*\/$/))
+    .optional(),
   /** Stamped by the orchestrator, never by the sandbox clock (§13). */
   built_at: Timestamp,
 })

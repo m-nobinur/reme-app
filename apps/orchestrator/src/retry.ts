@@ -7,6 +7,8 @@ import {
   type BuildStopCause,
   BuildSummary,
   buildFailure,
+  CHANGE_CHECKED,
+  ChangeChecked,
   CompletionReport,
   dashesToCommas,
   type GateName,
@@ -145,7 +147,38 @@ function plannedPages(blueprint: unknown) {
 
 /** What a change says about itself: the owner's short name for it, and the new words of a copy change. */
 /** `nearest` when the build says it could not make the change as asked. */
-export type Change = { label?: string; words?: string; nearest?: true }
+/** `missed` names the brief's checks the built pages still fail; `lines` says what changed, from the text changes. */
+export type Change = {
+  label?: string
+  words?: string
+  nearest?: true
+  missed?: string[]
+  lines?: string[]
+}
+
+const LINES_MAX = 4
+const quoted = (text: string) =>
+  `"${text.length > 60 ? `${text.slice(0, 57).trimEnd()}...` : text}"`
+const onPage = (pages: readonly string[]) => {
+  const page = pages[0] ?? "/"
+  const name =
+    page === "/" ? "Home" : page.replace(/^\/|\/$/g, "").replace(/[-/]/g, " ")
+  return `on ${name.charAt(0).toUpperCase()}${name.slice(1)}`
+}
+
+/** What a change did, in plain words, one line per text change, at most four. */
+export const changeLines = (
+  pairs: readonly { before: string; after: string; pages: string[] }[]
+): string[] =>
+  pairs
+    .slice(0, LINES_MAX)
+    .map(({ before, after, pages }) =>
+      !before
+        ? `Added ${quoted(after)} ${onPage(pages)}`
+        : !after
+          ? `Took off ${quoted(before)} ${onPage(pages)}`
+          : `Changed ${quoted(before)} to ${quoted(after)} ${onPage(pages)}`
+    )
 
 /** The same assignment always reads the same wording, so a replayed step posts what the first did. */
 const pick = <T>(seed: string, variants: readonly T[]) =>
@@ -162,19 +195,24 @@ const pick = <T>(seed: string, variants: readonly T[]) =>
 export function readyText(
   kind: string,
   blueprint: unknown,
-  { label, words, nearest }: Change = {},
+  { label, words, nearest, missed, lines = [] }: Change = {},
   seed = ""
 ): string {
   if (kind === "site.revise") {
+    const list =
+      lines.length > 0 ? `\n${lines.map((l) => `- ${l}`).join("\n")}` : ""
     // Never claim a change the build made somewhere else instead.
     if (nearest) {
-      return `I couldn't change ${label ?? "that"} exactly as you asked, so I made the nearest change I could. Have a look, and tell me if you'd like it done another way.`
+      return `I couldn't change ${label ?? "that"} exactly as you asked, so I made the nearest change I could. Have a look, and tell me if you'd like it done another way.${list}`
+    }
+    if (missed?.length) {
+      return `I've made the change to ${label ?? "your site"}, but this part didn't come out as asked: ${missed[0]}. Have a look, and tell me if you'd like me to try again.${list}`
     }
     if (!label) {
-      return "Your changes are ready. Have a look below."
+      return `Your changes are ready. Have a look below.${list}`
     }
     const next = "Have a look, and publish when you're happy."
-    return pick(
+    return `${pick(
       seed,
       words
         ? [
@@ -186,7 +224,7 @@ export function readyText(
             `All done, I've updated ${label}. ${next}`,
             `I've made the change to ${label}. ${next}`,
           ]
-    )
+    )}${list}`
   }
   const next = "Have a look below."
   const { named, each, sections } = plannedPages(blueprint)
@@ -261,7 +299,7 @@ async function changeOf(db: OrgScopedDb, ids: Ids): Promise<Change> {
     .select({ type: events.type, payload: events.payload })
     .from(events)
     .where(
-      sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} in ('assignment.created', 'assignment.completion_reported', ${QUICK_EDITED})`
+      sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} in ('assignment.created', 'assignment.completion_reported', ${QUICK_EDITED}, ${CHANGE_CHECKED})`
     )
     .orderBy(sql`${events.eventId} desc`)
   const payload = (type: string) => rows.find((r) => r.type === type)?.payload
@@ -269,11 +307,21 @@ async function changeOf(db: OrgScopedDb, ids: Ids): Promise<Change> {
     payload("assignment.created")?.label
   ).data
   const words = payload(QUICK_EDITED)?.words
-  const asAsked = payload("assignment.completion_reported")?.as_asked
+  const report = payload("assignment.completion_reported")
+  const asAsked = report?.as_asked
+  const missed = (
+    ChangeChecked.safeParse(payload(CHANGE_CHECKED)).data?.checks ?? []
+  ).flatMap((c) => (c.passed ? [] : [c.check]))
+  const lines = changeLines(
+    CompletionReport.shape.text_changes.safeParse(report?.text_changes).data ??
+      []
+  )
   return {
     ...(label && { label }),
     ...(typeof words === "string" && { words }),
     ...(asAsked === false && { nearest: true as const }),
+    ...(missed.length > 0 && { missed }),
+    ...(lines.length > 0 && { lines }),
   }
 }
 
@@ -707,6 +755,7 @@ export async function afterFailure(
       withhold: choices.withhold,
       lane: choices.lane,
       change_kind: choices.change_kind,
+      ...(choices.brief ? { brief: choices.brief } : {}),
       retry_of: {
         assignment_id: ids.assignmentId,
         blueprint: kept ? row.blueprint : redrawn(row.blueprint),

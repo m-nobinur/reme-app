@@ -312,6 +312,8 @@ const values = {
   navQuote: "Request a quote",
   /** Empty until the booking page ships, so no menu links to it. */
   navBooking: "",
+  /** business.phone again, for the header; empty unless the owner asked for the phone there. */
+  headerPhone: "",
   footerPagesHeading: "Pages",
   footerContactHeading: "Get in touch",
   bookingHeading: "Make a booking",
@@ -356,6 +358,7 @@ const fact = (fact_key: string, required = false): Field => ({
 const FACTS: Partial<Record<keyof typeof site, Field>> = {
   businessName: fact("business.name", true),
   phone: fact("business.phone", true),
+  headerPhone: fact("business.phone"),
   email: fact("business.email", true),
   industry: fact("business.industry", true),
   offerings: fact("business.offerings", true),

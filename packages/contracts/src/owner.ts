@@ -10,7 +10,7 @@ import { Timestamp, TimeZone, Ulid, Uuid } from "./common.ts"
 import { Blueprint, DirectionId, FontPairId } from "./design.ts"
 import { FactRecord } from "./fact.ts"
 import { Asset, AvatarId, choiceFacts } from "./onboarding.ts"
-import { ContentId, DOCUMENT_PAGES } from "./page.ts"
+import { ContentId, DOCUMENT_PAGES, PageDocument } from "./page.ts"
 import { Hostname, SiteLink } from "./site.ts"
 import { Text } from "./text.ts"
 
@@ -306,6 +306,92 @@ export const ChangeKind = z.enum([
   "creative",
 ])
 
+/** What a change does to the site, which decides its lane and its scope. */
+export const EditType = z.enum([
+  "add_content",
+  "update_content",
+  "remove",
+  "move",
+  "format",
+  "style",
+  "add_section",
+  "add_page",
+  "redesign",
+])
+
+/**
+ * The lane each edit type runs in: words, formatting and order are a document
+ * edit on the quick lane, a removal is the Developer's, and a new section, a
+ * new page or a redesign re-plans first.
+ */
+export const EDIT_KIND: Record<EditType, ChangeKind> = {
+  add_content: "copy",
+  update_content: "copy",
+  format: "copy",
+  move: "copy",
+  style: "style",
+  remove: "section",
+  add_section: "creative",
+  add_page: "creative",
+  redesign: "creative",
+}
+
+/** A page document by its path under src/content/pages, without .json: "about", "services/deep-clean". */
+export const PagePath = z
+  .string()
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/)
+  .max(80)
+
+/** A revision's page documents by path, uploaded beside its manifest as documents.json. */
+export const SiteDocuments = z.record(PagePath, PageDocument)
+export const DOCUMENTS_KEY = "documents.json"
+
+/** Where a change lands: a page, one of its sections, one of that section's blocks. */
+export const ChangeTarget = z.strictObject({
+  page: PagePath,
+  section: ContentId.optional(),
+  block: ContentId.optional(),
+})
+
+/**
+ * The change as the assistant briefs it after reading the site: what kind of
+ * edit, where, the finished words, and how to tell it worked. The builder
+ * builds this and nothing else.
+ */
+export const ChangeBrief = z.strictObject({
+  edit_type: EditType.describe(
+    "add_content: new words in an existing section. update_content: reword what is there. remove: take a block, section, page or service off the site. move: reorder sections or blocks. format: the same words in another form, such as a list or a table. style: colours, fonts or spacing across the site. add_section: a new section on a page. add_page: a new page. redesign: a new look or layout."
+  ),
+  targets: z
+    .array(ChangeTarget)
+    .max(8)
+    .describe(
+      "The page, section and block ids the change touches, from read_site. Empty only for style or redesign."
+    ),
+  content: Text(4_000)
+    .optional()
+    .describe(
+      "The finished words in the site's voice, as markdown. Where the owner gave the text, their words exactly. Omit it when nothing new is written."
+    ),
+  placement: Text(200)
+    .optional()
+    .describe(
+      'Where it goes, by id: "after section faq on home", "as the first block of section story".'
+    ),
+  keep: Text(300)
+    .optional()
+    .describe(
+      "What must stay as it is beyond the targets, when the owner said so."
+    ),
+  acceptance: z
+    .array(Text(200))
+    .min(2)
+    .max(3)
+    .describe(
+      'Two or three checks anyone can make by reading the page: "The About page has a section headed Our story", "The FAQ section comes before the services on home".'
+    ),
+})
+
 /** `POST /changes`: what the owner asked for, in their words. */
 export const OwnerChangeRequest = z.strictObject({
   text: Text(GOAL_MAX),
@@ -317,6 +403,8 @@ export const OwnerChangeRequest = z.strictObject({
     .describe(
       'A short name for the change in the owner\'s terms, as the panel and the ready line say it after "updating": "your hero title", "your phone number", "the colours".'
     ),
+  /** The brief, with the owner's message it came from, tainted and kept for audit only. */
+  brief: ChangeBrief.extend({ owner_words: Text(GOAL_MAX) }).optional(),
   chat: z
     .strictObject({ conversation_id: Uuid.optional() })
     .optional()
@@ -747,6 +835,10 @@ export type SetFactsRequest = z.infer<typeof SetFactsRequest>
 export type FactList = z.infer<typeof FactList>
 export type ChangeKind = z.infer<typeof ChangeKind>
 export type OwnerChangeRequest = z.infer<typeof OwnerChangeRequest>
+export type EditType = z.infer<typeof EditType>
+export type ChangeTarget = z.infer<typeof ChangeTarget>
+export type ChangeBrief = z.infer<typeof ChangeBrief>
+export type SiteDocuments = z.infer<typeof SiteDocuments>
 export type BuildLane = z.infer<typeof BuildLane>
 export type BuildActivity = z.infer<typeof BuildActivity>
 export type BuildPhoto = z.infer<typeof BuildPhoto>

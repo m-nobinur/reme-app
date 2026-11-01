@@ -501,6 +501,21 @@ picture {
   white-space: nowrap;
 }
 
+.header-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.header-phone {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 /* On a phone the name needs the row, so the action moves into the menu, where
    it stays one tap away, and the hero below carries the same button. */
 .menu-action {

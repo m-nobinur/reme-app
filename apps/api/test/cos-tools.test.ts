@@ -63,6 +63,7 @@ import {
   ownersAnswer,
   paceOf,
   putOff,
+  readSite,
   recordReview,
   removeDomain,
   requestChange,
@@ -71,6 +72,7 @@ import {
   type ToolContext,
   ToolFailed,
   updateReminder,
+  wholeSentencesIn,
 } from "../src/cos/tools.ts"
 import { connectGoogle } from "../src/google.ts"
 import {
@@ -155,6 +157,40 @@ describe("a claim the owner stated", () => {
     ["Fully insured since 2009", "fully insured", false],
   ])("%s from %s: %s", (proof, message, stated) => {
     expect(statedIn(proof, message)).toBe(stated)
+  })
+})
+
+describe("owner content in their own words", () => {
+  it.each([
+    [
+      "We started in 2019 with one van.",
+      "Add our story: We started in 2019 with one van.",
+      true,
+    ],
+    [
+      "We started in 2019 with one van.",
+      "We started in 2019 with one van. Thanks!",
+      true,
+    ],
+    [
+      "fully insured and local",
+      "We are not fully insured and local yet",
+      false,
+    ],
+    ["We started in 2019", "We started in 2019 with one van.", false],
+    ["We are fully insured", "We aren't sure: we are fully insured?", false],
+    [
+      "We are fully insured.",
+      "Not sure if this is true: we are fully insured.",
+      false,
+    ],
+    [
+      "We started with one van.",
+      "Could you add this: We started with one van.",
+      true,
+    ],
+  ])("%s from %s: %s", (body, message, whole) => {
+    expect(wholeSentencesIn(body, message)).toBe(whole)
   })
 })
 
@@ -624,12 +660,34 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       await s.event(build, "assignment.created", {
         lane: "quick",
         label: "your hero text",
+        brief: {
+          edit_type: "update_content",
+          targets: [{ page: "home", section: "hero" }],
+          acceptance: ["The hero names Bristol", "Nothing else changed"],
+          owner_words: "say we're in Bristol",
+        },
       })
       const revision = await s.revision(build, 2)
+      const block = {
+        page: "home",
+        section: "hero",
+        block: null,
+        change: "changed",
+        before: "## We clean homes",
+        after: "## Professional home cleaning in Bristol",
+      }
+      await s.event(build, "change.checked", {
+        report_id: crypto.randomUUID(),
+        round: 1,
+        checks: [
+          { check: "The hero names Bristol", passed: true, why: "It does." },
+        ],
+      })
       await s.event(
         build,
         "assignment.completion_reported",
         reported(changer, build, revision, {
+          blocks: [block],
           text_changes: [
             {
               before: "We clean homes",
@@ -675,15 +733,24 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         live_now: true,
         published_at: expect.any(String),
         recorded: true,
+        edit_type: "update_content",
+        targets: [{ page: "home", section: "hero" }],
+        checks: [
+          { check: "The hero names Bristol", passed: true, why: "It does." },
+        ],
+        blocks: [block],
         recent: [
           {
             ref: earlier,
             label: "your phone number",
             state: "published",
             at: expect.any(String),
+            edit_type: null,
+            pages: [],
           },
         ],
       })
+      expect(JSON.stringify(found)).not.toContain("say we're in Bristol")
       expect(stub.calls).toHaveLength(0)
       // Left out, it is the latest change, and a change not live says so.
       expect(await getChange(context(changer), {})).toMatchObject({
@@ -902,6 +969,68 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         },
       ],
       findings_left: 0,
+    })
+
+    it("reads the site's page documents by id, the draft's while one waits, with the owner's site notes", async () => {
+      const who = await owner(kit, url as string, "cos-read-site")
+      const ctx = reading(who)
+      expect(await readSite(ctx, {})).toEqual({ outcome: "none" })
+      const s = seed(kit, who)
+      const build = await s.assignment("awaiting_review")
+      const revision = await s.revision(build, 1)
+      expect(await readSite(ctx, {})).toEqual({ outcome: "no_documents" })
+      const home = {
+        page: "home",
+        sections: [
+          {
+            id: "faq",
+            kind: "faq",
+            heading: "Questions",
+            blocks: [
+              {
+                id: "faq-list",
+                type: "faq",
+                provenance: "trade",
+                items: [{ question: "Pets?", answer: "We love them." }],
+              },
+            ],
+          },
+        ],
+      }
+      stored.set(`sites/${who.orgId}/${revision}/documents.json`, {
+        about: { page: "about", title: "About us", sections: [] },
+        home,
+      })
+      const said = "Use bullets, not paragraphs."
+      await saveCorrection(
+        context(who),
+        { staff: "developer", quote: said },
+        "",
+        await turnOf(who, [said])
+      )
+      expect(kept("read_site", await readSite(ctx, {}))).toEqual({
+        outcome: "found",
+        about: "draft",
+        notes: [said],
+        pages: [
+          {
+            page: "home",
+            title: null,
+            sections: [
+              {
+                id: "faq",
+                kind: "faq",
+                heading: "Questions",
+                blocks: [{ id: "faq-list", type: "faq", provenance: "trade" }],
+              },
+            ],
+          },
+          { page: "about", title: "About us", sections: [] },
+        ],
+      })
+      expect(
+        (await readSite(ctx, { page: "home" })) as { document?: unknown }
+      ).toMatchObject({ document: home })
     })
 
     it("reads the newest review's stored report, without its tenancy ids, and says when one runs", async () => {
@@ -1285,6 +1414,65 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         error: { code: "contact.not_typed" },
       })
       expect(stub.calls).toHaveLength(0)
+    })
+
+    it("keeps the owner's own words from a brief as site content, and sends the brief with their message", async () => {
+      const words = "We started in 2019 with one van. Now we are a team of six."
+      const asked = `Add our story to the about page: ${words}`
+      const turn = await turnOf(me, [asked])
+      const brief = {
+        edit_type: "add_section" as const,
+        targets: [{ page: "about", section: "story" }],
+        content: `## Our story\n\n${words}`,
+        placement: "after section intro on about",
+        acceptance: [
+          "The About page has a section headed Our story",
+          "It says: We started in 2019 with one van.",
+        ],
+      }
+      const stub = creating(me)
+      const output = kept(
+        "request_change",
+        await requestChange(
+          context(me, stub),
+          { text: "Add our story to the About page", brief },
+          crypto.randomUUID(),
+          turn
+        )
+      )
+      expect(output).toMatchObject({ outcome: "started" })
+      expect(stub.calls[0]?.body).toMatchObject({
+        change_kind: "creative",
+        brief: { ...brief, owner_words: asked },
+      })
+      expect(
+        (await getFacts(context(me), {})).facts.find(
+          (f) => f.key === "site.content"
+        )?.value
+      ).toEqual({
+        items: [
+          { id: "story", page: "about", title: "Our story", markdown: words },
+        ],
+      })
+      // The assistant's own copy is never stored as the owner's.
+      await requestChange(
+        context(me, creating(me)),
+        {
+          text: "Add a line about pets",
+          brief: {
+            ...brief,
+            targets: [{ page: "about", section: "pets" }],
+            content: "Pets are welcome in every home we clean.",
+          },
+        },
+        crypto.randomUUID(),
+        await turnOf(me, ["Say something about pets on the about page"])
+      )
+      expect(
+        (await getFacts(context(me), {})).facts.find(
+          (f) => f.key === "site.content"
+        )?.value
+      ).toMatchObject({ items: [{ id: "story" }] })
     })
 
     const proofNow = async () =>

@@ -267,6 +267,35 @@ live("a revise", () => {
       kind: "site.revise",
       revises_revision_id: revisionId,
     })
+    // A briefed change takes its lane from its edit type.
+    const brief = {
+      edit_type: "move",
+      targets: [{ page: "home", section: "faq" }],
+      acceptance: [
+        "The FAQ comes before the services on home",
+        "Nothing else moved",
+      ],
+      owner_words: "move the faq up",
+    }
+    const briefed = await post(slug, {
+      kind: "site.revise",
+      goal: "Move the FAQ above the services",
+      change_kind: "creative",
+      brief,
+    })
+    expect(briefed.status).toBe(201)
+    const briefedId = ((await briefed.json()) as { assignment_id: string })
+      .assignment_id
+    expect(
+      (
+        await eventsOf({ orgId, assignmentId: briefedId }, "assignment.created")
+      )[0]?.payload
+    ).toMatchObject({ lane: "quick", change_kind: "copy", brief })
+    // Its checks are the assistant's words: never trusted criteria in the instructions.
+    const [briefedRow] = await kit.withOrg({ orgId }, (db) =>
+      db.select().from(assignments).where(eq(assignments.id, briefedId))
+    )
+    expect(briefedRow?.acceptanceCriteria).toEqual(row?.acceptanceCriteria)
     // A build carries no taint and no link.
     const build = await post(slug, { kind: "site.build" })
     expect(build.status).toBe(201)

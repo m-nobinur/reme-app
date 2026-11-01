@@ -12,6 +12,7 @@ import {
 import {
   eq,
   nextFor,
+  type OrgScopedDb,
   orgs,
   readCorrections,
   scheduledJobs,
@@ -68,38 +69,45 @@ export async function saveCorrection(
         `A correction quotes one whole sentence the owner typed in this conversation, exactly, ${CORRECTION_MAX} characters at most.`
       )
     }
-    await lockProfile(db, owner.orgId, STAFF_CORRECTIONS_KEY)
-    const { lines } = await readCorrections(db)
-    if (
-      lines.some(
-        (l) =>
-          l.staff === input.staff && l.text.toLowerCase() === text.toLowerCase()
-      )
-    ) {
+    if (!(await addCorrection(db, owner.orgId, input.staff, text))) {
       return refused("correction.duplicate", "already saved")
     }
-    await supersedePrivateFact(db, {
-      orgId: owner.orgId,
-      key: STAFF_CORRECTIONS_KEY,
-      factType: "owner",
-      value: {
-        lines: [
-          ...lines,
-          {
-            id: crypto.randomUUID(),
-            staff: input.staff,
-            text,
-            at: new Date().toISOString(),
-          },
-        ].slice(-CORRECTIONS_MAX),
-      },
-      provenance: { source: "owner_stated", confidence: 1 },
-    })
     return {
       outcome: "saved",
       note: "Saved. It applies from the next build. Do not repeat it.",
     }
   })
+}
+
+/** One quoted correction added under the corrections' lock; false when it is saved already. */
+export async function addCorrection(
+  db: OrgScopedDb,
+  orgId: string,
+  staff: SaveCorrectionInput["staff"],
+  text: string
+): Promise<boolean> {
+  await lockProfile(db, orgId, STAFF_CORRECTIONS_KEY)
+  const { lines } = await readCorrections(db)
+  if (
+    lines.some(
+      (l) => l.staff === staff && l.text.toLowerCase() === text.toLowerCase()
+    )
+  ) {
+    return false
+  }
+  await supersedePrivateFact(db, {
+    orgId,
+    key: STAFF_CORRECTIONS_KEY,
+    factType: "owner",
+    value: {
+      lines: [
+        ...lines,
+        { id: crypto.randomUUID(), staff, text, at: new Date().toISOString() },
+      ].slice(-CORRECTIONS_MAX),
+    },
+    provenance: { source: "owner_stated", confidence: 1 },
+  })
+  return true
 }
 
 /**

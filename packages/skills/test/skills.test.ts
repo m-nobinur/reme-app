@@ -38,6 +38,7 @@ describe("skills", () => {
       "weekly-review",
       "review-reply",
       "quote-reply",
+      "site-change",
     ])
     expect(indexOf(cos).join("\n")).not.toContain("stock photos")
   })

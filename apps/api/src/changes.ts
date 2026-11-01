@@ -9,6 +9,7 @@ import {
   type FactRecord,
   type FactValue,
   OWNER_BRIDGE_HEADERS,
+  type OwnerChangeRequest,
   Uuid,
 } from "@workspace/contracts"
 import {
@@ -421,7 +422,9 @@ export async function startChange(
   /** The CoS's read of the change's size; the orchestrator picks the lane from it. */
   changeKind?: ChangeKind,
   /** The change's short name in the owner's terms, kept with the build it makes. */
-  label?: string
+  label?: string,
+  /** The assistant's brief of the change, with the owner's message it came from. */
+  brief?: OwnerChangeRequest["brief"]
 ): Promise<Response> {
   // One deadline for the whole change: its reads and every call it makes
   // share it, so a replace's three calls end within it too.
@@ -589,6 +592,7 @@ export async function startChange(
     ...(changeKind ? { change_kind: changeKind } : {}),
     ...(label ? { label } : {}),
     ...(draft ? { draft_revision_id: draft } : {}),
+    ...(brief ? { brief } : {}),
   })
   const create = async (kind: "site.build" | "site.revise", draft?: string) => {
     const result = await createCall(createBody(kind, draft))

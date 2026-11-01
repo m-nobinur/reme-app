@@ -48,7 +48,7 @@ import {
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import { z } from "zod"
-import { type Brief, retryContextSignal } from "../brief.ts"
+import { type Brief, changeBriefSignal, retryContextSignal } from "../brief.ts"
 import {
   assemble,
   DOCUMENTS_DIR,
@@ -513,6 +513,8 @@ function render({ id }: AgentProps) {
       // The first delivery only: a retry hears what failed last time.
       const previous = retryContextSignal(brief)
       if (previous) append(previous)
+      const change = changeBriefSignal(brief)
+      if (change) append(change)
     }
     // biome-ignore lint/suspicious/noUnnecessaryConditions: same, the persisted value
     if (restored && (await siteKept(current))) return

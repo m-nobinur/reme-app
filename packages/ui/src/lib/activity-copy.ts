@@ -610,6 +610,12 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: ["Opened the report on your website"],
     fail: ["open the report on your website"],
   },
+  read_site: {
+    kind: "checking",
+    working: ["Reading your website's pages"],
+    done: ["Looked over your website's pages"],
+    fail: ["read your website's pages"],
+  },
 }
 
 /** What a tool's line says, whatever the part's state, the turn's end or the time. */

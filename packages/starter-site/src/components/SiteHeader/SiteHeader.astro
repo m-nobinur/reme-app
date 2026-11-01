@@ -1,5 +1,6 @@
 ---
 import Photo from "../../layouts/Photo.astro"
+import { phoneText } from "../../phone"
 import { hasPhoto } from "../../photo-files"
 import { navLinks, primaryAction } from "../../routes"
 import { site } from "../../site-config"
@@ -56,9 +57,16 @@ const items = links.map((link) => ({
             </ul>
           </nav>
         )}
-        {primaryAction && (
+        {(primaryAction || site.headerPhone) && (
           <span class="header-action">
-            <ActionLink href={primaryAction.href} label={primaryAction.label} />
+            {site.headerPhone && (
+              <a class="header-phone" href={`tel:${site.headerPhone}`}>
+                {phoneText(site.headerPhone)}
+              </a>
+            )}
+            {primaryAction && (
+              <ActionLink href={primaryAction.href} label={primaryAction.label} />
+            )}
           </span>
         )}
         {(items.length > 0 || primaryAction) && site.navMenu && (
