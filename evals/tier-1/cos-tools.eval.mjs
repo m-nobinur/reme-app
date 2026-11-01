@@ -40,11 +40,10 @@ export function drift(fixture) {
   if (canonical(recorded) !== canonical(cased)) found.push("the case list")
   for (const kase of GATED) {
     const names = fixture.sessions[kase.name] ?? []
-    const sent = names.map((name) => {
-      const { mode, text, deny } = fixture.owner[name]
-      return { mode, text, deny }
-    })
-    if (canonical(sent) !== canonical(kase.turns)) found.push(kase.name)
+    const said = ({ mode, text, deny }) => ({ mode, text, deny })
+    const sent = names.map((name) => said(fixture.owner[name]))
+    if (canonical(sent) !== canonical(kase.turns.map(said)))
+      found.push(kase.name)
   }
   return found
 }
@@ -70,6 +69,11 @@ function splitValuesRedacted() {
         name: "split",
         turns: [
           { owner: { mode: "ask", text: "q" }, chunks, outcome: "answered" },
+          {
+            owner: { read: true },
+            parts: [{ type: "text", text: cut[0].join("") }],
+            outcome: "answered",
+          },
         ],
       },
     ],
@@ -78,7 +82,10 @@ function splitValuesRedacted() {
     stopped: null,
     secrets: [],
   })
-  const delta = JSON.parse(text.split("\n")[1]).chunk.delta
+  const [head, line] = text.split("\n").map((l) => l && JSON.parse(l))
+  if (head.owner["split.2"].parts[0].text !== "REDACTED-uuid-1")
+    throw new Error("a read turn's parts were not recorded redacted")
+  const delta = line.chunk.delta
   if (delta !== " REDACTED-uuid-1 REDACTED-ulid-1 REDACTED-host-1/x")
     throw new Error(`a split value was not redacted whole: ${delta}`)
 }
@@ -98,7 +105,7 @@ export default async function cosTools() {
     const names = fixture.sessions[kase.name] ?? []
     const turns = names.map((name) => ({
       outcome: fixture.owner[name].outcome,
-      parts: partsOf(fixture.turns.get(name)),
+      parts: fixture.owner[name].parts ?? partsOf(fixture.turns.get(name)),
     }))
     return { name: kase.name, ...score(kase, turns, fixture.facts) }
   })

@@ -565,15 +565,17 @@ export const CASES = [
     },
   },
   {
-    pending: OFFER_CASE,
+    pending:
+      "an eval org with no address task: the offer comes once per org, and the shared eval org has had it",
     // The first build starts, and the address is offered on its card while it runs.
     name: "address-offer-mid-build",
+    facts: GOLDEN_FACTS,
     turns: [
       {
         mode: "act",
-        text: "Change the headline on my homepage to say 'Clean homes, every week'.",
+        text: "Build my website, with 'Clean homes, every week' as the headline.",
       },
-      { read: true, wait: 90 },
+      { read: true, wait: 240 },
     ],
     check: ([started, read]) => [
       ...buildStarted(started),
@@ -581,21 +583,14 @@ export const CASES = [
     ],
   },
   {
-    pending: OFFER_CASE,
+    // An org is offered its address once: the case before left that offer open.
     name: "address-not-now",
     turns: [
-      {
-        mode: "act",
-        text: "Change the headline on my homepage to say 'Fresh homes, every week'.",
-      },
-      { read: true, wait: 90 },
       { mode: "act", text: "Not now on the web address, thanks." },
       { mode: "ask", text: "What are our opening hours on weekdays?" },
     ],
-    check: ([started, read, declined, asked]) => {
+    check: ([declined, asked]) => {
       const problems = [
-        ...buildStarted(started),
-        ...sells(offered(read, isAddressCard), "address"),
         ...replied(declined),
         ...noActs(declined),
         ...noActs(asked),
@@ -611,7 +606,8 @@ export const CASES = [
     },
   },
   {
-    pending: `${OFFER_CASE}, with ${EVAL_DOMAIN}'s setting pointed at staging`,
+    pending:
+      "a domain no other org held, whose setting is added after the connect",
     // Google learns the owner's own address, so it is offered once that setting is seen.
     name: "google-after-setting",
     turns: [
@@ -619,9 +615,11 @@ export const CASES = [
         mode: "act",
         text: `I own ${EVAL_DOMAIN} and nothing is on it yet. Put my website there.`,
       },
+      // A domain that already points somewhere waits for the owner's yes, naming it.
+      { mode: "act", text: `Yes, put my website on ${EVAL_DOMAIN}.` },
       { read: true, wait: 180 },
     ],
-    check: ([connected, read]) => {
+    check: ([, connected, read]) => {
       const problems = sells(offered(read, isGoogleButton), "Google")
       if (called(connected, "connect_domain").length === 0)
         problems.push("it did not connect the owner's domain")
@@ -938,9 +936,13 @@ function startsReview(parts) {
   return problems
 }
 
-/** One request_change for the owner's approval, carrying `wording`. */
+/**
+ * One request_change for the owner's approval, carrying `wording`; on an org
+ * with no site yet, asking to build one first.
+ */
 function proposed(parts, wording) {
   const acts = actsOf(parts)
+  if (acts.length === 0 && /\bbuild\b/i.test(text(parts))) return []
   if (acts.length !== 1 || acts[0].toolName !== "request_change") {
     return [
       `expected one request_change card, got ${acts.map((c) => c.toolName).join(", ") || "none"}`,

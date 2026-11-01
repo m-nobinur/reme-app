@@ -246,6 +246,7 @@ describe("the fallback Blueprint", () => {
         hero: "wash",
         services: "photo_cards",
         palette: "forest",
+        home: null,
       },
     ]
     expect(
@@ -1085,7 +1086,33 @@ describe("planning a build", () => {
     expect(made.source).toBe("model")
     expect(made.calls).toHaveLength(2)
     expect(calls[1]?.user).toContain("<previous_attempt_failed>")
+    expect(calls[1]?.user).not.toContain("<previous_attempt>")
     expect(calls[1]?.system).toBe(calls[0]?.system)
+  })
+
+  it("hands a retry the plan it rejected, to fix rather than plan again", async () => {
+    const rejected = {
+      ...fallbackBlueprint({ facts: CLEANING, recent: [], library: LIBRARY }),
+      direction: "nowhere",
+    }
+    const { calls, complete } = scripted([
+      JSON.stringify(rejected),
+      replyFor(CLEANING),
+    ])
+    const made = await plan({
+      complete,
+      route: ROUTE,
+      sessionId: "s",
+      facts: CLEANING,
+      recent: [],
+      previous: null,
+      library: LIBRARY,
+    })
+    expect(made.source).toBe("model")
+    expect(calls[1]?.user).toContain(
+      `<previous_attempt>\n${JSON.stringify(rejected)}\n</previous_attempt>`
+    )
+    expect(calls[1]?.user).toContain("direction nowhere is not in the library")
   })
 
   it("falls back to code after two failures, model errors included", async () => {
@@ -1140,6 +1167,7 @@ describe("planning a build", () => {
         hero: null,
         services: null,
         palette: first.palette.id,
+        home: null,
       },
     ]
     const other = business("cleaning", "Other Co (fictional)")
@@ -1150,6 +1178,119 @@ describe("planning a build", () => {
     ).not.toEqual(first.palette)
     const picked = [...other, fact("site.palette", { id: first.palette.id })]
     expect((await planFor(picked, recent)).palette).toEqual(first.palette)
+  })
+
+  it("gives two trades on one direction different palettes", () => {
+    const library = [
+      {
+        ...AFTER_DARK,
+        id: "quiet_luxury",
+        industries: ["legal", "chauffeur"],
+        palettes: ["pebble", "onyx", "graphite"],
+      } as DesignDirection,
+    ]
+    const paletteOf = (facts: FactRecord[]) =>
+      fallbackBlueprint({ facts, recent: [], library }).palette
+    expect(paletteOf(LEGAL)).toEqual({ kind: "preset", id: "pebble" })
+    expect(paletteOf(CHAUFFEUR)).toEqual({ kind: "preset", id: "onyx" })
+  })
+
+  it("plans code's palette over the model's, and names it in the features", async () => {
+    const library = [
+      {
+        ...AFTER_DARK,
+        id: "quiet_luxury",
+        industries: ["legal", "chauffeur"],
+        palettes: ["pebble", "onyx", "graphite"],
+      } as DesignDirection,
+    ]
+    const made = fallbackBlueprint({ facts: CHAUFFEUR, recent: [], library })
+    const named = {
+      ...made,
+      palette: { kind: "preset", id: "pebble" },
+      features: made.features.map((f) => f.replace("Onyx", "Pebble")),
+    }
+    const planned = await plan({
+      complete: scripted([JSON.stringify(named)]).complete,
+      route: ROUTE,
+      sessionId: "s",
+      facts: CHAUFFEUR,
+      recent: [],
+      previous: null,
+      library,
+    })
+    expect(planned.source).toBe("model")
+    expect(planned.blueprint.palette).toEqual({ kind: "preset", id: "onyx" })
+    expect(planned.blueprint.features.join(" ")).toContain("Onyx colours")
+    expect(planned.blueprint.features.join(" ")).not.toContain("Pebble")
+  })
+
+  it("reads a direction id stitched onto a library one as that direction", async () => {
+    const made = fallbackBlueprint({
+      facts: LEGAL,
+      recent: [],
+      library: LIBRARY,
+    })
+    const { calls, complete } = scripted([
+      JSON.stringify({ ...made, direction: `${made.direction}_numbered_rows` }),
+    ])
+    const planned = await plan({
+      complete,
+      route: ROUTE,
+      sessionId: "s",
+      facts: LEGAL,
+      recent: [],
+      previous: null,
+      library: LIBRARY,
+    })
+    expect(planned).toMatchObject({
+      source: "model",
+      blueprint: { direction: made.direction },
+    })
+    expect(calls).toHaveLength(1)
+  })
+
+  it("asks a retry for another home page when the trade has one close to it, unless the owner described the arrangement", async () => {
+    const made = fallbackBlueprint({
+      facts: CLEANING,
+      recent: [],
+      library: LIBRARY,
+    })
+    const kinds =
+      made.pages.find((p) => p.page === "home")?.sections.map((s) => s.kind) ??
+      []
+    const recent = [
+      {
+        direction: null,
+        hero: null,
+        services: null,
+        palette: null,
+        home: kinds.slice(0, -1).join(","),
+      },
+    ]
+    const planWith = (facts: FactRecord[]) => {
+      const script = scripted([JSON.stringify(made), JSON.stringify(made)])
+      return plan({
+        complete: script.complete,
+        route: ROUTE,
+        sessionId: "s",
+        facts,
+        recent,
+        previous: null,
+        library: LIBRARY,
+      }).then((planned) => ({ planned, calls: script.calls }))
+    }
+    const steered = await planWith(CLEANING)
+    expect(steered.calls[1]?.user).toContain(
+      `the home page's sections (${kinds.join(", ")}) are close to another business's in this industry`
+    )
+    expect(steered.planned.source).toBe("model")
+
+    const own = await planWith([
+      ...CLEANING,
+      fact("site.direction", { id: "custom", custom: "FAQ near the top" }),
+    ])
+    expect(own.calls).toHaveLength(1)
   })
 
   it("gives two businesses in one trade different directions and home orders unless the owner picked one", async () => {
@@ -1190,7 +1331,13 @@ describe("planning a build", () => {
     const sameAsFirst = replyOf(LEGAL, [])
     const first = (await planWith([sameAsFirst], LEGAL, [])).blueprint
     const recent = [
-      { direction: first.direction, hero: null, services: null, palette: null },
+      {
+        direction: first.direction,
+        hero: null,
+        services: null,
+        palette: null,
+        home: null,
+      },
     ]
     const other = business("legal", "Pike & Dunn Solicitors (fictional)")
     expect(
@@ -1207,6 +1354,21 @@ describe("planning a build", () => {
     )
     expect(second.blueprint.direction).toBe("quiet_luxury")
     expect(home(second.blueprint)).not.toEqual(home(first))
+
+    const stitched = await planWith(
+      [
+        JSON.stringify({ ...first, direction: "lawyerly" }),
+        replyOf(other, recent),
+      ],
+      other,
+      recent
+    )
+    expect(stitched.user[1]).toContain(
+      "direction lawyerly is not in the library"
+    )
+    expect(stitched.user[1]).toContain(
+      "another business in this industry has counsel already; take the one of quiet_luxury"
+    )
 
     const kept = await planWith([sameAsFirst, sameAsFirst], other, recent)
     expect(kept).toMatchObject({
@@ -1250,12 +1412,14 @@ describe("the prompt", () => {
         hero: "wash",
         services: "photo_cards",
         palette: "forest",
+        home: "hero,service_cards,steps,faq,cta_band",
       },
       {
         direction: "calm_daylight",
         hero: "wash",
         services: "photo_cards",
         palette: "forest",
+        home: "hero,service_cards,steps,faq,cta_band",
       },
     ]
     const a = plannerPrompt({
@@ -1278,6 +1442,10 @@ describe("the prompt", () => {
     expect(a.user).toContain(
       "- calm_daylight + hero wash + services photo_cards (2)"
     )
+    expect(a.user).toContain(
+      "Their home pages hold these sections in this order. Give this home page another order or another mix"
+    )
+    expect(a.user).toContain("- hero, service_cards, steps, faq, cta_band (2)")
     expect(diversityNote([], "cleaning")).toEqual([])
   })
 })
