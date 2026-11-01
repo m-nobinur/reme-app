@@ -1058,8 +1058,14 @@ picture {
   color: var(--card-foreground);
 }
 
-.card :is(h3, p) {
+.card :is(h2, h3, p) {
   margin: 0;
+}
+
+/* A name straight under the page's h1 is an h2 that looks like the h3 it replaces. */
+:is(.card, .row-text) h2 {
+  font-size: var(--text-xl);
+  line-height: 1.3;
 }
 
 /* Card, step and answer copy is the reference's 14 px, in the muted ink. */
@@ -1089,22 +1095,22 @@ picture {
 
 /* A linked card: the name is the link, stretched over the card, and the
    card answers the pointer and shows the focus ring. */
-.card-linked h3 a,
-.rows-linked h3 a {
+.card-linked :is(h2, h3) a,
+.rows-linked :is(h2, h3) a {
   color: inherit;
   text-decoration: none;
 }
 
-.card-linked h3 a::after,
-.rows-linked h3 a::after {
+.card-linked :is(h2, h3) a::after,
+.rows-linked :is(h2, h3) a::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
 }
 
-.card-linked h3 a:focus-visible,
-.rows-linked h3 a:focus-visible {
+.card-linked :is(h2, h3) a:focus-visible,
+.rows-linked :is(h2, h3) a:focus-visible {
   outline: none;
 }
 
@@ -1122,8 +1128,8 @@ picture {
   border-color: var(--brand-line);
 }
 
-.card-linked:hover h3,
-.rows-linked li:hover h3 {
+.card-linked:hover :is(h2, h3),
+.rows-linked li:hover :is(h2, h3) {
   color: var(--brand-text);
 }
 
@@ -1257,7 +1263,7 @@ picture {
   background: color-mix(in oklch, var(--brand-soft) 60%, transparent);
 }
 
-.row-text :is(h3, p) {
+.row-text :is(h2, h3, p) {
   margin: 0;
 }
 
@@ -1265,7 +1271,7 @@ picture {
   color: var(--muted-foreground);
 }
 
-.services-practice_list .row-text h3 {
+.services-practice_list .row-text :is(h2, h3) {
   font-size: var(--text-xl);
 }
 
@@ -1427,6 +1433,8 @@ picture {
 }
 
 .facts-label {
+  margin: 0 0 var(--space-2xs);
+  line-height: 1.3;
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: 500;
@@ -2471,6 +2479,9 @@ picture {
 }
 
 .contact-details dd a {
+  /* An inline link is its text's height, 21 px: a tap target is 24 px at least. */
+  display: inline-block;
+  padding-block: 0.125rem;
   color: var(--foreground);
   text-decoration-color: var(--brand-line);
 }

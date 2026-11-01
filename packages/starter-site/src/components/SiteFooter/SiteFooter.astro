@@ -1,5 +1,6 @@
 ---
 import { plain } from "../../accent"
+import { iconFiles } from "../../icon-files"
 import Photo from "../../layouts/Photo.astro"
 import { hasPhoto } from "../../photo-files"
 import { navLinks, primaryAction } from "../../routes"
@@ -14,7 +15,8 @@ const hasContact = Boolean(
     site.serviceAreaText ||
     site.serviceArea
 )
-const blurb = site.tagline || site.homeIntro
+const blurb = site.footerBlurb || site.tagline
+const icons = await iconFiles()
 ---
 
 {
@@ -31,7 +33,7 @@ const blurb = site.tagline || site.homeIntro
               <p class="site-name footer-name">
                 <img
                   class="footer-mark"
-                  src="/favicon.svg"
+                  src={icons["favicon.svg"]?.path}
                   alt=""
                   width="32"
                   height="32"

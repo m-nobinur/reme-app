@@ -90,7 +90,7 @@ describe("a section whose photo file is missing takes its text form", () => {
     if (!missing) throw new Error("the build did not run")
     const asked = readPages(missing.dist).flatMap((p) =>
       imgs(p)
-        .filter((el) => !el.attrs.src?.endsWith("favicon.svg"))
+        .filter((el) => !/favicon\.\w+\.svg$/.test(el.attrs.src ?? ""))
         .map((el) => `${p.file}: ${el.attrs.src}`)
     )
     expect(asked).toEqual([])

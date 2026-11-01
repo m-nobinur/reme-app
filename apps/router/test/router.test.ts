@@ -1111,6 +1111,22 @@ describe("a published host", () => {
     }
   })
 
+  it("answers a missing path with the site's own 404 page when it has one", async () => {
+    const id = "10000001-0000-4000-8000-00000000000b"
+    revision(ORG, id, {
+      files: {
+        "index.html": "a".repeat(64),
+        "404.html": "d".repeat(64),
+      },
+    })
+    objects.set(`sites/${ORG}/${id}/dist/404.html`, "<h1>Lost</h1>")
+    pointers.set(`host:${SITE_HOST}`, { ...pointer, revision_id: id })
+    const res = await get(SITE_HOST, "/nope/")
+    expect(res.status).toBe(404)
+    expect(res.headers.get("content-type")).toContain("text/html")
+    expect(await res.text()).toBe("<h1>Lost</h1>")
+  })
+
   it("refuses a pointer whose manifest belongs to another org or revision", async () => {
     pointers.set(`host:${SITE_HOST}`, { ...pointer, org_id: OTHER })
     expect((await get(SITE_HOST, "/")).status).toBe(404)

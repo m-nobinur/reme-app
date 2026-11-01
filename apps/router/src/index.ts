@@ -62,6 +62,9 @@ const NO_STORE = { "cache-control": "no-store" }
 /** One constant answer for every host, path or pointer that serves nothing, so a guess learns nothing. */
 const notHere = (c: Context<App>) => c.text("No site here.", 404, NO_STORE)
 
+/** The page a site's build wrote for a path it does not have. */
+const MISSING_PAGE = "404.html"
+
 /** One constant answer for every cookie that does not open this preview. No scheme is offered, so no `WWW-Authenticate`. */
 const noPreview = (c: Context<App>) =>
   c.text("No preview here. Open a fresh preview link.", 401, NO_STORE)
@@ -290,7 +293,9 @@ async function serve(
   key: string,
   headers: Headers,
   // The slug host the build baked in and the custom domain to name instead.
-  rewrite?: { from: string; to: string }
+  rewrite?: { from: string; to: string },
+  // What a found file answers as: the site's own 404 page is a file that answers 404.
+  status?: number
 ): Promise<Response> {
   // A rewritten body is its own representation, so its validator is the
   // file's, made weak and suffixed with the host; the file's own is what the
@@ -324,7 +329,10 @@ async function serve(
           `https://${rewrite.to}`
         )
       : found.body
-  return new Response(body, { status: found.status, headers })
+  return new Response(body, {
+    status: found.status === 200 && status ? status : found.status,
+    headers,
+  })
 }
 
 /**
@@ -607,7 +615,21 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   const found = await manifestFor(c, host, pointer)
   if (!found) return notHere(c)
   const file = resolveSitePath(url.pathname, found.manifest.files)
-  if (!file) return notHere(c)
+  if (!file) {
+    if (!Object.hasOwn(found.manifest.files, MISSING_PAGE)) return notHere(c)
+    return serve(
+      c,
+      host,
+      `${found.base}dist/${MISSING_PAGE}`,
+      previewHeaders(
+        found.manifest.headers,
+        MISSING_PAGE,
+        cacheFor(MISSING_PAGE)
+      ),
+      undefined,
+      404
+    )
+  }
   if (file.endsWith(".html")) await warmPages(c, host, found, file)
   const headers = previewHeaders(found.manifest.headers, file, cacheFor(file))
   headers.set(SITE_HEADER, pointer.site_id)

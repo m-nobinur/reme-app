@@ -22,6 +22,7 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as SignInCodeRouteImport } from './routes/sign-in-code'
 import { Route as SignOutRouteImport } from './routes/sign-out'
 import { Route as SignUpRouteImport } from './routes/sign-up'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as ApiAssetsRouteImport } from './routes/api.assets'
@@ -116,6 +117,11 @@ const SignOutRoute = SignOutRouteImport.update({
 const SignUpRoute = SignUpRouteImport.update({
   id: '/sign-up',
   path: '/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TermsRoute = TermsRouteImport.update({
@@ -282,6 +288,7 @@ export interface FileRoutesByFullPath {
   '/sign-in-code': typeof SignInCodeRoute
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/api/assets': typeof ApiAssetsRouteWithChildren
@@ -326,6 +333,7 @@ export interface FileRoutesByTo {
   '/sign-in-code': typeof SignInCodeRoute
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/api/assets': typeof ApiAssetsRouteWithChildren
@@ -370,6 +378,7 @@ export interface FileRoutesById {
   '/sign-in-code': typeof SignInCodeRoute
   '/sign-out': typeof SignOutRoute
   '/sign-up': typeof SignUpRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/api/assets': typeof ApiAssetsRouteWithChildren
@@ -417,6 +426,7 @@ export interface FileRouteTypes {
     | '/sign-in-code'
     | '/sign-out'
     | '/sign-up'
+    | '/sitemap.xml'
     | '/terms'
     | '/verify-email'
     | '/api/assets'
@@ -461,6 +471,7 @@ export interface FileRouteTypes {
     | '/sign-in-code'
     | '/sign-out'
     | '/sign-up'
+    | '/sitemap.xml'
     | '/terms'
     | '/verify-email'
     | '/api/assets'
@@ -504,6 +515,7 @@ export interface FileRouteTypes {
     | '/sign-in-code'
     | '/sign-out'
     | '/sign-up'
+    | '/sitemap.xml'
     | '/terms'
     | '/verify-email'
     | '/api/assets'
@@ -550,6 +562,7 @@ export interface RootRouteChildren {
   SignInCodeRoute: typeof SignInCodeRoute
   SignOutRoute: typeof SignOutRoute
   SignUpRoute: typeof SignUpRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   ApiAssetsRoute: typeof ApiAssetsRouteWithChildren
@@ -657,6 +670,13 @@ declare module '@tanstack/react-router' {
       path: '/sign-up'
       fullPath: '/sign-up'
       preLoaderRoute: typeof SignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -956,6 +976,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignInCodeRoute: SignInCodeRoute,
   SignOutRoute: SignOutRoute,
   SignUpRoute: SignUpRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsRoute: TermsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   ApiAssetsRoute: ApiAssetsRouteWithChildren,

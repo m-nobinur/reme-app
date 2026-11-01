@@ -37,7 +37,12 @@ const emitted = () => readdirSync(join(built.dist, "_astro")).sort()
 
 describe("a generated photo", () => {
   test("ships only its resized variants, never the original", () => {
-    expect(emitted().filter((f) => f.endsWith(".png"))).toEqual([])
+    expect(
+      emitted().filter(
+        (f) =>
+          f.endsWith(".png") && !/^(favicon|apple-touch-icon|icon-\d)/.test(f)
+      )
+    ).toEqual([])
     // Every emitted image is one a page names: the home hero, and the about
     // story, which shows the hero's photo when the gallery has none.
     const html = readPages(built.dist)

@@ -61,6 +61,10 @@ const sectionsOf = (html: string) =>
     (match) => match[0]
   )
 
+/** A list of items, such as the services page's cards, whose names are h2 when no section head sits above them. */
+const withoutItems = (section: string) =>
+  section.replace(/<(ul|ol)\b[\s\S]*?<\/\1>/g, "")
+
 describe("eyebrows and accent clauses (rules 2 and 3)", () => {
   test("every section with an h2 opens with an eyebrow", () => {
     if (!built) throw new Error("the build did not run")
@@ -72,7 +76,7 @@ describe("eyebrows and accent clauses (rules 2 and 3)", () => {
     ).toBeGreaterThan(3)
     const bare = pages.flatMap((page) =>
       sectionsOf(page.html)
-        .filter((section) => section.includes("<h2"))
+        .filter((section) => withoutItems(section).includes("<h2"))
         .filter((section) => !section.includes('class="eyebrow"'))
         .map((section) => `${page.file}: ${section.slice(0, 80)}`)
     )
@@ -86,7 +90,7 @@ describe("eyebrows and accent clauses (rules 2 and 3)", () => {
       sectionsOf(page.html).flatMap((section) =>
         // A service's own name on the services page is an item, not a heading field.
         [
-          ...section
+          ...withoutItems(section)
             .replace(/<article[\s\S]*?<\/article>/g, "")
             .matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g),
         ]

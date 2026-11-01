@@ -41,7 +41,7 @@ const dropOriginals = {
       const root = fileURLToPath(dir)
       const files = readdirSync(root, { recursive: true }).map(String)
       const text = files
-        .filter((file) => /\.(html|css|js|json|xml)$/.test(file))
+        .filter((file) => /\.(html|css|js|json|webmanifest|xml)$/.test(file))
         .map((file) => readFileSync(root + file, "utf8"))
         .join("\n")
       for (const file of files) {

@@ -49,7 +49,10 @@ const assets = [
       )
       // The favicon set (src/favicon.ts) is fetched once per site, and the
       // apple-touch-icon only when a phone saves the page; neither is the page.
-      .filter((path) => !/^(favicon[-.]|apple-touch-icon\.|icon-\d)/.test(path))
+      .filter(
+        (path) =>
+          !/^_astro\/(favicon[-.]|apple-touch-icon\.|icon-\d)/.test(path)
+      )
   ),
 ]
 

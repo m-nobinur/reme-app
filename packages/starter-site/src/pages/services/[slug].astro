@@ -1,5 +1,6 @@
 ---
 import { plain } from "../../accent"
+import { headerPhoto } from "../../header-photo"
 import Base from "../../layouts/Base.astro"
 import Sections from "../../layouts/Sections.astro"
 import {
@@ -29,6 +30,7 @@ const { service } = Astro.props
   title={service.title || plain(service.heading || service.name)}
   description={service.description || service.body}
   jsonLd={[...services(Astro.site, [service]), ...faqPage(service.faqs)]}
+  image={headerPhoto(`service:${service.id}`)}
 >
   <Sections page="service" service={service} />
 </Base>
