@@ -529,7 +529,7 @@ export function copyFindings(
   const headings: { file: string; text: string; stems: Set<string> }[] = []
   const steps: { file: string; text: string; stems: Set<string> }[] = []
   const titles = new Map<string, string>()
-  const sentences = new Map<string, string>()
+  const repeats = repeatedSentences(pages)
   const named = new Set(wordsOf(areas))
   const places = plainText(areas)
   for (const { file, html } of pages) {
@@ -611,22 +611,15 @@ export function copyFindings(
           "the page has no table comparing the services (the service, what it usually covers, who it suits); add it as a table block in a content section of services.json",
       })
 
-    const repeated = new Set<string>()
-    for (const line of page.lines)
-      for (const sentence of sentencesOf(line)) {
-        const first = sentences.get(sentence)
-        if (!first) sentences.set(sentence, file)
-        else if (first !== file && !repeated.has(sentence)) {
-          repeated.add(sentence)
-          found.push({
-            file,
-            node: "text",
-            problem: "repeat",
-            text: line,
-            detail: `the sentence "${sentence}" is on ${first} too; say each thing once, on the page that owns the topic, and link there from this one`,
-          })
-        }
-      }
+    for (const { sentence, files } of repeats)
+      if (files[0] !== file && files.includes(file))
+        found.push({
+          file,
+          node: "text",
+          problem: "repeat",
+          text: sentence,
+          detail: `the sentence "${sentence}" is on ${files[0]} too; say each thing once, on the page that owns the topic, and link there from this one`,
+        })
 
     if (places) {
       for (const town of page.towns)
@@ -755,6 +748,26 @@ export function copyFindings(
     }
   }
   return found
+}
+
+/**
+ * Each sentence of `REPEAT_WORDS` words or more that two pages or more say,
+ * with those pages in site order: what the gate fails, for the evals to count.
+ * A page kept out of search is not read.
+ */
+export function repeatedSentences(
+  pages: readonly { file: string; html: string }[]
+): { sentence: string; files: string[] }[] {
+  const seen = new Map<string, string[]>()
+  for (const { file, html } of pages) {
+    const page = read(html)
+    if (!page.indexed) continue
+    for (const sentence of new Set(page.lines.flatMap(sentencesOf)))
+      seen.set(sentence, [...(seen.get(sentence) ?? []), file])
+  }
+  return [...seen]
+    .filter(([, files]) => files.length > 1)
+    .map(([sentence, files]) => ({ sentence, files }))
 }
 
 /** A site field's gated section, by its name in src/site-config.ts. */

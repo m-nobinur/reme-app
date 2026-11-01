@@ -49,6 +49,7 @@ export {
   fieldFindings,
   NEAR as HEADING_NEAR,
   REPEAT_WORDS,
+  repeatedSentences,
   STOCK_HEADINGS,
   sentencesOf,
   TITLE_CHARS,
