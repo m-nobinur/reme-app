@@ -566,7 +566,7 @@ export const CASES = [
   },
   {
     pending:
-      "an eval org with no address task: the offer comes once per org, and the shared eval org has had it",
+      "address-not-now runs first, having no facts, and its decline opens the address task, so this build's once-only offer is skipped; ordering it after this case left two builds the recording counts as unapproved",
     // The first build starts, and the address is offered on its card while it runs.
     name: "address-offer-mid-build",
     facts: GOLDEN_FACTS,
