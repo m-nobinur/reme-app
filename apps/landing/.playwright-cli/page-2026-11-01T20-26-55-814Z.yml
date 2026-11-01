@@ -1,0 +1,7 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e3]: Reme
+    - paragraph [ref=e9]: Coming soon
+    - heading "The assistant that runs your website for you" [level=1] [ref=e10]
+    - paragraph [ref=e11]: Reme is an AI assistant for small service businesses. It builds your website, keeps it up to date and brings you the decisions that need you.
+  - contentinfo [ref=e12]: © 2026 Reme

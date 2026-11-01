@@ -1,0 +1,15 @@
+// The bare domain's holding page: static files only, no Worker code. The
+// production router hands both names back to Cloudflare (SERVICE_HOSTS), so
+// these custom domains serve them.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "reme-landing",
+  "compatibility_date": "2026-08-26",
+  "assets": { "directory": "./public" },
+  "routes": [
+    { "pattern": "remeai.co.uk", "custom_domain": true },
+    { "pattern": "www.remeai.co.uk", "custom_domain": true }
+  ],
+  "workers_dev": false,
+  "preview_urls": false
+}
