@@ -192,6 +192,9 @@ const perRow = items.length === 4 ? 4 : 3
                       {site.serviceIncludesLabel && (
                         <Label class="facts-label">{site.serviceIncludesLabel}</Label>
                       )}
+                      {site.typicalNote && (
+                        <p class="typical-note">{site.typicalNote}</p>
+                      )}
                       <ul class="check-list" data-copy="service_includes">
                         {item.includes.map((line) => (
                           <li>

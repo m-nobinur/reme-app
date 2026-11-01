@@ -3,8 +3,8 @@ import {
   type ImageSlot,
   PALETTES,
   type PageId,
+  type PlannedKind,
   SECTION_VARIANTS,
-  type SectionKind,
 } from "@workspace/contracts"
 
 import { generatedPath, plannedPath } from "./photo-files.ts"
@@ -24,11 +24,14 @@ const ROLES = ["paper", "ink", "primary", "tint", "accent", "line"] as const
  */
 export function blueprintLayout(
   plan: Blueprint
-): Partial<Record<PageId, { kind: SectionKind; variant: string }[]>> {
+): Partial<Record<PageId, { kind: PlannedKind; variant?: string }[]>> {
   return Object.fromEntries(
     plan.pages.map(({ page, sections }) => [
       page,
-      sections.map(({ kind, variant }) => ({ kind, variant })),
+      // A content section has one look, so no variant.
+      sections.map(({ kind, variant }) =>
+        kind === "content" ? { kind } : { kind, variant }
+      ),
     ])
   )
 }
@@ -100,6 +103,21 @@ export function blueprintLines(
           `  - ${page} ${s.kind} (${s.variant}): ${s.purpose}${s.content_notes ? ` Facts: ${s.content_notes}` : ""}`
       )
     ),
+    ...(plan.content?.length
+      ? [
+          "- What each page says, its content plan: each topic on its own page only, the others linking to it:",
+          ...plan.content.map(
+            (c) =>
+              `  - ${c.offering > 0 ? `service ${c.offering}` : c.page}, for "${c.target_search}": topics ${c.topics.join("; ")}; outline ${c.outline
+                .map((o) =>
+                  o.subheadings.length > 0
+                    ? `${o.heading} (${o.subheadings.join(", ")})`
+                    : o.heading
+                )
+                .join("; ")}; from ${c.sources.join(", ")}`
+          ),
+        ]
+      : []),
     ...(plan.images.length > 0
       ? [
           "- Image slots. A photo the plan dropped is not listed, and its section renders without one:",

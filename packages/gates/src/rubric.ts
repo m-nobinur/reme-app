@@ -16,7 +16,7 @@ export const RULES = [
   { id: "eyebrow", text: "An eyebrow above every h2" },
   {
     id: "accent",
-    text: "Accent the last word or clause of a headline, never the whole line",
+    text: "Accent the last word or clause of at most two headlines a page, never the whole line",
   },
   {
     id: "one_hue",
@@ -27,7 +27,10 @@ export const RULES = [
     text: "Neutrals lean toward the hue; no pure white, black or grey",
   },
   { id: "hairlines", text: "Hairlines divide; shadows are rare and soft" },
-  { id: "numbered", text: "Processes and lists are numbered 01, 02, 03" },
+  {
+    id: "numbered",
+    text: "A process is numbered 01, 02, 03; a list takes numbers or icons, never both",
+  },
   { id: "overlay", text: "Every image carries at most one overlay with copy" },
   {
     id: "arrows",

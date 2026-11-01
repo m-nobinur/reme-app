@@ -41,8 +41,14 @@
   {
     "component": "AreaSection",
     "path": "src/components/AreaSection/AreaSection.astro",
-    "summary": "Where the business works, the places it names, a short local paragraph, the hours, and the area drawn as a line map with a small card.",
+    "summary": "Where the business works, the places it names, a short local paragraph, the hours, and the area drawn as a line map with a small card or, in town_list, the towns as a list.",
     "props": [
+      {
+        "name": "variant",
+        "type": "\"default\" | \"town_list\"",
+        "required": false,
+        "description": "default: the area drawn beside the copy; town_list: the towns as a column list, each with its line, and no drawing."
+      },
       {
         "name": "heading",
         "type": "string",
@@ -67,11 +73,12 @@
       "Off the service area page it links there with areaLink.",
       "Reads weekdayHours (its row shows only when given), areaPlaceLabel, areaHoursLabel, areaCardLabel and areaCardLine; an empty areaCardLine shows service_area.text on the card.",
       "The drawing is generated from areaTowns at build time, the first town in the middle, and is hidden from assistive technology; the towns are also text. A direction with one dark band draws the section on the deep band, any other on the light one.",
-      "On the service area page the drawing is the header's, and the section lists the towns, each with its line from areaTownNotes (one to a line, the town, a colon and its line, for towns in areaTowns only)."
+      "On the service area page the drawing is the header's, and the section lists the towns, each with its line from areaTownNotes (one to a line, the town, a colon and its line, for towns in areaTowns only). town_list lists them the same way on any page, with no drawing."
     ],
     "examples": [
       "<AreaSection heading={site.serviceAreaHeading} />",
-      "<AreaSection />"
+      "<AreaSection />",
+      "<AreaSection variant=\"town_list\" />"
     ],
     "forbidden": ["a place, landmark or travel time the facts do not give"],
     "source": "generated"
@@ -472,7 +479,7 @@
     ],
     "constraints": [
       "Reads serviceItems from src/structured-data.ts (service1Name to service6For); a service renders only with a name or a body.",
-      "photo_cards are cards with a 4:3 photo, a pill with the icon and number on it, and serviceMoreLabel with an arrow; numbered_rows are hairline rows with a number, an icon circle and a round arrow; practice_list is a numbered list with the name beside its sentence, for legal; fleet is 16:9 cards with Includes as spec pills, for limousine; alternating is photo and text rows with the Includes check list.",
+      "photo_cards are cards with a 4:3 photo, a pill with the icon and number on it, and serviceMoreLabel with an arrow; numbered_rows are hairline rows with a number, an icon circle and a round arrow; practice_list is a numbered list with the name beside its sentence, for legal; fleet is 16:9 cards with Includes as spec pills, for limousine; alternating is photo and text rows with the Includes check list, under serviceIncludesLabel and the typicalNote line that marks it as what the work usually covers.",
       "Every pattern but alternating links each name to its section, id service-N, on the services page. alternating adds Includes, one item to a line, For, and a quote link, and is what the services page uses.",
       "serviceNImage with serviceNImageAlt is the service's photo; without it a card shows its icon and a row its text. A fleet photo is an owner upload.",
       "The section's eyebrow is site.serviceCardsEyebrow.",
@@ -637,8 +644,14 @@
   {
     "component": "ValueProps",
     "path": "src/components/ValueProps/ValueProps.astro",
-    "summary": "Up to three reasons to choose the business, each an icon, a title and a sentence, on one panel.",
+    "summary": "Up to three reasons to choose the business, each an icon, a title and a sentence, in one of two patterns.",
     "props": [
+      {
+        "name": "variant",
+        "type": "\"default\" | \"hairline_rows\"",
+        "required": false,
+        "description": "default: numbered reasons beside the heading, each in an icon circle; hairline_rows: full-width rows under the heading, between hairlines, a small icon leading each."
+      },
       {
         "name": "eyebrow",
         "type": "string",
@@ -667,9 +680,10 @@
     "constraints": [
       "Reads valueProp1Title to valueProp3Icon itself, in order, unless a page passes its own items (the about page's approach1 to approach4); an entry renders only when its title or body is set.",
       "Each valuePropNIcon is a key of ICONS in src/icons.ts that fits the reason; an empty or unknown one is picked from the reason's words.",
+      "default numbers the reasons beside the heading, each in an icon circle; hairline_rows sets them as full-width rows under the heading, divided by hairlines, a small icon leading each and no number.",
       "Renders nothing when every title and body is empty."
     ],
-    "examples": ["<ValueProps />"],
+    "examples": ["<ValueProps />", "<ValueProps variant=\"hairline_rows\" />"],
     "forbidden": ["a number, rating, award or guarantee no fact states"],
     "source": "generated"
   }

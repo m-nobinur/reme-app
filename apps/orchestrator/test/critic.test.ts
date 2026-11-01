@@ -327,7 +327,7 @@ describe("a fix that maps to nothing the builder can edit", () => {
     const { system } = criticPrompt({ blueprint: {} })
     expect(system).toContain("- trust_strip (variants: icons, phrases)")
     expect(system).toContain("trust1 to trust3")
-    expect(system).toContain("- value_props (variants: default)")
+    expect(system).toContain("- value_props (variants: default, hairline_rows)")
     expect(system).toContain("valuePropNTitle")
     expect(system).toContain("`kind:variant`")
     expect(system).toContain("A component fix has an empty target.")
@@ -415,16 +415,16 @@ describe("the site's config as text", () => {
         /^ {2}homeLink: .*$/m,
         '  homeLink:\n    "Two lines of words",'
       )}${sheet.replace(
-      '{ kind: "faq" },\n    { kind: "cta_band" },\n  ],\n  service:',
-      '{ kind: "faq", variant: "stacked" },\n    { kind: "cta_band" },\n  ],\n  service:'
+      '{ kind: "cta_band" },\n  ],\n  service:',
+      '{ kind: "cta_band", variant: "photo" },\n  ],\n  service:'
     )}`
     const config = readConfig(edited)
     expect(config.values.navHome).toBe("It's plain.")
     expect(config.values.homeLink).toBe("Two lines of words")
     const pages: Record<string, Config["layout"][string] | undefined> =
       config.layout
-    expect(pages.services?.find((s) => s.kind === "faq")?.variant).toBe(
-      "stacked"
+    expect(pages.services?.find((s) => s.kind === "cta_band")?.variant).toBe(
+      "photo"
     )
   })
 })

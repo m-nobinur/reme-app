@@ -419,6 +419,7 @@ export type LayoutSection = {
     | "cta_band"
     | "contact"
     | "quote_form"
+    | "content"
   variant?: string
 }
 export type LayoutPage =
@@ -448,21 +449,19 @@ export const layout: Record<LayoutPage, LayoutSection[]> = {
     { kind: "hero" },
     { kind: "about" },
     { kind: "value_props" },
-    { kind: "steps" },
-    { kind: "service_area" },
     { kind: "cta_band" },
   ],
   services: [
     { kind: "hero" },
     { kind: "service_cards", variant: "photo_cards" },
-    { kind: "faq" },
+    { kind: "content" },
     { kind: "cta_band" },
   ],
   service: [
     { kind: "hero" },
     { kind: "service_cards", variant: "alternating" },
-    { kind: "steps" },
-    { kind: "faq" },
+    { kind: "content" },
+    { kind: "content" },
     { kind: "cta_band" },
   ],
   service_area: [

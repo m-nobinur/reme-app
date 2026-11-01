@@ -44,10 +44,13 @@ export {
   copyFindings,
   copyGateRules,
   DESCRIPTION_CHARS,
+  documentFindings,
   factWords,
   fieldFindings,
   NEAR as HEADING_NEAR,
+  REPEAT_WORDS,
   STOCK_HEADINGS,
+  sentencesOf,
   TITLE_CHARS,
 } from "./copy.ts"
 export {

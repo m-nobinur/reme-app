@@ -56,13 +56,6 @@ const BLOCKS: [RegExp, [string, string][]][] = [
       ["service_for", "serviceNFor (who it suits)"],
     ],
   ],
-  [
-    /^about\/index\.html$/,
-    [
-      ["approach_body", "approach1Title to approach4Body"],
-      ["step_body", "aboutStep1Title to aboutStep4Body"],
-    ],
-  ],
   [/^contact\/index\.html$/, [["contact_body", "contactIncludeBody"]]],
 ]
 
@@ -144,14 +137,16 @@ export function copyFindings(pages: readonly BuiltPage[]): string[] {
       [])
       if (indexed && !marked(mark))
         say(`has no ${field} block; fill it for this page`)
-    // With two services or more, the services page helps a visitor choose.
+    // With two services or more, the services page compares them, once.
     if (
       indexed &&
       file === "services/index.html" &&
       (html.match(/data-copy="service_body"/g)?.length ?? 0) > 1 &&
-      !marked("services_help")
+      !/<main[\s\S]*<table[\s>]/.test(html)
     )
-      say("has no servicesHelpBody block; fill it for this page")
+      say(
+        "has no table block; add one comparing the services (the service, what it usually covers, who it suits) in a content section of services.json"
+      )
 
     const text = textOf(html)
     if (text.includes(EM_DASH))

@@ -151,7 +151,10 @@ describe("the structured output schema", () => {
     const pages = props.pages
     const section = pages.items.properties.sections.items
     expect(section.anyOf).toBeUndefined()
-    expect(section.properties.kind.enum).toEqual(Object.keys(SECTION_VARIANTS))
+    expect(section.properties.kind.enum).toEqual([
+      ...Object.keys(SECTION_VARIANTS),
+      "content",
+    ])
     expect(new Set(section.properties.variant.enum)).toEqual(
       new Set(Object.values(SECTION_VARIANTS).flat())
     )
@@ -389,9 +392,10 @@ describe("the photo shot list", () => {
       // An arch is portrait, and its copy sits beside it, not on it.
       ["hero", "3:4", undefined],
       ["card", "4:3", undefined],
-      ["band", "21:9", undefined],
       // An owner's photo is placed as it is.
       ["own", "16:9", undefined],
+      // A band's texture is spent with the headers that matter least.
+      ["band", "21:9", undefined],
     ])
     // dark_center's copy sits on the photo, so its text side stays.
     expect(
@@ -458,34 +462,31 @@ describe("page header photos", () => {
     ).toEqual(["generated", "generated"])
   })
 
-  it("puts back the about page's principles and visit steps when a plan drops them", () => {
+  it("leaves the about page as planned, with no process and no area of its own", () => {
     const made = fallback(CLEANING)
+    const about = made.pages.find((p) => p.page === "about")?.sections ?? []
+    expect(about.map((s) => s.kind)).toEqual([
+      "hero",
+      "about",
+      "value_props",
+      "cta_band",
+    ])
     const dropped = {
       ...made,
       pages: made.pages.map((p) =>
         p.page === "about"
           ? {
               ...p,
-              sections: p.sections.filter(
-                (s) => s.kind !== "value_props" && s.kind !== "steps"
-              ),
+              sections: p.sections.filter((s) => s.kind !== "value_props"),
             }
           : p
       ),
     } as Blueprint
-    const about = (shown: Blueprint) =>
-      shown.pages.find((p) => p.page === "about")?.sections ?? []
-    expect(about(dropped).map((s) => s.kind)).not.toContain("steps")
-    const kept = about(withOwnerChoices(dropped, CLEANING))
-    const kinds = kept.map((s) => s.kind)
-    expect(kinds.slice(-3)).toEqual(["value_props", "steps", "cta_band"])
-    // The home page's variant, so the site keeps one look.
-    const home = made.pages.find((p) => p.page === "home")?.sections
-    expect(kept.find((s) => s.kind === "steps")?.variant).toBe(
-      home?.find((s) => s.kind === "steps")?.variant
-    )
-    // A plan that has them is left as it is.
-    expect(about(withOwnerChoices(made, CLEANING))).toEqual(about(made))
+    expect(
+      withOwnerChoices(dropped, CLEANING)
+        .pages.find((p) => p.page === "about")
+        ?.sections.map((s) => s.kind)
+    ).toEqual(["hero", "about", "cta_band"])
   })
 
   it("keeps a page with no photo as it was, and draws about and contact last", () => {
@@ -841,6 +842,104 @@ describe("the checks a schema cannot make", () => {
     expect(found.join("\n")).toMatch(/listed twice/)
     expect(found.join("\n")).toMatch(/pages missing: about, services/)
     expect(found.join("\n")).toMatch(/contact cannot hold gallery/)
+  })
+
+  it("holds the content plan to one page per topic and heading, and a plan per page and offering", () => {
+    expect(check(good)).toEqual([])
+    const content = good.content ?? []
+    expect(content.map((c) => [c.page, c.offering])).toEqual([
+      ["home", 0],
+      ["about", 0],
+      ["services", 0],
+      ["service", 1],
+      ["service", 2],
+      ["service_area", 0],
+      ["contact", 0],
+      ["quote", 0],
+    ])
+    expect(check({ ...good, content: undefined }).join("\n")).toMatch(
+      /content has no plan for home/
+    )
+    type Entry = NonNullable<Blueprint["content"]>[number]
+    const [home, about] = content as [Entry, Entry]
+    const rest = content.slice(2)
+    const found = check({
+      ...good,
+      content: [
+        home,
+        {
+          ...about,
+          topics: [...about.topics, (home.topics[0] ?? "").toUpperCase()],
+        },
+        {
+          ...about,
+          page: "service",
+          offering: 3,
+          outline: [
+            { heading: home.outline[0]?.heading ?? "", subheadings: [] },
+          ],
+        },
+        ...rest.filter((c) => c.offering !== 2),
+      ],
+    }).join("\n")
+    expect(found).toMatch(/topic ".*" is on home and about/)
+    expect(found).toMatch(/outline heading ".*" is on home and service 3/)
+    expect(found).toMatch(
+      /content plans service 3, which is not a planned page/
+    )
+    expect(found).toMatch(/content has no plan for service 2/)
+  })
+
+  it("plans one FAQ, a table on the services page and detail on each service page", () => {
+    const faq = {
+      kind: "faq" as const,
+      variant: "split" as const,
+      purpose: "x",
+      content_notes: null,
+    }
+    const found = check({
+      ...good,
+      pages: good.pages.map((p) =>
+        p.page === "services" || p.page === "service"
+          ? { ...p, sections: p.sections.filter((s) => s.kind !== "content") }
+          : p.page === "contact"
+            ? { ...p, sections: [...p.sections, faq] }
+            : p
+      ),
+    }).join("\n")
+    expect(found).toMatch(/the FAQ is on 2 pages/)
+    const towns = check({
+      ...good,
+      pages: good.pages.map((p) =>
+        p.page === "home"
+          ? {
+              ...p,
+              sections: p.sections.map((s) =>
+                s.kind === "service_area" ? { ...s, variant: "town_list" } : s
+              ),
+            }
+          : p
+      ),
+    } as Blueprint).join("\n")
+    expect(towns).toMatch(/home shows the area as town_list/)
+    expect(found).toMatch(/services page needs a content section/)
+    expect(found).toMatch(/a service page needs a content section/)
+    expect(
+      check({
+        ...good,
+        pages: good.pages.map((p) =>
+          p.page === "about"
+            ? {
+                ...p,
+                sections: [
+                  ...p.sections,
+                  { ...faq, kind: "steps", variant: "circles" },
+                ],
+              }
+            : p
+        ),
+      } as Blueprint).join("\n")
+    ).toMatch(/about cannot hold steps/)
   })
 
   it("refuses a generated photo where a photo is a claim, and an unknown upload", () => {

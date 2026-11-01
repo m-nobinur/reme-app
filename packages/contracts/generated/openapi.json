@@ -3700,11 +3700,14 @@
                                 "fleet",
                                 "practice_list",
                                 "default",
+                                "hairline_rows",
                                 "circles",
                                 "dark_band",
                                 "timeline",
+                                "panel_split",
                                 "featured",
                                 "wall",
+                                "town_list",
                                 "split",
                                 "stacked",
                                 "solid",
@@ -3727,11 +3730,14 @@
                                 "fleet",
                                 "practice_list",
                                 "default",
+                                "hairline_rows",
                                 "circles",
                                 "dark_band",
                                 "timeline",
+                                "panel_split",
                                 "featured",
                                 "wall",
+                                "town_list",
                                 "split",
                                 "stacked",
                                 "solid",
@@ -4093,11 +4099,14 @@
                                           "fleet",
                                           "practice_list",
                                           "default",
+                                          "hairline_rows",
                                           "circles",
                                           "dark_band",
                                           "timeline",
+                                          "panel_split",
                                           "featured",
                                           "wall",
+                                          "town_list",
                                           "split",
                                           "stacked",
                                           "solid",
@@ -4120,11 +4129,14 @@
                                           "fleet",
                                           "practice_list",
                                           "default",
+                                          "hairline_rows",
                                           "circles",
                                           "dark_band",
                                           "timeline",
+                                          "panel_split",
                                           "featured",
                                           "wall",
+                                          "town_list",
                                           "split",
                                           "stacked",
                                           "solid",
@@ -11902,7 +11914,8 @@
                           "variant": {
                             "type": "string",
                             "enum": [
-                              "default"
+                              "default",
+                              "hairline_rows"
                             ]
                           },
                           "purpose": {
@@ -11986,7 +11999,8 @@
                           "variant": {
                             "type": "string",
                             "enum": [
-                              "default"
+                              "default",
+                              "panel_split"
                             ]
                           },
                           "purpose": {
@@ -12110,7 +12124,8 @@
                           "variant": {
                             "type": "string",
                             "enum": [
-                              "default"
+                              "default",
+                              "town_list"
                             ]
                           },
                           "purpose": {
@@ -12272,6 +12287,47 @@
                           "kind": {
                             "type": "string",
                             "const": "quote_form"
+                          },
+                          "variant": {
+                            "type": "string",
+                            "enum": [
+                              "default"
+                            ]
+                          },
+                          "purpose": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
+                          },
+                          "content_notes": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 400,
+                                "pattern": "\\S"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "variant",
+                          "purpose",
+                          "content_notes"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "content"
                           },
                           "variant": {
                             "type": "string",
@@ -12562,6 +12618,112 @@
               "required": [
                 "name",
                 "purpose"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "content": {
+            "maxItems": 16,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "page": {
+                  "type": "string",
+                  "enum": [
+                    "home",
+                    "services",
+                    "about",
+                    "gallery",
+                    "testimonials",
+                    "faq",
+                    "service_area",
+                    "contact",
+                    "quote",
+                    "service"
+                  ]
+                },
+                "offering": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 6
+                },
+                "purpose": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "pattern": "\\S"
+                },
+                "target_search": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "pattern": "\\S"
+                },
+                "topics": {
+                  "minItems": 1,
+                  "maxItems": 8,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "pattern": "\\S"
+                  }
+                },
+                "outline": {
+                  "minItems": 1,
+                  "maxItems": 12,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "heading": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "\\S"
+                      },
+                      "subheadings": {
+                        "maxItems": 6,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        }
+                      }
+                    },
+                    "required": [
+                      "heading",
+                      "subheadings"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "sources": {
+                  "minItems": 1,
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "owner",
+                      "facts",
+                      "trade"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "page",
+                "offering",
+                "purpose",
+                "target_search",
+                "topics",
+                "outline",
+                "sources"
               ],
               "additionalProperties": false
             }
@@ -13772,7 +13934,8 @@
                                   "variant": {
                                     "type": "string",
                                     "enum": [
-                                      "default"
+                                      "default",
+                                      "hairline_rows"
                                     ]
                                   },
                                   "purpose": {
@@ -13856,7 +14019,8 @@
                                   "variant": {
                                     "type": "string",
                                     "enum": [
-                                      "default"
+                                      "default",
+                                      "panel_split"
                                     ]
                                   },
                                   "purpose": {
@@ -13980,7 +14144,8 @@
                                   "variant": {
                                     "type": "string",
                                     "enum": [
-                                      "default"
+                                      "default",
+                                      "town_list"
                                     ]
                                   },
                                   "purpose": {
@@ -14142,6 +14307,47 @@
                                   "kind": {
                                     "type": "string",
                                     "const": "quote_form"
+                                  },
+                                  "variant": {
+                                    "type": "string",
+                                    "enum": [
+                                      "default"
+                                    ]
+                                  },
+                                  "purpose": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200,
+                                    "pattern": "\\S"
+                                  },
+                                  "content_notes": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 400,
+                                        "pattern": "\\S"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "variant",
+                                  "purpose",
+                                  "content_notes"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "content"
                                   },
                                   "variant": {
                                     "type": "string",
@@ -14432,6 +14638,112 @@
                       "required": [
                         "name",
                         "purpose"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "content": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "string",
+                          "enum": [
+                            "home",
+                            "services",
+                            "about",
+                            "gallery",
+                            "testimonials",
+                            "faq",
+                            "service_area",
+                            "contact",
+                            "quote",
+                            "service"
+                          ]
+                        },
+                        "offering": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 6
+                        },
+                        "purpose": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        },
+                        "target_search": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        "topics": {
+                          "minItems": 1,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "outline": {
+                          "minItems": 1,
+                          "maxItems": 12,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "heading": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120,
+                                "pattern": "\\S"
+                              },
+                              "subheadings": {
+                                "maxItems": 6,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 120,
+                                  "pattern": "\\S"
+                                }
+                              }
+                            },
+                            "required": [
+                              "heading",
+                              "subheadings"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "sources": {
+                          "minItems": 1,
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "owner",
+                              "facts",
+                              "trade"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "page",
+                        "offering",
+                        "purpose",
+                        "target_search",
+                        "topics",
+                        "outline",
+                        "sources"
                       ],
                       "additionalProperties": false
                     }
@@ -14791,7 +15103,8 @@
                                       "variant": {
                                         "type": "string",
                                         "enum": [
-                                          "default"
+                                          "default",
+                                          "hairline_rows"
                                         ]
                                       },
                                       "purpose": {
@@ -14875,7 +15188,8 @@
                                       "variant": {
                                         "type": "string",
                                         "enum": [
-                                          "default"
+                                          "default",
+                                          "panel_split"
                                         ]
                                       },
                                       "purpose": {
@@ -14999,7 +15313,8 @@
                                       "variant": {
                                         "type": "string",
                                         "enum": [
-                                          "default"
+                                          "default",
+                                          "town_list"
                                         ]
                                       },
                                       "purpose": {
@@ -15161,6 +15476,47 @@
                                       "kind": {
                                         "type": "string",
                                         "const": "quote_form"
+                                      },
+                                      "variant": {
+                                        "type": "string",
+                                        "enum": [
+                                          "default"
+                                        ]
+                                      },
+                                      "purpose": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200,
+                                        "pattern": "\\S"
+                                      },
+                                      "content_notes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 400,
+                                            "pattern": "\\S"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "variant",
+                                      "purpose",
+                                      "content_notes"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "content"
                                       },
                                       "variant": {
                                         "type": "string",
@@ -15451,6 +15807,112 @@
                           "required": [
                             "name",
                             "purpose"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "content": {
+                        "maxItems": 16,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "page": {
+                              "type": "string",
+                              "enum": [
+                                "home",
+                                "services",
+                                "about",
+                                "gallery",
+                                "testimonials",
+                                "faq",
+                                "service_area",
+                                "contact",
+                                "quote",
+                                "service"
+                              ]
+                            },
+                            "offering": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 6
+                            },
+                            "purpose": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "pattern": "\\S"
+                            },
+                            "target_search": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120,
+                              "pattern": "\\S"
+                            },
+                            "topics": {
+                              "minItems": 1,
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80,
+                                "pattern": "\\S"
+                              }
+                            },
+                            "outline": {
+                              "minItems": 1,
+                              "maxItems": 12,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "heading": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120,
+                                    "pattern": "\\S"
+                                  },
+                                  "subheadings": {
+                                    "maxItems": 6,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 120,
+                                      "pattern": "\\S"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "heading",
+                                  "subheadings"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "sources": {
+                              "minItems": 1,
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "owner",
+                                  "facts",
+                                  "trade"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "page",
+                            "offering",
+                            "purpose",
+                            "target_search",
+                            "topics",
+                            "outline",
+                            "sources"
                           ],
                           "additionalProperties": false
                         }
@@ -25959,7 +26421,8 @@
                                                   "variant": {
                                                     "type": "string",
                                                     "enum": [
-                                                      "default"
+                                                      "default",
+                                                      "hairline_rows"
                                                     ]
                                                   },
                                                   "purpose": {
@@ -26043,7 +26506,8 @@
                                                   "variant": {
                                                     "type": "string",
                                                     "enum": [
-                                                      "default"
+                                                      "default",
+                                                      "panel_split"
                                                     ]
                                                   },
                                                   "purpose": {
@@ -26167,7 +26631,8 @@
                                                   "variant": {
                                                     "type": "string",
                                                     "enum": [
-                                                      "default"
+                                                      "default",
+                                                      "town_list"
                                                     ]
                                                   },
                                                   "purpose": {
@@ -26329,6 +26794,47 @@
                                                   "kind": {
                                                     "type": "string",
                                                     "const": "quote_form"
+                                                  },
+                                                  "variant": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "default"
+                                                    ]
+                                                  },
+                                                  "purpose": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 200,
+                                                    "pattern": "\\S"
+                                                  },
+                                                  "content_notes": {
+                                                    "anyOf": [
+                                                      {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 400,
+                                                        "pattern": "\\S"
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  }
+                                                },
+                                                "required": [
+                                                  "kind",
+                                                  "variant",
+                                                  "purpose",
+                                                  "content_notes"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "kind": {
+                                                    "type": "string",
+                                                    "const": "content"
                                                   },
                                                   "variant": {
                                                     "type": "string",
@@ -26619,6 +27125,112 @@
                                       "required": [
                                         "name",
                                         "purpose"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "content": {
+                                    "maxItems": 16,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "page": {
+                                          "type": "string",
+                                          "enum": [
+                                            "home",
+                                            "services",
+                                            "about",
+                                            "gallery",
+                                            "testimonials",
+                                            "faq",
+                                            "service_area",
+                                            "contact",
+                                            "quote",
+                                            "service"
+                                          ]
+                                        },
+                                        "offering": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 6
+                                        },
+                                        "purpose": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 200,
+                                          "pattern": "\\S"
+                                        },
+                                        "target_search": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 120,
+                                          "pattern": "\\S"
+                                        },
+                                        "topics": {
+                                          "minItems": 1,
+                                          "maxItems": 8,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 80,
+                                            "pattern": "\\S"
+                                          }
+                                        },
+                                        "outline": {
+                                          "minItems": 1,
+                                          "maxItems": 12,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "heading": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 120,
+                                                "pattern": "\\S"
+                                              },
+                                              "subheadings": {
+                                                "maxItems": 6,
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 120,
+                                                  "pattern": "\\S"
+                                                }
+                                              }
+                                            },
+                                            "required": [
+                                              "heading",
+                                              "subheadings"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "sources": {
+                                          "minItems": 1,
+                                          "maxItems": 3,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "enum": [
+                                              "owner",
+                                              "facts",
+                                              "trade"
+                                            ]
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "page",
+                                        "offering",
+                                        "purpose",
+                                        "target_search",
+                                        "topics",
+                                        "outline",
+                                        "sources"
                                       ],
                                       "additionalProperties": false
                                     }
@@ -26978,7 +27590,8 @@
                                                       "variant": {
                                                         "type": "string",
                                                         "enum": [
-                                                          "default"
+                                                          "default",
+                                                          "hairline_rows"
                                                         ]
                                                       },
                                                       "purpose": {
@@ -27062,7 +27675,8 @@
                                                       "variant": {
                                                         "type": "string",
                                                         "enum": [
-                                                          "default"
+                                                          "default",
+                                                          "panel_split"
                                                         ]
                                                       },
                                                       "purpose": {
@@ -27186,7 +27800,8 @@
                                                       "variant": {
                                                         "type": "string",
                                                         "enum": [
-                                                          "default"
+                                                          "default",
+                                                          "town_list"
                                                         ]
                                                       },
                                                       "purpose": {
@@ -27348,6 +27963,47 @@
                                                       "kind": {
                                                         "type": "string",
                                                         "const": "quote_form"
+                                                      },
+                                                      "variant": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "default"
+                                                        ]
+                                                      },
+                                                      "purpose": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "pattern": "\\S"
+                                                      },
+                                                      "content_notes": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "maxLength": 400,
+                                                            "pattern": "\\S"
+                                                          },
+                                                          {
+                                                            "type": "null"
+                                                          }
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "kind",
+                                                      "variant",
+                                                      "purpose",
+                                                      "content_notes"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "kind": {
+                                                        "type": "string",
+                                                        "const": "content"
                                                       },
                                                       "variant": {
                                                         "type": "string",
@@ -27638,6 +28294,112 @@
                                           "required": [
                                             "name",
                                             "purpose"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "content": {
+                                        "maxItems": 16,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "page": {
+                                              "type": "string",
+                                              "enum": [
+                                                "home",
+                                                "services",
+                                                "about",
+                                                "gallery",
+                                                "testimonials",
+                                                "faq",
+                                                "service_area",
+                                                "contact",
+                                                "quote",
+                                                "service"
+                                              ]
+                                            },
+                                            "offering": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 6
+                                            },
+                                            "purpose": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 200,
+                                              "pattern": "\\S"
+                                            },
+                                            "target_search": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 120,
+                                              "pattern": "\\S"
+                                            },
+                                            "topics": {
+                                              "minItems": 1,
+                                              "maxItems": 8,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 80,
+                                                "pattern": "\\S"
+                                              }
+                                            },
+                                            "outline": {
+                                              "minItems": 1,
+                                              "maxItems": 12,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "heading": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 120,
+                                                    "pattern": "\\S"
+                                                  },
+                                                  "subheadings": {
+                                                    "maxItems": 6,
+                                                    "type": "array",
+                                                    "items": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 120,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  }
+                                                },
+                                                "required": [
+                                                  "heading",
+                                                  "subheadings"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "sources": {
+                                              "minItems": 1,
+                                              "maxItems": 3,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "owner",
+                                                  "facts",
+                                                  "trade"
+                                                ]
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "page",
+                                            "offering",
+                                            "purpose",
+                                            "target_search",
+                                            "topics",
+                                            "outline",
+                                            "sources"
                                           ],
                                           "additionalProperties": false
                                         }
@@ -43697,7 +44459,8 @@
                                           "variant": {
                                             "type": "string",
                                             "enum": [
-                                              "default"
+                                              "default",
+                                              "hairline_rows"
                                             ]
                                           },
                                           "purpose": {
@@ -43781,7 +44544,8 @@
                                           "variant": {
                                             "type": "string",
                                             "enum": [
-                                              "default"
+                                              "default",
+                                              "panel_split"
                                             ]
                                           },
                                           "purpose": {
@@ -43905,7 +44669,8 @@
                                           "variant": {
                                             "type": "string",
                                             "enum": [
-                                              "default"
+                                              "default",
+                                              "town_list"
                                             ]
                                           },
                                           "purpose": {
@@ -44067,6 +44832,47 @@
                                           "kind": {
                                             "type": "string",
                                             "const": "quote_form"
+                                          },
+                                          "variant": {
+                                            "type": "string",
+                                            "enum": [
+                                              "default"
+                                            ]
+                                          },
+                                          "purpose": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200,
+                                            "pattern": "\\S"
+                                          },
+                                          "content_notes": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 400,
+                                                "pattern": "\\S"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "variant",
+                                          "purpose",
+                                          "content_notes"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "const": "content"
                                           },
                                           "variant": {
                                             "type": "string",
@@ -44357,6 +45163,112 @@
                               "required": [
                                 "name",
                                 "purpose"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "content": {
+                            "maxItems": 16,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "page": {
+                                  "type": "string",
+                                  "enum": [
+                                    "home",
+                                    "services",
+                                    "about",
+                                    "gallery",
+                                    "testimonials",
+                                    "faq",
+                                    "service_area",
+                                    "contact",
+                                    "quote",
+                                    "service"
+                                  ]
+                                },
+                                "offering": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 6
+                                },
+                                "purpose": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "pattern": "\\S"
+                                },
+                                "target_search": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 120,
+                                  "pattern": "\\S"
+                                },
+                                "topics": {
+                                  "minItems": 1,
+                                  "maxItems": 8,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 80,
+                                    "pattern": "\\S"
+                                  }
+                                },
+                                "outline": {
+                                  "minItems": 1,
+                                  "maxItems": 12,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "heading": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 120,
+                                        "pattern": "\\S"
+                                      },
+                                      "subheadings": {
+                                        "maxItems": 6,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 120,
+                                          "pattern": "\\S"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "heading",
+                                      "subheadings"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "sources": {
+                                  "minItems": 1,
+                                  "maxItems": 3,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "owner",
+                                      "facts",
+                                      "trade"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "page",
+                                "offering",
+                                "purpose",
+                                "target_search",
+                                "topics",
+                                "outline",
+                                "sources"
                               ],
                               "additionalProperties": false
                             }
@@ -44716,7 +45628,8 @@
                                               "variant": {
                                                 "type": "string",
                                                 "enum": [
-                                                  "default"
+                                                  "default",
+                                                  "hairline_rows"
                                                 ]
                                               },
                                               "purpose": {
@@ -44800,7 +45713,8 @@
                                               "variant": {
                                                 "type": "string",
                                                 "enum": [
-                                                  "default"
+                                                  "default",
+                                                  "panel_split"
                                                 ]
                                               },
                                               "purpose": {
@@ -44924,7 +45838,8 @@
                                               "variant": {
                                                 "type": "string",
                                                 "enum": [
-                                                  "default"
+                                                  "default",
+                                                  "town_list"
                                                 ]
                                               },
                                               "purpose": {
@@ -45086,6 +46001,47 @@
                                               "kind": {
                                                 "type": "string",
                                                 "const": "quote_form"
+                                              },
+                                              "variant": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "default"
+                                                ]
+                                              },
+                                              "purpose": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 200,
+                                                "pattern": "\\S"
+                                              },
+                                              "content_notes": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 400,
+                                                    "pattern": "\\S"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "variant",
+                                              "purpose",
+                                              "content_notes"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "const": "content"
                                               },
                                               "variant": {
                                                 "type": "string",
@@ -45376,6 +46332,112 @@
                                   "required": [
                                     "name",
                                     "purpose"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "content": {
+                                "maxItems": 16,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "page": {
+                                      "type": "string",
+                                      "enum": [
+                                        "home",
+                                        "services",
+                                        "about",
+                                        "gallery",
+                                        "testimonials",
+                                        "faq",
+                                        "service_area",
+                                        "contact",
+                                        "quote",
+                                        "service"
+                                      ]
+                                    },
+                                    "offering": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 6
+                                    },
+                                    "purpose": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "pattern": "\\S"
+                                    },
+                                    "target_search": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 120,
+                                      "pattern": "\\S"
+                                    },
+                                    "topics": {
+                                      "minItems": 1,
+                                      "maxItems": 8,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 80,
+                                        "pattern": "\\S"
+                                      }
+                                    },
+                                    "outline": {
+                                      "minItems": 1,
+                                      "maxItems": 12,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "heading": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 120,
+                                            "pattern": "\\S"
+                                          },
+                                          "subheadings": {
+                                            "maxItems": 6,
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 120,
+                                              "pattern": "\\S"
+                                            }
+                                          }
+                                        },
+                                        "required": [
+                                          "heading",
+                                          "subheadings"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "sources": {
+                                      "minItems": 1,
+                                      "maxItems": 3,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "enum": [
+                                          "owner",
+                                          "facts",
+                                          "trade"
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "page",
+                                    "offering",
+                                    "purpose",
+                                    "target_search",
+                                    "topics",
+                                    "outline",
+                                    "sources"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -50691,7 +51753,8 @@
                                         "variant": {
                                           "type": "string",
                                           "enum": [
-                                            "default"
+                                            "default",
+                                            "hairline_rows"
                                           ]
                                         },
                                         "purpose": {
@@ -50775,7 +51838,8 @@
                                         "variant": {
                                           "type": "string",
                                           "enum": [
-                                            "default"
+                                            "default",
+                                            "panel_split"
                                           ]
                                         },
                                         "purpose": {
@@ -50899,7 +51963,8 @@
                                         "variant": {
                                           "type": "string",
                                           "enum": [
-                                            "default"
+                                            "default",
+                                            "town_list"
                                           ]
                                         },
                                         "purpose": {
@@ -51061,6 +52126,47 @@
                                         "kind": {
                                           "type": "string",
                                           "const": "quote_form"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "default"
+                                          ]
+                                        },
+                                        "purpose": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 200,
+                                          "pattern": "\\S"
+                                        },
+                                        "content_notes": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 400,
+                                              "pattern": "\\S"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "variant",
+                                        "purpose",
+                                        "content_notes"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "content"
                                         },
                                         "variant": {
                                           "type": "string",
@@ -51351,6 +52457,112 @@
                             "required": [
                               "name",
                               "purpose"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "content": {
+                          "maxItems": 16,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "page": {
+                                "type": "string",
+                                "enum": [
+                                  "home",
+                                  "services",
+                                  "about",
+                                  "gallery",
+                                  "testimonials",
+                                  "faq",
+                                  "service_area",
+                                  "contact",
+                                  "quote",
+                                  "service"
+                                ]
+                              },
+                              "offering": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 6
+                              },
+                              "purpose": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "pattern": "\\S"
+                              },
+                              "target_search": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120,
+                                "pattern": "\\S"
+                              },
+                              "topics": {
+                                "minItems": 1,
+                                "maxItems": 8,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "outline": {
+                                "minItems": 1,
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "heading": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 120,
+                                      "pattern": "\\S"
+                                    },
+                                    "subheadings": {
+                                      "maxItems": 6,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 120,
+                                        "pattern": "\\S"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "heading",
+                                    "subheadings"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "sources": {
+                                "minItems": 1,
+                                "maxItems": 3,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "owner",
+                                    "facts",
+                                    "trade"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "page",
+                              "offering",
+                              "purpose",
+                              "target_search",
+                              "topics",
+                              "outline",
+                              "sources"
                             ],
                             "additionalProperties": false
                           }
@@ -51710,7 +52922,8 @@
                                             "variant": {
                                               "type": "string",
                                               "enum": [
-                                                "default"
+                                                "default",
+                                                "hairline_rows"
                                               ]
                                             },
                                             "purpose": {
@@ -51794,7 +53007,8 @@
                                             "variant": {
                                               "type": "string",
                                               "enum": [
-                                                "default"
+                                                "default",
+                                                "panel_split"
                                               ]
                                             },
                                             "purpose": {
@@ -51918,7 +53132,8 @@
                                             "variant": {
                                               "type": "string",
                                               "enum": [
-                                                "default"
+                                                "default",
+                                                "town_list"
                                               ]
                                             },
                                             "purpose": {
@@ -52080,6 +53295,47 @@
                                             "kind": {
                                               "type": "string",
                                               "const": "quote_form"
+                                            },
+                                            "variant": {
+                                              "type": "string",
+                                              "enum": [
+                                                "default"
+                                              ]
+                                            },
+                                            "purpose": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 200,
+                                              "pattern": "\\S"
+                                            },
+                                            "content_notes": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 400,
+                                                  "pattern": "\\S"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "variant",
+                                            "purpose",
+                                            "content_notes"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "content"
                                             },
                                             "variant": {
                                               "type": "string",
@@ -52370,6 +53626,112 @@
                                 "required": [
                                   "name",
                                   "purpose"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "content": {
+                              "maxItems": 16,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "page": {
+                                    "type": "string",
+                                    "enum": [
+                                      "home",
+                                      "services",
+                                      "about",
+                                      "gallery",
+                                      "testimonials",
+                                      "faq",
+                                      "service_area",
+                                      "contact",
+                                      "quote",
+                                      "service"
+                                    ]
+                                  },
+                                  "offering": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 6
+                                  },
+                                  "purpose": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200,
+                                    "pattern": "\\S"
+                                  },
+                                  "target_search": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120,
+                                    "pattern": "\\S"
+                                  },
+                                  "topics": {
+                                    "minItems": 1,
+                                    "maxItems": 8,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 80,
+                                      "pattern": "\\S"
+                                    }
+                                  },
+                                  "outline": {
+                                    "minItems": 1,
+                                    "maxItems": 12,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "heading": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 120,
+                                          "pattern": "\\S"
+                                        },
+                                        "subheadings": {
+                                          "maxItems": 6,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 120,
+                                            "pattern": "\\S"
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "heading",
+                                        "subheadings"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "sources": {
+                                    "minItems": 1,
+                                    "maxItems": 3,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "owner",
+                                        "facts",
+                                        "trade"
+                                      ]
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "page",
+                                  "offering",
+                                  "purpose",
+                                  "target_search",
+                                  "topics",
+                                  "outline",
+                                  "sources"
                                 ],
                                 "additionalProperties": false
                               }

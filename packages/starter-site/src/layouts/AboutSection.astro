@@ -1,5 +1,5 @@
 ---
-import { accentParts } from "../accent"
+import { accentParts, plain } from "../accent"
 import Icon from "../components/Icon/Icon.astro"
 import Section from "../components/Section/Section.astro"
 import { headerPhoto } from "../header-photo"
@@ -22,9 +22,16 @@ interface Props {
    * follows the story.
    */
   section: PageSection
+  /**
+   * The about page's look: default sets the story beside the photo and the
+   * record in a band of its own; panel_split sets the story beside a tinted
+   * panel that holds the audience and the record, and no photo. The home
+   * page's short section has one look.
+   */
+  variant?: "default" | "panel_split"
 }
 
-const { page, section } = Astro.props
+const { page, section, variant = "default" } = Astro.props
 const blocks = section.blocks ?? []
 const named = (what: string) =>
   blocks.find((b) => b.id === `${section.id}-${what}`)
@@ -58,6 +65,8 @@ const proofItems = [
 ]
 // The audience h3 reads the same accent marks as the h2 above it.
 const audienceHead = accentParts(audience?.heading ?? "")
+const proof = proofItems.length >= 2
+const panel = variant === "panel_split" && (audience?.markdown || proof)
 ---
 
 {
@@ -83,9 +92,11 @@ const audienceHead = accentParts(audience?.heading ?? "")
     )
   ) : (
     <>
-      {(story || audience?.markdown || others.length > 0) && (
-        <section class="band about-story">
-          <div class:list={["wrap", "story-inner", photo && "story-split"]}>
+      {(story || audience?.markdown || others.length > 0 || panel) && (
+        <section class:list={["band about-story", panel && "about-panel_split"]}>
+          <div
+            class:list={["wrap", "story-inner", (photo || panel) && "story-split"]}
+          >
             <div class="story-text">
               <SectionHead
                 eyebrow={section.eyebrow ?? ""}
@@ -98,7 +109,7 @@ const audienceHead = accentParts(audience?.heading ?? "")
                   </p>
                 )
               }
-              {audience?.markdown && audience.heading && (
+              {!panel && audience?.markdown && audience.heading && (
                 <h3>
                   {audienceHead.lead}
                   {audienceHead.accent && (
@@ -107,23 +118,55 @@ const audienceHead = accentParts(audience?.heading ?? "")
                   {audienceHead.tail}
                 </h3>
               )}
-              {audience?.markdown && (
+              {!panel && audience?.markdown && (
                 <Markdown source={audience.markdown} copy="about_body" />
               )}
               {others.length > 0 && <Blocks blocks={others} />}
             </div>
-            {photo && (
+            {panel ? (
+              <div class="about-panel">
+                {audience?.markdown && (
+                  <div>
+                    {audience.heading && <h3>{plain(audience.heading)}</h3>}
+                    <Markdown source={audience.markdown} copy="about_body" />
+                  </div>
+                )}
+                {proof && (
+                  <div>
+                    {record?.heading && <h3>{plain(record.heading)}</h3>}
+                    {record?.markdown && (
+                      <Markdown
+                        source={record.markdown}
+                        copy={
+                          record.provenance === "owner" ? undefined : "proof_body"
+                        }
+                      />
+                    )}
+                    <ul class="check-list">
+                      {proofItems.map((item) => (
+                        <li>
+                          <Icon name="checkCircle" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              photo && (
               <Photo
                 class="story-photo"
                 src={photo.src}
                 alt={photo.alt}
                 sizes="(min-width: 80rem) 36rem, (min-width: 56rem) 50vw, 100vw"
               />
+              )
             )}
           </div>
         </section>
       )}
-      {proofItems.length >= 2 && (
+      {proof && !panel && (
         <Section eyebrow={record?.eyebrow ?? ""} heading={record?.heading ?? ""}>
           <div class="proof-record">
             {record?.markdown && (

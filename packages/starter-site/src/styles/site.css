@@ -188,7 +188,7 @@ p {
     align-items: start;
   }
 
-  .value-head .section-head {
+  .value-inner .section-head {
     margin: 0;
   }
 }
@@ -1339,6 +1339,49 @@ picture {
   color: var(--muted-foreground);
 }
 
+/* hairline_rows: the reasons as full-width rows between hairlines under the
+   heading, a small icon leading each, the title beside its sentence on a
+   wide screen. Icons, so no numbers. */
+.value-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block-end: 1px solid var(--border);
+}
+
+.value-rows li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-sm);
+  align-items: start;
+  padding-block: var(--space-md);
+  border-block-start: 1px solid var(--border);
+}
+
+.value-rows li > span {
+  display: flex;
+  padding-block-start: 0.2rem;
+}
+
+.value-rows li > div {
+  display: grid;
+  gap: var(--space-2xs) var(--space-2xl);
+}
+
+@media (min-width: 56rem) {
+  .value-rows li > div {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+}
+
+.value-rows :is(h3, p) {
+  margin: 0;
+}
+
+.value-rows p {
+  color: var(--muted-foreground);
+}
+
 /* Services page */
 
 .service-detail {
@@ -1426,7 +1469,8 @@ picture {
   font-size: var(--text-lg);
 }
 
-.service-detail-facts {
+.service-detail-facts,
+.about-panel {
   padding: var(--space-lg) var(--space-md);
   border-radius: var(--radius-card);
   background: var(--brand-soft);
@@ -1443,6 +1487,17 @@ picture {
 
 .service-detail-facts :is(ul, p) {
   margin: 0 0 var(--space-md);
+}
+
+/* The line that marks trade guidance as what the work usually covers. */
+.typical-note {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.block > h3:has(+ .typical-note),
+.service-detail-facts .typical-note {
+  margin-block-end: var(--space-2xs);
 }
 
 .service-detail-facts > :last-child {
@@ -1870,6 +1925,22 @@ picture {
   }
 }
 
+/* panel_split: the audience and the record on the tinted panel beside the
+   story, a hairline between them. */
+.about-panel_split .story-inner {
+  align-items: start;
+}
+
+.about-panel > div + div {
+  margin-block-start: var(--space-lg);
+  padding-block-start: var(--space-lg);
+  border-block-start: 1px solid var(--brand-line);
+}
+
+.about-panel > div > :last-child {
+  margin-block-end: 0;
+}
+
 /* Service area */
 
 /* deep: the band on a dark tone of the brand, the page's pair turned over
@@ -2175,7 +2246,7 @@ picture {
   line-height: 1.6;
 }
 
-.area-page .area-inner {
+.area-listed .area-inner {
   align-items: start;
 }
 

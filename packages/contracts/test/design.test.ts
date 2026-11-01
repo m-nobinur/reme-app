@@ -310,6 +310,49 @@ describe("Blueprint", () => {
       false
     )
     expect(withSection({ ...base, kind: "hero" })).toBe(false)
+    expect(withSection({ ...base, kind: "content", variant: "default" })).toBe(
+      true
+    )
+    expect(withSection({ ...base, kind: "content", variant: "wash" })).toBe(
+      false
+    )
+  })
+
+  it("takes a content plan per page and per offering, or none", () => {
+    const entry = {
+      page: "service",
+      offering: 2,
+      purpose: "Explain the end of tenancy clean to landlords and tenants",
+      target_search: "end of tenancy cleaning in Leeds",
+      topics: [
+        "what an end of tenancy clean covers",
+        "getting the deposit back",
+      ],
+      outline: [
+        {
+          heading: "What the clean covers",
+          subheadings: ["Kitchen", "Bathroom"],
+        },
+        { heading: "Before we arrive", subheadings: [] },
+      ],
+      sources: ["facts", "trade"],
+    }
+    const content = (list: unknown) =>
+      Blueprint.safeParse({ ...blueprint, content: list }).success
+    expect(content(undefined)).toBe(true)
+    expect(content([entry, { ...entry, page: "home", offering: 0 }])).toBe(true)
+    expect(content([{ ...entry, offering: 7 }])).toBe(false)
+    expect(content([{ ...entry, topics: [] }])).toBe(false)
+    expect(content([{ ...entry, outline: [] }])).toBe(false)
+    expect(content([{ ...entry, sources: ["guesswork"] }])).toBe(false)
+    expect(
+      content([
+        {
+          ...entry,
+          outline: [{ heading: "A", subheadings: Array(7).fill("b") }],
+        },
+      ])
+    ).toBe(false)
   })
 
   it("refuses an unknown page, an empty page, no pages, and nine-plus-one", () => {

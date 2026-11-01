@@ -1,11 +1,6 @@
 import { limit } from "@workspace/gates"
-import { whereIs } from "./documents.ts"
-import {
-  fieldsOfPrompt,
-  pageCheck,
-  pageOfPrompt,
-  type WriterTask,
-} from "./fanout.ts"
+import { DOCUMENTS_DIR, type Words, type Written } from "./documents.ts"
+import { type WriterTask, writerLabel } from "./fanout.ts"
 import { GENERATED_DIR, generatedPath } from "./photo-files.ts"
 import type { PhotoFile } from "./photo-step.ts"
 import { SITE_ROOT } from "./revise.ts"
@@ -22,10 +17,18 @@ import { SITE_ROOT } from "./revise.ts"
  * image cache is filled in the background, so the lead's build reuses it.
  */
 
-/** A writer's reply: its summary and the new text of each field it owns. */
-export type Reply = { summary: string; values: Record<string, string> }
+/**
+ * A writer's reply: its summary, the new text of each site field it owns,
+ * and the words of its sections, with its page's title and description
+ * when they are its own.
+ */
+export type Reply = {
+  summary: string
+  values: Record<string, string>
+  written: Written
+}
 
-/** The reply's shape for structured output: exactly the task's own fields. */
+/** The reply's shape for structured output, for a task of site fields alone. */
 export function replySchema(fields: readonly string[]) {
   const text = { type: "string" }
   return {
@@ -47,10 +50,26 @@ export function replySchema(fields: readonly string[]) {
   }
 }
 
-/** The reply as JSON, kept to the task's own string fields; throws a message the retry can read. */
-export function parseReply(text: string, fields: readonly string[]): Reply {
+const WORD_KEYS = ["eyebrow", "heading", "intro"] as const
+
+/**
+ * The reply as JSON, kept to the task's own string fields and sections, and
+ * its title and description when the task writes them; throws a message the
+ * retry can read. A section keeps only the keys a section's words have; the
+ * schema checks the blocks when the reply is written.
+ */
+export function parseReply(
+  text: string,
+  task: Pick<WriterTask, "fields" | "sections" | "meta">
+): Reply {
   // A reply may wrap its JSON in a fence; the object is what counts.
-  let raw: { summary?: unknown; values?: unknown }
+  let raw: {
+    summary?: unknown
+    values?: unknown
+    title?: unknown
+    description?: unknown
+    sections?: unknown
+  }
   try {
     raw = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1))
   } catch {
@@ -58,14 +77,46 @@ export function parseReply(text: string, fields: readonly string[]): Reply {
   }
   const given = (raw.values ?? {}) as Record<string, unknown>
   const values = Object.fromEntries(
-    fields.flatMap((f) => (typeof given[f] === "string" ? [[f, given[f]]] : []))
+    task.fields.flatMap((f) =>
+      typeof given[f] === "string" ? [[f, given[f]]] : []
+    )
   )
-  if (Object.keys(values).length === 0 && fields.length > 0) {
+  const said = (raw.sections ?? {}) as Record<string, unknown>
+  const sections: Written["sections"] = {}
+  for (const id of task.sections) {
+    const words = said[id]
+    if (!words || typeof words !== "object") continue
+    const from = words as Record<string, unknown>
+    sections[id] = {
+      ...Object.fromEntries(
+        WORD_KEYS.flatMap((k) =>
+          typeof from[k] === "string" ? [[k, from[k]]] : []
+        )
+      ),
+      ...(Array.isArray(from.blocks) ? { blocks: from.blocks } : {}),
+    } as Words
+  }
+  const meta = (key: "title" | "description") =>
+    task.meta && typeof raw[key] === "string" ? { [key]: raw[key] } : {}
+  if (
+    Object.keys(values).length === 0 &&
+    Object.keys(sections).length === 0 &&
+    task.fields.length + task.sections.length > 0
+  ) {
     throw new Error(
-      `The reply had no values for your fields: ${fields.join(", ")}.`
+      `The reply had nothing for your task: ${[
+        task.fields.length > 0 && `values for ${task.fields.join(", ")}`,
+        task.sections.length > 0 && `sections ${task.sections.join(", ")}`,
+      ]
+        .filter(Boolean)
+        .join(" and ")}.`
     )
   }
-  return { summary: String(raw.summary ?? "").slice(0, 400), values }
+  return {
+    summary: String(raw.summary ?? "").slice(0, 400),
+    values,
+    written: { ...meta("title"), ...meta("description"), sections },
+  }
 }
 
 /** A field's line in the site config's values, `  name: "…"`, wrapped or not. */
@@ -106,31 +157,21 @@ export function setValues(
   return next
 }
 
-/** What a writer reads after its instructions: the task, then its lines as they are. */
-const writerUser = (prompt: string, source: string) =>
-  [
-    prompt,
-    "",
-    "<fields>",
-    fieldLines(source, fieldsOfPrompt(prompt)),
-    "</fields>",
-  ].join("\n")
-
-/** A writer's name in the lead's lines: the page, the service's number, or the copy writer. */
-const label = (prompt: string) =>
-  `${pageOfPrompt(prompt) ?? "copy"}${/^Page service\. Service (\d)/.exec(prompt)?.[1] ?? ""}`
-
 const message = (thrown: unknown) =>
   thrown instanceof Error ? thrown.message : String(thrown)
 
-/** Each page slot of `fields` with its place in the documents, for the lead to edit there. */
-const withPlaces = (fields: readonly string[]) =>
-  fields.map((field) => {
-    const where = whereIs(field)
-    return where ? `${field} (${where})` : field
-  })
+/** What a task writes, for the lead to take over: its document's sections and its site fields. */
+export const partOf = (task: WriterTask) =>
+  [
+    task.sections.length > 0 &&
+      `${DOCUMENTS_DIR}/${task.file.replace(/^services\/(\d)\.json$/, "services/<slug of service$1Name>.json")} sections ${task.sections.join(", ")}${task.meta ? ", its title and description" : ""}`,
+    task.fields.length > 0 &&
+      `src/site-config.ts fields ${task.fields.join(", ")}`,
+  ]
+    .filter(Boolean)
+    .join("; ")
 
-/** A `pageCheck` message's findings on one line. */
+/** A check message's findings on one line. */
 const findings = (check: string) =>
   check
     .split("\n")
@@ -142,9 +183,10 @@ const findings = (check: string) =>
  * Every writer, at most `max` at once. The first call goes alone for
  * `staggerMs` so its siblings, which share its instructions, read the cache
  * entry it writes rather than each paying for its own. A task with `after`
- * waits for that task. Each writer's fields go through the copy gate's field
- * check once, and a finding gets one more call. One line per writer back,
- * for the lead; a writer that fails says so, and its fields are the lead's.
+ * waits for that task. Each reply is written through `apply`, which returns
+ * the copy gate's check of it, and a finding gets one more call. One line
+ * per writer back, for the lead; a writer that fails says so, and its part
+ * is the lead's.
  *
  * shortcut: the stagger is a fixed wait, not the first token (the call does
  * not stream); wait for the first token if writers ever stream.
@@ -166,27 +208,28 @@ export async function writePages(input: {
     user: string,
     strict: boolean
   ) => Promise<string>
-  /** Read, change and write the site config, one change at a time. */
-  edit: (change: (source: string) => string) => Promise<string>
+  /** What the writer reads after its instructions, as the site stands. */
+  user: (index: number) => Promise<string>
+  /** Write a reply into the site, one at a time, and return the copy check's message, or null when it passes. */
+  apply: (index: number, reply: Reply) => Promise<string | null>
   /** A writer has begun: its first call is about to go. */
   onStarted?: (task: WriterTask) => void
   onWritten?: (task: WriterTask) => void
   sleep?: (ms: number) => Promise<void>
 }): Promise<string[]> {
-  const { tasks, call, edit } = input
+  const { tasks, call, apply } = input
   const sleep =
     input.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
   const run = async (index: number): Promise<string> => {
     const task = tasks[index] as WriterTask
-    const fields = fieldsOfPrompt(task.prompt)
-    const name = label(task.prompt)
+    const name = writerLabel(task)
     input.onStarted?.(task)
     try {
-      const user = writerUser(task.prompt, await edit((s) => s))
+      const user = await input.user(index)
       let second = false
       let reply: Reply
       try {
-        reply = parseReply(await call(index, 1, user, false), fields)
+        reply = parseReply(await call(index, 1, user, false), task)
       } catch (thrown) {
         second = true
         reply = parseReply(
@@ -196,28 +239,28 @@ export async function writePages(input: {
             `${user}\n<previous_reply_failed>\n${message(thrown)}\n</previous_reply_failed>`,
             true
           ),
-          fields
+          task
         )
       }
-      const written = await edit((s) => setValues(s, reply.values))
-      const check = second ? null : pageCheck(written, task.prompt)
+      const check = await apply(index, reply)
       let note = ""
-      if (check) {
+      if (check && second)
+        note = ` The copy check still finds: ${findings(check)} Its part: ${partOf(task)}.`
+      else if (check) {
         try {
           const fixed = parseReply(
             await call(
               index,
               2,
-              `${user}\n<your_reply>\n${JSON.stringify(reply.values)}\n</your_reply>\n${check}`,
+              `${user}\n<your_reply>\n${JSON.stringify({ values: reply.values, ...reply.written })}\n</your_reply>\n${check}`,
               false
             ),
-            fields
+            task
           )
-          await edit((s) => setValues(s, fixed.values))
+          const left = await apply(index, fixed)
           reply = { ...fixed, summary: fixed.summary || reply.summary }
-          const left = pageCheck(await edit((s) => s), task.prompt)
           note = left
-            ? ` Still failing the copy check: ${findings(left)} Where: ${withPlaces(fields.filter((f) => left.includes(f))).join("; ")}.`
+            ? ` Still failing the copy check: ${findings(left)} Its part: ${partOf(task)}.`
             : " Fixed what the copy check found."
         } catch (thrown) {
           note = ` Its fix failed (${message(thrown).slice(0, 120)}); the copy check still finds: ${findings(check)}`
@@ -226,7 +269,7 @@ export async function writePages(input: {
       input.onWritten?.(task)
       return `- ${name}: ${reply.summary}${note}`
     } catch (thrown) {
-      return `- ${name}: failed (${message(thrown).slice(0, 160)}). Its fields are yours: ${withPlaces(fields).join("; ")}.`
+      return `- ${name}: failed (${message(thrown).slice(0, 160)}). Its part is yours: ${partOf(task)}.`
     }
   }
   const bounded = limit(input.max)

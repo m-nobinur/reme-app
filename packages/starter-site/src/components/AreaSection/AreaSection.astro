@@ -8,6 +8,8 @@ import { site } from "../../site-config"
 import Icon from "../Icon/Icon.astro"
 
 interface Props {
+  /** default: the area drawn beside the copy; town_list: the towns as a column list, each with its line, and no drawing. */
+  variant?: "default" | "town_list"
   /** The h2, off the service area page. */
   heading?: string
   /** The short label above the h2; empty is the areaEyebrow slot's default. */
@@ -17,6 +19,7 @@ interface Props {
 }
 
 const {
+  variant = "default",
   heading = "",
   eyebrow = pageFields.areaEyebrow,
   body = pageFields.areaBody,
@@ -28,9 +31,13 @@ const place = onPage || towns.length === 0 ? site.serviceAreaText : ""
 // Off the service area page, the section points to it.
 const more = site.areaLink && hasRoute("/service-area/") && !onPage
 // On its own page the drawing is the header's (Sections.astro), so the
-// section lists the towns, each with its line when the copy gives one.
+// section lists the towns, each with its line when the copy gives one, as
+// town_list does anywhere.
+const listed = onPage || variant === "town_list"
 const deep = areaDeep(site.direction) && !onPage
-const notes = onPage ? townNotes(site.areaTownNotes) : new Map()
+const notes = listed ? townNotes(site.areaTownNotes) : new Map()
+// The list takes the eyebrow only where no heading above it shows it already.
+const listLabel = heading ? "" : eyebrow
 const hours = site.weekdayHours
   ? `${site.weekdayHoursLabel} ${site.weekdayHours}`.trim()
   : ""
@@ -42,7 +49,8 @@ const hours = site.weekdayHours
       class:list={[
         "band area-section",
         deep ? "area-deep" : "area-light",
-        onPage && "area-page",
+        `area-${variant}`,
+        listed && "area-listed",
       ]}
     >
       <div class="wrap area-inner">
@@ -59,7 +67,7 @@ const hours = site.weekdayHours
               </dt>
               <dd>
                 {place && <p class="area-place">{place}</p>}
-                {towns.length > 0 && !onPage && (
+                {towns.length > 0 && !listed && (
                   <ul class="area-towns">
                     {towns.map((town) => (
                       <li>
@@ -95,17 +103,17 @@ const hours = site.weekdayHours
             </p>
           )}
         </div>
-        {onPage ? (
+        {listed ? (
           towns.length > 0 && (
             <div class="area-index">
-              {eyebrow && (
+              {listLabel && (
                 <p class="eyebrow" id="area-index-label">
-                  {eyebrow}
+                  {listLabel}
                 </p>
               )}
               <ul
                 class="area-index-list"
-                aria-labelledby={eyebrow ? "area-index-label" : undefined}
+                aria-labelledby={listLabel ? "area-index-label" : undefined}
               >
                 {towns.map((town) => (
                   <li>

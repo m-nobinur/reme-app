@@ -6,6 +6,8 @@ import { pageFields } from "../../page-fields"
 import Icon from "../Icon/Icon.astro"
 
 interface Props {
+  /** default: numbered reasons beside the heading, each in an icon circle; hairline_rows: full-width rows under the heading, between hairlines, a small icon leading each. */
+  variant?: "default" | "hairline_rows"
   /** The short label above the h2, where a page has its own; empty is the valuePropsEyebrow slot's default. */
   eyebrow?: string
   /** The h2, where a page has its own; empty is the valuePropsHeading slot's default. */
@@ -17,6 +19,7 @@ interface Props {
 }
 
 const {
+  variant = "default",
   eyebrow = pageFields.valuePropsEyebrow,
   heading = pageFields.valuePropsHeading,
   items = ([1, 2, 3] as const).map((n) => ({
@@ -27,22 +30,23 @@ const {
   copy,
 } = Astro.props
 const shown = items.filter((item) => item.title || item.body)
+const rows = variant === "hairline_rows"
 ---
 
 {
   shown.length > 0 && (
-    <section class="band value-props">
-      <div class="wrap value-inner">
+    <section class:list={["band value-props", `value-props-${variant}`]}>
+      <div class:list={["wrap", !rows && "value-inner"]}>
         <div class="value-head">
           <SectionHead
             eyebrow={eyebrow}
             heading={heading}
           />
         </div>
-        <ul class="value-list">
+        <ul class={rows ? "value-rows" : "value-list"}>
           {shown.map((item) => (
             <li>
-              <span class="card-icon">
+              <span class={rows ? undefined : "card-icon"}>
                 <Icon name={iconFor(item.icon, `${item.title} ${item.body}`)} />
               </span>
               <div>

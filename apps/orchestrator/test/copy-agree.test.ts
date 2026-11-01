@@ -41,5 +41,5 @@ test("the sandbox copy check and the copy gate miss the same blocks", () => {
     .filter((line) => line.includes(" block;"))
     .map((line) => `${line.split(":")[0]} ${line.match(/no (\w+)/)?.[1]}`)
   expect(bySandbox).toEqual(byGate)
-  expect(byGate).toHaveLength(6)
+  expect(byGate).toHaveLength(5)
 })

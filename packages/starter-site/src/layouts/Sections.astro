@@ -186,6 +186,7 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
       case "value_props":
         return (
           <ValueProps
+            variant={v}
             eyebrow={eyebrow}
             heading={heading}
             items={(first(section, "cards")?.items ?? []).map((item) => ({
@@ -206,14 +207,25 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
         )
       case "about":
         return (
-          <AboutSection page={home ? "home" : "about"} section={section} />
+          <AboutSection
+            page={home ? "home" : "about"}
+            section={section}
+            variant={v}
+          />
         )
       case "testimonials":
         return <Testimonials variant={v} eyebrow={eyebrow} heading={heading} />
       case "gallery":
         return <Gallery eyebrow={eyebrow} heading={heading} />
       case "service_area":
-        return <AreaSection eyebrow={eyebrow} heading={heading} body={intro} />
+        return (
+          <AreaSection
+            variant={v}
+            eyebrow={eyebrow}
+            heading={heading}
+            body={intro}
+          />
+        )
       case "faq":
         return (
           <Faq

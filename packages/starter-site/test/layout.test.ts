@@ -6,7 +6,7 @@ import {
   SECTION_VARIANTS,
 } from "@workspace/contracts"
 import { describe, expect, test } from "vitest"
-import { loadManifests, ROOT } from "../scripts/manifests"
+import { declaredProps, loadManifests, ROOT } from "../scripts/manifests"
 import { ICONS } from "../src/icons"
 import { layout, pageFields } from "../src/page-fields"
 import { quoteFormProblem } from "../src/quote-form"
@@ -45,19 +45,25 @@ describe("the section variants", () => {
     hero: "Hero",
     trust_strip: "TrustStrip",
     service_cards: "ServiceCards",
+    value_props: "ValueProps",
     steps: "Steps",
+    about: "AboutSection",
+    service_area: "AreaSection",
     testimonials: "Testimonials",
     faq: "Faq",
     cta_band: "CtaBand",
   }
   const { manifests } = loadManifests()
+  // AboutSection is a layout with no manifest, so its own Props stand in.
+  const propsOf = (name: string) =>
+    name === "AboutSection"
+      ? declaredProps(join(ROOT, "src/layouts/AboutSection.astro"))
+      : manifests.find((manifest) => manifest.component === name)?.props
 
   test.each(Object.entries(COMPONENT))(
     "%s matches %s's variant prop",
     (kind, name) => {
-      const prop = manifests
-        .find((manifest) => manifest.component === name)
-        ?.props.find((each) => each.name === "variant")
+      const prop = propsOf(name)?.find((each) => each.name === "variant")
       const declared = [...(prop?.type.matchAll(/"([a-z_]+)"/g) ?? [])].map(
         (match) => String(match[1])
       )
@@ -79,7 +85,9 @@ describe("the section variants", () => {
 describe("the layout", () => {
   test("names kinds and variants the contract knows, on pages that exist", () => {
     for (const [page, entries] of Object.entries(layout)) {
-      expect(problems(page, entries, Object.keys(variants))).toEqual([])
+      expect(
+        problems(page, entries, [...Object.keys(variants), "content"])
+      ).toEqual([])
       expect(entries[0]?.kind, page).toBe("hero")
     }
     expect(Object.keys(layout).sort()).toEqual(

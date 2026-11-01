@@ -7,6 +7,7 @@
  * catalog; every other string comes from the fixture's site-config.
  */
 import ActionLink from "../src/components/ActionLink/ActionLink.astro"
+import AreaSection from "../src/components/AreaSection/AreaSection.astro"
 import CtaBand from "../src/components/CtaBand/CtaBand.astro"
 import Faq from "../src/components/Faq/Faq.astro"
 import Hero from "../src/components/Hero/Hero.astro"
@@ -15,7 +16,11 @@ import SiteHeader from "../src/components/SiteHeader/SiteHeader.astro"
 import Steps from "../src/components/Steps/Steps.astro"
 import Testimonials from "../src/components/Testimonials/Testimonials.astro"
 import TrustStrip from "../src/components/TrustStrip/TrustStrip.astro"
+import ValueProps from "../src/components/ValueProps/ValueProps.astro"
+import { pageDocument } from "../src/documents"
+import AboutSection from "../src/layouts/AboutSection.astro"
 import Base from "../src/layouts/Base.astro"
+import type { Block } from "../src/page-document"
 import { primaryAction } from "../src/routes"
 import { site } from "../src/site-config"
 import { serviceItems } from "../src/structured-data"
@@ -35,6 +40,19 @@ const SERVICES = [
   "practice_list",
 ] as const
 const photo = { src: site.heroImage, alt: site.heroImageAlt }
+const about = pageDocument("about")?.sections.find(
+  (section) => section.kind === "about"
+)
+// The page slots are empty in a test build, so lists come from the home document.
+const home = pageDocument("home")?.sections ?? []
+const block = <T extends Block["type"]>(kind: string, type: T) =>
+  home
+    .find((section) => section.kind === kind)
+    ?.blocks?.find((b): b is Extract<Block, { type: T }> => b.type === type)
+const reasons = (block("value_props", "cards")?.items ?? []).map((item) => ({
+  ...item,
+  icon: item.icon ?? "",
+}))
 const heroes = HEROES.flatMap((variant) => [
   { variant, image: photo },
   { variant, image: undefined },
@@ -84,10 +102,35 @@ const heroes = HEROES.flatMap((variant) => [
     ))
   }
   {
+    (["default", "hairline_rows"] as const).map((variant) => (
+      <>
+        <p class="catalog-label">ValueProps · {variant}</p>
+        <ValueProps variant={variant} items={reasons} />
+      </>
+    ))
+  }
+  {
+    about &&
+      (["default", "panel_split"] as const).map((variant) => (
+        <>
+          <p class="catalog-label">AboutSection · {variant}</p>
+          <AboutSection page="about" section={about} variant={variant} />
+        </>
+      ))
+  }
+  {
+    (["default", "town_list"] as const).map((variant) => (
+      <>
+        <p class="catalog-label">AreaSection · {variant}</p>
+        <AreaSection variant={variant} />
+      </>
+    ))
+  }
+  {
     (["circles", "dark_band", "timeline"] as const).map((variant) => (
       <>
         <p class="catalog-label">Steps · {variant}</p>
-        <Steps variant={variant} />
+        <Steps variant={variant} items={block("steps", "steps")?.items} />
       </>
     ))
   }
@@ -103,7 +146,7 @@ const heroes = HEROES.flatMap((variant) => [
     (["split", "stacked"] as const).map((variant) => (
       <>
         <p class="catalog-label">Faq · {variant}</p>
-        <Faq variant={variant} />
+        <Faq variant={variant} items={block("faq", "faq")?.items} />
       </>
     ))
   }
@@ -111,7 +154,11 @@ const heroes = HEROES.flatMap((variant) => [
     (["solid", "photo"] as const).map((variant) => (
       <>
         <p class="catalog-label">CtaBand · {variant}</p>
-        <CtaBand variant={variant} />
+        <CtaBand
+          variant={variant}
+          heading={block("cta_band", "cta")?.heading}
+          body={block("cta_band", "cta")?.body}
+        />
       </>
     ))
   }

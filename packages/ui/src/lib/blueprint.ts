@@ -3,7 +3,7 @@ import {
   FONT_PAIRS,
   PALETTES,
   PLANNED_PAGES,
-  type SectionKind,
+  type PlannedKind,
 } from "@workspace/contracts"
 import { shade } from "@workspace/ui/lib/colour"
 
@@ -17,7 +17,7 @@ import { shade } from "@workspace/ui/lib/colour"
 /** The channel values a brand colour is moved towards for the paper, tint and ink stops. */
 const [LIGHT, DARK] = [255, 0]
 
-const SECTION_LABEL: Record<SectionKind, string> = {
+const SECTION_LABEL: Record<PlannedKind, string> = {
   hero: "Hero",
   trust_strip: "Trust strip",
   service_cards: "Services",
@@ -31,6 +31,7 @@ const SECTION_LABEL: Record<SectionKind, string> = {
   cta_band: "Call to action",
   contact: "Contact",
   quote_form: "Quote form",
+  content: "Details",
 }
 
 const pageLabel = (id: string) =>

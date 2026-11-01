@@ -69,6 +69,17 @@ describe("a page document", () => {
     ).toBe(true)
   })
 
+  it("marks a trade block as what the work usually covers", () => {
+    const covers =
+      /<div class="block block-checklist" id="covers">[\s\S]*?<\/div>/.exec(
+        home.html
+      )?.[0]
+    expect(covers).toContain(
+      `<p class="typical-note">${FILLED.typicalNote}</p>`
+    )
+    expect(home.html.match(/class="typical-note"/g)).toHaveLength(1)
+  })
+
   it("keeps a section that gives no words on the seed's, and the title too", () => {
     const h1 = home.html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? ""
     expect(h1.replace(/<[^>]+>/g, "")).toContain(FILLED.heroHeading)
@@ -101,6 +112,58 @@ describe("a page document", () => {
     expect(names).toEqual(
       expect.arrayContaining(["Is the oven included?", FILLED.faq1Question])
     )
+  })
+})
+
+describe("a document's second variants", () => {
+  let about = ""
+  const section = (kind: string) =>
+    new RegExp(`<section class="[^"]*${kind}[\\s\\S]*?</section>`).exec(
+      about
+    )?.[0] ?? ""
+  beforeAll(async () => {
+    const built = await build({
+      site: { ...FILLED, areaTownNotes: "Oakley: Terraces by the green" },
+      files: {
+        "src/content/pages/about.json": json({
+          page: "about",
+          title: "",
+          sections: [
+            { id: "hero", kind: "hero" },
+            { id: "about", kind: "about", variant: "panel_split" },
+            {
+              id: "value-props",
+              kind: "value_props",
+              variant: "hairline_rows",
+            },
+            { id: "service-area", kind: "service_area", variant: "town_list" },
+          ],
+        }),
+      },
+    })
+    about = readFileSync(join(built.dist, "about/index.html"), "utf8")
+  }, 120_000)
+
+  it("sets the audience and the record on a panel beside the story", () => {
+    const panel = section("about-panel_split")
+    expect(panel).toContain('class="about-panel"')
+    expect(panel).toContain(FILLED.audienceHeading)
+    expect(panel).toContain(FILLED.trust1)
+    expect(about).not.toContain("proof-record")
+  })
+
+  it("sets the reasons as rows with an icon and no number", () => {
+    const rows = section("value-props-hairline_rows")
+    expect(rows).toContain('class="value-rows"')
+    expect(rows).not.toContain("card-icon")
+  })
+
+  it("lists the towns with their lines, draws no area and says its eyebrow once", () => {
+    const area = section("area-town_list")
+    expect(area).toContain("area-index-list")
+    expect(area).toContain("Terraces by the green")
+    expect(area).not.toContain("area-art")
+    expect(area).not.toContain("area-index-label")
   })
 })
 
