@@ -9,8 +9,10 @@ import {
   type CheckDomainOutput,
   ConnectDomainInput,
   ConnectDomainOutput,
+  DEFAULT_LABELS,
   type DnsRecord,
   DomainBoughtInput,
+  dnsProvider,
   RemoveDomainInput,
   RemoveDomainOutput,
 } from "@workspace/contracts"
@@ -19,6 +21,7 @@ import {
   Done,
   Problem,
 } from "@workspace/ui/components/assistant/decision"
+import { BrandMark } from "@workspace/ui/components/brand-mark"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConnectRow } from "@workspace/ui/components/connect-row"
 import {
@@ -26,20 +29,28 @@ import {
   StatusLine,
   ToolStatus,
 } from "@workspace/ui/components/status-line"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
 import { useCopyToClipboard } from "@workspace/ui/hooks/use-copy-to-clipboard"
 import { useLiveCards } from "@workspace/ui/lib/live-cards"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { decisionView, readView } from "@workspace/ui/lib/tool-state"
 import { META } from "@workspace/ui/lib/utils"
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 
 /**
  * Connecting a domain the owner already has. The yes is the owner's approval;
- * what follows is the list of records to add where their domain is managed,
- * each value with its own copy button, and a link to the provider's DNS
- * settings only when the detected provider carries one of our own links.
- * "OK" answers in the owner's voice through the thread, and the
- * assistant watches the domain either way.
+ * what follows is two steps: sign in where the domain's settings live (our
+ * own link to the provider's DNS page when we know it, else where to look),
+ * then a record table with a copy button per cell. Copy all hands the whole
+ * setting to whoever manages the domain. "OK" answers in the owner's voice
+ * through the thread, and the assistant watches the domain either way.
  */
 
 type Connecting = Extract<ConnectDomainOutput, { outcome: "connecting" }>
@@ -52,7 +63,7 @@ function CopyValue({ value }: { value: string }) {
   const { isCopied, copyToClipboard } = useCopyToClipboard()
   return (
     <span className="inline-flex max-w-full items-center gap-1">
-      <code className="min-w-0 break-all rounded-md bg-muted px-1.5 py-0.5 text-[0.8125rem]">
+      <code className="min-w-0 break-words rounded-md bg-muted px-1.5 py-0.5 text-[0.8125rem]">
         {value}
       </code>
       <Button
@@ -71,27 +82,39 @@ function CopyValue({ value }: { value: string }) {
   )
 }
 
-/** One change to make: "Set www to CNAME", then the value to copy. */
-function Step({ record }: { record: DnsRecord }) {
-  return (
-    // Not a flex item itself: `display: flex` on an `li` drops its number.
-    <li>
-      <div className="flex flex-col gap-1">
-        <span>
-          Set <code className="font-medium">{record.name}</code> to{" "}
-          <strong className="font-medium">{record.type}</strong>
-        </span>
-        <CopyValue value={record.value} />
-      </div>
-    </li>
-  )
+/** What the bare address needs when no record can say it. */
+const forwardText = (name: string) =>
+  `Then forward ${name} to https://www.${name} as permanent, so the address without www works too.`
+
+/**
+ * The whole setting as plain text, for the owner to send to whoever manages
+ * the domain: the domain, what the records are for, and each record.
+ */
+export function copyAllText(name: string, output: Connecting): string {
+  return [
+    `Website settings for ${name}`,
+    `These point ${name} at its new website.${output.email_affected ? " Check them with whoever set up the email first." : " Email is not affected."}`,
+    "",
+    ...(output.steps ?? []).map(
+      (r) => `${r.type} record · Name: ${r.name} · Value: ${r.value}`
+    ),
+    ...(output.apex === "forward" ? ["", forwardText(name)] : []),
+  ].join("\n")
 }
 
-/** What to do about the bare address, by how the assistant will serve it. */
-function apexText(apex: "alias" | "forward", name: string) {
-  return apex === "alias"
-    ? "For the address without www, add an ALIAS or ANAME record at the root of your domain, pointing to the same place."
-    : `For the address without www, forward it to https://www.${name} as permanent.`
+function CopyAll({ text }: { text: string }) {
+  const { isCopied, copyToClipboard } = useCopyToClipboard()
+  return (
+    <Button
+      onClick={() => copyToClipboard(text)}
+      size="sm"
+      type="button"
+      variant="outline"
+    >
+      {isCopied ? <DoneIcon /> : <CopyIcon aria-hidden />}
+      {isCopied ? "Copied" : "Copy all"}
+    </Button>
+  )
 }
 
 /** The owner's own message, once, while this is the last thing in the chat. */
@@ -101,23 +124,125 @@ function WaitButton() {
   const last = useAuiState((s) => s.message.isLast && !s.thread.isRunning)
   if (!last) return null
   return (
-    <div>
-      <Button
-        disabled={sent}
-        onClick={() => {
-          setSent(true)
-          aui.thread().append(DONE_WAITING)
-        }}
-        size="sm"
-        type="button"
+    <Button
+      disabled={sent}
+      onClick={() => {
+        setSent(true)
+        aui.thread().append(DONE_WAITING)
+      }}
+      size="sm"
+      type="button"
+    >
+      OK
+    </Button>
+  )
+}
+
+/** A numbered step: its number, its title, then what to do. */
+function Step({
+  n,
+  title,
+  children,
+}: {
+  n: number
+  title: string
+  children: ReactNode
+}) {
+  return (
+    <li className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3 gap-y-2">
+      <span
+        aria-hidden
+        className="flex size-6 items-center justify-center rounded-full bg-muted font-medium text-xs"
       >
-        OK
-      </Button>
+        {n}
+      </span>
+      <h3 className="self-center font-medium text-sm">{title}</h3>
+      <div className="col-start-2 flex flex-col gap-2">{children}</div>
+    </li>
+  )
+}
+
+/**
+ * Where to look when we have no link: the provider's name or its
+ * nameservers' domain as a hint, both text only since a domain's own DNS
+ * names them, else where settings usually live.
+ */
+function SettingsHint({ name, host }: { name?: string; host?: string }) {
+  const line = name
+    ? "Look for DNS or Manage DNS once you're signed in."
+    : host
+      ? `Its nameservers point to ${host}, so start there. Look for DNS or Manage DNS.`
+      : "Usually where you bought it, or with whoever set up your old website. Look for DNS or Manage DNS."
+  return (
+    <div
+      className="flex items-center gap-3 rounded-2xl border border-border bg-card p-2 pe-4 text-card-foreground"
+      data-slot="settings-hint"
+    >
+      <BrandMark />
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="font-medium text-sm">
+          Where your domain's settings live
+        </span>
+        <span className="text-muted-foreground text-sm">{line}</span>
+      </span>
     </div>
   )
 }
 
-/** The records to add; only drawn when there is at least one. */
+/**
+ * The records as the provider's screen names their fields, each cell
+ * copyable. In a narrow card each record stacks its fields, each led by its
+ * label, in the same table, so nothing scrolls sideways on a phone.
+ */
+function RecordTable({
+  steps,
+  labels,
+}: {
+  steps: DnsRecord[]
+  labels: { name: string; value: string }
+}) {
+  const heads = ["Type", labels.name, labels.value]
+  return (
+    <div className="@container">
+      <Table className="@max-lg:block rounded-xl border border-border">
+        <TableHeader className="@max-lg:sr-only">
+          <TableRow>
+            {heads.map((head) => (
+              <TableHead className="h-9" key={head}>
+                {head}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody className="@max-lg:block">
+          {steps.map((record) => (
+            <TableRow
+              className="@max-lg:block @max-lg:py-1.5"
+              key={`${record.type}|${record.name}|${record.value}`}
+            >
+              {[record.type, record.name, record.value].map((value, i) => (
+                <TableCell
+                  className="@max-lg:flex @max-lg:items-center @max-lg:gap-3 @max-lg:whitespace-normal @max-lg:py-1"
+                  key={heads[i]}
+                >
+                  <span
+                    aria-hidden
+                    className="@lg:hidden w-16 shrink-0 text-muted-foreground text-xs"
+                  >
+                    {heads[i]}
+                  </span>
+                  <CopyValue value={value} />
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+/** The two steps; only drawn when there is at least one record. */
 function Records({
   output,
   steps,
@@ -128,67 +253,68 @@ function Records({
   name: string
 }) {
   const { provider, apply_url: applyUrl } = output
-  // The apex line is a step of its own, so the count matches the list; a
-  // subdomain has none.
-  const changes = steps.length + (output.apex ? 1 : 0)
+  const entry = dnsProvider(provider?.id)
   const email = output.email_affected
-    ? "These may touch your email, so ask whoever set it up before you change anything."
+    ? "This may touch your email, so ask whoever set it up before you change anything."
     : "Your email is not affected."
-  const where = provider?.name ?? "Your DNS provider"
   return (
-    <div className="flex flex-col gap-3" data-slot="domain-records">
+    <div className="flex flex-col gap-4" data-slot="domain-records">
       {applyUrl ? (
-        <>
-          <p className="text-sm">
-            {`${provider ? `Your domain's settings are at ${provider.name}, and I` : "I"} can add the record there for you. ${email}`}
+        <div className="flex flex-col items-start gap-1.5">
+          <a
+            className={buttonVariants({ size: "sm" })}
+            href={applyUrl}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Add it for me
+            <ArrowSquareOutIcon aria-hidden />
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+          <p className={META}>
+            {`${provider?.name ?? "Your DNS provider"} asks you to sign in and approve it, then brings you back here. Or add it yourself:`}
           </p>
-          <div className="flex flex-col items-start gap-1.5">
-            <a
-              className={buttonVariants({ size: "sm" })}
-              href={applyUrl}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              Add it for me
-              <ArrowSquareOutIcon aria-hidden />
-              <span className="sr-only"> (opens in a new tab)</span>
-            </a>
-            <p className={META}>
-              {`${where} asks you to sign in and approve it, then brings you back here.${output.apex ? " The address without www is still yours to set: the last step below." : ""}`}
-            </p>
-          </div>
-          <p className="text-sm">
-            {`Or make ${changes === 1 ? "the change" : `the ${changes} changes`} yourself:`}
-          </p>
-        </>
-      ) : (
-        <p className="text-sm">
-          {provider
-            ? `Your domain's settings are at ${provider.name}.`
-            : "Make these changes where you manage your domain."}{" "}
-          {`${changes === 1 ? "There is 1 change" : `There are ${changes} changes`} to make${provider ? " there" : ""}. `}
-          {email}
-        </p>
-      )}
-      {provider?.settings_url ? (
-        <ConnectRow
-          href={provider.settings_url}
-          line="Open your DNS settings"
-          name={provider.name}
-          newTab
-        />
+        </div>
       ) : null}
-      <ol className="flex list-decimal flex-col gap-3 ps-5 text-sm marker:text-muted-foreground">
-        {steps.map((record) => (
-          <Step
-            key={`${record.type}|${record.name}|${record.value}`}
-            record={record}
-          />
-        ))}
-        {output.apex ? <li>{apexText(output.apex, name)}</li> : null}
+      <ol className="flex flex-col gap-4">
+        <Step
+          n={1}
+          title={
+            provider
+              ? `Sign in to ${provider.name}`
+              : "Open your domain's settings"
+          }
+        >
+          {provider?.settings_url ? (
+            <ConnectRow
+              href={provider.settings_url}
+              line="Open your DNS settings"
+              mark={entry?.mark}
+              name={provider.name}
+              newTab
+            />
+          ) : (
+            <SettingsHint host={output.nameserver_host} name={provider?.name} />
+          )}
+        </Step>
+        <Step
+          n={2}
+          title={steps.length === 1 ? "Add this record" : "Add these records"}
+        >
+          <RecordTable labels={entry?.labels ?? DEFAULT_LABELS} steps={steps} />
+          {entry?.note ? <p className={META}>{entry.note}</p> : null}
+          {output.apex === "forward" ? (
+            <p className="text-sm">{forwardText(name)}</p>
+          ) : null}
+        </Step>
       </ol>
-      <p className={META}>I'll message you once it's live.</p>
-      <WaitButton />
+      <p className={META}>
+        {`${email} That's all. I'll keep an eye on it and tell you the moment it's working.`}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <CopyAll text={copyAllText(name, output)} />
+        <WaitButton />
+      </div>
     </div>
   )
 }
@@ -217,6 +343,8 @@ export function ConnectSteps({
 
 const NOT_CONNECTED = "The domain could not be connected."
 
+const titleOf = (name: string) => `Use ${name} for your website`
+
 export const ConnectDomain: ToolCallMessagePartComponent = (props) => {
   const view = decisionView(props, ConnectDomainInput, ConnectDomainOutput)
   if (view.state === "refused") {
@@ -226,7 +354,7 @@ export const ConnectDomain: ToolCallMessagePartComponent = (props) => {
       <StatusLine
         className="flex px-1 py-1.5 text-sm"
         data-slot="connect-domain"
-        label={`Put your website on ${view.input.name}. ${refusalText(view.code, NOT_CONNECTED)}`}
+        label={`${titleOf(view.input.name)}. ${refusalText(view.code, NOT_CONNECTED)}`}
         state="failed"
       />
     )
@@ -255,7 +383,7 @@ export const ConnectDomain: ToolCallMessagePartComponent = (props) => {
       no="Cancel"
       props={props}
       slot="connect-domain"
-      title={(input) => `Put your website on ${input.name}`}
+      title={(input) => titleOf(input.name)}
       view={view}
       yes="Connect"
     />

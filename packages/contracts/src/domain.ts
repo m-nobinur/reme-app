@@ -62,11 +62,16 @@ export const DomainCheck = z.discriminatedUnion("status", [
 ])
 
 /**
- * The owner's DNS provider as detected. `settings_url` is only ever one of
- * our own allowlisted links, never a URL a domain's DNS named, and a plain
+ * The owner's DNS provider as detected. `id` is its `DNS_PROVIDERS` entry,
+ * absent for a name only Domain Connect gave. `settings_url` is only ever
+ * one of our own links, never a URL a domain's DNS named, and a plain
  * string so a tool output shows the model no `uri` format.
  */
 export const DomainProvider = z.strictObject({
+  id: z
+    .string()
+    .regex(/^[a-z0-9-]{1,40}$/)
+    .optional(),
   name: Text(80),
   settings_url: z
     .string()
@@ -74,6 +79,13 @@ export const DomainProvider = z.strictObject({
     .regex(/^https:\/\/[^\s]+$/)
     .optional(),
 })
+
+/**
+ * Where a domain's nameservers point when no provider we know runs them: the
+ * registrable domain of the first nameserver. It comes from DNS anyone can
+ * set, so it is text only, never a link.
+ */
+export const NameserverHost = Hostname
 
 /**
  * What `inspect_domain` found out about a name the owner already has, from the
@@ -86,6 +98,7 @@ export const DomainInspection = z.strictObject({
   registered: z.boolean(),
   registrar: Text(80).optional(),
   dns_host: DomainProvider.optional(),
+  nameserver_host: NameserverHost.optional(),
   in_use: z.boolean(),
 })
 

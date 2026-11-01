@@ -20,6 +20,7 @@ import {
   DomainRegistrantPrefill,
   DomainState,
   DomainStemOffer,
+  NameserverHost,
   NotRegisteredYet,
 } from "./domain.ts"
 import { ToolCallId } from "./ids.ts"
@@ -589,6 +590,7 @@ export const ConnectDomainOutput = z.discriminatedUnion("outcome", [
     steps: z.array(DnsRecord).max(10).optional(),
     apex: z.enum(["alias", "forward"]).optional(),
     provider: DomainProvider.optional(),
+    nameserver_host: NameserverHost.optional(),
     // A plain string, as `settings_url` is, so the model sees no `uri` format.
     apply_url: z
       .string()

@@ -305,6 +305,7 @@ function Elsewhere({
       <ConnectRow
         href={links.cloudflare}
         line="cloudflare.com"
+        mark="cloudflare"
         name="Cloudflare"
         newTab
         onClick={onFollow}
@@ -312,6 +313,7 @@ function Elsewhere({
       <ConnectRow
         href={links.godaddy}
         line="godaddy.com"
+        mark="godaddy"
         name="GoDaddy"
         newTab
         onClick={onFollow}

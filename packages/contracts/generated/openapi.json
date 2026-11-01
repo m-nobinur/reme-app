@@ -12240,6 +12240,10 @@
               "provider": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9-]{1,40}$"
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -12256,6 +12260,11 @@
                   "name"
                 ],
                 "additionalProperties": false
+              },
+              "nameserver_host": {
+                "type": "string",
+                "maxLength": 253,
+                "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
               },
               "apply_url": {
                 "type": "string",
@@ -19493,6 +19502,10 @@
               "provider": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9-]{1,40}$"
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -19509,6 +19522,11 @@
                   "name"
                 ],
                 "additionalProperties": false
+              },
+              "nameserver_host": {
+                "type": "string",
+                "maxLength": 253,
+                "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
               },
               "apply_url": {
                 "type": "string",
@@ -28648,6 +28666,10 @@
                       "provider": {
                         "type": "object",
                         "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9-]{1,40}$"
+                          },
                           "name": {
                             "type": "string",
                             "minLength": 1,
@@ -28664,6 +28686,11 @@
                           "name"
                         ],
                         "additionalProperties": false
+                      },
+                      "nameserver_host": {
+                        "type": "string",
+                        "maxLength": 253,
+                        "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
                       },
                       "apply_url": {
                         "type": "string",
@@ -30416,6 +30443,10 @@
                       "dns_host": {
                         "type": "object",
                         "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9-]{1,40}$"
+                          },
                           "name": {
                             "type": "string",
                             "minLength": 1,
@@ -30432,6 +30463,11 @@
                           "name"
                         ],
                         "additionalProperties": false
+                      },
+                      "nameserver_host": {
+                        "type": "string",
+                        "maxLength": 253,
+                        "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
                       },
                       "in_use": {
                         "type": "boolean"
@@ -30583,6 +30619,10 @@
                       "provider": {
                         "type": "object",
                         "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9-]{1,40}$"
+                          },
                           "name": {
                             "type": "string",
                             "minLength": 1,
@@ -30599,6 +30639,11 @@
                           "name"
                         ],
                         "additionalProperties": false
+                      },
+                      "nameserver_host": {
+                        "type": "string",
+                        "maxLength": 253,
+                        "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
                       },
                       "apply_url": {
                         "type": "string",
@@ -35164,6 +35209,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,40}$"
+          },
           "name": {
             "type": "string",
             "minLength": 1,
@@ -39600,6 +39649,10 @@
               "dns_host": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9-]{1,40}$"
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -39616,6 +39669,11 @@
                   "name"
                 ],
                 "additionalProperties": false
+              },
+              "nameserver_host": {
+                "type": "string",
+                "maxLength": 253,
+                "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
               },
               "in_use": {
                 "type": "boolean"

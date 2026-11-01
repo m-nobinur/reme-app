@@ -3470,9 +3470,11 @@ export interface components {
           /** @enum {string} */
           apex?: "alias" | "forward"
           provider?: {
+            id?: string
             name: string
             settings_url?: string
           }
+          nameserver_host?: string
           apply_url?: string
           evidence?: (
             | {
@@ -5567,9 +5569,11 @@ export interface components {
           /** @enum {string} */
           apex?: "alias" | "forward"
           provider?: {
+            id?: string
             name: string
             settings_url?: string
           }
+          nameserver_host?: string
           apply_url?: string
           evidence?: (
             | {
@@ -8216,9 +8220,11 @@ export interface components {
                 /** @enum {string} */
                 apex?: "alias" | "forward"
                 provider?: {
+                  id?: string
                   name: string
                   settings_url?: string
                 }
+                nameserver_host?: string
                 apply_url?: string
                 evidence?: (
                   | {
@@ -8703,9 +8709,11 @@ export interface components {
                 registered: boolean
                 registrar?: string
                 dns_host?: {
+                  id?: string
                   name: string
                   settings_url?: string
                 }
+                nameserver_host?: string
                 in_use: boolean
               }
             | {
@@ -8748,9 +8756,11 @@ export interface components {
                 /** @enum {string} */
                 apex?: "alias" | "forward"
                 provider?: {
+                  id?: string
                   name: string
                   settings_url?: string
                 }
+                nameserver_host?: string
                 apply_url?: string
                 evidence?: (
                   | {
@@ -10129,6 +10139,7 @@ export interface components {
       cost_usd: number
     }
     DomainProvider: {
+      id?: string
       name: string
       settings_url?: string
     }
@@ -11301,9 +11312,11 @@ export interface components {
           registered: boolean
           registrar?: string
           dns_host?: {
+            id?: string
             name: string
             settings_url?: string
           }
+          nameserver_host?: string
           in_use: boolean
         }
       | {

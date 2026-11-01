@@ -1,4 +1,5 @@
 import { HouseIcon } from "@phosphor-icons/react"
+import { DNS_PROVIDERS } from "@workspace/contracts"
 import { Alert } from "@workspace/ui/components/alert"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
@@ -225,19 +226,10 @@ const catalog: CatalogEntry[] = [
     render: () => (
       <div className="flex flex-wrap gap-3">
         {[
-          "Google Search Console",
-          "Cloudflare",
-          "GoDaddy",
-          "Namecheap",
-          "Squarespace",
-          "Wix",
-          "IONOS",
-          "Gandi",
-          "Porkbun",
-          "Hostinger",
-          "123-reg",
-        ].map((name) => (
-          <BrandMark key={name} name={name} />
+          "google-search-console",
+          ...new Set(DNS_PROVIDERS.map((p) => p.mark)),
+        ].map((mark) => (
+          <BrandMark key={mark ?? "globe"} mark={mark} />
         ))}
       </div>
     ),
@@ -255,6 +247,7 @@ const catalog: CatalogEntry[] = [
         <ConnectRow
           href="#google"
           line="Show up when people near you search"
+          mark="google-search-console"
           name="Google Search Console"
         />
       </div>
@@ -268,12 +261,14 @@ const catalog: CatalogEntry[] = [
           <ConnectRow
             href="#cloudflare"
             line="Search for sparkleclean.co.uk"
+            mark="cloudflare"
             name="Cloudflare"
             newTab
           />
           <ConnectRow
             href="#godaddy"
             line="Search for sparkleclean.co.uk"
+            mark="godaddy"
             name="GoDaddy"
             newTab
           />

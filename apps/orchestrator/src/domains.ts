@@ -4,10 +4,17 @@
  * and the `DomainCheck` that decides when a domain may go live. Everything
  * here reads public DNS or our own SaaS zone; nothing writes the owner's DNS.
  */
-import type {
-  DnsRecord,
-  DomainCheck,
-  DomainProvider,
+import {
+  DEFAULT_LABELS,
+  DNS_PROVIDERS,
+  type DnsProviderEntry,
+  type DnsRecord,
+  type DomainCheck,
+  type DomainProvider,
+  dnsProvider,
+  NameserverHost,
+  nameKey,
+  registrarIn,
 } from "@workspace/contracts"
 import { TEMPLATE } from "./domain-connect.ts"
 import { rdapLookup } from "./rdap.ts"
@@ -415,22 +422,10 @@ export const SETTINGS_TIMEOUT_MS = 2_000
 export const SETTINGS_MAX_BYTES = 10 * 1024
 
 /**
- * The only DNS-settings links a card ever shows, keyed by the host a
- * provider's settings answer names. The answer only picks an entry; the link
- * is always ours, because the TXT and the settings JSON both come from the
- * domain's own DNS and cannot vouch for themselves.
- */
-export const SETTINGS_LINKS: Readonly<Record<string, string>> = {
-  "dcc.godaddy.com": "https://dcc.godaddy.com/manage/dns",
-  "dcc.secureserver.net": "https://dcc.secureserver.net/manage/dns",
-  "dash.cloudflare.com": "https://dash.cloudflare.com/",
-}
-
-/**
  * The Domain Connect pages an apply link may open, keyed by the provider's
  * `urlSyncUX` as `host[/path]`, each with the API we ask whether our template
- * is live there. Ours for the same reason as `SETTINGS_LINKS`: a domain's own
- * DNS could otherwise send the owner to any page. A page is used only once
+ * is live there. Ours, because a domain's own DNS could otherwise send the
+ * owner to any page. A page is used only once
  * its API answers that our template is live, so a provider still onboarding
  * it shows nothing. Each pair is the provider's own discovery answer
  * (2026-10-29): Cloudflare's for bnwise.tech, GoDaddy's as recorded in the
@@ -447,70 +442,6 @@ const APPLY_PAGES: Readonly<Record<string, string>> = {
     ])
   ),
 }
-
-const IONOS: DomainProvider = {
-  name: "IONOS",
-  settings_url: "https://my.ionos.co.uk/domains",
-}
-
-/**
- * Without a Domain Connect record: the nameserver suffix names the provider.
- * Each link was fetched on 2026-10-27 and answered 200 or a redirect to the
- * provider's sign-in; the owner lands on their account's domain list or DNS
- * page after signing in. GoDaddy and Cloudflare answer a script 403 behind
- * bot checks and were checked by their redirects to sign-in alone.
- */
-const NAMESERVERS: ReadonlyArray<[string, DomainProvider]> = [
-  [
-    ".cloudflare.com",
-    { name: "Cloudflare", settings_url: "https://dash.cloudflare.com/" },
-  ],
-  [
-    ".domaincontrol.com",
-    { name: "GoDaddy", settings_url: "https://dcc.godaddy.com/manage/dns" },
-  ],
-  [
-    ".123-reg.co.uk",
-    { name: "123-reg", settings_url: "https://www.123-reg.co.uk/secure/" },
-  ],
-  [".ui-dns.com", IONOS],
-  [".ui-dns.org", IONOS],
-  [".ui-dns.biz", IONOS],
-  [".ui-dns.de", IONOS],
-  [
-    ".registrar-servers.com",
-    {
-      name: "Namecheap",
-      settings_url: "https://ap.www.namecheap.com/domains/list/",
-    },
-  ],
-  [
-    ".googledomains.com",
-    {
-      name: "Squarespace",
-      settings_url: "https://account.squarespace.com/domains",
-    },
-  ],
-  [
-    ".wixdns.net",
-    { name: "Wix", settings_url: "https://manage.wix.com/account/domains" },
-  ],
-  [
-    ".livedns.co.uk",
-    { name: "Fasthosts", settings_url: "https://admin.fasthosts.co.uk/" },
-  ],
-  [
-    ".gandi.net",
-    { name: "Gandi", settings_url: "https://admin.gandi.net/domain" },
-  ],
-  [
-    ".ns.porkbun.com",
-    {
-      name: "Porkbun",
-      settings_url: "https://porkbun.com/account/domainsSpeedy",
-    },
-  ],
-]
 
 /**
  * A `_domainconnect` TXT value as `host[/path]`, or null. Refuses a scheme
@@ -558,18 +489,6 @@ async function readCapped(response: Response, max: number): Promise<string> {
 }
 
 const txt = (data: string) => data.replace(/"\s*"/g, "").replace(/^"|"$/g, "")
-
-function linkFor(url: unknown): string | undefined {
-  if (typeof url !== "string") return undefined
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === "https:"
-      ? SETTINGS_LINKS[parsed.hostname]
-      : undefined
-  } catch {
-    return undefined
-  }
-}
 
 /** How long a Domain Connect answer is kept, so a connect right after an inspect reads it once. */
 const DISCOVERY_TTL_MS = 5 * 60_000
@@ -631,15 +550,13 @@ const settingsOf = (apex: string) =>
   })
 
 /**
- * Domain Connect discovery: the provider's own name, and our link if we have
- * one, so an unknown provider still gets its name. The name is cut to 80
- * characters, and a link is only ever one of `SETTINGS_LINKS`.
+ * Domain Connect discovery: the provider's own name, cut to 80 printable
+ * characters, or null. Only a name: any link is the registry's.
  */
-async function discover(apex: string): Promise<DomainProvider | null> {
+async function discover(apex: string): Promise<string | null> {
   const settings = await settingsOf(apex)
   if (!settings) return null
   const shown = settings.providerDisplayName ?? settings.providerName
-  // Shown in the card: printable characters only, at the contract's length.
   const name =
     typeof shown === "string"
       ? shown
@@ -647,10 +564,7 @@ async function discover(apex: string): Promise<DomainProvider | null> {
           .trim()
           .slice(0, 80)
       : ""
-  if (!name) return null
-  const settingsUrl =
-    linkFor(settings.urlControlPanel) ?? linkFor(settings.urlSyncUX)
-  return settingsUrl ? { name, settings_url: settingsUrl } : { name }
+  return name || null
 }
 
 /**
@@ -687,27 +601,112 @@ export async function applyBase(
   }
 }
 
+/** What recognition found: the provider, or where the nameservers point when no provider we know runs them. */
+export type Detected = { provider?: DomainProvider; nameserver_host?: string }
+
+const providerOf = (entry: DnsProviderEntry, apex: string): DomainProvider => ({
+  id: entry.id,
+  name: entry.name,
+  settings_url: entry.settingsUrl(apex),
+})
+
+/** The entries whose suffix matches a nameserver, the longest match only. */
+function byNameservers(nameservers: string[]): DnsProviderEntry[] {
+  const hosts = nameservers.map(bare)
+  const scored = DNS_PROVIDERS.map((entry) => ({
+    entry,
+    length: Math.max(
+      0,
+      ...entry.nameservers
+        .filter((s) => hosts.some((h) => h.endsWith(s)))
+        .map((s) => s.length)
+    ),
+  }))
+  const best = Math.max(0, ...scored.map((s) => s.length))
+  return best ? scored.filter((s) => s.length === best).map((s) => s.entry) : []
+}
+
 /**
- * Who runs the domain's DNS: Domain Connect discovery first, which tells
- * GoDaddy's brands apart, then the nameserver table, then nobody. A provider
- * discovery names without a page of ours gets the table's page for the same
- * nameservers. Never throws: a card without a provider still works.
+ * One of entries sharing nameservers, by the RDAP registrar: the entry that
+ * lists it, else the one that lists none. No registrar, no answer.
+ */
+async function tieBreak(
+  candidates: DnsProviderEntry[],
+  apex: string
+): Promise<DnsProviderEntry | undefined> {
+  if (candidates.length < 2) return candidates[0]
+  const registrar = (await rdapLookup(apex).catch(() => null))?.registrar
+  if (!registrar) return undefined
+  return (
+    candidates.find((e) => registrarIn(registrar, e.registrars)) ??
+    candidates.find((e) => e.registrars.length === 0)
+  )
+}
+
+/**
+ * The registrable domain of a nameserver host: `katapult.io` for
+ * `ns1.katapult.io`, `example.co.uk` for `ns1.example.co.uk`.
+ *
+ * shortcut: knows a two-letter ending's common second levels only; use the
+ * public suffix list if a host is ever cut wrong.
+ */
+function registrableOf(host: string): string {
+  const labels = bare(host).split(".")
+  const second = labels.at(-2) ?? ""
+  const keep =
+    labels.length > 2 &&
+    (labels.at(-1)?.length ?? 0) === 2 &&
+    /^(co|com|net|org|ac|gov|ltd|plc|me)$/.test(second)
+      ? 3
+      : 2
+  return labels.slice(-keep).join(".")
+}
+
+/**
+ * Who runs the domain's DNS: the name Domain Connect gives, read against the
+ * registry; then the registry's nameserver suffixes, with the RDAP registrar
+ * breaking a tie. A name discovery gives that the registry lacks is kept as
+ * text, with no link, since a reseller's screen is not its platform's. With
+ * no provider, `nameserver_host` is the hint, and each unmatched nameserver
+ * domain is logged once, with nothing about the owner, to grow the registry
+ * from. Never throws: a card without a provider still works.
  */
 export async function detectProvider(
   apex: string,
   nameservers: string[]
-): Promise<DomainProvider | null> {
+): Promise<Detected> {
   const discovered = await discover(apex).catch(() => null)
-  const row = NAMESERVERS.find(([suffix]) =>
-    nameservers.some((n) => bare(n).endsWith(suffix))
-  )
   if (discovered) {
-    const link = row?.[1].settings_url
-    return discovered.settings_url || !link
-      ? discovered
-      : { ...discovered, settings_url: link }
+    const named = DNS_PROVIDERS.find((e) =>
+      nameKey(discovered).startsWith(nameKey(e.name))
+    )
+    return { provider: named ? providerOf(named, apex) : { name: discovered } }
   }
-  return row ? { ...row[1] } : null
+  const entry = await tieBreak(byNameservers(nameservers), apex)
+  if (entry) return { provider: providerOf(entry, apex) }
+  const domains = [...new Set(nameservers.map(registrableOf))]
+  for (const nameserver_host of domains) {
+    console.log(
+      JSON.stringify({ type: "domain.provider_unmatched", nameserver_host })
+    )
+  }
+  const hint = NameserverHost.safeParse(domains[0])
+  return hint.success ? { nameserver_host: hint.data } : {}
+}
+
+/**
+ * How the bare domain is served once connected: an alias where it already
+ * reaches us, or where the registry says the provider can point it at us;
+ * otherwise a forward to `www`.
+ */
+export function connectApex(
+  inspection: Inspection,
+  provider: DomainProvider | undefined
+): ApexMode {
+  return apexMode(inspection, null) === "alias" ||
+    dnsProvider(provider?.id)?.apex === "alias"
+    ? "alias"
+    : "forward"
 }
 
 // ---------------------------------------------------------------------------
@@ -903,4 +902,66 @@ export function domainCheck(
     return { status: "pending_certificate" }
   }
   return { status: "valid" }
+}
+
+/** One mistake in the records the owner added, and its fix in one line. */
+export type Diagnosis = {
+  kind: "doubled_name" | "wrong_value" | "left_behind"
+  text: string
+}
+
+/**
+ * The first mistake public DNS shows in `records`, the ones the owner was
+ * asked to add, or null. Only CNAME and ALIAS records point at us, so only
+ * those are read: a name typed in full where the provider adds the zone
+ * itself (`dox.bnwise.tech.bnwise.tech`), a value that is not ours, or an
+ * old address left beside ours. The owner's own Cloudflare shows only its
+ * proxy's addresses, so there an address says nothing.
+ */
+export async function diagnose(
+  inspection: Inspection,
+  records: DnsRecord[],
+  provider?: DomainProvider
+): Promise<Diagnosis | null> {
+  const field = (dnsProvider(provider?.id)?.labels ?? DEFAULT_LABELS).name
+  for (const record of records) {
+    if (record.type !== "CNAME" && record.type !== "ALIAS") continue
+    const host =
+      record.name === "@"
+        ? inspection.apex
+        : `${record.name}.${inspection.apex}`
+    const seen = inspection.hosts[host] ?? { a: [], aaaa: [] }
+    if (pointsAtUs(seen, inspection)) continue
+    const addresses = [...seen.a, ...seen.aaaa]
+    if (!seen.cname && addresses.length === 0) {
+      const doubled = await hostRecords(`${host}.${inspection.apex}`).catch(
+        () => null
+      )
+      if (doubled?.cname || doubled?.a.length || doubled?.aaaa.length) {
+        return {
+          kind: "doubled_name",
+          text: `Nearly there: in the ${field} box type just ${record.name}, and ${provider?.name ?? "your provider"} adds the rest.`,
+        }
+      }
+      continue
+    }
+    if (seen.cname) {
+      return {
+        kind: "wrong_value",
+        text: `The ${record.name} record points at ${seen.cname}. Change its value to ${CNAME_TARGET}.`,
+      }
+    }
+    if (inspection.onCloudflare) continue
+    const old = addresses.filter((a) => !inspection.target.includes(a))
+    return old.length < addresses.length
+      ? {
+          kind: "left_behind",
+          text: `There's still an old ${record.name} setting pointing at ${old.join(", ")}. Delete that one and keep the new one.`,
+        }
+      : {
+          kind: "wrong_value",
+          text: `The ${record.name} record points at ${old.join(", ")}. Make it a ${record.type} record with the value ${CNAME_TARGET}.`,
+        }
+  }
+  return null
 }

@@ -48,6 +48,7 @@ export function ConnectGoogleRow({
       className={className}
       href={href}
       line="Show up when people near you search"
+      mark="google-search-console"
       name="Google Search Console"
     />
   )
