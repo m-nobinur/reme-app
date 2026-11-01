@@ -307,11 +307,11 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       withKit(env, (kit) => claimHostnames(env, kit, orgId, domainId))
     )
     if (claimed === "gone") return { outcome: "removed" }
-    if (claimed === "held") {
-      const message = await step.do("held", () =>
-        withKit(env, (kit) => expireDomain(env, kit, orgId, domainId, "held"))
+    if (claimed === "held" || claimed === "refused") {
+      const message = await step.do(claimed, () =>
+        withKit(env, (kit) => expireDomain(env, kit, orgId, domainId, claimed))
       )
-      await say("say held", message)
+      await say(`say ${claimed}`, message)
       return { outcome: "failed" }
     }
 

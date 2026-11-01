@@ -300,12 +300,10 @@ export function addressPlan(d: DomainFacts): TaskPlan {
         },
       }
     case "failed":
-      return {
-        ...active,
-        steps: bought
-          ? { ...base, choose: owner(), purchase: pending }
-          : { ...base, records: owner() },
-      }
+      // A connect that failed let the name go: nothing waits until the owner asks again.
+      return bought
+        ? { ...active, steps: { ...base, choose: owner(), purchase: pending } }
+        : { ...active, state: "later" }
   }
   // Paid and registering: Reme sets the records itself once it is registered.
   if (bought && !d.registered)

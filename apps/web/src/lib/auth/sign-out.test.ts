@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest"
 
 const signOut = vi.fn(async (_options: unknown) => undefined)
 const getAuth = vi.fn()
+const clearSession = vi.fn(async (_response: unknown) => ({}))
 
 vi.mock("@tanstack/react-start", () => ({
   createServerFn: () => ({
@@ -12,7 +13,11 @@ vi.mock("@tanstack/react-start/server", () => ({
   getRequestUrl: () =>
     new URL("https://pr-141-reme-web.beapp.workers.dev/sign-out"),
 }))
-vi.mock("@workos/authkit-tanstack-react-start", () => ({ signOut, getAuth }))
+vi.mock("@workos/authkit-tanstack-react-start", () => ({
+  signOut,
+  getAuth,
+  getAuthkit: async () => ({ clearSession }),
+}))
 
 beforeEach(() => {
   signOut.mockClear()
@@ -33,5 +38,12 @@ it("goes home without WorkOS when no session is left, as after deletion", async 
   await expect(signOutHere()).rejects.toMatchObject({
     options: { to: "/" },
   })
+  expect(signOut).not.toHaveBeenCalled()
+})
+
+it("drops the session cookie here without going through WorkOS", async () => {
+  const { endSessionHere } = await import("./sign-out")
+  await endSessionHere()
+  expect(clearSession).toHaveBeenCalledOnce()
   expect(signOut).not.toHaveBeenCalled()
 })

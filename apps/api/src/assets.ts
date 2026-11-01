@@ -293,7 +293,7 @@ const CUTS: Record<string, { keys: string[]; width: number; height: number }> =
       height: 750,
     },
     phone: { keys: ["screenshots/home-390.png"], width: 390, height: 844 },
-    icon: { keys: ["dist/icon-192.png"], width: 0, height: 0 },
+    icon: { keys: [], width: 0, height: 0 },
   }
 
 /**
@@ -314,10 +314,21 @@ export async function readRevisionPicture(
   picture: string
 ): Promise<Response> {
   const cut = CUTS[picture]
+  const prefix = `sites/${owner.orgId}/${revisionId}/`
   let object: R2ObjectBody | null = null
   for (const key of cut?.keys ?? []) {
-    object = await env.SITES.get(`sites/${owner.orgId}/${revisionId}/${key}`)
+    object = await env.SITES.get(`${prefix}${key}`)
     if (object) break
+  }
+  if (picture === "icon") {
+    // The build names it by content hash, under `_astro/`.
+    const [found] = (
+      await env.SITES.list({
+        prefix: `${prefix}dist/_astro/icon-192.`,
+        limit: 1,
+      })
+    ).objects
+    object = found ? await env.SITES.get(found.key) : null
   }
   if (!cut || !object) {
     return failure(404, {

@@ -152,6 +152,13 @@ export type Workspace = {
   etag: string | null
 }
 
+/** The session behind a read has ended: not an empty business, and not a failure to retry. */
+export class SessionEnded extends Error {
+  constructor() {
+    super("The session has ended.")
+  }
+}
+
 /** A poll's answer: the workspace, or that it has not changed since `etag`. */
 export type WorkspacePoll = Workspace | "unchanged"
 

@@ -78,6 +78,15 @@ describe("addressPlan", () => {
       addressPlan(row({ origin: "purchased", state: "abandoned" }))
     ).not.toHaveProperty("steps")
   })
+
+  it("waits on nothing for a failed connect, and on a new name for a failed purchase", () => {
+    const connect = addressPlan(row({ state: "failed" }))
+    expect(connect.state).toBe("later")
+    expect(connect).not.toHaveProperty("steps")
+    expect(
+      stateOf(addressPlan(row({ origin: "purchased", state: "failed" })))
+    ).toMatchObject({ choose: "blocked", records: "pending" })
+  })
 })
 
 describe("googlePlan", () => {

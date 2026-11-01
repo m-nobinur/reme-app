@@ -5,6 +5,7 @@ import {
   eq,
   events,
   orgs,
+  ownerTasks,
   searchConnections,
   searchProperties,
   sql,
@@ -693,6 +694,53 @@ describe.skipIf(!url)("custom domains against a database", () => {
       )
     ).toHaveLength(1)
 
+    const other = await published()
+    expect(
+      await connect(env, kit, other.orgId, { name, approval_id: "b" })
+    ).toMatchObject({ status: 201 })
+  })
+
+  it("lets go of a name Cloudflare refuses, and keeps retrying its outages", async () => {
+    stubNet()
+    const net = globalThis.fetch
+    let code = 1411
+    vi.stubGlobal(
+      "fetch",
+      (input: string | URL | Request, init?: RequestInit) =>
+        init?.method === "POST" && String(input).startsWith(CF)
+          ? Response.json(
+              { success: false, errors: [{ code }], result: null },
+              { status: code === 1500 ? 500 : 400 }
+            )
+          : net(input, init)
+    )
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    const name = unique()
+    await connect(env, kit, site.orgId, { name, approval_id: "a" })
+    const domainId = (await rowOf(site.orgId, name))?.id ?? ""
+
+    code = 1500
+    await expect(
+      claimHostnames(env, kit, site.orgId, domainId)
+    ).rejects.toThrow("cloudflare.1500")
+    code = 1411
+    expect(await claimHostnames(env, kit, site.orgId, domainId)).toBe("refused")
+    expect(
+      (await expireDomain(env, kit, site.orgId, domainId, "refused"))?.text
+    ).toBe(
+      `I couldn't connect ${name}: it can't be set up for a website here. Your site stays on ${site.slug}. Check that the name is yours and isn't already in use with another service, or try a different one.`
+    )
+    expect(await rowOf(site.orgId, name)).toMatchObject({ state: "failed" })
+    const [task] = await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db
+        .select({ state: ownerTasks.state })
+        .from(ownerTasks)
+        .where(eq(ownerTasks.kind, "address"))
+    )
+    expect(task).toEqual({ state: "later" })
+
+    vi.stubGlobal("fetch", net)
     const other = await published()
     expect(
       await connect(env, kit, other.orgId, { name, approval_id: "b" })

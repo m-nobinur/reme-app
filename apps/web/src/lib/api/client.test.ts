@@ -5,7 +5,7 @@ import type { QuestionReply } from "@workspace/contracts"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { EMPTY_WORKSPACE } from "../attention"
 import { apiSource, treeOf } from "./client"
-import type { StaffMember } from "./types"
+import { SessionEnded, type StaffMember } from "./types"
 
 vi.mock("@tanstack/react-start/server", () => ({
   getCookie: () => "sealed",
@@ -488,6 +488,15 @@ it("answers empty for a session with no organisation", async () => {
   )
   expect(await apiSource.activity()).toEqual([])
   expect(await apiSource.profile()).toBeNull()
+})
+
+it("reads a lost session as signed out, not as an empty business", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 401 }))
+  )
+  await expect(apiSource.pollWorkspace(null)).rejects.toThrow(SessionEnded)
+  await expect(apiSource.workspace(Promise.resolve([]))).rejects.toThrow()
 })
 
 it("stores no conversation, and records no write, for a session with no organisation", async () => {

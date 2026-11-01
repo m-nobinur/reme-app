@@ -24,6 +24,7 @@ import {
   isRepeat,
   isRetried,
   readView,
+  repeatsPrevious,
   showsProgress,
   supersededBy,
   UNCONFIRMED,
@@ -474,6 +475,25 @@ it("hides a refusal the same tool was called again after, and only that", () => 
       "a"
     )
   ).toBe(false)
+})
+
+it("draws one line for finished calls of one tool that follow each other", () => {
+  const done = (id: string, toolName: string) =>
+    call(id, { toolName, args: {}, argsText: "{}", result: {} })
+  const parts = [
+    done("a", "read_site"),
+    done("b", "read_site"),
+    done("c", "get_facts"),
+    done("d", "read_site"),
+    call("e", { toolName: "read_site", args: {}, argsText: "{}" }),
+  ]
+  expect(parts.map((p) => repeatsPrevious(parts, p.toolCallId))).toEqual([
+    false,
+    true,
+    false,
+    false,
+    false,
+  ])
 })
 
 it("leaves the reply's status line to a reply with nothing at work on screen", () => {

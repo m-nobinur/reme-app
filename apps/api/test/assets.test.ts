@@ -59,12 +59,17 @@ describe("GET /revisions/:id/:picture", () => {
     `sites/org-a/${rev}/screenshots/home-1440.png`,
     `sites/org-a/${rev}/screenshots/home-390.png`,
     `sites/org-a/${rev}/critic/home-1440-2.jpg`,
-    `sites/org-a/${rev}/dist/icon-192.png`,
+    `sites/org-a/${rev}/dist/_astro/icon-192.1a2b3c4d.png`,
   ]
   const asked: unknown[] = []
   const env = (images: boolean) =>
     ({
       SITES: {
+        list: async ({ prefix }: { prefix: string }) => ({
+          objects: keys
+            .filter((key) => key.startsWith(prefix))
+            .map((key) => ({ key })),
+        }),
         get: async (key: string) =>
           keys.includes(key)
             ? { key, body: new Blob([new Uint8Array(9)]).stream() }

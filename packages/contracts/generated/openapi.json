@@ -20350,6 +20350,10 @@
                 "after": {
                   "type": "string",
                   "maxLength": 1000
+                },
+                "above": {
+                  "type": "string",
+                  "maxLength": 200
                 }
               },
               "required": [
@@ -25894,7 +25898,10 @@
                               "pattern": "\\S"
                             },
                             "passed": {
-                              "type": "boolean"
+                              "type": [
+                                "boolean",
+                                "null"
+                              ]
                             },
                             "why": {
                               "type": "string",
@@ -25955,6 +25962,10 @@
                             "after": {
                               "type": "string",
                               "maxLength": 1000
+                            },
+                            "above": {
+                              "type": "string",
+                              "maxLength": 200
                             }
                           },
                           "required": [
@@ -48911,7 +48922,10 @@
                       "pattern": "\\S"
                     },
                     "passed": {
-                      "type": "boolean"
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
                     },
                     "why": {
                       "type": "string",
@@ -48972,6 +48986,10 @@
                     "after": {
                       "type": "string",
                       "maxLength": 1000
+                    },
+                    "above": {
+                      "type": "string",
+                      "maxLength": 200
                     }
                   },
                   "required": [

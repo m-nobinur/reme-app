@@ -452,6 +452,13 @@ describe("the domain Workflow", () => {
     expect(script.calls).toEqual(["expire held", "say failed held"])
   })
 
+  it("fails a claim whose name Cloudflare refuses, without looking", async () => {
+    const { names, result } = await drive([], "refused")
+    expect(names).toEqual(steps.DomainWorkflow["hostname refused"])
+    expect(result).toEqual({ outcome: "failed" })
+    expect(script.calls).toEqual(["expire refused", "say failed refused"])
+  })
+
   it("ends quietly for a claim removed before or while it waits", async () => {
     const before = await drive([], "gone")
     expect(before.names).toEqual(

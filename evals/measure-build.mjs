@@ -1,12 +1,17 @@
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { join, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 import { clearOrgs } from "../packages/db/fixtures/seed.ts"
 import { connect } from "../packages/db/src/client.ts"
 import { facts, memberships, orgs, users } from "../packages/db/src/schema.ts"
 import { ensureStartingTeam, rootStaffId } from "../packages/db/src/staff.ts"
 import { ENTER_APP_ROLE, setContext } from "../packages/db/src/tenancy.ts"
-import { awaitingRound, SETTLED } from "./measure-build/watch.mjs"
+import {
+  awaitingRound,
+  previewRevision,
+  SETTLED,
+} from "./measure-build/watch.mjs"
 import { BUSINESSES, toFacts, toTray } from "./variety/businesses.mjs"
 
 /**
@@ -15,13 +20,17 @@ import { BUSINESSES, toFacts, toTray } from "./variety/businesses.mjs"
  *   node --experimental-transform-types --no-warnings evals/measure-build.mjs
  *        --business clean-05 --out DIR [--state R2_STATE_DIR] [--edits 1]
  *
+ * `--state` is the orchestrator's local state directory, this checkout's
+ * `apps/orchestrator/.wrangler/state` unless given.
+ *
  * Seeds one org for one EV1 business into the local DB (clears it first, so
  * a rerun starts clean) with the starting team, Developer included; puts
  * three stand-in owner photos in local R2 when the business has uploads
  * (drawn once on Gemini 3.1 Flash Lite Image, kept in DIR/photos); starts a build through the
  * orchestrator on ORCHESTRATOR_URL; answers "Build it" if the build waits on
  * its Blueprint; watches to `preview_ready` or a settled state and saves the
- * events. Never approves. With `--edits 1` it then runs the five canned quick
+ * events, the Blueprint as `blueprint.json` and, once they have landed in
+ * local R2, waits for the preview's screenshots. Never approves. With `--edits 1` it then runs the five canned quick
  * edits on that site, one after another. A revise needs a served revision, so
  * before each edit the driver records a `rollback`-kind deployments row for
  * the latest preview in the local DB only: no approval, no KV, no publish.
@@ -74,7 +83,10 @@ const business = BUSINESSES.find((b) => b.id === (args.business ?? "clean-05"))
 if (!business) throw new Error(`no business ${args.business}`)
 const out = args.out ?? "measure-out"
 const state =
-  args.state ?? "../cb-integration/apps/orchestrator/.wrangler/state"
+  args.state ??
+  fileURLToPath(
+    new URL("../apps/orchestrator/.wrangler/state", import.meta.url)
+  )
 const base = (process.env.ORCHESTRATOR_URL ?? "http://localhost:3002").replace(
   /\/$/,
   ""
@@ -328,6 +340,69 @@ async function serve(revisionId) {
 
 const latestRevision = (row) => row.revisions?.[0]?.revision_id
 
+/** The Blueprint the planner stored on the assignment row; the API row leaves it out. */
+async function saveBlueprint(assignmentId) {
+  const { sql: client } = connect()
+  try {
+    const [row] =
+      await client`select blueprint from assignments where id = ${assignmentId}`
+    if (!row?.blueprint) return log("no Blueprint on the row")
+    writeFileSync(
+      join(out, "blueprint.json"),
+      `${JSON.stringify(row.blueprint, null, 2)}\n`
+    )
+  } finally {
+    await client.end()
+  }
+}
+
+const SCREENSHOTS = ["home-1440", "home-768", "home-390", "page-1440"]
+const SCREENSHOT_WAIT_MS = 3 * 60_000
+
+/** Screenshots land in R2 after `preview_ready`; leaving first loses them. */
+async function awaitScreenshots(revisionId) {
+  if (!revisionId) return
+  const probe = join(out, ".screenshot-probe")
+  const landed = (name) => {
+    try {
+      execFileSync(
+        "pnpm",
+        [
+          "--filter",
+          "orchestrator",
+          "exec",
+          "wrangler",
+          "r2",
+          "object",
+          "get",
+          `reme-sites/sites/${ORG_ID}/${revisionId}/screenshots/${name}.png`,
+          "--file",
+          resolve(probe),
+          "--local",
+          "--persist-to",
+          resolve(state),
+        ],
+        { env: { ...process.env, FORCE_COLOR: "0" }, stdio: "ignore" }
+      )
+      return true
+    } catch {
+      return false
+    }
+  }
+  const started = Date.now()
+  let missing = SCREENSHOTS
+  while (missing.length && Date.now() - started < SCREENSHOT_WAIT_MS) {
+    missing = missing.filter((name) => !landed(name))
+    if (missing.length) await sleep(5_000)
+  }
+  rmSync(probe, { force: true })
+  log(
+    missing.length
+      ? `screenshots still missing after ${SCREENSHOT_WAIT_MS / 1000}s: ${missing.join(", ")}`
+      : `screenshots landed (${SCREENSHOTS.length})`
+  )
+}
+
 async function main() {
   const spentAtStart = await keyUsage()
   log(`OpenRouter key usage at start $${spentAtStart.toFixed(4)}`)
@@ -369,6 +444,8 @@ async function main() {
       )
       throw new Error(`build settled in ${build.row.assignment.state}`)
     }
+    await saveBlueprint(buildId)
+    await awaitScreenshots(previewRevision(build.row))
   }
   if (args.edits) {
     summary.edits = []

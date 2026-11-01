@@ -45,6 +45,7 @@ import {
 import type { WorkspacePoll } from "@/lib/api/types"
 import { retryOrgWrite } from "@/lib/auth/actions"
 import { NameBusinessForm } from "@/lib/auth/name-business-form"
+import { safeReturnTo } from "@/lib/auth/redirect-target"
 import { useAutoPanel } from "@/lib/auto-panel"
 import {
   jobWaits,
@@ -164,9 +165,20 @@ const SETUP_FIRST =
 /** How many notifications the rail's bell lists before "View all". */
 const MENU_ITEMS = 6
 
-/** The panel's poll, through the server, with the tag it last saw. */
+/**
+ * The panel's poll, through the server, with the tag it last saw. A session
+ * that has ended sends the owner to sign in, back to this page, and keeps the
+ * panel from rendering an empty business meanwhile.
+ */
 const readWorkspace = async (etag: string | null): Promise<WorkspacePoll> => {
   const poll = await pollWorkspace({ data: { etag } })
+  if (!poll.changed && poll.signedOut) {
+    const here = window.location.pathname + window.location.search
+    window.location.assign(
+      `/sign-in?returnTo=${encodeURIComponent(safeReturnTo(here))}`
+    )
+    return new Promise<never>(() => undefined)
+  }
   return poll.changed ? poll.workspace : "unchanged"
 }
 

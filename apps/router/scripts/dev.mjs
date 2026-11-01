@@ -4,15 +4,17 @@
  * open here. `.dev.vars` sets `SITE_HOST_SUFFIX=.reme.localhost` and the
  * `PREVIEW_KEY` the orchestrator signs with.
  *
- * Not `wrangler dev`: given the staging route, it rewrites every request's URL
- * to the route's host, and the router routes by hostname. `startWorker` takes
- * `inferOriginFromRoutes: false`, which keeps the host the browser sent.
+ * `wrangler dev`, so the `API` service binding finds the api that `pnpm dev`
+ * runs through the dev registry; start the api first, or a site's quote post
+ * has nothing to reach. Given the staging route, wrangler would rewrite every
+ * request's URL to the route's host and the router routes by hostname, so
+ * `--infer-origin-from-routes false` keeps the host the browser sent.
  *
  * `--persist-to <dir>` overrides the state directory, `--port` the port.
  */
+import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { parseArgs } from "node:util"
-import { unstable_startWorker } from "wrangler"
 
 const BINDING = "CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE"
 const router = fileURLToPath(new URL("..", import.meta.url))
@@ -46,19 +48,21 @@ const { values } = parseArgs({
   },
 })
 
-process.chdir(router)
-const worker = await unstable_startWorker({
-  config: "wrangler.jsonc",
-  dev: {
-    server: { port: Number(values.port) },
+const wrangler = spawn(
+  "wrangler",
+  [
+    "dev",
+    "--port",
+    values.port,
     // Past apps/api's 9329 and the Vite Workers' 9229 and 9230.
-    inspector: { port: 9331 },
-    persist: values["persist-to"],
-    inferOriginFromRoutes: false,
-  },
-})
-await worker.ready
+    "--inspector-port",
+    "9331",
+    "--persist-to",
+    values["persist-to"],
+    "--infer-origin-from-routes",
+    "false",
+  ],
+  { cwd: router, stdio: "inherit", env: process.env }
+)
+wrangler.on("exit", (code) => process.exit(code ?? 0))
 console.log(`router: http://*.reme.localhost:${values.port}`)
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => worker.dispose().finally(() => process.exit(0)))
-}

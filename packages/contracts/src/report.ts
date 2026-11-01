@@ -74,7 +74,11 @@ export const ValidationReport = z.strictObject({
   produced_at: Timestamp,
 })
 
-/** One block or section a change touched, as its text before and after; "" where there was none. */
+/**
+ * One block or section a change touched, as its text before and after; ""
+ * where there was none. A moved one keeps its text, and `above` is the first
+ * line of what it now sits directly above (none at the end).
+ */
 export const BlockChange = z.strictObject({
   page: PagePath,
   section: ContentId,
@@ -82,12 +86,16 @@ export const BlockChange = z.strictObject({
   change: z.enum(["added", "removed", "changed", "moved"]),
   before: z.string().max(1_000),
   after: z.string().max(1_000),
+  above: z.string().max(200).optional(),
 })
 
-/** One of a change brief's acceptance checks, judged on the built pages, never by the builder. */
+/**
+ * One of a change brief's acceptance checks, judged on the built pages, never
+ * by the builder. `passed` is null when the pages could not decide it.
+ */
 export const ChangeCheck = z.strictObject({
   check: Text(200),
-  passed: z.boolean(),
+  passed: z.boolean().nullable(),
   why: Text(300),
 })
 
