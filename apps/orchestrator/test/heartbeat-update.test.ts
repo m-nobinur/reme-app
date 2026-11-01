@@ -288,6 +288,22 @@ describe("a model-written update", () => {
     expect(never).not.toHaveBeenCalled()
   })
 
+  it("tells the writer how the chat's markdown is used", async () => {
+    const { kit } = kitFor()
+    const write = writer(UPDATE.template)
+    await writeUpdate(env, kit, "org", UPDATE, write)
+    expect(write.mock.calls[0]?.[1]).toMatch(
+      /bold for the one key fact, inline code for a DNS value or record name, a numbered list for steps[^\n]*a link[^\n]*No headings, no tables/
+    )
+  })
+
+  it("keeps a bold, code and linked value as the fact verbatim", async () => {
+    const { kit } = kitFor()
+    const text =
+      "I've stopped watching **www.brightclean.co.uk**: its records didn't show up within 3 days."
+    expect(await writeUpdate(env, kit, "org", UPDATE, writer(text))).toBe(text)
+  })
+
   it("asks for the facts and the draft, with a short timeout", async () => {
     const { kit } = kitFor()
     const write = writer(UPDATE.template)

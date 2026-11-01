@@ -53,11 +53,11 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const GODADDY = {
+const godaddy = (domain: string) => ({
   id: "godaddy",
   name: "GoDaddy",
-  settings_url: "https://dcc.godaddy.com/manage/dns",
-}
+  settings_url: `https://dcc.godaddy.com/control/dnsmanagement?domainName=${domain}`,
+})
 
 describe("provider detection", () => {
   it("names GoDaddy and links our GoDaddy DNS page", async () => {
@@ -66,7 +66,7 @@ describe("provider detection", () => {
       await detectProvider("sparklecleanbristol.co.uk", [
         "ns47.domaincontrol.com",
       ])
-    ).toEqual({ provider: GODADDY })
+    ).toEqual({ provider: godaddy("sparklecleanbristol.co.uk") })
   })
 
   it("names 123-reg by its Domain Connect name, which the nameservers alone would call GoDaddy", async () => {
@@ -98,12 +98,16 @@ describe("provider detection", () => {
 
   it.each([
     ["ns.123-reg.co.uk", "123-reg", "https://www.123-reg.co.uk/secure/"],
-    ["ns1043.ui-dns.com", "ionos", "https://my.ionos.co.uk/domains"],
+    [
+      "ns1043.ui-dns.com",
+      "ionos",
+      "https://my.ionos.co.uk/domain-dns-settings/plain.co.uk",
+    ],
     ["ns-fh.ui-dns.co.uk", "fasthosts", "https://admin.fasthosts.co.uk/"],
     [
       "dns1.registrar-servers.com",
       "namecheap",
-      "https://ap.www.namecheap.com/domains/list/",
+      "https://ap.www.namecheap.com/domains/domaincontrolpanel/plain.co.uk/advancedns",
     ],
     [
       "ns1.dns-parking.com",
@@ -147,7 +151,7 @@ describe("provider detection", () => {
       provider: {
         id: "ionos",
         name: "IONOS",
-        settings_url: "https://my.ionos.co.uk/domains",
+        settings_url: "https://my.ionos.co.uk/domain-dns-settings/plain.co.uk",
       },
     })
   })
@@ -193,7 +197,7 @@ describe("provider detection", () => {
       }
     )
     expect(await detectProvider("unknown.co.uk", [])).toEqual({
-      provider: GODADDY,
+      provider: godaddy("unknown.co.uk"),
     })
   })
 
@@ -220,7 +224,7 @@ describe("provider detection", () => {
     const fetched = stubNet()
     expect(
       await detectProvider("wildcard.co.uk", ["ns53.domaincontrol.com."])
-    ).toEqual({ provider: GODADDY })
+    ).toEqual({ provider: godaddy("wildcard.co.uk") })
     expect(
       urls(fetched).every((u) => u.startsWith("https://cloudflare-dns.com/"))
     ).toBe(true)

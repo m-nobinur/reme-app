@@ -2161,6 +2161,23 @@ Set with \`revision: rev_2f41c9\`.
     role: "assistant",
     status: { reason: "stop", type: "complete" },
   },
+  ask("How do I point my domain at the site?"),
+  {
+    content: [
+      {
+        text: `Your registrar needs one record, and it takes about five minutes:
+
+1. Open your DNS settings and sign in if asked.
+2. Add a **CNAME** record named \`shop\` that points to \`sites.example.net\`.
+3. Come back here, and I'll check it for you.
+
+Nothing changes on your website until the record is live. Your registrar's [DNS guide](https://example.net/dns) has screenshots.`,
+        type: "text",
+      },
+    ],
+    role: "assistant",
+    status: { reason: "stop", type: "complete" },
+  },
 ]
 
 const CONVERSATION: ThreadMessageLike[] = [
@@ -2555,7 +2572,10 @@ const assistantCatalog = [
       </div>
     ),
   },
-  { name: "MarkdownText", render: () => <FixtureThread messages={MARKDOWN} /> },
+  {
+    name: "MarkdownText",
+    render: () => <FixtureThread height="h-[72rem]" messages={MARKDOWN} />,
+  },
   {
     name: "Reasoning",
     render: () => <FixtureThread messages={REASONING_ONE} />,

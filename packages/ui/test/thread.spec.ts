@@ -344,8 +344,10 @@ for (const theme of ["light", "dark"] as const) {
         }
       })
       await open(page, "MarkdownText", width, theme)
-      const reply = page.locator('[data-entry="MarkdownText"] .aui-md')
-      await expect(reply).toContainText("Photos of the shop front")
+      const reply = page
+        .locator('[data-entry="MarkdownText"] .aui-md')
+        .filter({ hasText: "Photos of the shop front" })
+      await expect(reply).toHaveCount(1)
       await expect(reply.locator("img")).toHaveCount(0)
       const outside = reply.getByRole("link", {
         name: "the site (example.net) (opens in a new tab)",

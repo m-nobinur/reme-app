@@ -327,7 +327,10 @@ export function modelInput(look: Look) {
 
 /** Sentences as a reader counts them: a stop followed by a space or the end. */
 const sentencesIn = (text: string) =>
-  text.split(/(?<=[.!?…])["'”’)]*\s+/).filter((s) => s.trim()).length
+  text
+    .replace(/^\s*\d+\.\s/gm, "")
+    .split(/(?<=[.!?…])["'”’)]*\s+/)
+    .filter((s) => s.trim()).length
 
 /** Null when the message keeps to `LIMITS`, else which limit it broke. */
 export function overLimit(text: string): string | null {
@@ -368,6 +371,7 @@ const updatePrompt = (name: string | null) =>
     `${youAre(name)} Something the owner started has just moved on, and you are telling them.`,
     "You get the facts and a draft. Write the update in your own words as one short, warm message: the point first, then what happens next or what the owner can do.",
     "Use every value in the facts exactly as written, with no quotation marks around it. Add no number, date, name, web address or DNS value that is not in the facts. No greeting, no thanks, no sign-off.",
+    "The chat renders markdown. Keep it plain, and format only where it helps: bold for the one key fact, inline code for a DNS value or record name, a numbered list for steps to do in order, and a link when a fact is a web address to open. No headings, no tables.",
     `At most ${LIMITS.sentences} sentences and ${LIMITS.chars} characters, and at most one question.`,
   ].join("\n\n")
 

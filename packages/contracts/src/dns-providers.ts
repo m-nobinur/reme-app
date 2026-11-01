@@ -65,7 +65,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "GoDaddy",
     nameservers: [".domaincontrol.com"],
     registrars: [],
-    settingsUrl: page("https://dcc.godaddy.com/manage/dns"),
+    // Per-domain; signed out it keeps the path through login (checked 2026-11-01).
+    settingsUrl: (domain) =>
+      `https://dcc.godaddy.com/control/dnsmanagement?domainName=${domain}`,
     helpUrl: "https://www.godaddy.com/help/add-a-cname-record-19236",
     apex: "forward",
     mark: "godaddy",
@@ -85,7 +87,10 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "IONOS",
     nameservers: [".ui-dns.com", ".ui-dns.org", ".ui-dns.biz", ".ui-dns.de"],
     registrars: [],
-    settingsUrl: page("https://my.ionos.co.uk/domains"),
+    // Per-domain; signed out it keeps the path through login (checked 2026-11-01).
+    // shortcut: always the UK account host, since nameservers do not show the market; use the owner's country when non-UK owners arrive.
+    settingsUrl: (domain) =>
+      `https://my.ionos.co.uk/domain-dns-settings/${domain}`,
     helpUrl:
       "https://www.ionos.co.uk/help/domains/configuring-cname-records-for-subdomains/configuring-a-cname-record-for-a-subdomain/",
     labels: { name: "Host name", value: "Points to" },
@@ -97,7 +102,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "Namecheap",
     nameservers: [".registrar-servers.com"],
     registrars: [],
-    settingsUrl: page("https://ap.www.namecheap.com/domains/list/"),
+    // Per-domain; signed out it keeps the path through login (checked 2026-11-01).
+    settingsUrl: (domain) =>
+      `https://ap.www.namecheap.com/domains/domaincontrolpanel/${domain}/advancedns`,
     helpUrl:
       "https://www.namecheap.com/support/knowledgebase/article.aspx/9646/2237/how-to-create-a-cname-record-for-your-domain/",
     labels: { name: "Host", value: "Value" },
@@ -110,7 +117,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "Squarespace",
     nameservers: [".squarespacedns.com", ".googledomains.com"],
     registrars: ["Squarespace Domains"],
-    settingsUrl: page("https://account.squarespace.com/domains"),
+    // Per-domain, also for domains moved from Google Domains.
+    settingsUrl: (domain) =>
+      `https://account.squarespace.com/domains/managed/${domain}/dns/dns-settings`,
     helpUrl:
       "https://support.squarespace.com/hc/en-us/articles/360002101888-Adding-custom-DNS-records-to-your-Squarespace-managed-domain",
     labels: { name: "Host", value: "Data" },
