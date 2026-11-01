@@ -10,7 +10,7 @@ import {
   PaletteRoles,
   type TemplateId,
 } from "./onboarding.ts"
-import { SECTION_VARIANTS } from "./page.ts"
+import { BLOCK_PROVENANCE, SECTION_VARIANTS } from "./page.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -187,23 +187,60 @@ export const ImageSlot = z.discriminatedUnion("source", [
 
 /** One section as the planner plans it. The variant is checked against the kind. */
 type PlannedSection = z.ZodObject<{
-  kind: z.ZodLiteral<SectionKindKey>
+  kind: z.ZodLiteral<SectionKindKey | "content">
   variant: z.ZodEnum<{ [V in string]: V }>
   purpose: z.ZodString
   content_notes: z.ZodNullable<z.ZodString>
 }>
 
-const BlueprintSection = z.discriminatedUnion(
-  "kind",
-  SECTION_KINDS.map((kind) =>
+/**
+ * A planned section: a starter kind with one of its variants, or `content`,
+ * a section of the page document's blocks (prose, a checklist, a table and
+ * the rest) for a part of the outline no starter section holds.
+ */
+const BlueprintSection = z.discriminatedUnion("kind", [
+  ...SECTION_KINDS.map((kind) =>
     z.strictObject({
       kind: z.literal(kind),
       variant: variantOf(kind),
       purpose: Text(200),
       content_notes: Text(400).nullable(),
     })
-  ) as unknown as [PlannedSection, ...PlannedSection[]]
-)
+  ),
+  z.strictObject({
+    kind: z.literal("content"),
+    variant: z.enum(["default"]),
+    purpose: Text(200),
+    content_notes: Text(400).nullable(),
+  }),
+] as unknown as [PlannedSection, ...PlannedSection[]])
+
+/** A planned section's kind: a starter kind or `content`. */
+export type PlannedKind = SectionKindKey | "content"
+
+/** One h2 of a page's outline, with the h3s under it. */
+export const OutlineEntry = z.strictObject({
+  heading: Text(120),
+  subheadings: z.array(Text(120)).max(6),
+})
+
+/**
+ * What one page says, planned before a word is written (design §3): its
+ * job, the search it is written for (an offering and the area), the topics
+ * it owns, which no other page covers and other pages link to, its outline
+ * of h2s and h3s in page order, and where its words come from. A service
+ * page has one per offering, `offering` being its place (1 to 6) in
+ * business.offerings; every other page has 0.
+ */
+export const ContentPlan = z.strictObject({
+  page: PageId,
+  offering: z.number().int().min(0).max(6),
+  purpose: Text(200),
+  target_search: Text(120),
+  topics: z.array(Text(80)).min(1).max(8),
+  outline: z.array(OutlineEntry).min(1).max(12),
+  sources: z.array(z.enum(BLOCK_PROVENANCE)).min(1).max(3),
+})
 
 /** The most and fewest lines the owner's card carries. */
 export const BLUEPRINT_FEATURES_MIN = 4
@@ -259,6 +296,8 @@ export const Blueprint = z.strictObject({
     )
     .max(CUSTOM_SECTIONS_MAX)
     .optional(),
+  /** Each page's content plan; a plan stored before content plans has none. */
+  content: z.array(ContentPlan).max(16).optional(),
 })
 
 /**
@@ -315,4 +354,5 @@ export type DirectionId = z.infer<typeof DirectionId>
 export type DesignDirection = z.infer<typeof DesignDirection>
 export type ImageSlot = z.infer<typeof ImageSlot>
 export type Blueprint = z.infer<typeof Blueprint>
+export type ContentPlan = z.infer<typeof ContentPlan>
 export type IndustryPackId = z.infer<typeof IndustryPackId>

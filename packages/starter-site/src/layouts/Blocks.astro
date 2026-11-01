@@ -32,6 +32,9 @@ const action = (block: Extract<Block, { type: "cta" }>) => {
       <div class:list={["block", `block-${block.type}`]} id={block.id}>
         {block.eyebrow && <p class="eyebrow">{block.eyebrow}</p>}
         {block.heading && <h3>{plain(block.heading)}</h3>}
+        {block.provenance === "trade" && site.typicalNote && (
+          <p class="typical-note">{site.typicalNote}</p>
+        )}
         {block.type === "prose" && <Markdown source={block.markdown} />}
         {block.type === "checklist" && (
           <ul class="check-list">

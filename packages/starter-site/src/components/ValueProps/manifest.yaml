@@ -1,8 +1,14 @@
 component: ValueProps
 path: src/components/ValueProps/ValueProps.astro
 summary: Up to three reasons to choose the business, each an icon, a title and a
-  sentence, on one panel.
+  sentence, in one of two patterns.
 props:
+  - name: variant
+    type: '"default" | "hairline_rows"'
+    required: false
+    description: "default: numbered reasons beside the heading, each in an icon
+      circle; hairline_rows: full-width rows under the heading, between
+      hairlines, a small icon leading each."
   - name: eyebrow
     type: string
     required: false
@@ -29,9 +35,13 @@ constraints:
     renders only when its title or body is set.
   - Each valuePropNIcon is a key of ICONS in src/icons.ts that fits the reason;
     an empty or unknown one is picked from the reason's words.
+  - default numbers the reasons beside the heading, each in an icon circle;
+    hairline_rows sets them as full-width rows under the heading, divided by
+    hairlines, a small icon leading each and no number.
   - Renders nothing when every title and body is empty.
 examples:
   - "<ValueProps />"
+  - '<ValueProps variant="hairline_rows" />'
 forbidden:
   - a number, rating, award or guarantee no fact states
 source: generated

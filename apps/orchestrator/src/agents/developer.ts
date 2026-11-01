@@ -50,21 +50,23 @@ import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import { z } from "zod"
 import { type Brief, retryContextSignal } from "../brief.ts"
 import {
+  assemble,
   DOCUMENTS_DIR,
-  documentFiles,
-  SHEET_MARK,
-  SLOT_SHEET,
+  documentFile,
+  skeletons,
+  type Written,
+  wordsProblem,
 } from "../documents.ts"
 import {
   copyInstructions,
   FAN_OUT,
   fansOut,
-  fieldsOfPrompt,
   pageInstructions,
-  pageOfPrompt,
   serviceCount,
   siteValues,
+  writerCheck,
   writerTasks,
+  writerUser,
 } from "../fanout.ts"
 import { placeGenerated } from "../images.ts"
 import { instructions, sectionInstructions } from "../instructions.ts"
@@ -87,8 +89,10 @@ import {
   followPhotos,
   type Landed,
   landedOf,
+  type Reply,
   reconcilePhotos,
   replySchema,
+  setValues,
   WARM_BUILD,
   writePages,
 } from "../write-pages.ts"
@@ -673,7 +677,7 @@ const writePagesTool = (current: Session) =>
   defineTool({
     name: "write_pages",
     description:
-      "Writes every page's site fields and the SEO and FAQ copy, one writer per page in parallel, places the plan's photos as they are made and commits. Call it once, alone, after the shell's checkpoint. Returns one line per writer.",
+      "Writes every planned page's document from its content plan, the site fields and the one FAQ, one writer per page in parallel, places the plan's photos as they are made and commits. Call it once, alone, after the shell's checkpoint. Returns one line per writer.",
     input: toolInput(z.object({})),
     harness: true,
     durable: true,
@@ -691,34 +695,75 @@ const writePagesTool = (current: Session) =>
       const sandbox = harness.sandbox
       const stub = sandboxFor(env, orgId)
       const plan = brief.blueprint
-      const tasks = writerTasks(plan, serviceCount(brief))
+      const services = serviceCount(brief)
+      const tasks = writerTasks(plan, services)
       const total = plan.pages.length
       const shown = new Set<string>()
       const started = new Set<string>()
       current.tee.emit("build.progress", { stage: "pages", item: null, total })
 
-      // The writers read and write src/site-config.ts and the slot sheet as
-      // one text; the site's settings go back to the config, and the page
-      // slots become the planned pages' documents. One change at a time,
-      // through the assignment's queue for the config. A replay starts the
-      // sheet again and gets the same writes.
-      let sheet = SLOT_SHEET
-      await sandbox.exec(`mkdir -p ${SITE_ROOT}/${DOCUMENTS_DIR}/services`)
-      const edit = (change: (source: string) => string) =>
-        current.mutations(CONFIG, async () => {
-          const { content } = await stub.readFile(CONFIG)
-          const both = `${content}${SHEET_MARK}${sheet}`
-          const next = change(both)
-          if (next === both) return next
-          const [config = content, slots = sheet] = next.split(SHEET_MARK)
-          if (config !== content) await stub.writeFile(CONFIG, config)
-          sheet = slots
-          for (const [path, text] of Object.entries(
-            documentFiles(siteValues(next), plan)
-          ))
-            await stub.writeFile(`${SITE_ROOT}/${DOCUMENTS_DIR}/${path}`, text)
-          return next
+      // Each writer's site fields go into src/site-config.ts and its words
+      // into its page's document, every planned page written out again after
+      // each reply, so a page shows the Blueprint's sections from the first.
+      // One change at a time, through the assignment's queue for the config.
+      // A replay starts the words again and gets the same writes.
+      const pages = skeletons(plan)
+      const written: Record<string, Written> = {}
+      const docsOf = (values: Record<string, string>) =>
+        Object.entries(pages).flatMap(([file, skeleton]) => {
+          const at = documentFile(file, values)
+          return at
+            ? [{ file, ...at, doc: assemble(skeleton, written[file], at.slug) }]
+            : []
         })
+      await sandbox.exec(`mkdir -p ${SITE_ROOT}/${DOCUMENTS_DIR}/services`)
+      const apply = (index: number, reply: Reply) =>
+        current.mutations(CONFIG, async () => {
+          const task = tasks[index] as (typeof tasks)[number]
+          const { content } = await stub.readFile(CONFIG)
+          const config = setValues(content, reply.values)
+          if (config !== content) await stub.writeFile(CONFIG, config)
+          const skeleton = pages[task.file]
+          const wrong = skeleton
+            ? wordsProblem(skeleton, reply.written, task.sections)
+            : null
+          if (!wrong) {
+            const page = written[task.file] ?? { sections: {} }
+            written[task.file] = {
+              ...page,
+              ...(task.meta
+                ? {
+                    title: reply.written.title,
+                    description: reply.written.description,
+                  }
+                : {}),
+              sections: { ...page.sections, ...reply.written.sections },
+            }
+          }
+          const values = siteValues(config)
+          const docs = docsOf(values)
+          for (const { path, doc } of docs)
+            await stub.writeFile(
+              `${SITE_ROOT}/${DOCUMENTS_DIR}/${path}`,
+              `${JSON.stringify(doc, null, 2)}\n`
+            )
+          if (wrong)
+            return `Your sections are not a page document's yet, so nothing of them was written:\n${wrong}\nFix them in one more reply, then stop.`
+          const own = docs.find((d) => d.file === task.file)
+          return writerCheck({
+            task,
+            values,
+            ...(own ? { doc: own.doc } : {}),
+            others: docs.filter((d) => d !== own).map((d) => d.doc),
+            services,
+          })
+        })
+      const user = async (index: number) =>
+        writerUser(
+          tasks[index] as (typeof tasks)[number],
+          plan,
+          (await stub.readFile(CONFIG)).content
+        )
       // A retry after a provider failure writes on the fallback model too.
       const writer = (role: "page" | "copy") => {
         const routed = roleOf(spec, role)
@@ -736,7 +781,7 @@ const writePagesTool = (current: Session) =>
       const call = (
         index: number,
         attempt: 1 | 2,
-        user: string,
+        userText: string,
         strict: boolean
       ) =>
         step.do(`writer ${index + 1}.${attempt}`, async () => {
@@ -747,11 +792,11 @@ const writePagesTool = (current: Session) =>
             effort: route.effort,
             maxTokens: route.maxTokens,
             system: systems[task.agent],
-            user,
+            user: userText,
             sessionId: assignmentId,
-            // Strict only to retry an unparsable reply (write-pages.ts).
-            ...(strict
-              ? { schema: replySchema(fieldsOfPrompt(task.prompt)) }
+            // Strict only to retry an unparsable reply of fields alone (write-pages.ts).
+            ...(strict && task.sections.length === 0
+              ? { schema: replySchema(task.fields) }
               : {}),
           })
           await logTurn(
@@ -796,12 +841,14 @@ const writePagesTool = (current: Session) =>
         max: FAN_OUT,
         staggerMs: 3000,
         call,
-        edit,
-        // A page is at work from its first writer's start and written at its
-        // first writer's end; `working` rows never count as written.
+        user,
+        apply,
+        // A page is at work from its writer's start and written at its end;
+        // the FAQ writer's part is its page's, so it counts for none.
+        // `working` rows never count as written.
         onStarted: (task) => {
-          const page = pageOfPrompt(task.prompt)
-          if (!page || started.has(page)) return
+          const { page } = task
+          if (task.agent === "copy" || started.has(page)) return
           started.add(page)
           current.tee.emit("build.progress", {
             stage: "pages",
@@ -812,8 +859,8 @@ const writePagesTool = (current: Session) =>
         },
         onWritten: (task) => {
           warm.kick()
-          const page = pageOfPrompt(task.prompt)
-          if (!page || shown.has(page)) return
+          const { page } = task
+          if (task.agent === "copy" || shown.has(page)) return
           shown.add(page)
           current.tee.emit("build.progress", {
             stage: "pages",
@@ -823,11 +870,13 @@ const writePagesTool = (current: Session) =>
         },
       })
       const photos = await following
-      const before = await edit((s) => s)
-      if (
-        (await edit((s) => reconcilePhotos(s, slots, photos.files))) !== before
-      )
-        warm.kick()
+      const reconciled = await current.mutations(CONFIG, async () => {
+        const { content } = await stub.readFile(CONFIG)
+        const next = reconcilePhotos(content, slots, photos.files)
+        if (next !== content) await stub.writeFile(CONFIG, next)
+        return next !== content
+      })
+      if (reconciled) warm.kick()
       // The photos as placed are the baseline the report holds the lead to.
       await sandbox.exec(`cd ${SITE_ROOT} && ${SEAL_PHOTOS}`)
       await warm.idle()
@@ -840,7 +889,7 @@ const writePagesTool = (current: Session) =>
       )
       return {
         output: [
-          `Wrote ${tasks.length} writers' fields and committed them as "pages":`,
+          `Wrote ${tasks.length} writers' pages and fields and committed them as "pages":`,
           ...lines,
           ...(missing.length > 0
             ? [

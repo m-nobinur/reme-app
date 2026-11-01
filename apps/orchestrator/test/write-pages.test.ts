@@ -1,5 +1,6 @@
+import type { PageDocument } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
-import { pageCheck, sandboxFindings, type WriterTask } from "../src/fanout.ts"
+import { sandboxFindings, type WriterTask, writerCheck } from "../src/fanout.ts"
 import type { PhotoFile } from "../src/photo-step.ts"
 import {
   createWarmer,
@@ -7,6 +8,7 @@ import {
   followPhotos,
   landedOf,
   parseReply,
+  type Reply,
   reconcilePhotos,
   setValues,
   writePages,
@@ -31,34 +33,62 @@ const CONFIG = [
   "}",
 ].join("\n")
 
+const task = (
+  over: Partial<WriterTask> & Pick<WriterTask, "page">
+): WriterTask => ({
+  agent: "page",
+  file: `${over.page}.json`,
+  sections: [],
+  meta: false,
+  fields: [],
+  prompt: `Page ${over.page}.`,
+  ...over,
+})
+
 const TASKS: WriterTask[] = [
-  { agent: "page", prompt: "Page home. Your fields: heroHeading." },
-  { agent: "page", prompt: "Page about. Your fields: aboutHeading." },
-  { agent: "copy", prompt: "SEO and FAQ copy. Your fields: homeTitle." },
-  {
-    agent: "page",
-    prompt:
-      "Page service. Service 1's own page, /services/<slug of service1Name>/, laid out by layout.service. If service1Name is empty, leave your fields empty. Your fields: service1Heading.",
+  task({ page: "home", fields: ["heroHeading"] }),
+  task({ page: "about", fields: ["aboutHeading"] }),
+  task({ agent: "copy", page: "home", sections: ["faq"] }),
+  task({
+    page: "service",
+    offering: 1,
+    file: "services/1.json",
+    fields: ["service1Heading"],
     after: 0,
-  },
+  }),
 ]
 
-/** A site config in memory, changed one change at a time, as the tool's queue does. */
-function memorySite(source = CONFIG) {
+/**
+ * A site in memory, each reply written one at a time as the tool's queue
+ * does, and the check `check` gives back for each write.
+ */
+function memorySite(
+  tasks: readonly WriterTask[],
+  source = CONFIG,
+  check: (index: number, reply: Reply) => string | null = () => null
+) {
   let text = source
+  const written: Reply["written"][] = []
   return {
-    edit: async (change: (s: string) => string) => {
-      text = change(text)
-      return text
+    user: async (index: number) =>
+      fieldLines(text, (tasks[index] as WriterTask).fields),
+    apply: async (index: number, given: Reply) => {
+      text = setValues(text, given.values)
+      written[index] = given.written
+      return check(index, given)
     },
+    written,
     get text() {
       return text
     },
   }
 }
 
-const reply = (values: Record<string, string>, summary = "Filled.") =>
-  JSON.stringify({ summary, values })
+const reply = (
+  values: Record<string, string>,
+  summary = "Filled.",
+  extra: Record<string, unknown> = {}
+) => JSON.stringify({ summary, values, ...extra })
 
 describe("the writers' lines in the site config", () => {
   it("gives a writer each field's line with its note, wrapped values included", () => {
@@ -90,27 +120,56 @@ describe("the writers' lines in the site config", () => {
     expect(next.split("\n")).toHaveLength(CONFIG.split("\n").length)
   })
 
-  it("keeps a reply to the task's own string fields and refuses one with none", () => {
+  it("keeps a reply to the task's own fields and sections, and refuses one with neither", () => {
+    const own = {
+      fields: ["heroHeading"],
+      sections: ["hero"],
+      meta: true,
+    }
     expect(
       parseReply(
         "```json\n" +
-          reply({ heroHeading: "Hi", aboutHeading: "Not yours", x: "1" }) +
+          reply(
+            { heroHeading: "Hi", aboutHeading: "Not yours", x: "1" },
+            "Filled.",
+            {
+              title: "A title",
+              description: 7,
+              sections: {
+                hero: { heading: "Gardens", kind: "faq", blocks: [] },
+                faq: { heading: "Not yours" },
+              },
+            }
+          ) +
           "\n```",
-        ["heroHeading"]
+        own
       )
-    ).toEqual({ summary: "Filled.", values: { heroHeading: "Hi" } })
-    expect(() => parseReply("no json here", ["heroHeading"])).toThrow(
-      "not JSON"
-    )
-    expect(() => parseReply(reply({ other: "x" }), ["heroHeading"])).toThrow(
-      "no values for your fields"
+    ).toEqual({
+      summary: "Filled.",
+      values: { heroHeading: "Hi" },
+      written: {
+        title: "A title",
+        sections: { hero: { heading: "Gardens", blocks: [] } },
+      },
+    })
+    // The page's title is its page writer's, never the FAQ writer's.
+    expect(
+      parseReply(reply({}, "x", { title: "Mine?", sections: { faq: {} } }), {
+        fields: [],
+        sections: ["faq"],
+        meta: false,
+      }).written
+    ).toEqual({ sections: { faq: {} } })
+    expect(() => parseReply("no json here", own)).toThrow("not JSON")
+    expect(() => parseReply(reply({ other: "x" }), own)).toThrow(
+      "nothing for your task: values for heroHeading and sections hero"
     )
   })
 })
 
 describe("write_pages's fan-out", () => {
   it("runs at most max at once, the first alone until the stagger, a service page after the home page", async () => {
-    const site = memorySite()
+    const site = memorySite(TASKS)
     // What the panel hears: each writer as it starts, then as it is written.
     const heard: string[] = []
     let active = 0
@@ -118,12 +177,6 @@ describe("write_pages's fan-out", () => {
     const order: string[] = []
     const releases: (() => void)[] = []
     const staggered: (() => void)[] = []
-    const fields: Record<number, string> = {
-      0: "heroHeading",
-      1: "aboutHeading",
-      2: "homeTitle",
-      3: "service1Heading",
-    }
     const pending = writePages({
       tasks: TASKS,
       max: 2,
@@ -132,9 +185,10 @@ describe("write_pages's fan-out", () => {
         new Promise<void>((resolve) => {
           staggered.push(resolve)
         }),
-      edit: site.edit,
-      onStarted: (task) => heard.push(`started ${TASKS.indexOf(task)}`),
-      onWritten: (task) => heard.push(`written ${TASKS.indexOf(task)}`),
+      user: site.user,
+      apply: site.apply,
+      onStarted: (t) => heard.push(`started ${TASKS.indexOf(t)}`),
+      onWritten: (t) => heard.push(`written ${TASKS.indexOf(t)}`),
       call: async (index) => {
         order.push(`start ${index}`)
         active++
@@ -142,12 +196,12 @@ describe("write_pages's fan-out", () => {
         await new Promise<void>((resolve) => releases.push(resolve))
         active--
         order.push(`end ${index}`)
-        // A title the copy check passes: 50 to 60 characters.
-        const text =
-          index === 2
-            ? "Hollin Garden Care: lawns, hedges and borders in Bristol"
-            : `text ${index}`
-        return reply({ [fields[index] as string]: text })
+        const own = TASKS[index] as WriterTask
+        return reply(
+          Object.fromEntries(own.fields.map((f) => [f, `text ${index}`])),
+          "Filled.",
+          { sections: { faq: { heading: "Before your first clean" } } }
+        )
       },
     })
     const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -157,14 +211,14 @@ describe("write_pages's fan-out", () => {
     expect(heard).toEqual(["started 0"])
     for (const end of staggered) end()
     await tick()
-    // Then one more, the bound: about. The copy writer and the service page wait.
+    // Then one more, the bound: about. The FAQ writer and the service page wait.
     expect(order).toEqual(["start 0", "start 1"])
     // Two at work at once, so the panel shows both being written.
     expect(heard).toEqual(["started 0", "started 1"])
     releases.shift()?.()
     await tick()
     await tick()
-    // Home is done: the copy writer takes its slot, and the service page may queue.
+    // Home is done: the FAQ writer takes its slot, and the service page may queue.
     expect(order.slice(2)).toEqual(["end 0", "start 2"])
     while (releases.length > 0 || order.length < 8) {
       releases.shift()?.()
@@ -180,43 +234,47 @@ describe("write_pages's fan-out", () => {
     expect(lines).toEqual([
       "- home: Filled.",
       "- about: Filled.",
-      "- copy: Filled.",
+      "- faq: Filled.",
       "- service1: Filled.",
     ])
     expect(site.text).toContain('heroHeading: "text 0"')
     expect(site.text).toContain('service1Heading: "text 3"')
+    expect(site.written[2]).toEqual({
+      sections: { faq: { heading: "Before your first clean" } },
+    })
   })
 
-  it("gives a writer the copy check's findings once, and a writer that fails hands its fields to the lead", async () => {
-    const site = memorySite(
-      CONFIG.replace(
-        '  homeTitle: "",',
-        '  ctaHeading: "",\n  aboutCtaHeading: "Ready for a tidier garden",'
-      )
+  it("gives a writer the copy check's findings once, and a writer that fails hands its part to the lead", async () => {
+    const tasks = [
+      task({ page: "home", fields: ["heroHeading"], sections: ["cta-band"] }),
+      task({ page: "about", fields: ["aboutHeading"] }),
+    ]
+    let checked = 0
+    const site = memorySite(tasks, CONFIG, (index) =>
+      index === 0 && checked++ === 0
+        ? "The copy gate's check of what you wrote, before the build, found:\n- the heading repeats the about page's\nFix exactly these in one more reply, then stop."
+        : null
     )
     const users: string[] = []
     let fix = ""
     const lines = await writePages({
-      tasks: [
-        { agent: "page", prompt: "Page home. Your fields: ctaHeading." },
-        { agent: "page", prompt: "Page about. Your fields: aboutHeading." },
-      ],
+      tasks,
       max: 4,
       staggerMs: 0,
       sleep: async () => undefined,
-      edit: site.edit,
+      user: site.user,
+      apply: site.apply,
       call: async (index, attempt, user, strict) => {
         users.push(`${index}.${attempt}${strict ? " strict" : ""}`)
         if (index === 0 && attempt === 2) fix = user
         if (index === 1) return "not json"
-        // A closing heading the copy check refuses: it repeats the about page's.
         return attempt === 1
-          ? reply({ ctaHeading: "Ready for a tidier garden?" })
-          : reply({ ctaHeading: "Questions about the garden" }, "Fixed.")
+          ? reply({ heroHeading: "Ready for a tidier garden?" })
+          : reply({ heroHeading: "Gardens kept tidy in Bristol" }, "Fixed.")
       },
     })
-    // Only the retry after an unparsable reply asks for the schema: a strict
-    // call misses the writers' shared prompt cache.
+    // Only the retry after an unparsable reply asks for strict output: a
+    // strict call misses the writers' shared prompt cache.
     expect([...users].sort((a, b) => a.localeCompare(b))).toEqual([
       "0.1",
       "0.2",
@@ -224,46 +282,86 @@ describe("write_pages's fan-out", () => {
       "1.2 strict",
     ])
     // The fix call sees its own reply and the findings, after its field's line.
-    expect(fix).toContain('  ctaHeading: "",')
+    expect(fix).toContain('  heroHeading: "",')
     expect(fix).toContain(
-      '<your_reply>\n{"ctaHeading":"Ready for a tidier garden?"}'
+      '<your_reply>\n{"values":{"heroHeading":"Ready for a tidier garden?"},"sections":{}}'
     )
     expect(fix).toContain("Fix exactly these in one more reply")
     expect(lines[0]).toBe("- home: Fixed. Fixed what the copy check found.")
-    expect(site.text).toContain('ctaHeading: "Questions about the garden"')
+    expect(site.text).toContain('heroHeading: "Gardens kept tidy in Bristol"')
     expect(lines[1]).toMatch(
-      /^- about: failed \(The reply was not JSON.*\)\. Its fields are yours: aboutHeading \(src\/content\/pages\/about\.json, section hero, heading\)\.$/
+      /^- about: failed \(The reply was not JSON.*\)\. Its part is yours: src\/site-config\.ts fields aboutHeading\.$/
     )
   })
 })
 
-describe("a writer's own check, before the lead sees its fields", () => {
+describe("a writer's own check, before the lead sees its work", () => {
   // Perf run 2: titles came back 91 characters as shown, four icons were
   // guesses, and the lead spent its integration turns on both.
-  const source = [
-    "const values = {",
-    '  businessName: "Brightside Window and Gutter Care",',
-    '  service1Title: "Window Cleaning in Bristol | Brightside Care",',
-    '  service1Icon: "sparkles",',
-    `  service1Body: "A seamless clean ${String.fromCharCode(0x2014)} every pane, every sill, inside and out, across Bristol homes and flats.",`,
-    "}",
-  ].join("\n")
-  const prompt =
-    "Page service. Service 1's own page. Your fields: service1Title, service1Icon, service1Body."
+  const values = {
+    businessName: "Brightside Window and Gutter Care",
+    service1Icon: "sparkles",
+    service1Body: `A seamless clean ${String.fromCharCode(0x2014)} every pane, every sill, inside and out, across Bristol homes and flats.`,
+  }
+  const service = task({
+    page: "service",
+    offering: 1,
+    file: "services/1.json",
+    sections: ["hero", "content"],
+    meta: true,
+    fields: ["service1Icon", "service1Body"],
+  })
+  const doc: PageDocument = {
+    page: "service",
+    slug: "window-cleaning",
+    title: "Window Cleaning in Bristol | Brightside Care",
+    description: "Too short.",
+    sections: [
+      { id: "hero", kind: "hero", heading: "Window cleaning in Bristol" },
+      {
+        id: "content",
+        kind: "content",
+        heading: "How it differs from gutter clearing",
+        blocks: [
+          {
+            id: "kinds",
+            type: "cards",
+            provenance: "trade",
+            items: [
+              { title: "Frames", body: "Wiped by hand.", icon: "sparkles" },
+            ],
+          },
+        ],
+      },
+    ],
+  }
 
   it("names the shown title's length, an unknown icon, an em dash and a stock phrase", () => {
-    const check = pageCheck(source, prompt) ?? ""
+    const check =
+      writerCheck({ task: service, values, doc, others: [], services: 2 }) ?? ""
     expect(check).toContain(
-      'service1Title shows as "Window Cleaning in Bristol | Brightside Care | Brightside Window and Gutter Care", 80 characters'
+      'the title shows as "Window Cleaning in Bristol | Brightside Care | Brightside Window and Gutter Care", 80 characters'
     )
+    expect(check).toContain("the description is 10 characters")
     expect(check).toContain(
       'service1Icon "sparkles" is not an icon; name one of: broom,'
     )
+    expect(check).toContain(`section content's icon "sparkles" is not an icon`)
     expect(check).toContain("service1Body has an em dash")
     expect(check).toContain('service1Body says "seamless"')
   })
 
-  it("passes fields the build's copy check passes", () => {
+  it("holds a writer to its own sections, and passes what the build's copy check passes", () => {
+    const faq = task({ agent: "copy", page: "service", sections: ["hero"] })
+    expect(
+      writerCheck({
+        task: faq,
+        values: {},
+        doc: { ...doc, title: "x", description: "x" },
+        others: [],
+        services: 1,
+      })
+    ).toBeNull()
     expect(
       sandboxFindings(
         { service1Icon: "sparkle", service1Body: "Every pane, by hand." },

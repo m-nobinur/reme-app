@@ -1,8 +1,14 @@
 component: AreaSection
 path: src/components/AreaSection/AreaSection.astro
 summary: Where the business works, the places it names, a short local paragraph,
-  the hours, and the area drawn as a line map with a small card.
+  the hours, and the area drawn as a line map with a small card or, in
+  town_list, the towns as a list.
 props:
+  - name: variant
+    type: '"default" | "town_list"'
+    required: false
+    description: "default: the area drawn beside the copy; town_list: the towns as a
+      column list, each with its line, and no drawing."
   - name: heading
     type: string
     required: false
@@ -29,10 +35,12 @@ constraints:
     on the light one.
   - On the service area page the drawing is the header's, and the section lists
     the towns, each with its line from areaTownNotes (one to a line, the town, a
-    colon and its line, for towns in areaTowns only).
+    colon and its line, for towns in areaTowns only). town_list lists them the
+    same way on any page, with no drawing.
 examples:
   - "<AreaSection heading={site.serviceAreaHeading} />"
   - "<AreaSection />"
+  - '<AreaSection variant="town_list" />'
 forbidden:
   - a place, landmark or travel time the facts do not give
 source: generated

@@ -1072,11 +1072,14 @@ export interface components {
                     | "fleet"
                     | "practice_list"
                     | "default"
+                    | "hairline_rows"
                     | "circles"
                     | "dark_band"
                     | "timeline"
+                    | "panel_split"
                     | "featured"
                     | "wall"
+                    | "town_list"
                     | "split"
                     | "stacked"
                     | "solid"
@@ -1096,11 +1099,14 @@ export interface components {
                     | "fleet"
                     | "practice_list"
                     | "default"
+                    | "hairline_rows"
                     | "circles"
                     | "dark_band"
                     | "timeline"
+                    | "panel_split"
                     | "featured"
                     | "wall"
+                    | "town_list"
                     | "split"
                     | "stacked"
                     | "solid"
@@ -1194,11 +1200,14 @@ export interface components {
                         | "fleet"
                         | "practice_list"
                         | "default"
+                        | "hairline_rows"
                         | "circles"
                         | "dark_band"
                         | "timeline"
+                        | "panel_split"
                         | "featured"
                         | "wall"
+                        | "town_list"
                         | "split"
                         | "stacked"
                         | "solid"
@@ -1218,11 +1227,14 @@ export interface components {
                         | "fleet"
                         | "practice_list"
                         | "default"
+                        | "hairline_rows"
                         | "circles"
                         | "dark_band"
                         | "timeline"
+                        | "panel_split"
                         | "featured"
                         | "wall"
+                        | "town_list"
                         | "split"
                         | "stacked"
                         | "solid"
@@ -3397,7 +3409,7 @@ export interface components {
               /** @constant */
               kind: "value_props"
               /** @enum {string} */
-              variant: "default"
+              variant: "default" | "hairline_rows"
               purpose: string
               content_notes: string | null
             }
@@ -3413,7 +3425,7 @@ export interface components {
               /** @constant */
               kind: "about"
               /** @enum {string} */
-              variant: "default"
+              variant: "default" | "panel_split"
               purpose: string
               content_notes: string | null
             }
@@ -3437,7 +3449,7 @@ export interface components {
               /** @constant */
               kind: "service_area"
               /** @enum {string} */
-              variant: "default"
+              variant: "default" | "town_list"
               purpose: string
               content_notes: string | null
             }
@@ -3468,6 +3480,14 @@ export interface components {
           | {
               /** @constant */
               kind: "quote_form"
+              /** @enum {string} */
+              variant: "default"
+              purpose: string
+              content_notes: string | null
+            }
+          | {
+              /** @constant */
+              kind: "content"
               /** @enum {string} */
               variant: "default"
               purpose: string
@@ -3566,6 +3586,29 @@ export interface components {
       custom_sections?: {
         name: string
         purpose: string
+      }[]
+      content?: {
+        /** @enum {string} */
+        page:
+          | "home"
+          | "services"
+          | "about"
+          | "gallery"
+          | "testimonials"
+          | "faq"
+          | "service_area"
+          | "contact"
+          | "quote"
+          | "service"
+        offering: number
+        purpose: string
+        target_search: string
+        topics: string[]
+        outline: {
+          heading: string
+          subheadings: string[]
+        }[]
+        sources: ("owner" | "facts" | "trade")[]
       }[]
     }
     BoughtElsewhereOutput:
@@ -3965,7 +4008,7 @@ export interface components {
                   /** @constant */
                   kind: "value_props"
                   /** @enum {string} */
-                  variant: "default"
+                  variant: "default" | "hairline_rows"
                   purpose: string
                   content_notes: string | null
                 }
@@ -3981,7 +4024,7 @@ export interface components {
                   /** @constant */
                   kind: "about"
                   /** @enum {string} */
-                  variant: "default"
+                  variant: "default" | "panel_split"
                   purpose: string
                   content_notes: string | null
                 }
@@ -4005,7 +4048,7 @@ export interface components {
                   /** @constant */
                   kind: "service_area"
                   /** @enum {string} */
-                  variant: "default"
+                  variant: "default" | "town_list"
                   purpose: string
                   content_notes: string | null
                 }
@@ -4036,6 +4079,14 @@ export interface components {
               | {
                   /** @constant */
                   kind: "quote_form"
+                  /** @enum {string} */
+                  variant: "default"
+                  purpose: string
+                  content_notes: string | null
+                }
+              | {
+                  /** @constant */
+                  kind: "content"
                   /** @enum {string} */
                   variant: "default"
                   purpose: string
@@ -4134,6 +4185,29 @@ export interface components {
           custom_sections?: {
             name: string
             purpose: string
+          }[]
+          content?: {
+            /** @enum {string} */
+            page:
+              | "home"
+              | "services"
+              | "about"
+              | "gallery"
+              | "testimonials"
+              | "faq"
+              | "service_area"
+              | "contact"
+              | "quote"
+              | "service"
+            offering: number
+            purpose: string
+            target_search: string
+            topics: string[]
+            outline: {
+              heading: string
+              subheadings: string[]
+            }[]
+            sources: ("owner" | "facts" | "trade")[]
           }[]
         }
         round: number
@@ -4272,7 +4346,7 @@ export interface components {
                   /** @constant */
                   kind: "value_props"
                   /** @enum {string} */
-                  variant: "default"
+                  variant: "default" | "hairline_rows"
                   purpose: string
                   content_notes: string | null
                 }
@@ -4288,7 +4362,7 @@ export interface components {
                   /** @constant */
                   kind: "about"
                   /** @enum {string} */
-                  variant: "default"
+                  variant: "default" | "panel_split"
                   purpose: string
                   content_notes: string | null
                 }
@@ -4312,7 +4386,7 @@ export interface components {
                   /** @constant */
                   kind: "service_area"
                   /** @enum {string} */
-                  variant: "default"
+                  variant: "default" | "town_list"
                   purpose: string
                   content_notes: string | null
                 }
@@ -4343,6 +4417,14 @@ export interface components {
               | {
                   /** @constant */
                   kind: "quote_form"
+                  /** @enum {string} */
+                  variant: "default"
+                  purpose: string
+                  content_notes: string | null
+                }
+              | {
+                  /** @constant */
+                  kind: "content"
                   /** @enum {string} */
                   variant: "default"
                   purpose: string
@@ -4441,6 +4523,29 @@ export interface components {
           custom_sections?: {
             name: string
             purpose: string
+          }[]
+          content?: {
+            /** @enum {string} */
+            page:
+              | "home"
+              | "services"
+              | "about"
+              | "gallery"
+              | "testimonials"
+              | "faq"
+              | "service_area"
+              | "contact"
+              | "quote"
+              | "service"
+            offering: number
+            purpose: string
+            target_search: string
+            topics: string[]
+            outline: {
+              heading: string
+              subheadings: string[]
+            }[]
+            sources: ("owner" | "facts" | "trade")[]
           }[]
         } | null
       }
@@ -7451,7 +7556,7 @@ export interface components {
                               /** @constant */
                               kind: "value_props"
                               /** @enum {string} */
-                              variant: "default"
+                              variant: "default" | "hairline_rows"
                               purpose: string
                               content_notes: string | null
                             }
@@ -7467,7 +7572,7 @@ export interface components {
                               /** @constant */
                               kind: "about"
                               /** @enum {string} */
-                              variant: "default"
+                              variant: "default" | "panel_split"
                               purpose: string
                               content_notes: string | null
                             }
@@ -7491,7 +7596,7 @@ export interface components {
                               /** @constant */
                               kind: "service_area"
                               /** @enum {string} */
-                              variant: "default"
+                              variant: "default" | "town_list"
                               purpose: string
                               content_notes: string | null
                             }
@@ -7522,6 +7627,14 @@ export interface components {
                           | {
                               /** @constant */
                               kind: "quote_form"
+                              /** @enum {string} */
+                              variant: "default"
+                              purpose: string
+                              content_notes: string | null
+                            }
+                          | {
+                              /** @constant */
+                              kind: "content"
                               /** @enum {string} */
                               variant: "default"
                               purpose: string
@@ -7620,6 +7733,29 @@ export interface components {
                       custom_sections?: {
                         name: string
                         purpose: string
+                      }[]
+                      content?: {
+                        /** @enum {string} */
+                        page:
+                          | "home"
+                          | "services"
+                          | "about"
+                          | "gallery"
+                          | "testimonials"
+                          | "faq"
+                          | "service_area"
+                          | "contact"
+                          | "quote"
+                          | "service"
+                        offering: number
+                        purpose: string
+                        target_search: string
+                        topics: string[]
+                        outline: {
+                          heading: string
+                          subheadings: string[]
+                        }[]
+                        sources: ("owner" | "facts" | "trade")[]
                       }[]
                     }
                     round: number
@@ -7758,7 +7894,7 @@ export interface components {
                               /** @constant */
                               kind: "value_props"
                               /** @enum {string} */
-                              variant: "default"
+                              variant: "default" | "hairline_rows"
                               purpose: string
                               content_notes: string | null
                             }
@@ -7774,7 +7910,7 @@ export interface components {
                               /** @constant */
                               kind: "about"
                               /** @enum {string} */
-                              variant: "default"
+                              variant: "default" | "panel_split"
                               purpose: string
                               content_notes: string | null
                             }
@@ -7798,7 +7934,7 @@ export interface components {
                               /** @constant */
                               kind: "service_area"
                               /** @enum {string} */
-                              variant: "default"
+                              variant: "default" | "town_list"
                               purpose: string
                               content_notes: string | null
                             }
@@ -7829,6 +7965,14 @@ export interface components {
                           | {
                               /** @constant */
                               kind: "quote_form"
+                              /** @enum {string} */
+                              variant: "default"
+                              purpose: string
+                              content_notes: string | null
+                            }
+                          | {
+                              /** @constant */
+                              kind: "content"
                               /** @enum {string} */
                               variant: "default"
                               purpose: string
@@ -7927,6 +8071,29 @@ export interface components {
                       custom_sections?: {
                         name: string
                         purpose: string
+                      }[]
+                      content?: {
+                        /** @enum {string} */
+                        page:
+                          | "home"
+                          | "services"
+                          | "about"
+                          | "gallery"
+                          | "testimonials"
+                          | "faq"
+                          | "service_area"
+                          | "contact"
+                          | "quote"
+                          | "service"
+                        offering: number
+                        purpose: string
+                        target_search: string
+                        topics: string[]
+                        outline: {
+                          heading: string
+                          subheadings: string[]
+                        }[]
+                        sources: ("owner" | "facts" | "trade")[]
                       }[]
                     } | null
                   }
@@ -12545,7 +12712,7 @@ export interface components {
                         /** @constant */
                         kind: "value_props"
                         /** @enum {string} */
-                        variant: "default"
+                        variant: "default" | "hairline_rows"
                         purpose: string
                         content_notes: string | null
                       }
@@ -12561,7 +12728,7 @@ export interface components {
                         /** @constant */
                         kind: "about"
                         /** @enum {string} */
-                        variant: "default"
+                        variant: "default" | "panel_split"
                         purpose: string
                         content_notes: string | null
                       }
@@ -12585,7 +12752,7 @@ export interface components {
                         /** @constant */
                         kind: "service_area"
                         /** @enum {string} */
-                        variant: "default"
+                        variant: "default" | "town_list"
                         purpose: string
                         content_notes: string | null
                       }
@@ -12616,6 +12783,14 @@ export interface components {
                     | {
                         /** @constant */
                         kind: "quote_form"
+                        /** @enum {string} */
+                        variant: "default"
+                        purpose: string
+                        content_notes: string | null
+                      }
+                    | {
+                        /** @constant */
+                        kind: "content"
                         /** @enum {string} */
                         variant: "default"
                         purpose: string
@@ -12714,6 +12889,29 @@ export interface components {
                 custom_sections?: {
                   name: string
                   purpose: string
+                }[]
+                content?: {
+                  /** @enum {string} */
+                  page:
+                    | "home"
+                    | "services"
+                    | "about"
+                    | "gallery"
+                    | "testimonials"
+                    | "faq"
+                    | "service_area"
+                    | "contact"
+                    | "quote"
+                    | "service"
+                  offering: number
+                  purpose: string
+                  target_search: string
+                  topics: string[]
+                  outline: {
+                    heading: string
+                    subheadings: string[]
+                  }[]
+                  sources: ("owner" | "facts" | "trade")[]
                 }[]
               }
               round: number
@@ -12852,7 +13050,7 @@ export interface components {
                         /** @constant */
                         kind: "value_props"
                         /** @enum {string} */
-                        variant: "default"
+                        variant: "default" | "hairline_rows"
                         purpose: string
                         content_notes: string | null
                       }
@@ -12868,7 +13066,7 @@ export interface components {
                         /** @constant */
                         kind: "about"
                         /** @enum {string} */
-                        variant: "default"
+                        variant: "default" | "panel_split"
                         purpose: string
                         content_notes: string | null
                       }
@@ -12892,7 +13090,7 @@ export interface components {
                         /** @constant */
                         kind: "service_area"
                         /** @enum {string} */
-                        variant: "default"
+                        variant: "default" | "town_list"
                         purpose: string
                         content_notes: string | null
                       }
@@ -12923,6 +13121,14 @@ export interface components {
                     | {
                         /** @constant */
                         kind: "quote_form"
+                        /** @enum {string} */
+                        variant: "default"
+                        purpose: string
+                        content_notes: string | null
+                      }
+                    | {
+                        /** @constant */
+                        kind: "content"
                         /** @enum {string} */
                         variant: "default"
                         purpose: string
@@ -13021,6 +13227,29 @@ export interface components {
                 custom_sections?: {
                   name: string
                   purpose: string
+                }[]
+                content?: {
+                  /** @enum {string} */
+                  page:
+                    | "home"
+                    | "services"
+                    | "about"
+                    | "gallery"
+                    | "testimonials"
+                    | "faq"
+                    | "service_area"
+                    | "contact"
+                    | "quote"
+                    | "service"
+                  offering: number
+                  purpose: string
+                  target_search: string
+                  topics: string[]
+                  outline: {
+                    heading: string
+                    subheadings: string[]
+                  }[]
+                  sources: ("owner" | "facts" | "trade")[]
                 }[]
               } | null
             }
@@ -14431,7 +14660,7 @@ export interface components {
                     /** @constant */
                     kind: "value_props"
                     /** @enum {string} */
-                    variant: "default"
+                    variant: "default" | "hairline_rows"
                     purpose: string
                     content_notes: string | null
                   }
@@ -14447,7 +14676,7 @@ export interface components {
                     /** @constant */
                     kind: "about"
                     /** @enum {string} */
-                    variant: "default"
+                    variant: "default" | "panel_split"
                     purpose: string
                     content_notes: string | null
                   }
@@ -14471,7 +14700,7 @@ export interface components {
                     /** @constant */
                     kind: "service_area"
                     /** @enum {string} */
-                    variant: "default"
+                    variant: "default" | "town_list"
                     purpose: string
                     content_notes: string | null
                   }
@@ -14502,6 +14731,14 @@ export interface components {
                 | {
                     /** @constant */
                     kind: "quote_form"
+                    /** @enum {string} */
+                    variant: "default"
+                    purpose: string
+                    content_notes: string | null
+                  }
+                | {
+                    /** @constant */
+                    kind: "content"
                     /** @enum {string} */
                     variant: "default"
                     purpose: string
@@ -14600,6 +14837,29 @@ export interface components {
             custom_sections?: {
               name: string
               purpose: string
+            }[]
+            content?: {
+              /** @enum {string} */
+              page:
+                | "home"
+                | "services"
+                | "about"
+                | "gallery"
+                | "testimonials"
+                | "faq"
+                | "service_area"
+                | "contact"
+                | "quote"
+                | "service"
+              offering: number
+              purpose: string
+              target_search: string
+              topics: string[]
+              outline: {
+                heading: string
+                subheadings: string[]
+              }[]
+              sources: ("owner" | "facts" | "trade")[]
             }[]
           }
           round: number
@@ -14738,7 +14998,7 @@ export interface components {
                     /** @constant */
                     kind: "value_props"
                     /** @enum {string} */
-                    variant: "default"
+                    variant: "default" | "hairline_rows"
                     purpose: string
                     content_notes: string | null
                   }
@@ -14754,7 +15014,7 @@ export interface components {
                     /** @constant */
                     kind: "about"
                     /** @enum {string} */
-                    variant: "default"
+                    variant: "default" | "panel_split"
                     purpose: string
                     content_notes: string | null
                   }
@@ -14778,7 +15038,7 @@ export interface components {
                     /** @constant */
                     kind: "service_area"
                     /** @enum {string} */
-                    variant: "default"
+                    variant: "default" | "town_list"
                     purpose: string
                     content_notes: string | null
                   }
@@ -14809,6 +15069,14 @@ export interface components {
                 | {
                     /** @constant */
                     kind: "quote_form"
+                    /** @enum {string} */
+                    variant: "default"
+                    purpose: string
+                    content_notes: string | null
+                  }
+                | {
+                    /** @constant */
+                    kind: "content"
                     /** @enum {string} */
                     variant: "default"
                     purpose: string
@@ -14907,6 +15175,29 @@ export interface components {
             custom_sections?: {
               name: string
               purpose: string
+            }[]
+            content?: {
+              /** @enum {string} */
+              page:
+                | "home"
+                | "services"
+                | "about"
+                | "gallery"
+                | "testimonials"
+                | "faq"
+                | "service_area"
+                | "contact"
+                | "quote"
+                | "service"
+              offering: number
+              purpose: string
+              target_search: string
+              topics: string[]
+              outline: {
+                heading: string
+                subheadings: string[]
+              }[]
+              sources: ("owner" | "facts" | "trade")[]
             }[]
           } | null
         }

@@ -285,20 +285,22 @@ describe("a component with its fields filled", () => {
     expect(page).toContain(FILLED.service1Description)
     expect(page).toContain(`<h1>${FILLED.service1Heading}</h1>`)
     for (const text of [
-      FILLED.service1StepsHeading,
-      FILLED.service1FaqHeading,
-      FILLED.service1Faq1Answer,
       FILLED.service1CtaHeading,
       FILLED.service1CtaBody,
       "Bathrooms cleaned",
     ])
       expect(page, text).toContain(text)
-    // Its questions are its own, never the site's.
-    expect(page).not.toContain(FILLED.faq2Answer)
+    // The process and the questions live once, on the home page.
+    for (const text of [
+      FILLED.service1StepsHeading,
+      FILLED.service1Faq1Answer,
+      FILLED.faq2Answer,
+    ])
+      expect(page, text).not.toContain(text)
     const ld = jsonLdOf(
       pages.find((p) => p.file === "services/weekly-clean/index.html") as never
     )
-    expect(ld.map((t) => t["@type"])).toEqual(["Service", "FAQPage"])
+    expect(ld.map((t) => t["@type"])).toEqual(["Service"])
     expect(ld[0]?.url).toBe(`${ORIGIN}/services/weekly-clean/`)
     const sitemap = sitemapUrls(fileOf(filled, "sitemap.xml"))
     for (const slug of slugs)
@@ -422,38 +424,37 @@ describe("the about page", () => {
     expect(photo?.attrs.alt).toBe(FILLED.photo1Alt)
   })
 
-  test("says how the work is done, what a visit is like and where, in its own words", () => {
+  test("says how the work is done in its own words, and leaves the process and the area to their pages", () => {
     const about = page(filled, "about/index.html")
     for (const text of [
       FILLED.approachHeading,
       FILLED.approach1Title,
       FILLED.approach3Body,
-      FILLED.aboutStepsHeading,
-      FILLED.aboutStep2Body,
-      FILLED.aboutAreaHeading,
-      FILLED.areaBody,
     ])
       expect(about.texts, text).toContain(text)
-    // The home page's reasons and steps stay on the home page.
-    for (const text of [FILLED.valueProp1Body, FILLED.step1Body])
+    for (const text of [
+      FILLED.valueProp1Body,
+      FILLED.step1Body,
+      FILLED.aboutStep2Body,
+      FILLED.areaBody,
+    ])
       expect(about.texts, text).not.toContain(text)
     expect(about.html.match(/data-copy="approach_body"/g)).toHaveLength(3)
-    expect(about.html.match(/data-copy="step_body"/g)).toHaveLength(3)
+    expect(about.html).not.toContain('data-copy="step_body"')
     // The record says each fact once: no trust strip beside it.
     expect(about.html).not.toContain("trust-strip")
   })
 
-  test("the services page helps a visitor choose and asks its own questions", () => {
+  test("the services page helps a visitor choose and leaves the questions to the home page", () => {
     const services = page(filled, "services/index.html")
     expect(services.texts).toContain(FILLED.servicesHelpBody)
-    expect(services.texts).toContain(FILLED.servicesFaq1Question)
+    expect(services.texts).not.toContain(FILLED.servicesFaq1Question)
     expect(services.texts).not.toContain(FILLED.faq1Question)
-    const faq = services.scripts
+    const ld = services.scripts
       .filter((s) => s.type === "application/ld+json")
       .map((s) => s.body)
       .join("")
-    expect(faq).toContain(FILLED.servicesFaq1Question)
-    expect(faq).not.toContain(FILLED.faq1Question)
+    expect(ld).not.toContain("FAQPage")
   })
 
   test("the contact page says what to send and links the form; the quote page says where details go", () => {

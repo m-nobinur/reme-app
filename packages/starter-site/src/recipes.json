@@ -15,7 +15,8 @@
         "gallery",
         "service_area",
         "faq",
-        "cta_band"
+        "cta_band",
+        "content"
       ],
       "fields": [
         "homeTitle",
@@ -108,13 +109,12 @@
     },
     "about": {
       "page": "src/pages/about.astro",
-      "purpose": "Who the business serves and how it works, from business.overview and business.audience (two paragraphs, 120 to 200 words); how the work is done, as three or four principles from the facts and the trade's good practice (a title and 25 to 45 words each, never a credential no fact states); what to expect on a visit, as three or four steps of the visit itself; the record from business.proof, a short paragraph beside its items and only when the fact exists; the places served; the closing band. Kept when business.overview or business.proof is known; deleted otherwise, and the home page's about section then carries business.audience.",
+      "purpose": "Who the business serves and how it works, in its own words from business.overview and business.audience; the record from business.proof, only when the fact exists; anything the owner has said about their story; the closing band. Its topics are its own: the process lives on the home page and the area on the service area page. Kept when business.overview or business.proof is known; deleted otherwise, and the home page's about section then carries business.audience.",
       "kinds": [
         "hero",
         "about",
         "value_props",
-        "steps",
-        "service_area",
+        "content",
         "trust_strip",
         "testimonials",
         "gallery",
@@ -165,13 +165,13 @@
     },
     "services": {
       "page": "src/pages/services.astro",
-      "purpose": "Every service in brief: an intro of two or three sentences, each service's summary linking to its own page, a helper paragraph for the visitor not sure which service they need, the page's own questions about choosing and scope, and the closing band.",
+      "purpose": "Every service in brief: an intro of two or three sentences, each service's summary linking to its own page and, with two services or more, a content section holding the one table that compares them (the service, what it usually covers, who it suits) with a line for a visitor not sure which they need; then the closing band. The questions live once, on the home page.",
       "kinds": [
         "hero",
         "trust_strip",
         "service_cards",
+        "content",
         "value_props",
-        "steps",
         "testimonials",
         "faq",
         "cta_band"
@@ -220,8 +220,8 @@
     },
     "service": {
       "page": "src/pages/services/[slug].astro",
-      "purpose": "One page for each service, at /services/<slug>/, so each can be found on its own: what the job involves, what is included, who it suits, how this service goes, in its own steps, questions about it and the call to action. One plan entry builds every service page.",
-      "kinds": ["hero", "service_cards", "steps", "faq", "cta_band"],
+      "purpose": "One page for each service, at /services/<slug>/, so each can be found on its own, one plan entry building every one: what it is and the result, what it usually covers as a checklist labelled typical, who it suits, how to prepare, and how it differs from the other services, then its closing band. The process and the questions live once, on the home page.",
+      "kinds": ["hero", "service_cards", "content", "cta_band"],
       "fields": [
         "service1Heading",
         "service1Title",
@@ -384,7 +384,14 @@
     "service_area": {
       "page": "src/pages/service-area.astro",
       "purpose": "Where the business works, for the visitor checking whether that includes them.",
-      "kinds": ["hero", "trust_strip", "service_area", "faq", "cta_band"],
+      "kinds": [
+        "hero",
+        "trust_strip",
+        "service_area",
+        "content",
+        "faq",
+        "cta_band"
+      ],
       "fields": [
         "serviceAreaTitle",
         "serviceAreaDescription",
@@ -493,12 +500,6 @@
             "kind": "value_props"
           },
           {
-            "kind": "steps"
-          },
-          {
-            "kind": "service_area"
-          },
-          {
             "kind": "cta_band"
           }
         ],
@@ -511,7 +512,7 @@
             "variant": "photo_cards"
           },
           {
-            "kind": "faq"
+            "kind": "content"
           },
           {
             "kind": "cta_band"
@@ -526,10 +527,10 @@
             "variant": "alternating"
           },
           {
-            "kind": "steps"
+            "kind": "content"
           },
           {
-            "kind": "faq"
+            "kind": "content"
           },
           {
             "kind": "cta_band"
@@ -693,12 +694,6 @@
             "kind": "value_props"
           },
           {
-            "kind": "steps"
-          },
-          {
-            "kind": "service_area"
-          },
-          {
             "kind": "cta_band"
           }
         ],
@@ -711,7 +706,7 @@
             "variant": "photo_cards"
           },
           {
-            "kind": "faq"
+            "kind": "content"
           },
           {
             "kind": "cta_band"
@@ -726,10 +721,10 @@
             "variant": "alternating"
           },
           {
-            "kind": "steps"
+            "kind": "content"
           },
           {
-            "kind": "faq"
+            "kind": "content"
           },
           {
             "kind": "cta_band"
@@ -878,12 +873,6 @@
             "kind": "value_props"
           },
           {
-            "kind": "steps"
-          },
-          {
-            "kind": "service_area"
-          },
-          {
             "kind": "cta_band"
           }
         ],
@@ -896,7 +885,7 @@
             "variant": "practice_list"
           },
           {
-            "kind": "faq"
+            "kind": "content"
           },
           {
             "kind": "cta_band"
@@ -911,10 +900,10 @@
             "variant": "alternating"
           },
           {
-            "kind": "steps"
+            "kind": "content"
           },
           {
-            "kind": "faq"
+            "kind": "content"
           },
           {
             "kind": "cta_band"
@@ -1085,12 +1074,6 @@
             "kind": "value_props"
           },
           {
-            "kind": "steps"
-          },
-          {
-            "kind": "service_area"
-          },
-          {
             "kind": "cta_band"
           }
         ],
@@ -1103,7 +1086,7 @@
             "variant": "fleet"
           },
           {
-            "kind": "faq"
+            "kind": "content"
           },
           {
             "kind": "cta_band"
@@ -1118,10 +1101,10 @@
             "variant": "alternating"
           },
           {
-            "kind": "steps"
+            "kind": "content"
           },
           {
-            "kind": "faq"
+            "kind": "content"
           },
           {
             "kind": "cta_band"

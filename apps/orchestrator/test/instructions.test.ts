@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { URL } from "node:url"
-import type { FactRecord } from "@workspace/contracts"
+import type { FactRecord, PageDocument } from "@workspace/contracts"
 import { COPY_WORDS } from "@workspace/gates"
 import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it, vi } from "vitest"
@@ -13,18 +13,16 @@ import {
   industryOf,
   packVoice,
 } from "../src/developer-rules.ts"
+import { PAGE_FIELDS, skeletons } from "../src/documents.ts"
 import {
   COPY_WRITER_RULES,
-  copyFields,
   copyInstructions,
-  fieldsOfPrompt,
   leadLines,
-  pageCheck,
+  PAGE_WRITER_RULES,
   pageInstructions,
-  pageOfPrompt,
-  pageTasks,
-  siteValues,
+  writerCheck,
   writerTasks,
+  writerUser,
 } from "../src/fanout.ts"
 import {
   BUILD_MARK,
@@ -267,54 +265,166 @@ const fanPlan = fallbackBlueprint({ facts: [cleaning], recent: [] })
 const planned = { ...brief([cleaning]), blueprint: fanPlan }
 
 describe("the parallel first build", () => {
-  it("gives every site field to one owner at most, the copy writer's to no page", () => {
-    const owned = [
-      ...pageTasks(fanPlan).flatMap((t) => t.fields),
-      ...copyFields(fanPlan),
-    ]
-    expect(owned.length).toBeGreaterThan(0)
-    expect(new Set(owned).size).toBe(owned.length)
-    expect(copyFields(fanPlan)).toContain("homeTitle")
-    expect(copyFields(fanPlan)).not.toContain("serviceTitle")
-    expect([...new Set(pageTasks(fanPlan).map((t) => t.page))]).toEqual(
-      fanPlan.pages.map((p) => p.page)
+  it("gives every site field and every section to one writer at most, the FAQ to the FAQ writer", () => {
+    const all = writerTasks(fanPlan)
+    const fields = all.flatMap((t) => t.fields)
+    expect(fields.length).toBeGreaterThan(0)
+    expect(new Set(fields).size).toBe(fields.length)
+    for (const field of fields)
+      expect(PAGE_FIELDS.has(field), field).toBe(false)
+    const sections = all.flatMap((t) =>
+      t.sections.map((id) => `${t.file}#${id}`)
     )
-    // One task per service page, each owning only its own service's fields.
-    const services = pageTasks(fanPlan, 3).filter((t) => t.page === "service")
-    expect(services.map((t) => t.service)).toEqual([1, 2, 3])
+    expect(new Set(sections).size).toBe(sections.length)
+    // Every section of every planned page has its writer.
+    for (const [file, doc] of Object.entries(skeletons(fanPlan)))
+      for (const section of doc.sections)
+        expect(sections, `${file}#${section.id}`).toContain(
+          `${file}#${section.id}`
+        )
+    const faq = all.filter((t) => t.agent === "copy")
+    expect(faq.map((t) => [t.file, t.sections, t.meta])).toEqual([
+      ["home.json", ["faq"], false],
+    ])
+    expect(all.filter((t) => t.meta).map((t) => t.file)).toEqual(
+      all.filter((t) => t.agent === "page").map((t) => t.file)
+    )
+  })
+
+  it("gives each offering's page its own writer, its catalogue fields and its content plan", () => {
+    const services = writerTasks(fanPlan, 3).filter((t) => t.page === "service")
+    expect(services.map((t) => [t.offering, t.file])).toEqual([
+      [1, "services/1.json"],
+      [2, "services/2.json"],
+      [3, "services/3.json"],
+    ])
     expect(services[1]?.fields).toEqual(
       expect.arrayContaining([
-        "service2Heading",
-        "service2Title",
         "service2Detail",
-        "service2Faq4Answer",
-        "service2Step1Title",
-        "service2Step4Body",
-        "service2CtaBody",
+        "service2Includes",
+        "service2For",
       ])
     )
     expect(services[1]?.fields.every((f) => f.startsWith("service2"))).toBe(
       true
     )
+    expect(services[1]?.prompt).toContain("offering 2 of the content plan")
   })
 
-  it("gives every section heading the copy gate reads to a writer, and the brief to all of them", () => {
-    const owned = new Set([
-      ...pageTasks(fanPlan).flatMap((t) => t.fields),
-      ...copyFields(fanPlan),
-    ])
-    const home = fanPlan.pages.find((p) => p.page === "home")
-    const kinds = new Set(home?.sections.map((s) => s.kind))
-    const heads: Record<string, string> = {
-      service_cards: "serviceCardsHeading",
-      value_props: "valuePropsHeading",
-      steps: "stepsHeading",
-      about: "homeAboutHeading",
-      service_area: "homeAreaHeading",
-      faq: "faqHeading",
+  it("gives the about page the business's own story, and the home page's writer only when there is none", () => {
+    const owner = (plan: typeof fanPlan, field: string) =>
+      writerTasks(plan).find((t) => t.fields.includes(field))?.page
+    expect(fanPlan.pages.map((p) => p.page)).toContain("about")
+    for (const field of ["overview", "audience"]) {
+      expect(owner(fanPlan, field)).toBe("about")
+      const homeOnly = {
+        ...fanPlan,
+        pages: fanPlan.pages.filter((p) => p.page !== "about"),
+        content: fanPlan.content?.filter((c) => c.page !== "about"),
+      }
+      expect(owner(homeOnly, field)).toBe("home")
     }
-    for (const [kind, field] of Object.entries(heads))
-      if (kinds.has(kind as never)) expect(owned, field).toContain(field)
+  })
+
+  it("hands a writer its task, its page's content plan, its skeleton and its fields' lines", () => {
+    const about = writerTasks(fanPlan).find((t) => t.page === "about")
+    if (!about) throw new Error("no about writer")
+    const source =
+      'const values = {\n  /** Who it serves. */\n  audience: "",\n}\n'
+    const text = writerUser(about, fanPlan, source)
+    expect(text.startsWith(about.prompt)).toBe(true)
+    const plan = fanPlan.content?.find((c) => c.page === "about")
+    expect(text).toContain(`<content_plan>\n${JSON.stringify(plan)}`)
+    const skeleton = JSON.parse(
+      /<skeleton>\n(.+)\n<\/skeleton>/.exec(text)?.[1] ?? "{}"
+    )
+    expect(skeleton.title).toBe("")
+    expect(
+      skeleton.sections.map((s: { id: string; purpose: string }) => [
+        s.id,
+        Boolean(s.purpose),
+      ])
+    ).toEqual(about.sections.map((id) => [id, true]))
+    expect(text).toContain('<fields>\n  /** Who it serves. */\n  audience: "",')
+  })
+
+  it("checks a writer's words against the pages already written and names what to fix", () => {
+    const home = writerTasks(fanPlan).find((t) => t.page === "home")
+    const about = writerTasks(fanPlan).find((t) => t.page === "about")
+    if (!home || !about) throw new Error("no writers")
+    const said = "We clean every room top to bottom and leave it ready to use."
+    const homeDoc: PageDocument = {
+      page: "home",
+      title: "Home cleaning in Fairhaven | Fairhaven Fresh (fictional)",
+      description: "x".repeat(150),
+      sections: [
+        {
+          id: "hero",
+          kind: "hero",
+          heading: "Home cleaning in Fairhaven",
+          intro: said,
+        },
+      ],
+    }
+    const aboutDoc: PageDocument = {
+      page: "about",
+      title: "About our home cleaning in Fairhaven | Fairhaven Fresh",
+      description: "y".repeat(150),
+      sections: [
+        {
+          id: "hero",
+          kind: "hero",
+          heading: "Fairhaven home cleaning",
+          intro: said,
+        },
+      ],
+    }
+    const message =
+      writerCheck({
+        task: about,
+        values: {},
+        doc: aboutDoc,
+        others: [homeDoc],
+        services: 2,
+      }) ?? ""
+    expect(message).toContain(
+      '"Fairhaven home cleaning" repeats "Home cleaning in Fairhaven"'
+    )
+    expect(message).toContain("is on another page already")
+    expect(message).toContain("Fix exactly these in one more reply")
+    expect(
+      writerCheck({
+        task: about,
+        values: {},
+        doc: {
+          ...aboutDoc,
+          sections: [
+            { id: "hero", kind: "hero", heading: "The people behind the mops" },
+          ],
+        },
+        others: [homeDoc],
+        services: 2,
+      })
+    ).toBeNull()
+  })
+
+  it("lists every page once and the FAQ writer once, each service page after the home page", () => {
+    const all = writerTasks(fanPlan, 5)
+    expect(all.filter((t) => t.agent === "copy")).toHaveLength(1)
+    const pages = all.filter((t) => t.agent === "page").map((t) => t.page)
+    expect(pages.filter((p) => p !== "service")).toEqual(
+      fanPlan.pages.map((p) => p.page).filter((p) => p !== "service")
+    )
+    // Five service pages, each waiting for the home page's writer, who names
+    // the service; nothing else waits.
+    const home = all.findIndex((t) => t.page === "home" && t.agent === "page")
+    const services = all.filter((t) => t.page === "service")
+    expect(services).toHaveLength(5)
+    expect(services.every((t) => t.after === home)).toBe(true)
+    expect(all.filter((t) => t.after !== undefined)).toHaveLength(5)
+  })
+
+  it("gives every writer and the lead the copy brief, which quotes the gate's ranges", () => {
     for (const text of [
       pageInstructions(planned),
       copyInstructions(planned),
@@ -322,112 +432,11 @@ describe("the parallel first build", () => {
     ]) {
       for (const line of COPY_BRIEF) expect(text).toContain(line)
     }
-    // The brief quotes the gate's ranges, so the two cannot drift.
     const joined = COPY_BRIEF.join(" ")
     for (const { aim } of Object.values(COPY_WORDS))
       expect(joined).toContain(`${aim[0]} to ${aim[1]} words`)
-  })
-
-  it("gives the about page its own body, and the home page's builder only when there is none", () => {
-    const owner = (plan: typeof fanPlan, field: string) =>
-      pageTasks(plan).find((t) => t.fields.includes(field))?.page
-    expect(fanPlan.pages.map((p) => p.page)).toContain("about")
-    for (const field of ["overviewBody", "audienceBody"]) {
-      expect(owner(fanPlan, field)).toBe("about")
-      const homeOnly = {
-        ...fanPlan,
-        pages: fanPlan.pages.filter((p) => p.page !== "about"),
-      }
-      expect(owner(homeOnly, field)).toBe("home")
-    }
-  })
-
-  it("gives each inner page's own blocks to that page's builder, and asks for the ones left empty", () => {
-    const owner = (field: string) =>
-      pageTasks(fanPlan).find((t) => t.fields.includes(field))?.page
-    for (const [field, page] of [
-      ["approach1Body", "about"],
-      ["approach4Icon", "about"],
-      ["aboutStep3Body", "about"],
-      ["aboutAreaHeading", "about"],
-      ["servicesHelpBody", "services"],
-      ["servicesFaq4Answer", "services"],
-      ["contactIncludeBody", "contact"],
-      ["quotePrivacy", "quote"],
-      // The home page's reasons stay the home page's.
-      ["valueProp1Body", "home"],
-    ])
-      if (fanPlan.pages.some((p) => p.page === page))
-        expect(owner(field as string), field).toBe(page)
-    const [about] = writerTasks(fanPlan).filter(
-      (t) => pageOfPrompt(t.prompt) === "about"
-    )
-    const message =
-      pageCheck('const values = {\n  approach1Body: "",\n}', about?.prompt) ??
-      ""
-    expect(message).toContain("three or four principles")
-    expect(message).toContain("what happens on a visit")
-  })
-
-  it("checks a writer's own fields after its edit and names what to fix", () => {
-    const [about] = writerTasks(fanPlan).filter(
-      (t) => pageOfPrompt(t.prompt) === "about"
-    )
-    expect(fieldsOfPrompt(about?.prompt)).toContain("aboutCtaHeading")
-    const source = [
-      "const values = {",
-      '  ctaHeading: "Ready for a tidier garden?",',
-      '  aboutCtaHeading: "Ready for a tidier garden",',
-      "  overviewBody:",
-      `    "${"word ".repeat(20).trim()}",`,
-      '  audienceBody: "",',
-      "}",
-    ].join("\n")
-    expect(siteValues(source)).toMatchObject({
-      aboutCtaHeading: "Ready for a tidier garden",
-      overviewBody: expect.stringMatching(/^word/),
-      audienceBody: "",
-    })
-    const message = pageCheck(source, about?.prompt) ?? ""
-    expect(message).toContain('aboutCtaHeading "Ready for a tidier garden"')
-    expect(message).toContain("have 20 words together")
-    expect(message).toContain("Fix exactly these in one more reply")
-    // Only the writer's own fields: the home page's builder hears of its
-    // ctaHeading, never of the about body, and clean fields pass.
-    const home = writerTasks(fanPlan).find(
-      (t) => pageOfPrompt(t.prompt) === "home"
-    )
-    const told = pageCheck(source, home?.prompt) ?? ""
-    expect(told).toContain('ctaHeading "Ready for a tidier garden?" repeats')
-    expect(told).not.toContain("words together")
-    expect(
-      pageCheck(
-        source.replace(
-          'Ready for a tidier garden"',
-          'Questions about the garden"'
-        ),
-        home?.prompt
-      )
-    ).toBeNull()
-    expect(pageCheck(source, undefined)).toBeNull()
-  })
-
-  it("lists every page once and the copy writer once, each service page after the home page", () => {
-    const all = writerTasks(fanPlan, 5)
-    expect(all.filter((t) => t.agent === "copy")).toHaveLength(1)
-    const pages = all
-      .filter((t) => t.agent === "page")
-      .map((t) => pageOfPrompt(t.prompt))
-    expect(pages.filter((p) => p !== "service")).toEqual(
-      fanPlan.pages.map((p) => p.page).filter((p) => p !== "service")
-    )
-    // Five service pages, each waiting for the home page's writer, who names
-    // the service; nothing else waits.
-    const home = all.findIndex((t) => pageOfPrompt(t.prompt) === "home")
-    const services = all.filter((t) => pageOfPrompt(t.prompt) === "service")
-    expect(services).toHaveLength(5)
-    expect(services.every((t) => t.after === home)).toBe(true)
-    expect(all.filter((t) => t.after !== undefined)).toHaveLength(5)
+    // The brief asks for one process and one FAQ, never one per page.
+    expect(joined).not.toMatch(/serviceNStep|servicesFaq|aboutStep/)
   })
 
   it("tells a planned first build's lead to call write_pages, and no one else", () => {
@@ -444,28 +453,31 @@ describe("the parallel first build", () => {
     )
   })
 
-  it("gives every page builder the same instructions, the facts and the plan included", () => {
+  it("gives every page writer the same instructions, the facts, the plan and each page's content plan included", () => {
     const text = pageInstructions(planned)
     expect(text).toBe(pageInstructions(planned))
     // One reply, no tools, and a terse summary the lead reads.
     expect(text).toContain("You have no tools. Reply with JSON only")
     expect(text).toContain("summary is one sentence of at most 40 words")
     expect(text).toContain("Blueprint, the plan the owner approved")
+    expect(text).toContain("What each page says, its content plan")
     expect(text).toContain("Canonical facts")
     expect(text).not.toContain("ask_chief for the first missing")
   })
 
-  it("has the copy writer write its fields by feel in one reply, not draft and count", () => {
+  it("has each page writer write its title by feel in one reply, and the FAQ writer only the FAQ", () => {
+    const page = pageInstructions(planned)
+    expect(page).toContain(PAGE_WRITER_RULES)
+    expect(page).toContain("Never count characters")
+    expect(page).toContain("each with its note")
     const text = copyInstructions(planned)
     expect(text).toContain(COPY_WRITER_RULES)
     expect(text).toContain("You have no tools. Reply with JSON only")
-    expect(text).toContain("Never count characters")
-    // Its fields are all empty, so it gets no lines' notes; a page writer does.
+    expect(text).not.toContain(PAGE_WRITER_RULES)
     expect(text).not.toContain("each with its note")
-    expect(pageInstructions(planned)).toContain("each with its note")
   })
 
-  it("quotes the copy check's own ranges to the copy writer", () => {
+  it("quotes the copy check's own ranges to the page writers", () => {
     const source = readFileSync(
       new URL(
         "../../../packages/starter-site/src/copy-check.ts",
@@ -480,8 +492,8 @@ describe("the parallel first build", () => {
       if (!m) throw new Error(`${name} is not in copy-check.ts`)
       return `${m[1]} to ${m[2]}`
     }
-    expect(COPY_WRITER_RULES).toContain(range("TITLE_CHARS"))
-    expect(COPY_WRITER_RULES).toContain(range("DESCRIPTION_CHARS"))
+    expect(PAGE_WRITER_RULES).toContain(range("TITLE_CHARS"))
+    expect(PAGE_WRITER_RULES).toContain(range("DESCRIPTION_CHARS"))
   })
 })
 

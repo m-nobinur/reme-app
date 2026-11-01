@@ -13,7 +13,7 @@
     "radius": "round",
     "bands": "one_dark",
     "ornament": "Round corners on a crisp hero photo with a small pill caption, no frame",
-    "image_style": "Bright, tidy rooms and surfaces with a cool, crisp grade: daylight from a window, clean lines, one task finished. No people facing the camera.",
+    "image_style": "Bright, tidy rooms and surfaces with a cool, crisp grade: daylight from a window, clean lines, one task finished, or hands at work seen from the side. Never a face.",
     "voice": "Clear and upbeat. Lead with the result, then what is included, in plain words. Short headings that name the job; no slang, no exclamation marks."
   },
   {
@@ -26,11 +26,11 @@
     "services": "photo_cards",
     "steps": "circles",
     "faq": "split",
-    "cta": "solid",
+    "cta": "photo",
     "radius": "soft",
     "bands": "one_dark",
     "ornament": "White pill captions on photos, a small dot before every eyebrow",
-    "image_style": "Empty, sunlit interiors in soft morning light, the left side of the frame left plain for copy; one prop (a plant, a towel, a vase) in the brand hue. No people, no clutter.",
+    "image_style": "Sunlit interiors in soft morning light, the left of the frame plain for copy; one prop in the brand hue; hands at work from the side at most, never a face, no clutter.",
     "voice": "Calm and reassuring. Short sentences about rooms, light and time given back. Nothing urgent, no exclamation marks, no claims the facts do not make."
   },
   {
@@ -43,7 +43,7 @@
     "services": "numbered_rows",
     "steps": "dark_band",
     "faq": "split",
-    "cta": "solid",
+    "cta": "photo",
     "radius": "square",
     "bands": "two_dark",
     "ornament": "An eight-spoked mark before every eyebrow, a hairline arch behind the hero",

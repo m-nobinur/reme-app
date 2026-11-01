@@ -83,6 +83,6 @@ test("names a page missing a block the copy gate fails it without", () => {
       },
     ])
   ).toEqual([
-    "services/index.html: has no servicesHelpBody block; fill it for this page",
+    "services/index.html: has no table block; add one comparing the services (the service, what it usually covers, who it suits) in a content section of services.json",
   ])
 })

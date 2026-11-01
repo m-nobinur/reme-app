@@ -63,6 +63,18 @@ export const documentPath = (page: Page, slug?: string) =>
     ? `services/${slug}.json`
     : `${page.replace("_", "-")}.json`
 
+/** Each section's id on its page: its kind, hyphenated, numbered from 2 when it repeats. */
+export function sectionIds(kinds: readonly string[]): string[] {
+  const ids: string[] = []
+  for (const kind of kinds) {
+    const base = kind.replace(/_/g, "-")
+    let id = base
+    for (let n = 2; ids.includes(id); n++) id = `${base}-${n}`
+    ids.push(id)
+  }
+  return ids
+}
+
 const numbered = <T>(count: number, entry: (n: number) => T) =>
   Array.from({ length: count }, (_, i) => entry(i + 1))
 
@@ -143,12 +155,9 @@ export function seedDocuments(
         kind: "service_cards",
       })
 
-    const ids = new Set<string>()
-    const sections = planned.map((p): PageSection => {
-      const base = p.kind.replace(/_/g, "-")
-      let id = base
-      for (let n = 2; ids.has(id); n++) id = `${base}-${n}`
-      ids.add(id)
+    const ids = sectionIds(planned.map((p) => p.kind))
+    const sections = planned.map((p, i): PageSection => {
+      const id = ids[i] as string
       const own = (what: string) => `${id}-${what}`
       const section = {
         id,

@@ -67,8 +67,8 @@ export const STYLE_GUIDE =
   "The photos follow a fixed house style (light, lens, grade), added to every prompt for you; do not restate camera settings. " +
   "Shoot the set like one photographer on one day in one kind of place: the same light, materials and palette in every frame. " +
   "Colour: mostly white, warm natural wood and soft neutrals; the brand colour appears in one or two natural or soft-furnishing details (a plant, a cushion, a throw, a vase, a chair), never in a cleaning product, a cloth or a tool, and never as a colour cast. " +
-  "Prefer simple, well-known shapes (a worktop, a sink, a sofa, a bed, a desk, a doorway) over mechanisms image models draw wrong: oven doors, hinges, taps seen up close, ladders, hands holding tools. " +
-  "No people. If a scene needs one, show hands at work from the side, never a face. "
+  "Prefer simple, well-known shapes (a worktop, a sink, a sofa, a bed, a desk, a doorway) over mechanisms image models draw wrong: hinges, taps seen up close, ladders. " +
+  "Show the work: where a scene is the job under way, show hands at work from the side, never a face or a whole person. "
 
 const HUES = "red orange ochre green teal blue violet plum red".split(" ")
 /** Each hue's upper bound in degrees, in `HUES` order. */

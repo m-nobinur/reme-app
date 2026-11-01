@@ -1,4 +1,4 @@
-import type { FactRecord, GateResult } from "@workspace/contracts"
+import type { FactRecord, GateResult, PageDocument } from "@workspace/contracts"
 import { parse } from "parse5"
 
 /**
@@ -21,9 +21,11 @@ import { parse } from "parse5"
  * - a word in any copy that is a near-miss of one of the business's own terms
  *   (a service name, the trade, a noun in the facts' descriptions): "conservative
  *   roofs" for "conservatory roofs";
+ * - a sentence of six words or more that another page also says, contact
+ *   details aside: each thing is said once, on the page that owns it;
  * - a service page without its "what is included" or "who it suits" block,
- *   an about page without its principles or its visit steps, or a contact
- *   page without its note on what to send;
+ *   a services page listing two services or more without the table that
+ *   compares them, or a contact page without its note on what to send;
  * - a page title outside the writer's 50 to 60 characters, or a description
  *   outside its 140 to 165.
  *
@@ -163,6 +165,7 @@ export type CopyFinding = {
     | "term"
     | "headline"
     | "missing"
+    | "repeat"
   text: string
   detail: string
 }
@@ -227,9 +230,41 @@ type Read = {
   said: string
   description: string
   indexed: boolean
+  /** Each leaf block of <main>, the service catalogue's shared lines aside. */
+  lines: string[]
+  table: boolean
 }
 
 const SKIPPED = new Set(["script", "style", "template"])
+
+/** The elements whose words are one run of text, for splitting into sentences. */
+const LEAF = new Set(
+  "p li h1 h2 h3 h4 h5 h6 td th summary blockquote figcaption caption dd dt legend label".split(
+    " "
+  )
+)
+/** Marks of copy the site shows wherever it lists the services: one text, many places. */
+const SHARED = new Set(["service_body"])
+const hasLeaf = (node: TreeNode): boolean =>
+  (node.childNodes ?? []).some(
+    (c) => (c.tagName && LEAF.has(c.tagName)) || hasLeaf(c)
+  )
+
+/** How many words a sentence needs before two pages may not share it. */
+export const REPEAT_WORDS = 6
+
+/**
+ * A text's sentences of `REPEAT_WORDS` words or more, as two pages compare
+ * them: their words, lowercase. A sentence with a phone number, an email or
+ * a web address is contact detail, which every page may give.
+ */
+export function sentencesOf(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .filter((s) => !/\d[\d\s()+-]{6,}\d/.test(s) && !s.match(ADDRESSES))
+    .map(plainText)
+    .filter((s) => s.split(" ").length >= REPEAT_WORDS)
+}
 const visibleText = (node: TreeNode): string =>
   node.tagName && SKIPPED.has(node.tagName)
     ? ""
@@ -284,9 +319,16 @@ function read(html: string): Read {
     said: "",
     description: "",
     indexed: true,
+    lines: [],
+    table: false,
   }
   const extra: string[] = []
-  const walk = (node: TreeNode, path: string, inMain: boolean) => {
+  const walk = (
+    node: TreeNode,
+    path: string,
+    inMain: boolean,
+    shared = false
+  ) => {
     const children = node.childNodes ?? node.content?.childNodes ?? []
     const counts = new Map<string, number>()
     for (const child of children) {
@@ -321,6 +363,22 @@ function read(html: string): Read {
       }
       const kind = attr(child, "data-copy")
       if (kind) out.marks.add(kind)
+      const own =
+        shared ||
+        SHARED.has(kind ?? "") ||
+        attr(child, "aria-hidden") === "true"
+      if (main && tag === "table") out.table = true
+      // Headings are held to the heading rules, which catch a near repeat too.
+      if (
+        main &&
+        !own &&
+        LEAF.has(tag) &&
+        !/^h\d$/.test(tag) &&
+        !hasLeaf(child)
+      ) {
+        const line = squash(visibleText(child))
+        if (line) out.lines.push(line)
+      }
       if (kind === "area_town")
         out.towns.push({ text: squash(textOf(child)), node: at })
       if (kind && Object.hasOwn(COPY_WORDS, kind)) {
@@ -330,7 +388,7 @@ function read(html: string): Read {
           node: at,
         })
       }
-      walk(child, at, main)
+      walk(child, at, main, own)
     }
   }
   const tree = parse(html) as unknown as TreeNode
@@ -348,19 +406,6 @@ const BLOCKS: [RegExp, [string, string][]][] = [
     [
       ["service_includes", "serviceNIncludes (what is included)"],
       ["service_for", "serviceNFor (who it suits)"],
-    ],
-  ],
-  [
-    /^about\/index\.html$/,
-    [
-      [
-        "approach_body",
-        "approach1Title to approach4Body (how the work is done)",
-      ],
-      [
-        "step_body",
-        "aboutStep1Title to aboutStep4Body (what to expect on a visit)",
-      ],
     ],
   ],
   [
@@ -484,6 +529,7 @@ export function copyFindings(
   const headings: { file: string; text: string; stems: Set<string> }[] = []
   const steps: { file: string; text: string; stems: Set<string> }[] = []
   const titles = new Map<string, string>()
+  const sentences = new Map<string, string>()
   const named = new Set(wordsOf(areas))
   const places = plainText(areas)
   for (const { file, html } of pages) {
@@ -550,11 +596,11 @@ export function copyFindings(
           text: "",
           detail: `the page has no ${field} block; fill it for this page`,
         })
-    // With two services or more, the services page helps a visitor choose.
+    // With two services or more, the services page compares them, once.
     if (
       file === "services/index.html" &&
       page.copy.filter((c) => c.kind === "service_body").length > 1 &&
-      !page.marks.has("services_help")
+      !page.table
     )
       found.push({
         file,
@@ -562,8 +608,25 @@ export function copyFindings(
         problem: "missing",
         text: "",
         detail:
-          "the page has no servicesHelpBody block (which service suits whom); fill it for this page",
+          "the page has no table comparing the services (the service, what it usually covers, who it suits); add it as a table block in a content section of services.json",
       })
+
+    const repeated = new Set<string>()
+    for (const line of page.lines)
+      for (const sentence of sentencesOf(line)) {
+        const first = sentences.get(sentence)
+        if (!first) sentences.set(sentence, file)
+        else if (first !== file && !repeated.has(sentence)) {
+          repeated.add(sentence)
+          found.push({
+            file,
+            node: "text",
+            problem: "repeat",
+            text: line,
+            detail: `the sentence "${sentence}" is on ${first} too; say each thing once, on the page that owns the topic, and link there from this one`,
+          })
+        }
+      }
 
     if (places) {
       for (const town of page.towns)
@@ -707,46 +770,6 @@ const FIELD_KINDS: [RegExp, CopyKind][] = [
   [/^contactIncludeBody$/, "contact_body"],
 ]
 
-/**
- * The blocks a page's writer must fill, by page: the field pattern, how many
- * entries at least, and what to write. Only checked when the writer owns the
- * first field, so a page whose recipe does not hold the block is never held to it.
- */
-const PAGE_BLOCKS: Record<
-  string,
-  { first: string; fields: RegExp; least: number; ask: string }[]
-> = {
-  about: [
-    {
-      first: "approach1Title",
-      fields: /^approach\dBody$/,
-      least: 3,
-      ask: `three or four principles of how the work is done (approach1Title to approach4Body, each body ${COPY_WORDS.approach_body.aim[0]} to ${COPY_WORDS.approach_body.aim[1]} words) under approachHeading`,
-    },
-    {
-      first: "aboutStep1Title",
-      fields: /^aboutStep\dBody$/,
-      least: 3,
-      ask: `three or four steps of what happens on a visit (aboutStep1Title to aboutStep4Body, each body ${COPY_WORDS.step_body.aim[0]} to ${COPY_WORDS.step_body.aim[1]} words) under aboutStepsHeading`,
-    },
-  ],
-  services: [
-    {
-      first: "servicesHelpBody",
-      fields: /^servicesHelpBody$/,
-      least: 1,
-      ask: `servicesHelpBody, ${COPY_WORDS.services_help.aim[0]} to ${COPY_WORDS.services_help.aim[1]} words on which service suits whom, under servicesHelpHeading`,
-    },
-  ],
-  contact: [
-    {
-      first: "contactIncludeBody",
-      fields: /^contactIncludeBody$/,
-      least: 1,
-      ask: `contactIncludeBody, ${COPY_WORDS.contact_body.aim[0]} to ${COPY_WORDS.contact_body.aim[1]} words on what to put in a message, under contactIncludeHeading`,
-    },
-  ],
-}
 /** A page's SEO title or description field: homeTitle, service2Description and the rest. */
 const PAGE_META =
   /^(?:home|about|services|serviceArea|contact|quote|service\d)(Title|Description)$/
@@ -773,13 +796,12 @@ const headingField = (name: string) =>
  * every field on the site, siblings' included, so a heading is held against
  * every other heading already written. Only filled fields are checked, except
  * a closing band whose body is written and heading is not, which would show
- * the home page's. `page` is the writer's page: the about body is counted
- * only on the about page, where the gate counts it.
+ * the home page's. A page's own words are its document's, which
+ * `documentFindings` checks.
  */
 export function fieldFindings(
   values: Readonly<Record<string, string>>,
-  owned: readonly string[],
-  page?: string
+  owned: readonly string[]
 ): string[] {
   const found: string[] = []
   let repeats = false
@@ -846,27 +868,139 @@ export function fieldFindings(
       )
     }
   }
-  if (page === "about" && owned.includes("overviewBody")) {
-    const body = `${filled("overviewBody") || filled("overview")} ${filled("audienceBody") || filled("audience")}`
-    const count = wordsOf(body).length
-    if (count > 0 && count < COPY_WORDS.about_body.min)
-      found.push(
-        `overviewBody and audienceBody have ${count} words together; write ${COPY_WORDS.about_body.aim[0]} to ${COPY_WORDS.about_body.aim[1]}, rephrasing every part of business.overview and business.audience`
-      )
-  }
-  for (const block of PAGE_BLOCKS[page ?? ""] ?? []) {
-    if (!owned.includes(block.first)) continue
-    const written = owned.filter(
-      (name) => block.fields.test(name) && filled(name)
-    ).length
-    if (written < block.least)
-      found.push(
-        `the ${page} page needs ${block.ask}; write it from the facts and this trade's usual practice`
-      )
-  }
   if (repeats)
     found.push(
       `Headings already on the site: ${headings.map((h) => `"${filled(h)}"`).join(", ")}.`
+    )
+  return found
+}
+
+/** Keys of a block that hold an address or a code, never words a visitor reads. */
+const NOT_WORDS = new Set(["id", "type", "provenance", "src", "href", "icon"])
+
+/** A document's headings (each section's and each prose ## or ###) and its other lines, in page order. */
+function documentText(doc: PageDocument) {
+  const headings: string[] = []
+  const lines: string[] = []
+  const words = (value: unknown, key = ""): string[] =>
+    NOT_WORDS.has(key)
+      ? []
+      : typeof value === "string"
+        ? [value]
+        : Array.isArray(value)
+          ? value.flatMap((v) => words(v))
+          : value && typeof value === "object"
+            ? Object.entries(value).flatMap(([k, v]) => words(v, k))
+            : []
+  for (const section of doc.sections) {
+    if (section.heading) headings.push(section.heading)
+    for (const line of [section.eyebrow, section.intro])
+      if (line) lines.push(line)
+    for (const block of section.blocks ?? []) {
+      if (block.type !== "prose") {
+        lines.push(...words(block))
+        continue
+      }
+      for (const line of block.markdown.split("\n")) {
+        const heading = /^#{2,3}\s+(.+)$/.exec(line.trim())?.[1]
+        if (heading) headings.push(heading)
+        else if (line.trim())
+          lines.push(line.replace(/^\s*(?:[-*]|\d+\.)\s+/, ""))
+      }
+    }
+  }
+  return { headings, lines }
+}
+
+/**
+ * The copy gate's rules for one writer's page document, before anything is
+ * built, against the documents its siblings have written so far: the title
+ * and description, stock and repeated headings, words that talk about the
+ * writer's inputs, a sentence another page already says, and the word
+ * ranges of the FAQ answers, steps and the home hero's subhead. `needsTable`
+ * is the services page of a site with two services or more, which compares
+ * them in one table. One line per finding.
+ */
+export function documentFindings(
+  doc: PageDocument,
+  others: readonly PageDocument[],
+  options: { business?: string; needsTable?: boolean }
+): string[] {
+  const found: string[] = []
+  const business = options.business ?? ""
+  const own = documentText(doc)
+  const theirs = others.map(documentText)
+  const meta = [
+    ["title", doc.title, TITLE_CHARS],
+    ["description", doc.description, DESCRIPTION_CHARS],
+  ] as const
+  // A writer that does not write the page's title and description is not held to them.
+  for (const [name, text, chars] of meta) {
+    if (text === undefined) continue
+    const shown = name === "title" ? titleOf(text, business) : text
+    if (shown.length < chars.min || shown.length > chars.max)
+      found.push(
+        shown === text
+          ? `the ${name} is ${text.length} characters; write ${chars.min} to ${name === "title" ? chars.max : 160}`
+          : `the title shows as "${shown}", ${shown.length} characters, because a title that does not contain the business name exactly gets " | ${business}" after it; write ${chars.min} to ${chars.max} in all, or name the business exactly within that`
+      )
+    if (text && others.some((o) => (o[name] ?? "") === text))
+      found.push(`the ${name} is another page's; write this page's own`)
+  }
+  const seen = theirs.flatMap((t) => t.headings)
+  for (const heading of own.headings) {
+    if (STOCK_HEADINGS.includes(plainText(heading))) {
+      found.push(
+        `the heading "${heading}" is a stock label; keep it as the eyebrow and name this business's service, customer or place`
+      )
+      continue
+    }
+    const stems = stemsOf(heading)
+    const twin = seen.find((other) => alike(stemsOf(other), stems))
+    if (twin)
+      found.push(
+        `the heading "${heading}" repeats "${twin}"; give it its own words`
+      )
+    seen.push(heading)
+  }
+  const said = new Set(theirs.flatMap((t) => t.lines.flatMap(sentencesOf)))
+  for (const line of own.lines) {
+    for (const leak of LEAKS)
+      for (const match of line.matchAll(leak))
+        found.push(
+          `"${line.slice(0, 80)}" says "${match[0]}", which talks about what you were told; leave it out, or say only what is true of the trade`
+        )
+    for (const sentence of sentencesOf(line))
+      if (said.has(sentence))
+        found.push(
+          `"${sentence}" is on another page already; say each thing once, on the page that owns it`
+        )
+  }
+  const short = (text: string, kind: CopyKind, what: string) => {
+    const count = wordsOf(text).length
+    if (text && count < COPY_WORDS[kind].min)
+      found.push(
+        `${what} "${text.slice(0, 60)}" has ${count} words; write ${COPY_WORDS[kind].aim[0]} to ${COPY_WORDS[kind].aim[1]}`
+      )
+  }
+  for (const section of doc.sections) {
+    if (doc.page === "home" && section.kind === "hero")
+      short(section.intro ?? "", "hero_lede", "the hero's subhead")
+    for (const block of section.blocks ?? []) {
+      if (block.type === "faq")
+        for (const item of block.items)
+          short(item.answer, "faq_answer", "the answer")
+      if (block.type === "steps")
+        for (const item of block.items)
+          short(item.body, "step_body", "the step")
+    }
+  }
+  if (
+    options.needsTable &&
+    !doc.sections.some((s) => s.blocks?.some((b) => b.type === "table"))
+  )
+    found.push(
+      "the services page needs one table block comparing the services (the service, what it usually covers, who it suits), in its content section"
     )
   return found
 }

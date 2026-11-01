@@ -178,7 +178,13 @@ const values = {
   serviceCardsLink: "See all services",
   /** The words on each service card's link to its part of the services page. */
   serviceMoreLabel: "Explore service",
-  serviceIncludesLabel: "What is included",
+  serviceIncludesLabel: "What it usually covers",
+  /**
+   * The muted line under trade guidance: a block whose provenance is trade,
+   * and the list under serviceIncludesLabel. Empty shows nothing.
+   */
+  typicalNote:
+    "Typical for this kind of job. We confirm the details when we quote.",
   serviceForLabel: "Who it is for",
   /**
    * Up to six services, one per business.offerings item that a fact

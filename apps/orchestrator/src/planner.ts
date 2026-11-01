@@ -2,6 +2,7 @@ import {
   type Asset,
   BLUEPRINT_FEATURES_MAX,
   Blueprint,
+  type ContentPlan,
   type DesignDirection,
   type FactRecord,
   FIXED_PAGES,
@@ -13,6 +14,7 @@ import {
   PALETTES,
   type PageId,
   PLANNED_PAGES,
+  type PlannedKind,
   SECTION_VARIANTS,
   type SectionKind,
 } from "@workspace/contracts"
@@ -70,7 +72,7 @@ type Recipes = {
       label: string
       cta?: string
       headings?: Record<string, string>
-      order?: Record<string, { kind: SectionKind; variant?: string }[]>
+      order?: Record<string, { kind: PlannedKind; variant?: string }[]>
     }
   >
 }
@@ -238,7 +240,7 @@ export function withOwnerChoices(
   const owner = ownerChoices(facts)
   const notes = pickNotes(facts)
   const budgeted = withinBudget(blueprint)
-  const pages = withContentBlocks(splitHeaders(budgeted))
+  const pages = splitHeaders(budgeted)
   // A model line about a picked section said it twice beside its note.
   const covered = pickedSections(facts).flatMap(({ kind }) =>
     kind in ABOUT_SECTION
@@ -373,6 +375,116 @@ export function problems(
       )
     }
   }
+  return [...found, ...sayOnce(blueprint, offeringsOf(context.facts).length)]
+}
+
+/** The offerings a site has a page for each of, six at most. */
+const offeringsOf = (facts: readonly FactRecord[]) =>
+  (factValue(facts, "business.offerings")?.items ?? []).slice(0, 6)
+
+/** A topic or heading as two plans compare it: its words, lowercase. */
+const wordsOf = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+
+const planLabel = (c: Pick<ContentPlan, "page" | "offering">) =>
+  c.offering > 0 ? `service ${c.offering}` : c.page
+
+/**
+ * The content plan's rules (design §3): a plan for every page and every
+ * offering, each topic and each heading on one page only, one FAQ, the
+ * services compared in one table and each service page with detail of its
+ * own. The process sits on the home page and nowhere else, which the pages'
+ * kinds already hold.
+ */
+function sayOnce(blueprint: Blueprint, offerings: number): string[] {
+  const found: string[] = []
+  const has = (page: PageId, kind: PlannedKind) =>
+    blueprint.pages.some(
+      (p) => p.page === page && p.sections.some((s) => s.kind === kind)
+    )
+  const faqs = blueprint.pages.filter((p) =>
+    p.sections.some((s) => s.kind === "faq")
+  ).length
+  if (faqs > 1)
+    found.push(
+      `the FAQ is on ${faqs} pages; plan one FAQ, on one page, and let the others link to it`
+    )
+  const planned = blueprint.pages.map((p) => p.page)
+  // The town list carries each town's note, the area's own words.
+  if (planned.includes("service_area"))
+    for (const { page, sections } of blueprint.pages)
+      if (
+        page !== "service_area" &&
+        sections.some(
+          (s) => s.kind === "service_area" && s.variant === "town_list"
+        )
+      )
+        found.push(
+          `${page} shows the area as town_list, the service area page's own words; use the default there and keep the towns' notes on the service area page`
+        )
+  if (
+    planned.includes("services") &&
+    offerings > 1 &&
+    !has("services", "content")
+  )
+    found.push(
+      "the services page needs a content section for the one table that compares the services"
+    )
+  if (planned.includes("service") && !has("service", "content"))
+    found.push(
+      "a service page needs a content section for how to prepare and how the service differs from the others"
+    )
+
+  const content = blueprint.content ?? []
+  const wanted = blueprint.pages.flatMap(
+    ({ page }): { page: PageId; offering: number }[] =>
+      page === "service"
+        ? Array.from({ length: offerings }, (_, i) => ({
+            page,
+            offering: i + 1,
+          }))
+        : [{ page, offering: 0 }]
+  )
+  const key = (c: Pick<ContentPlan, "page" | "offering">) =>
+    `${c.page}:${c.offering}`
+  const keys = content.map(key)
+  for (const want of wanted)
+    if (!keys.includes(key(want)))
+      found.push(
+        `content has no plan for ${planLabel(want)}; plan every page${offerings > 0 ? `, and the service page once per offering, 1 to ${offerings}` : ""}`
+      )
+  for (const c of content) {
+    if (!wanted.some((w) => key(w) === key(c)))
+      found.push(`content plans ${planLabel(c)}, which is not a planned page`)
+    else if (keys.indexOf(key(c)) !== keys.lastIndexOf(key(c)))
+      found.push(`content plans ${planLabel(c)} twice`)
+  }
+  const owner = new Map<string, string>()
+  const heading = new Map<string, string>()
+  for (const c of content) {
+    for (const topic of c.topics) {
+      const first = owner.get(wordsOf(topic))
+      if (first && first !== planLabel(c))
+        found.push(
+          `the topic "${topic}" is on ${first} and ${planLabel(c)}; one page owns each topic, and the others link to it`
+        )
+      else owner.set(wordsOf(topic), planLabel(c))
+    }
+    for (const line of c.outline.flatMap((o) => [
+      o.heading,
+      ...o.subheadings,
+    ])) {
+      const first = heading.get(wordsOf(line))
+      if (first)
+        found.push(
+          `the outline heading "${line}" is on ${first}${first === planLabel(c) ? " already" : ` and ${planLabel(c)}`}; every heading on the site is its own`
+        )
+      else heading.set(wordsOf(line), planLabel(c))
+    }
+  }
   return found
 }
 
@@ -406,7 +518,7 @@ function leastUsed(
   return candidates.reduce((best, d) => (uses(d) < uses(best) ? d : best))
 }
 
-const PURPOSE: Record<SectionKind, string> = {
+const PURPOSE: Record<PlannedKind, string> = {
   hero: "Says what the business does and where, with the call to action",
   trust_strip: "Short proof lines, only from what the owner told us",
   service_cards: "What the business offers, one card a service",
@@ -420,9 +532,21 @@ const PURPOSE: Record<SectionKind, string> = {
   cta_band: "One more call to action before the footer",
   contact: "Phone, email and opening hours",
   quote_form: "The quote form, with the owner's questions",
+  content: "Detail no other section holds, as a checklist, a table or prose",
 }
 
-const NAME: Record<SectionKind, string> = {
+/** What each content section of a pack's page is for, in its order on the page. */
+const CONTENT_PURPOSE: Partial<Record<PageId, string[]>> = {
+  services: [
+    "The one table comparing the services: what each usually covers and who it suits",
+  ],
+  service: [
+    "How to get ready for this service, as a checklist",
+    "How this service differs from the others, and when to pick another",
+  ],
+}
+
+const NAME: Record<PlannedKind, string> = {
   hero: "a hero",
   trust_strip: "proof points",
   service_cards: "services",
@@ -436,15 +560,17 @@ const NAME: Record<SectionKind, string> = {
   cta_band: "a closing call to action",
   contact: "contact details",
   quote_form: "the quote form",
+  content: "details",
 }
 
 /** The variant a direction gives a section, where it names one for that kind. */
 function variantFor(
   page: PageId,
-  kind: SectionKind,
+  kind: PlannedKind,
   pack: string | undefined,
   direction: DesignDirection
 ): string {
+  if (kind === "content") return "default"
   const ofDirection: Partial<Record<SectionKind, string>> = {
     hero: page === "home" ? direction.hero : "text_led",
     steps: direction.steps,
@@ -486,44 +612,6 @@ function boxAspect(
 }
 
 /**
- * The sections a page's content needs whatever the model planned: the about
- * page's story, principles and visit steps, which the copy gate fails it
- * without. A missing one goes in before the closing band.
- */
-const CONTENT_BLOCKS: Partial<Record<string, [SectionKind, string][]>> = {
-  about: [
-    ["about", "Who the business serves and how it works, then its record"],
-    ["value_props", "Three or four principles of how the work is done"],
-    ["steps", "What to expect on a visit, from arrival to the finished job"],
-  ],
-}
-function withContentBlocks(pages: Blueprint["pages"]): Blueprint["pages"] {
-  const home = pages.find((p) => p.page === "home")?.sections ?? []
-  return pages.map((page) => {
-    const missing = (CONTENT_BLOCKS[page.page] ?? []).filter(
-      ([kind]) => !page.sections.some((s) => s.kind === kind)
-    )
-    if (missing.length === 0) return page
-    const sections = [...page.sections]
-    const at = sections.findIndex((s) => s.kind === "cta_band")
-    sections.splice(
-      at < 0 ? sections.length : at,
-      0,
-      ...missing.map(([kind, purpose]) => ({
-        kind,
-        // The home page's variant of the kind, so the site keeps one look.
-        variant:
-          home.find((s) => s.kind === kind)?.variant ??
-          SECTION_VARIANTS[kind][0],
-        purpose,
-        content_notes: null,
-      }))
-    )
-    return { ...page, sections }
-  }) as Blueprint["pages"]
-}
-
-/**
  * An inner page whose header has a photo draws it as a split_frame hero, the
  * photo beside the copy: text_led's portrait inset is too small to carry a
  * header's photo. A page with no photo slot (the budget went elsewhere) is
@@ -553,9 +641,11 @@ function splitHeaders(blueprint: Blueprint): Blueprint["pages"] {
 /**
  * The order a build spends its photos in: the home hero and the cards first,
  * then each service page's own header, then About and Contact, whose headers
- * matter least. The owner's uploads cost no draw and keep their place.
+ * matter least, and a photo band's texture with them. The owner's uploads
+ * cost no draw and keep their place.
  */
 const rank = (slot: ImageSlot) => {
+  if (slot.source === "generated" && slot.section === "cta_band") return 2
   if (slot.source !== "generated" || slot.section !== "hero") return 0
   if (slot.page === "service") return 1
   return slot.page === "about" || slot.page === "contact" ? 2 : 0
@@ -594,6 +684,111 @@ function fitImages(blueprint: Blueprint): Blueprint["images"] {
   })
 }
 
+/** The topic a section owns, by page where the same kind sits on two. */
+const TOPIC: Partial<Record<PlannedKind, string>> = {
+  service_cards: "the services at a glance",
+  value_props: "reasons to choose the business",
+  steps: "how a job goes, from the first message to done",
+  about: "a short introduction to the business",
+  testimonials: "what customers say",
+  gallery: "photos of the work",
+  service_area: "the places covered",
+  faq: "questions customers ask before booking",
+  contact: "how to get in touch",
+  quote_form: "what to send for a quote",
+  content: "more about the work",
+}
+const PAGE_TOPIC: Partial<
+  Record<PageId, Partial<Record<PlannedKind, string>>>
+> = {
+  about: {
+    about: "who the business serves and how it works",
+    value_props: "how the work is done",
+    content: "the business's story",
+  },
+  services: {
+    service_cards: "every service in brief",
+    content: "how the services compare",
+  },
+  service_area: {
+    service_area: "every place covered, town by town",
+    content: "working across the area",
+  },
+}
+
+const sentence = (text: string) =>
+  `${text.charAt(0).toUpperCase()}${text.slice(1)}`
+
+/**
+ * The content plan code writes for its own Blueprint: each section's topic,
+ * as its outline heading too, and each offering's page its own three. The
+ * writers word the real headings; these keep every topic on one page.
+ */
+function fallbackContent(
+  pages: Blueprint["pages"],
+  facts: readonly FactRecord[]
+): ContentPlan[] {
+  const industry = factValue(facts, "business.industry")?.name ?? "the work"
+  const area = factValue(facts, "service_area.text")?.text
+  const search = (what: string) =>
+    cap(area ? `${what} in ${area}` : what, 120).toLowerCase()
+  const sources: ContentPlan["sources"] = facts.some(
+    (f) => f.key === "site.content"
+  )
+    ? ["facts", "owner", "trade"]
+    : ["facts", "trade"]
+  const names = offeringsOf(facts)
+  return pages.flatMap(({ page, sections }): ContentPlan[] => {
+    const purpose = cap(RECIPES.pages[page]?.purpose ?? `The ${page} page`, 200)
+    if (page === "service")
+      return names.map((name, i) => {
+        const own = names.indexOf(name) === i ? name : `${name} (${i + 1})`
+        const topics = [
+          `what ${own} covers`,
+          `getting ready for ${own}`,
+          `how ${own} differs from the other services`,
+        ]
+        return {
+          page,
+          offering: i + 1,
+          purpose,
+          target_search: search(name),
+          topics,
+          outline: topics.map((t) => ({
+            heading: sentence(t),
+            subheadings: [],
+          })),
+          sources,
+        }
+      })
+    const topics = [
+      ...new Set(
+        sections.flatMap(({ kind }) => {
+          const topic = PAGE_TOPIC[page]?.[kind] ?? TOPIC[kind]
+          return topic ? [topic] : []
+        })
+      ),
+    ]
+    const owned =
+      topics.length > 0 ? topics : [`the ${page.replace("_", " ")} page`]
+    return [
+      {
+        page,
+        offering: 0,
+        purpose,
+        target_search: search(
+          page === "home" ? industry : `${industry} ${page.replace("_", " ")}`
+        ),
+        topics: owned.slice(0, 8),
+        outline: owned
+          .slice(0, 12)
+          .map((t) => ({ heading: sentence(t), subheadings: [] })),
+        sources,
+      },
+    ]
+  })
+}
+
 /**
  * The plan code writes when the model's will not do: the pack's page order,
  * the least-used direction for the industry with the owner's answers over it,
@@ -625,22 +820,24 @@ export function fallbackBlueprint(input: {
   const pages = wantedPages(facts).map((page) => {
     const order = (pack.order[page] ?? [{ kind: "hero" as const }]).filter(
       ({ kind }) => !(kind in held) || held[kind as keyof typeof held]
-    ) as { kind: SectionKind; variant?: string }[]
+    ) as { kind: PlannedKind; variant?: string }[]
     if (page === "home") {
       for (const kind of pickedKinds) {
         if (order.some((s) => s.kind === kind)) continue
         const after = order.findIndex(
-          (s) => HOME_ORDER.indexOf(s.kind) > HOME_ORDER.indexOf(kind)
+          (s) =>
+            HOME_ORDER.indexOf(s.kind as SectionKind) > HOME_ORDER.indexOf(kind)
         )
         order.splice(after < 0 ? order.length : after, 0, { kind })
       }
     }
+    const details = [...(CONTENT_PURPOSE[page] ?? [])]
     return {
       page,
       sections: order.map(({ kind, variant }) => ({
         kind,
         variant: variantFor(page, kind, variant, direction),
-        purpose: PURPOSE[kind],
+        purpose: (kind === "content" && details.shift()) || PURPOSE[kind],
         content_notes: null,
       })),
     }
@@ -721,7 +918,12 @@ export function fallbackBlueprint(input: {
     aspect: "4:3" as const,
     resolution: "1K" as const,
     subject: cap(`${name}, ${view}. ${direction.image_style}`, 300),
-    alt: cap(`${name}, shown in a customer's space`, 200),
+    alt: cap(
+      section === "hero"
+        ? `${name} under way in a customer's space`
+        : `${name}, the finished result in a customer's space`,
+      200
+    ),
     source: "generated" as const,
   })
   const cardPhotos = galleryOn ? [] : work
@@ -732,7 +934,12 @@ export function fallbackBlueprint(input: {
           const own = cardPhotos[i]
           return own
             ? ownShot(id, "home", "service_cards", own)
-            : serviceShot(id, name, "done well", "service_cards")
+            : serviceShot(
+                id,
+                name,
+                "the finished result in one area that says this service",
+                "service_cards"
+              )
         })
       : []
   const headerImages = pages.some((p) => p.page === "service")
@@ -740,10 +947,31 @@ export function fallbackBlueprint(input: {
         serviceShot(
           `service_${i + 1}_hero`,
           name,
-          "a closer view of the finished work",
+          "the job under way, hands at work seen from the side and never a face",
           "hero"
         )
       )
+    : []
+  // A photo band is texture under the brand colour, spent after the headers.
+  const bandOn = pages.find((p) =>
+    p.sections.some((s) => s.kind === "cta_band" && s.variant === "photo")
+  )
+  const bandImages = bandOn
+    ? [
+        {
+          id: "cta_band",
+          page: bandOn.page,
+          section: "cta_band" as const,
+          aspect: "21:9" as const,
+          resolution: "2K" as const,
+          subject: cap(
+            `A calm, low-detail texture from the same shoot: a wall in window light or a tidy worktop. ${direction.image_style}`,
+            300
+          ),
+          alt: "A calm texture behind the closing call to action",
+          source: "generated" as const,
+        },
+      ]
     : []
   const fonts = owner.fonts ?? direction.fonts
   const palette = owner.palette ?? {
@@ -787,9 +1015,11 @@ export function fallbackBlueprint(input: {
       ...headerImages,
       ...aboutImages,
       ...galleryImages,
+      ...bandImages,
     ],
     voice: direction.voice,
     features,
+    content: fallbackContent(pages, facts),
   })
   return withOwnerChoices(made, facts)
 }
@@ -917,17 +1147,22 @@ export function plannerPrompt(input: {
   const pack = packOf(industry)
   const voice = packVoice(facts)
   const system = [
-    "You are the planner at Reme. Before a small business's website is built, you write its Blueprint: the design direction, the type pair and palette, each page's sections in order with a variant each, the photos it needs, the copy voice, and a plain-words feature list the owner reads on a card. A builder then builds exactly this.",
+    "You are the planner at Reme. Before a small business's website is built, you write its Blueprint: what each page says (its content plan), the design direction, the type pair and palette, each page's sections in order with a variant each, the photos it needs, the copy voice, and a plain-words feature list the owner reads on a card. Writers then write each page from its content plan, and a builder builds exactly this.",
     "",
     "How to plan:",
+    "- Plan the content first, then the design. content holds one entry per planned page, and the service page once per offering (offering 1 to 6, its place in business.offerings; every other page 0). Each entry gives the page's purpose; target_search, the search it is written to be found for, an offering and the area as a customer types it (\"end of tenancy cleaning in Leeds\"); topics, the subjects it owns; outline, its h2s in page order with the h3s under each; and sources, where its words come from: facts, owner (site.content, the owner's own words) and trade (the trade's usual practice, said as typical).",
+    "- Say each thing once. A topic belongs to one page only, and any other page that touches it links there. No two outline headings on the site match. One FAQ on the whole site, on one page. The process (steps) lives on the home page alone. The area's own words live on the service area page when there is one; a home page area section is then a short pointer to it. About is the business's own story and how it works, never the process or the area again.",
+    "- Every offering gets its own page and its own card. Its page says what the service is and the result, what it usually covers (the service cards section on that page shows it as a checklist labelled typical), who it suits, how to prepare, and how it differs from the other offerings, in content sections of its own. With two services or more the services page holds one content section with the table that compares them, once; each service page keeps only what differs.",
+    "- A content section (kind content, variant default) holds detail no starter section does, as prose, a checklist, a table, steps or cards. Plan one where the outline needs it, on a page whose kinds allow it, and say in purpose what it holds.",
+    "- Rich, never padded: plan the topics the facts and the trade's usual practice can fill in full. A page with few facts has a short outline; never plan a section to make a page longer.",
     "- Start from one direction in the library below and keep it whole, changing at most two of its choices (fonts, palette, home hero variant, home services variant). A direction is a tested combination; a site stitched from several reads as nobody's.",
-    "- Design like a studio, not a template. Pick the direction that fits this trade and this business's audience, a type pair with character, one dominant colour with one sharp accent. Vary the sections' order and variants from the pack's starting order where the facts make a different order read better, within the kinds each page may hold.",
+    "- Design like a studio, not a template. Pick the direction that fits this trade and this business's audience, a type pair with character, one dominant colour with one sharp accent. Lay each page out in its outline's order: the pack's starting order is only a fallback, and the direction keeps its fonts and palette whole while each section's order and variant are yours, within the kinds each page may hold. Vary variants across pages so no two pages read alike. Ornament budget: a list takes numbers or icons, never both, and at most two headings a page take the accent.",
     "- The site has exactly the pages listed under the business's pages. Every page holds only the kinds listed for it below, and each section's variant is one listed for its kind.",
     "- Plan a section only when the facts can fill it. No testimonials without testimonial facts; no gallery without the owner's photos; no proof strip without business.proof. A section the owner picked under 'Picked as home page sections' is the exception: plan it where they are listed as planned, and give a gallery one upload slot per photo, three at most.",
-    "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery, the header of a service, about or contact page. Use the owner's uploads first, as source upload with their asset id, each where its use places it: hero in the home hero, work in the service cards or the gallery, team in the about page's header; never the same photo twice on a page. The upload with use logo is the logo, never a photo slot. A generated photo is atmosphere: rooms, surfaces, objects, hands at work. Never generate one for an about section, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene in plain words; the alt says what it shows. Code sets each slot's aspect to its section's box.",
-    "- Plan generated photos as one photographer's shot list for one shoot. The hero is the establishing shot: the core service's finished result in the customer's own space (a whole room, a whole garden), never a street or skyline. Each service card is a different room, area or detail that shows that service at a glance (a worktop for regular cleaning, a bathroom for a deep clean), never the hero's scene again. A service's card and its page header show that service's own subject, indoors or out as the service is: gutters, fascias, soffits, roofs and windows seen from outside are exteriors in daylight, never a room. A photo CTA band is a calm texture (a wall in window light, foliage) that complements the rest. No two subjects share a room, a composition or a main prop. Prefer simple shapes (a worktop, a sink, a sofa, a bed, a desk) over mechanisms image models warp: oven doors, hinges, ladders, hands holding tools.",
+    "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery, the header of a service, about or contact page. Use the owner's uploads first, as source upload with their asset id, each where its use places it: hero in the home hero, work in the service cards or the gallery, team in the about page's header; never the same photo twice on a page. The upload with use logo is the logo, never a photo slot. A generated photo shows the work: the finished result in a customer's own space, or the job under way with hands at work seen from the side, never a face or a whole person. Never generate one for an about section, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene in plain words; the alt says what it shows. Code sets each slot's aspect to its section's box.",
+    "- Plan generated photos as one photographer's shot list for one shoot, taken from the content plan: each subject shows what its page's topics are about (an oven mid-clean for a deep clean, an empty rental ready for check-out for an end of tenancy clean). The hero is the establishing shot: the core service's finished result in the customer's own space (a whole room, a whole garden), never a street or skyline. Each service card is a different room, area or detail that shows that service at a glance (a worktop for regular cleaning, a bathroom for a deep clean), never the hero's scene again. A service's card and its page header show that service's own subject, indoors or out as the service is: gutters, fascias, soffits, roofs and windows seen from outside are exteriors in daylight, never a room. A photo CTA band is a calm texture (a wall in window light, foliage) that complements the rest. No two subjects share a room, a composition or a main prop. Prefer simple shapes (a worktop, a sink, a sofa, a bed, a desk) over mechanisms image models warp: hinges, taps seen up close, ladders.",
     "- Where the uploads leave a slot empty, a trade people want to see done well (a cleaned room, a finished job, a plate, a space) still gets pictures: the hero, a slot for each service card when you set photo_cards, and one for a photo CTA band. Plan up to 8 slots in all, drawn one per section, never a bare hero when the pages have more places for a photo.",
-    "- Page headers: each service's own page gets a header photo, a slot on page service, section hero, id service_<n>_hero, n being the service's place (1 to 6) in business.offerings, its subject a different room, area or detail from every other slot, in the same house style. A service's card slot (page home, section service_cards, id service_<n>_card) and its header slot are two photos of two different scenes: a page header never reuses its card's photo. Order the slots: the hero, every card, then the service headers, then About and Contact (page about or contact, section hero, ids about_hero and contact_hero): a calm place with no people, team, vehicle or result in it, such as a window in daylight or a tidy entrance, never the home hero's scene. A build draws eight photos and code drops the rest in that order, so a service page whose header slot did not fit shows a plain text header.",
+    "- Page headers: each service's own page gets a header photo, a slot on page service, section hero, id service_<n>_hero, n being the service's place (1 to 6) in business.offerings, its subject a different room, area or detail from every other slot, in the same house style. A service's card slot (page home, section service_cards, id service_<n>_card) and its header slot are two photos of two different scenes: a page header never reuses its card's photo. Order the slots: the hero, every card, then the service headers, then About and Contact (page about or contact, section hero, ids about_hero and contact_hero): the work under way, such as hands wiping a worktop seen from the side, or a tidy entrance ready for a visit, never a face, a team, a vehicle or the home hero's scene. A build draws eight photos and code drops the rest in that order, so a service page whose header slot did not fit shows a plain text header.",
     "- Services: photo_cards, and alternating on the home page, only when you plan a photo slot for every service; without one, set numbered_rows. Three alike cards with an icon each read as a template.",
     "- purpose says in one line what a section does for this business; content_notes says which facts fill it, or null.",
     "- features: four to ten lines the owner reads, each a plain sentence about what their site will have, under 140 characters, no jargon, no section or variant ids.",
@@ -973,6 +1208,13 @@ export function plannerPrompt(input: {
       .join("\n") || "- (none)",
     "",
     `The business's pages: ${wantedPages(facts).join(", ")}.`,
+    ...(wantedPages(facts).includes("service") && offeringsOf(facts).length > 0
+      ? [
+          `Each offering's page, by its number in content: ${offeringsOf(facts)
+            .map((name, i) => `${i + 1}. ${name}`)
+            .join("; ")}.`,
+        ]
+      : []),
     ...pickedSections(facts).map(({ kind, planned }) =>
       planned
         ? `Picked as home page sections: ${kind} (planned).`

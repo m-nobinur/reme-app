@@ -25,7 +25,7 @@ import {
   paletteRoles,
   siteRules,
 } from "../src/developer-rules.ts"
-import { COPY_WRITER_RULES } from "../src/fanout.ts"
+import { COPY_WRITER_RULES, PAGE_WRITER_RULES } from "../src/fanout.ts"
 import { photoFile } from "../src/photo-files.ts"
 import { SEED_FIELDS } from "../src/seed.ts"
 
@@ -90,7 +90,9 @@ describe("the Developer's site rules", () => {
   it("says how the copy reads, the page heads and the icons", () => {
     const rules = text(false)
     expect(rules).toContain("local copywriter for this trade")
-    expect(rules).toContain("heroHeading names the main service and the area")
+    expect(rules).toContain(
+      "The home hero's heading names the main service and the area"
+    )
     expect(rules).toContain("50 to 60 characters")
     expect(rules).toContain("140 to 160 characters")
     expect(rules).toContain("ICONS key in src/icons.ts")
@@ -145,23 +147,30 @@ describe("the Developer's site rules", () => {
       "overviewBody and audienceBody put business.overview and business.audience in the site's voice: rephrase, never add"
     )
     expect(rules).toContain(
-      "proofHeading, approachHeading, aboutStepsHeading, aboutAreaHeading, servicesHelpHeading, servicesFaqHeading and contactIncludeHeading name this business's service or area, never one bare word or a stock label"
+      "Every section heading names this business's service or area, never one bare word or a stock label"
     )
   })
 
   it("briefs each inner page's blocks with the gate's ranges and the truth rules", () => {
     const rules = text(false)
     for (const line of [
-      "The approach: three or four principles of how the work is done (approach1Title to approach4Body, a title of 2 to 5 words and a body of 25 to 45 words",
+      "three or four principles of how the work is done (a title of 2 to 5 words and a body of 25 to 45 words",
       "never a credential, guarantee, count or response time no fact states",
-      "What to expect on a visit: three or four steps of the visit itself",
-      "proofBody 30 to 60 words on what each point means for the customer, beside the points themselves, never a lone sentence",
-      "servicesHelpBody (40 to 80 words) under servicesHelpHeading helps a visitor not sure which service they need",
-      "contactIncludeBody (25 to 60 words) under contactIncludeHeading says what to put in a message",
+      "Never the process or the area again: they have their own pages.",
+      "30 to 60 words on what each point means for the customer, beside the points themselves",
+      "one table block comparing them, columns the service, what it usually covers and who it suits",
+      "how to prepare, a checklist block (provenance trade) of three to six things the customer does before the visit",
+      "how it differs from the other offerings, a prose block of 40 to 90 words",
+      "The contact section's prose block (25 to 60 words) says what to put in a message",
       "A reply time only when a fact states one; without it, promise neither a time nor a reply to every message.",
       "quotePrivacy is one sentence on what happens to the details sent",
     ])
       expect(rules).toContain(line)
+    // Each thing once: no steps or questions on a service or about page.
+    expect(rules).toContain(
+      "No steps and no questions: those are the home page's."
+    )
+    expect(rules).not.toContain("What to expect on a visit")
   })
 
   it("asks for an eyebrow and an accent clause in every section heading", () => {
@@ -427,7 +436,7 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(COPY_WRITER_RULES).toContain(
       "Leave a question out rather than answer that you do not know"
     )
-    expect(COPY_WRITER_RULES).toContain(
+    expect(PAGE_WRITER_RULES).toContain(
       "the copy gate accepts 50 to 60 and 140 to 165"
     )
     expect(rules).toContain("the copy gate fails under 100")
@@ -463,7 +472,7 @@ describe("the owner's onboarding choices in the rules", () => {
       "Who the business is comes from a fact or not at all: local, family-run, independent, owner-run, years in business, team size"
     )
     expect(rules).toContain(
-      "in neutral wording: no guarantee, no named product or brand, no count or measure"
+      "which the page labels typical: no guarantee, no named product or brand, no count or measure"
     )
   })
 

@@ -1,6 +1,7 @@
 import {
+  type Block,
   type Blueprint,
-  type PageDocument,
+  PageDocument,
   SECTION_VARIANTS,
 } from "@workspace/contracts"
 import { pageFields } from "@workspace/starter-site/page-fields"
@@ -12,55 +13,167 @@ import {
   servicesOf,
 } from "@workspace/starter-site/page-seed"
 import { blueprintLayout } from "./blueprint.ts"
-import { STARTER_FILES } from "./seed.ts"
 
 /**
- * Page documents on a planned first build (design §1, option A): the writers
- * fill the slots of the starter's src/page-fields.ts, as they always have,
- * and code writes their words into each planned page's document with the
- * Blueprint's sections. So src/site-config.ts holds only the site's own
- * settings, and everything after the writers (the lead, the gates, the
- * critic, every later change) reads and edits documents. A slot's place in
- * the documents comes from the seed itself, so the two cannot drift.
+ * Page documents on a planned first build (design §3): each writer writes
+ * its page's document from the page's content plan, section by section, in
+ * the Blueprint's order, and code assembles and checks what they wrote. The
+ * skeleton a writer fills is the starter's seed for its sections, so a
+ * section reads its words and blocks where the starter looks for them. So
+ * src/site-config.ts holds only the site's own settings and the service
+ * catalogue, and everything after the writers (the lead, the gates, the
+ * critic, every later change) reads and edits documents.
  */
 
 /** Where a site keeps its documents. */
 export const DOCUMENTS_DIR = "src/content/pages"
 
-/** The slots whose words are a page's, which the writers fill. */
+/** The slots whose words are a page's, which the seed reads for a page with no document. */
 export const PAGE_FIELDS: ReadonlySet<string> = new Set(Object.keys(pageFields))
 
-/** The slot sheet as the starter ships it: each slot's line, note and default. */
-export const SLOT_SHEET = STARTER_FILES["src/page-fields.ts"] as string
+/** The words a writer gives one section. */
+export type Words = {
+  eyebrow?: string
+  heading?: string
+  intro?: string
+  blocks?: Block[]
+}
 
-/** Between src/site-config.ts and the slot sheet when the writers read both as one text. */
-export const SHEET_MARK = "\n// The page slots, which become the documents.\n"
+/** What the writers have written of one page so far. */
+export type Written = {
+  title?: string
+  description?: string
+  sections: Record<string, Words>
+}
 
-/** Every planned page's document for these values, settings and slots both, as JSON text by path under DOCUMENTS_DIR. */
-export function documentFiles(
-  values: Readonly<Record<string, string>>,
-  plan: Blueprint
-): Record<string, string> {
+/** Every page slot filled, so the seed lays out each section's every block. */
+const FILLED: Record<string, string> = Object.fromEntries([
+  ...[...PAGE_FIELDS].map((name) => [name, "x"]),
+  ...["businessName", "tagline", "overview", "audience", "proof"].map(
+    (name) => [name, "x"]
+  ),
+  ...[1, 2, 3, 4, 5, 6].flatMap((n) => [
+    [`service${n}Name`, `s${n}`],
+    [`service${n}Body`, "x"],
+  ]),
+])
+
+/** Keys whose values say what a part is, never words a writer writes. */
+const FIXED = new Set([
+  "id",
+  "type",
+  "provenance",
+  "kind",
+  "variant",
+  "name",
+  "page",
+  "slug",
+  "icon",
+])
+
+const blank = (value: unknown, key = ""): unknown =>
+  FIXED.has(key)
+    ? value
+    : typeof value === "string"
+      ? ""
+      : Array.isArray(value)
+        ? value.map((v) => blank(v))
+        : value && typeof value === "object"
+          ? Object.fromEntries(
+              Object.entries(value).map(([k, v]) => [k, blank(v, k)])
+            )
+          : value
+
+/**
+ * Each planned page's skeleton, by the file a writer fills: the seed of the
+ * Blueprint's sections with every word empty. A service's is
+ * `services/<N>.json`, N its place in the offerings, until its name gives
+ * the slug.
+ */
+export function skeletons(plan: Blueprint): Record<string, PageDocument> {
   const layout = blueprintLayout(plan)
-  const planned = new Set<string>(
-    plan.pages.flatMap(({ page }) =>
-      page === "service" ? [] : [documentPath(page as Page)]
-    )
-  )
   const docs = seedDocuments(
-    values,
+    FILLED,
     layout,
     plan.pages.some((p) => p.page === "about")
   )
   return Object.fromEntries(
     Object.entries(docs)
-      .filter(
-        ([path]) =>
-          planned.has(path) ||
-          (path.startsWith("services/") && "service" in layout)
+      .filter(([path]) =>
+        path.startsWith("services/")
+          ? "service" in layout
+          : plan.pages.some(
+              (p) =>
+                p.page !== "service" && documentPath(p.page as Page) === path
+            )
       )
-      .map(([path, doc]) => [path, `${JSON.stringify(doc, null, 2)}\n`])
+      .map(([path, doc]) => [
+        path.replace(/^services\/s(\d)\.json$/, "services/$1.json"),
+        blank(doc) as PageDocument,
+      ])
   )
+}
+
+/**
+ * A page's document from its skeleton and what its writers wrote: the
+ * Blueprint's sections in order with each writer's words, and the title and
+ * description the page's writer gave. A section nobody wrote gives no words,
+ * so the starter shows it from the seed until the lead writes them.
+ */
+export function assemble(
+  skeleton: PageDocument,
+  written: Written | undefined,
+  slug?: string
+): PageDocument {
+  const { slug: _seeded, ...rest } = skeleton
+  return {
+    ...rest,
+    ...(slug ? { slug } : {}),
+    title: written?.title ?? "",
+    description: written?.description ?? "",
+    sections: skeleton.sections.map((section) => {
+      const { id, kind } = section
+      const variant = "variant" in section ? section.variant : undefined
+      return {
+        id,
+        kind,
+        ...(variant ? { variant } : {}),
+        ...(written?.sections[id] ?? {}),
+      } as PageDocument["sections"][number]
+    }),
+  }
+}
+
+/** What is wrong with one writer's words for its sections, a line per issue as the schema says it, or null. */
+export function wordsProblem(
+  skeleton: PageDocument,
+  written: Written,
+  sections: readonly string[]
+): string | null {
+  const own = {
+    ...skeleton,
+    sections: skeleton.sections.filter((s) => sections.includes(s.id)),
+  }
+  const parsed = PageDocument.safeParse(
+    assemble(own, written, skeleton.page === "service" ? "x" : undefined)
+  )
+  return parsed.success
+    ? null
+    : parsed.error.issues
+        .slice(0, 12)
+        .map((i) => `- ${i.path.join(".")}: ${i.message}`)
+        .join("\n")
+}
+
+/** A skeleton's file under DOCUMENTS_DIR, a service's by the slug its name makes, or null while it has none. */
+export function documentFile(
+  file: string,
+  values: Readonly<Record<string, string>>
+): { path: string; slug?: string } | null {
+  const n = /^services\/(\d)\.json$/.exec(file)?.[1]
+  if (!n) return { path: file }
+  const slug = servicesOf(values).find((s) => s.n === Number(n) && s.name)?.slug
+  return slug ? { path: documentPath("service", slug), slug } : null
 }
 
 type Step = string | number

@@ -28,7 +28,7 @@ export const HOME = {
             "## Our story\n\nWe **started** in a *small* flat. <script>alert(1)</script> [Ask us](/contact/) or [this](javascript:alert(1)).\n\n- Ovens\n- Windows",
         },
         {
-          ...owner,
+          provenance: "trade",
           id: "covers",
           type: "checklist",
           heading: "Kitchen",

@@ -93,7 +93,8 @@ describe("a service page's included and who-it-suits blocks", () => {
     for (const page of pages) {
       expect(page.html, page.file).toContain('data-copy="service_includes"')
       expect(page.html, page.file).toContain('data-copy="service_for"')
-      expect(page.html, page.file).toContain("What is included")
+      expect(page.html, page.file).toContain(FILLED.serviceIncludesLabel)
+      expect(page.html, page.file).toContain(FILLED.typicalNote)
       expect(page.html, page.file).toContain("Who it is for")
     }
   })
