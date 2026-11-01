@@ -35,6 +35,7 @@ import {
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { AlwaysAllowProvider } from "@workspace/ui/components/assistant/decision"
+import { makeEnquiryCardUI } from "@workspace/ui/components/assistant/enquiry-card"
 import { ConnectGoogleRow } from "@workspace/ui/components/assistant/google"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { PayDialog } from "@workspace/ui/components/assistant/pay-dialog"
@@ -1852,6 +1853,34 @@ const CHANGE_ASKED: ThreadMessageLike[] = [
   },
 ]
 
+/** A quote request from the owner's website, as the deliveries outbox posts it. */
+const ENQUIRY: ThreadMessageLike[] = [
+  {
+    content: [
+      { type: "text", text: "You have a new quote request from your website." },
+      {
+        type: "data",
+        name: "enquiry",
+        data: {
+          id: "00000000-0000-4000-8000-0000000000e1",
+          name: "Priya Shah",
+          email: "priya@example.com",
+          phone: "07700 900123",
+          answers: [
+            { label: "Property address", value: "Flat 4, 12 Albion Road, N16" },
+            { label: "Type of clean", value: "End of tenancy" },
+            { label: "Bedrooms", value: "2" },
+          ],
+          photos: [],
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+const EnquiryCardUI = makeEnquiryCardUI((id) => `/photos/${id}`)
+
 /** Three questions a build waits on, posted by the assistant as one stack. */
 const BUILD_QUESTIONS: ThreadMessageLike[] = [
   {
@@ -2980,6 +3009,14 @@ const assistantCatalog = [
     render: () => (
       <FixtureThread height="h-[26rem]" messages={CHANGE_ASKED}>
         <ChangeAskedUI />
+      </FixtureThread>
+    ),
+  },
+  {
+    name: "EnquiryCardUI",
+    render: () => (
+      <FixtureThread height="h-[26rem]" messages={ENQUIRY}>
+        <EnquiryCardUI />
       </FixtureThread>
     ),
   },

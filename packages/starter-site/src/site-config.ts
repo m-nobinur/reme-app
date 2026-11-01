@@ -195,11 +195,6 @@ const values = {
   contactIntro: "",
   quoteIntro: "",
   /**
-   * Where the quote form sends a request, once an endpoint exists. Empty
-   * sends it by email to site.email instead; with neither, no form renders.
-   */
-  quoteFormAction: "",
-  /**
    * A photo for the About and Contact page headers, as a path the build placed
    * and its alt text; shown only with both, and never the home hero's photo.
    * Empty gives the header its text-only form, which needs no photo to look finished.
@@ -222,12 +217,10 @@ const values = {
   contactFormLink: "Use the quote form",
   /**
    * The quote page's privacy line under the form: what happens to the
-   * details sent, only as true of how the form works (it goes to
-   * business.email) or as a fact states. Empty shows nothing.
+   * details sent, only as true of how the form works (they go to the
+   * business, to prepare the quote) or as a fact states. Empty shows nothing.
    */
   quotePrivacy: "",
-  /** The subject line of a request sent by email. */
-  quoteEmailSubject: "Quote request",
   bookingIntro: "",
   aboutEyebrow: "About",
   aboutHeading: "About us",
@@ -712,12 +705,16 @@ const values = {
   quoteEmailLabel: "Email address",
   quotePhoneLabel: "Phone number",
   quoteChoose: "Choose one",
-  /** In the photo question's drop zone, once the form has an endpoint. */
+  /** In the photo question's drop zone: up to five JPEG, PNG or WebP photos. */
   quotePhotoDrop: "Drop photos here, or choose them",
   quotePhotoLinks: "Links to photos, one per line",
   quoteOptional: "optional",
   quoteSubmit: "Send quote request",
   quoteNextSteps: "Your request comes straight to us.",
+  /** Above the form once a request has gone, and once one could not go. */
+  quoteSent: "Thank you. Your request has reached us.",
+  quoteNotSent:
+    "Your request did not send. Try again in a minute, or call or email us instead.",
   phoneLabel: "Phone",
   emailLabel: "Email",
   weekdayHoursLabel: "Weekdays",

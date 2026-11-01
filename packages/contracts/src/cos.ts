@@ -1126,12 +1126,13 @@ export const CosCompaction = z.strictObject({
 /**
  * The `cos.event` payload: something that happened away from the chat,
  * logged in the CoS session when it happened so the next turn reads it: a
- * staff result, a notice posted in the chat, a scheduled run's outcome. A
- * notice names the message it posted. `wake` asks for a turn of its own.
- * Labelled by the text `summary` carries.
+ * staff result, a notice posted in the chat, a scheduled run's outcome, a
+ * quote request from the business's website. A notice names the message it
+ * posted. `wake` asks for a turn of its own. Labelled by the text `summary`
+ * carries.
  */
 export const CosEvent = z.strictObject({
-  source: z.enum(["staff", "notice", "schedule"]),
+  source: z.enum(["staff", "notice", "schedule", "enquiry"]),
   summary: Text(1500),
   evidence: z.array(Evidence).max(4),
   wake: z.boolean(),

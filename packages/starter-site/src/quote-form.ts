@@ -113,3 +113,14 @@ const refused = quoteFormProblem(file)
 if (refused) throw new Error(`src/quote-form.json is not valid: ${refused}.`)
 
 export const quoteFields = (file as { fields: QuoteField[] }).fields
+
+/**
+ * Where the form posts, on the site's own host, and the field only a script
+ * fills in: the contract's `QUOTE_PATH` and `QUOTE_TRAP_FIELD`, copied for
+ * the reason the checks above are. The platform answers by sending the
+ * visitor back to `#quote-sent` or `#quote-not-sent` on the quote page.
+ */
+export const QUOTE_ACTION = "/api/quote"
+export const QUOTE_TRAP = "_website"
+export const QUOTE_SENT_ID = "quote-sent"
+export const QUOTE_NOT_SENT_ID = "quote-not-sent"

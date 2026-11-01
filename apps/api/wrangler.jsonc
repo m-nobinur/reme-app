@@ -116,11 +116,18 @@
   // A `namespace_id` is shared by every binding in the account that names it,
   // counters and all, so this one is its own: 1001 is the web's sign-in
   // limit, 1002 the router's misses, 1004 production's copy of this one.
+  // QUOTE_LIMIT is a website visitor's quote requests a minute (src/enquiry.ts),
+  // 1006 in production.
   "ratelimits": [
     {
       "name": "WRITE_LIMIT",
       "namespace_id": "1003",
       "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "QUOTE_LIMIT",
+      "namespace_id": "1005",
+      "simple": { "limit": 5, "period": 60 }
     }
   ],
   // Closed turns, for the work that follows one (compaction, reflection). A
@@ -208,6 +215,11 @@
           "name": "WRITE_LIMIT",
           "namespace_id": "1004",
           "simple": { "limit": 30, "period": 60 }
+        },
+        {
+          "name": "QUOTE_LIMIT",
+          "namespace_id": "1006",
+          "simple": { "limit": 5, "period": 60 }
         }
       ],
       "queues": {

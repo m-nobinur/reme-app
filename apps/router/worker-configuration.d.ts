@@ -7,6 +7,7 @@ interface __BaseEnv_Env {
 	HYPERDRIVE: Hyperdrive;
 	MISSES: RateLimit;
 	SITE_HOST_SUFFIX: ".remeai.co.uk" | "-stg.remeai.co.uk";
+	API: Fetcher /* reme-api-production */ | Fetcher /* reme-api */;
 	INDEXNOW_KEY: "50d33f2d3b42e6d093cb945653fea6ca" | "e589181a6d7f0ffecc3cfe5285688213";
 	SERVICE_HOSTS: "remeai.co.uk,www.remeai.co.uk,api.remeai.co.uk,preview.remeai.co.uk,orchestrator.remeai.co.uk,staging.remeai.co.uk,staging-api.remeai.co.uk,staging-orchestrator.remeai.co.uk" | "";
 }
@@ -20,6 +21,7 @@ declare namespace Cloudflare {
 		HYPERDRIVE: Hyperdrive;
 		MISSES: RateLimit;
 		SITE_HOST_SUFFIX: ".remeai.co.uk";
+		API: Fetcher /* reme-api-production */;
 		INDEXNOW_KEY: "50d33f2d3b42e6d093cb945653fea6ca";
 		SERVICE_HOSTS: "remeai.co.uk,www.remeai.co.uk,api.remeai.co.uk,preview.remeai.co.uk,orchestrator.remeai.co.uk,staging.remeai.co.uk,staging-api.remeai.co.uk,staging-orchestrator.remeai.co.uk";
 	}

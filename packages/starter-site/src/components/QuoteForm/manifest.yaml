@@ -9,9 +9,9 @@ constraints:
     quoteRequestLegend.
   - src/quote-form.json is the list the owner approved. The platform writes it;
     never edit it or this file to change the questions.
-  - Sends to quoteFormAction when set, else by email to site.email; renders
-    nothing with neither. Leave quoteFormAction empty until the platform gives
-    an endpoint.
+  - Sends each request to the business's Reme workspace, photos included, up to
+    five JPEG, PNG or WebP. quoteSent and quoteNotSent show above it when the
+    visitor comes back from sending.
   - On the quote page, after its Hero.
 examples:
   - "<QuoteForm />"

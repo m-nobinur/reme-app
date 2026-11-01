@@ -1,5 +1,6 @@
 import {
   formatSiteRevision,
+  QUOTE_PATH,
   SITE_HEADER,
   SITE_PROBE_HEADER,
   SITE_REVISION_HEADER,
@@ -116,6 +117,8 @@ const reads: string[] = []
 let limited = false
 /** Every key the limiter was asked about. */
 const askers: string[] = []
+/** Every request handed to the Core API, as it arrived there. */
+const forwarded: { url: string; body: string }[] = []
 const pointers = new Map<string, unknown>()
 
 function revision(
@@ -173,6 +176,12 @@ const env = {
     },
   },
   HYPERDRIVE: { connectionString: "postgres://stub" },
+  API: {
+    fetch: async (request: Request) => {
+      forwarded.push({ url: request.url, body: await request.text() })
+      return new Response(null, { status: 303, headers: { location: "/" } })
+    },
+  },
 } as unknown as Env
 
 const soon = () => Math.floor(Date.now() / 1000) + 3600
@@ -578,14 +587,38 @@ describe("hosts", () => {
 
   it("answers /api/* with the typed 501 on any host", async () => {
     for (const host of [SITE_HOST, PREVIEW_HOST]) {
-      const res = await get(host, "/api/leads", { method: "POST" })
-      expect(res.status).toBe(501)
-      expect(await res.json()).toMatchObject({
-        class: "resource",
-        code: "route.not_implemented",
-        detail: {},
-      })
+      for (const [path, method] of [
+        ["/api/leads", "POST"],
+        [QUOTE_PATH, "GET"],
+      ] as const) {
+        const res = await get(host, path, { method })
+        expect(res.status).toBe(501)
+        expect(await res.json()).toMatchObject({
+          class: "resource",
+          code: "route.not_implemented",
+          detail: {},
+        })
+      }
     }
+  })
+
+  it("hands a quote request to the Core API as it came, so its URL names the site", async () => {
+    forwarded.length = 0
+    const res = await get(SITE_HOST, QUOTE_PATH, {
+      method: "POST",
+      body: new URLSearchParams({ name: "Jane" }),
+    })
+    expect(res.status).toBe(303)
+    expect(forwarded).toEqual([
+      { url: `https://${SITE_HOST}${QUOTE_PATH}`, body: "name=Jane" },
+    ])
+  })
+
+  it("takes no quote request on a preview host", async () => {
+    forwarded.length = 0
+    const res = await get(PREVIEW_HOST, QUOTE_PATH, { method: "POST" })
+    expect(res.status).toBe(404)
+    expect(forwarded).toEqual([])
   })
 })
 

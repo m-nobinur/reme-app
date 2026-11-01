@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { JsonObject, Timestamp, Uuid } from "./common.ts"
+import { Enquiry } from "./enquiry.ts"
 import {
   ANSWER_TEXT_MAX,
   CHOICE_FACT_KEYS,
@@ -226,7 +227,8 @@ export const QuestionReply = z.strictObject({
 
 /**
  * A message the server posts on its own, with no owner turn: the text parts,
- * then the button part if there is one, then the questions if there are any.
+ * then the button part if there is one, then the questions if there are any,
+ * then a quote request from the website if it carries one.
  * `id` is derived from what happened, not generated, so posting it twice
  * stores it once.
  */
@@ -235,6 +237,7 @@ export const ServerMessage = z.strictObject({
   text: z.array(Text(2000)).min(1).max(5),
   button: ServerButton.optional(),
   questions: BuildQuestions.optional(),
+  enquiry: Enquiry.optional(),
 })
 
 /**

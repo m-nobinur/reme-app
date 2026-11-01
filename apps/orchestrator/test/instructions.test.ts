@@ -492,12 +492,12 @@ describe("the section lane's short prompt", () => {
   }
   const withPlan = { ...revise, site_plan: fanPlan }
 
-  it("is a quarter smaller than the full instructions, which it measures against", () => {
+  it("drops at least 9k chars of design material from the full instructions", () => {
     const full = instructions(withPlan, 20).length
     const short = sectionInstructions(withPlan, 20).length
     console.info(`section prompt: ${full} chars before, ${short} after`)
-    // The claim rules (about 7k chars) stay by design; the directions, components and design rules go.
-    expect(short).toBeLessThan(full * 0.75)
+    // The claim rules stay by design and grow with both prompts, so the drop is measured, not a ratio.
+    expect(full - short).toBeGreaterThan(9_000)
   })
 
   it("drops the design material and keeps every rule that guards a claim", () => {

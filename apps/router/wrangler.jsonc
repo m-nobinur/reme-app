@@ -58,6 +58,9 @@
   ],
   // The same bucket the orchestrator writes: `sites/{site}/{rev}/...`.
   "r2_buckets": [{ "binding": "SITES", "bucket_name": "reme-sites" }],
+  // The Core API, which files a site's quote requests (`QUOTE_PATH`). A
+  // binding, not a fetch to its host, so only this Worker names the site.
+  "services": [{ "binding": "API", "service": "reme-api" }],
   // The truth behind the cache (§11.1.3): read on a pointer miss only, and
   // the answer is written back to KV. The same staging config as the api.
   "hyperdrive": [
@@ -108,6 +111,7 @@
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }
       ],
+      "services": [{ "binding": "API", "service": "reme-api-production" }],
       "ratelimits": [
         {
           "name": "MISSES",

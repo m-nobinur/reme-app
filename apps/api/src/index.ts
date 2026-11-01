@@ -1,6 +1,7 @@
 import {
   CreateOrgRequest,
   idempotencyKey,
+  QUOTE_PATH,
   REQUEST_FAILED,
 } from "@workspace/contracts"
 import { logFailure, resolveOrg, type Tenancy, tenancy } from "@workspace/db"
@@ -14,6 +15,7 @@ import { type AfterTurn, afterTurnBatch } from "./after-turn.ts"
 import { bridge, type Owner } from "./changes.ts"
 import { stripeWebhook } from "./domain-buy.ts"
 import { certificateWebhook } from "./domain-certificate.ts"
+import { receiveQuote } from "./enquiry.ts"
 import { checkTenantPath } from "./health.ts"
 import {
   BodyTooLarge,
@@ -60,7 +62,9 @@ import {
  * its org is in metadata that only our own Stripe calls wrote and Stripe
  * signed, and it reaches the domain row only under that org's RLS; and
  * `/webhooks/cloudflare`, whose org is looked up from the hostname the alert
- * names, behind a secret only Cloudflare holds.
+ * names, behind a secret only Cloudflare holds; and `QUOTE_PATH`, whose org
+ * is the one the request's own hostname names, which only the router's
+ * service binding can set to a site's.
  */
 
 /**
@@ -271,6 +275,10 @@ async function route(
   // Cloudflare's certificate alert, with its secret in a header.
   if (pathname === "/webhooks/cloudflare" && method === "POST") {
     return certificateWebhook(request, env, kit, waitUntil)
+  }
+  // A visitor's quote request from a published website, through the router.
+  if (pathname === QUOTE_PATH && method === "POST") {
+    return receiveQuote(request, env, kit, env.QUOTE_LIMIT)
   }
 
   const session = await readSession(request, env)
