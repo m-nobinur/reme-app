@@ -1086,7 +1086,8 @@ export async function chat(
         turn.kind === "message" ? parsed.data.intent : undefined,
         personaOf(facts, profile),
         turn.kind === "message" && log.fresh,
-        await google,
+        // Not waited for: the prompt's own Google rule holds without Jev's line.
+        await Promise.race([google, null]),
         facts,
         turn.kind === "message" && SETS_RULE.test(turn.text),
         null,
@@ -2831,7 +2832,7 @@ async function plannedTurn(
     if (!stepOpen) write({ type: "start-step" })
     const rest =
       outcome.shown && parts[0]?.type === "text" ? parts.slice(1) : parts
-    await pace([...lead, ...rest.flatMap(made)], write, how, !!outcome.shown)
+    for (const chunk of [...lead, ...rest.flatMap(made)]) write(chunk)
     if (!continued) write(writtenAt())
     write({ type: "finish-step" })
     write({ type: "finish" })

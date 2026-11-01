@@ -4,6 +4,7 @@ import {
   PALETTE_AA_PAIRS,
   PaletteFromImage,
 } from "@workspace/contracts"
+import type { Tenancy } from "@workspace/db"
 import { MockLanguageModelV4 } from "ai/test"
 import { describe, expect, it } from "vitest"
 import type { Owner } from "../src/changes.ts"
@@ -11,6 +12,7 @@ import { DAILY_CAP_USD } from "../src/cos/turns.ts"
 import { worstCall } from "../src/onboarding-agent.ts"
 import { contrast, paletteRoles, readableStops } from "../src/palette.ts"
 import {
+  logoPalettes,
   logoPalettesOf,
   looksOf,
   missingOf,
@@ -325,5 +327,83 @@ describe("POST /palettes/from-image", () => {
     expect(ErrorEnvelope.parse(await empty.json()).message).toContain(
       "Try another one"
     )
+  })
+})
+
+describe("POST /palettes/from-logo", () => {
+  const owner = { orgId: "org-a" } as Owner
+  const logo = {
+    id: "11111111-0000-4000-8000-000000000000",
+    name: "Logo.png",
+    content_type: "image/png",
+    bytes: 9,
+    use: "logo",
+  } as Asset
+  const kit = {
+    withOrg: async () => [{ key: "media.uploads", value: { items: [logo] } }],
+  } as unknown as Tenancy
+  const key = `logo-palettes/org-a/${logo.id}.json`
+  const reading = `${key}.reading`
+  const sites = () => {
+    const objects = new Map<
+      string,
+      { body: string; customMetadata?: Record<string, string> }
+    >()
+    return {
+      objects,
+      get: async (k: string) => {
+        const o = objects.get(k)
+        return o ? { body: new Response(o.body).body } : null
+      },
+      head: async (k: string) => objects.get(k) ?? null,
+      delete: async (k: string) => {
+        objects.delete(k)
+      },
+    }
+  }
+  const ask = () =>
+    new Request("https://api.test/palettes/from-logo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ asset_id: logo.id }),
+    })
+  const inFlight = (SITES: ReturnType<typeof sites>) =>
+    SITES.objects.set(reading, {
+      body: "",
+      customMetadata: { started: String(Date.now()) },
+    })
+
+  it("waits for a read already in flight rather than paying for a second", async () => {
+    const SITES = sites()
+    inFlight(SITES)
+    setTimeout(() => {
+      SITES.objects.set(key, { body: JSON.stringify({ palettes: [] }) })
+      SITES.objects.delete(reading)
+    }, 600)
+    const response = await logoPalettes(
+      ask(),
+      { SITES } as unknown as Env,
+      kit,
+      owner,
+      { model: null }
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ palettes: [] })
+  })
+
+  it("reads them itself once the read in flight ends without them", async () => {
+    const SITES = sites()
+    inFlight(SITES)
+    setTimeout(() => SITES.objects.delete(reading), 600)
+    const started = Date.now()
+    const response = await logoPalettes(
+      ask(),
+      { SITES } as unknown as Env,
+      kit,
+      owner,
+      { model: null }
+    )
+    expect(response.status).toBe(503)
+    expect(Date.now() - started).toBeLessThan(5_000)
   })
 })

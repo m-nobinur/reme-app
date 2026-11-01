@@ -464,6 +464,12 @@ export function logoPalettesOf(value: unknown): PaletteFromImage[] {
 const logoPalettesKey = (orgId: string, assetId: string) =>
   `logo-palettes/${orgId}/${assetId}.json`
 
+/** How often a request waits on palettes another request is reading. */
+const READING_POLL_MS = 500
+
+const json = (body: ReadableStream | string) =>
+  new Response(body, { headers: { "content-type": "application/json" } })
+
 /** `POST /palettes/from-logo`: one vision call per logo, then served from what was held. */
 export async function logoPalettes(
   request: Request,
@@ -476,32 +482,85 @@ export async function logoPalettes(
   if (!parsed.success) return invalid(parsed.error.issues)
   const orgId = owner.orgId
   const assetId = parsed.data.asset_id
-  const facts = await kit.withOrg({ orgId }, readFacts)
+  const [facts, held] = await Promise.all([
+    kit.withOrg({ orgId }, readFacts),
+    env.SITES.get(logoPalettesKey(orgId, assetId)),
+  ])
   const logo = logoOf(facts)
   // Only the logo held now: an older one's palettes would not match the site.
-  if (logo?.id !== assetId) return invalid([{ path: ["asset_id"] }])
+  if (logo?.id !== assetId) {
+    await held?.body.cancel()
+    return invalid([{ path: ["asset_id"] }])
+  }
+  const ready = held ?? (await landed(env, orgId, assetId))
+  if (ready) return json(ready.body)
+  return readLogoPalettes(env, kit, orgId, logo, facts, deps)
+}
+
+/** Starts reading a just-kept logo's palettes, so the palette page finds them held. */
+export async function warmLogoPalettes(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  assetId: string
+): Promise<void> {
+  const [facts, held] = await Promise.all([
+    kit.withOrg({ orgId }, readFacts),
+    env.SITES.head(logoPalettesKey(orgId, assetId)),
+  ])
+  const logo = logoOf(facts)
+  if (held || logo?.id !== assetId) return
+  await readLogoPalettes(env, kit, orgId, logo, facts)
+}
+
+/**
+ * The palettes a read already in flight holds once it lands, or null when
+ * none is in flight or it ended without them. The marker is checked before
+ * the palettes, as the reader writes them before clearing it.
+ */
+async function landed(env: Env, orgId: string, assetId: string) {
   const key = logoPalettesKey(orgId, assetId)
-  const held = await env.SITES.get(key)
-  if (held)
-    return new Response(held.body, {
-      headers: { "content-type": "application/json" },
-    })
+  const marker = await env.SITES.head(`${key}.reading`)
+  const until = Number(marker?.customMetadata?.started ?? 0) + VISION.callMs
+  while (Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, READING_POLL_MS))
+    const reading = await env.SITES.head(`${key}.reading`)
+    const ready = await env.SITES.get(key)
+    if (ready || !reading) return ready
+  }
+  return null
+}
+
+async function readLogoPalettes(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  logo: Asset,
+  facts: Awaited<ReturnType<typeof readFacts>>,
+  deps: Deps = {}
+): Promise<Response> {
   const model = modelOf(env, deps)
   if (!model) return unavailable()
-  if (
-    !(await useDaily(
-      env,
-      `vision-days/palette/${orgId}`,
-      VISION.perDay,
-      crypto.randomUUID()
-    ))
-  ) {
-    return capped()
-  }
-  const object = await env.SITES.get(uploadKey(orgId, assetId))
-  if (!object) return unavailable()
+  const key = logoPalettesKey(orgId, logo.id)
   const trade = factValue(facts, "business.industry")?.name ?? null
   try {
+    const [, allowed, object] = await Promise.all([
+      env.SITES.put(`${key}.reading`, "", {
+        customMetadata: { started: String(Date.now()) },
+      }),
+      useDaily(
+        env,
+        `vision-days/palette/${orgId}`,
+        VISION.perDay,
+        crypto.randomUUID()
+      ),
+      env.SITES.get(uploadKey(orgId, logo.id)),
+    ])
+    if (!allowed) {
+      await object?.body.cancel()
+      return capped()
+    }
+    if (!object) return unavailable()
     const picture = await small(
       env,
       object.body,
@@ -522,9 +581,7 @@ export async function logoPalettes(
     if (palettes.length === 0) return unreadable()
     const body = JSON.stringify({ palettes } satisfies LogoPalettes)
     await env.SITES.put(key, body)
-    return new Response(body, {
-      headers: { "content-type": "application/json" },
-    })
+    return json(body)
   } catch (error) {
     console.error(
       JSON.stringify({
@@ -533,6 +590,8 @@ export async function logoPalettes(
       })
     )
     return unavailable()
+  } finally {
+    await env.SITES.delete(`${key}.reading`)
   }
 }
 

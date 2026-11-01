@@ -170,7 +170,7 @@ export async function createOrg(
   },
   newId: () => string = () => crypto.randomUUID(),
   waitMs = SIGNUP_WAIT_MS
-): Promise<Org> {
+): Promise<Org & { workosOrganizationId: string }> {
   // The person first, before any vendor call, so an email another row holds
   // is refused before a WorkOS organization exists to be left behind. Under a
   // fresh org id, as the write below is, so `users_self_insert` and
@@ -267,7 +267,7 @@ async function writeOrg(
   input: Parameters<typeof createOrg>[2],
   personId: string,
   newId: () => string
-): Promise<Org> {
+): Promise<Org & { workosOrganizationId: string }> {
   // The replay: everything after it either creates a vendor resource or
   // writes a row.
   const existing = await directory.listOrganizationMemberships({
@@ -297,7 +297,7 @@ async function writeOrg(
   const replayed = await resolveOrg(kit, identity)
   if (replayed) {
     const org = await readOrg(kit, replayed)
-    if (org) return org
+    if (org) return { ...org, workosOrganizationId: organization.id }
   }
 
   const orgId = crypto.randomUUID()
@@ -388,5 +388,5 @@ async function writeOrg(
   if (!org) {
     throw new Error("the org was written and could not be read back")
   }
-  return org
+  return { ...org, workosOrganizationId: organization.id }
 }

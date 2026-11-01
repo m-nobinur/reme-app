@@ -37,7 +37,11 @@ import { SiteNameProvider } from "@workspace/ui/lib/site-name"
 import { STATE_MARKS } from "@workspace/ui/lib/status-icons"
 import { useEffect, useId, useState } from "react"
 import { lastChat } from "@/chat/history"
-import { getWorkspaceFrame, pollWorkspace } from "@/lib/api/server"
+import {
+  getConversationMessages,
+  getWorkspaceFrame,
+  pollWorkspace,
+} from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
 import { retryOrgWrite } from "@/lib/auth/actions"
 import { NameBusinessForm } from "@/lib/auth/name-business-form"
@@ -75,6 +79,14 @@ export const Route = createFileRoute("/app")({
   // route is protected by where it lives rather than by remembering.
   loader: async ({ location }) => {
     const owner = await requireOwner(location.href)
+    // The first page's conversation, read beside the frame so the chat shows
+    // it on hydration. Server only: on the client the thread reads its own.
+    const opened = import.meta.env.SSR
+      ? /^\/app\/c\/([^/]+)\/?$/.exec(location.pathname)?.[1]
+      : undefined
+    const messages =
+      opened &&
+      getConversationMessages({ data: { id: opened } }).catch(() => null)
     const frame = await getWorkspaceFrame()
     // A WorkOS organization we hold no business for, and no signup write to
     // retry: name it first. No return address, so a new business lands in
@@ -99,7 +111,13 @@ export const Route = createFileRoute("/app")({
         replace: true,
       })
     }
-    return { owner, ...frame }
+    const conversation = frame.conversations?.find((c) => c.id === opened)
+    const rows = await messages
+    return {
+      owner,
+      ...frame,
+      opening: conversation && rows ? { conversation, messages: rows } : null,
+    }
   },
   // The tab names the assistant and the business, and shows the face the
   // owner picked in place of the app's icons (the root leaves them out).

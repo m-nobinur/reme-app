@@ -3,6 +3,7 @@ import {
   RuntimeAdapterProvider,
   useAui,
 } from "@assistant-ui/react"
+import type { Conversation } from "@workspace/contracts"
 import { titleText } from "@workspace/ui/lib/title"
 import { type PropsWithChildren, useMemo } from "react"
 import {
@@ -12,6 +13,7 @@ import {
   listConversations,
   updateConversation,
 } from "@/lib/api/server"
+import type { TransportedMessage } from "@/lib/api/types"
 import {
   conversationHistory,
   missingConversations,
@@ -30,6 +32,25 @@ import {
 /** Threads a session with no organisation keeps in the tab, unstored. */
 export const unstored = new Set<string>()
 
+type Opening = { conversation: Conversation; messages: TransportedMessage[] }
+
+/** What the /app loader read for the first page's conversation, each served once. */
+const opening = new Map<string, Opening>()
+const seeded = new WeakSet<Opening>()
+
+export function seedOpening(held: Opening | null) {
+  if (!held || seeded.has(held)) return
+  seeded.add(held)
+  opening.set(held.conversation.id, held)
+}
+
+/** A thread's stored rows: the loader's on its first read, else the server's. */
+export async function readMessages(id: string) {
+  const held = opening.get(id)
+  opening.delete(id)
+  return held?.messages ?? (await getConversationMessages({ data: { id } }))
+}
+
 /** Mounts the open thread's history for the runtime under it. */
 function ConversationHistory({ children }: PropsWithChildren) {
   const aui = useAui()
@@ -37,7 +58,7 @@ function ConversationHistory({ children }: PropsWithChildren) {
     () =>
       conversationHistory(
         () => aui.threadListItem.getState().remoteId,
-        (id) => getConversationMessages({ data: { id } })
+        readMessages
       ),
     [aui]
   )
@@ -67,7 +88,9 @@ export const conversationList: RemoteThreadListAdapter = {
     return { remoteId: stored?.id ?? threadId }
   },
   fetch: async (threadId) => {
-    const found = await getConversation({ data: { id: threadId } })
+    const found =
+      opening.get(threadId)?.conversation ??
+      (await getConversation({ data: { id: threadId } }))
     if (!found) {
       // The chat shows an empty state for it; the runtime stays on a new
       // thread underneath.

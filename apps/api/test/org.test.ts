@@ -338,7 +338,13 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
   const others: string[] = []
 
   beforeAll(async () => {
-    org = Org.parse(await createOrg(kit, directory, input))
+    const { workosOrganizationId, ...written } = await createOrg(
+      kit,
+      directory,
+      input
+    )
+    expect(workosOrganizationId).toBe(`${WORKOS_ORG}_1`)
+    org = Org.parse(written)
     const resolved = await resolveOrg(kit, {
       workosUserId: WORKOS_USER,
       workosOrganizationId: `${WORKOS_ORG}_1`,

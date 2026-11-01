@@ -74,7 +74,10 @@ export async function createOrgForSession(input: {
   // the API answers fails here instead of two screens later.
   Org.parse(await response.json())
 
-  return refreshInto(input.sealedSession, input.workosUserId)
+  return refreshInto(
+    input.sealedSession,
+    response.headers.get("workos-organization-id")
+  )
 }
 
 /**
@@ -83,9 +86,9 @@ export async function createOrgForSession(input: {
  * A session minted before the organisation existed carries no `org_id` claim,
  * so `apps/api` answers `GET /org` with 403 `org.unresolved` until this runs.
  *
- * The organization id is read back from WorkOS against the session's own user
- * rather than returned by `apps/api`: ADR-029 keeps the vendor id out of the
- * `Org` contract, since it is a join key and not something a screen shows.
+ * The organization id comes back in a response header rather than the body:
+ * ADR-029 keeps the vendor id out of the `Org` contract, since it is a join key
+ * and not something a screen shows.
  *
  * Measured against staging on 2026-08-29, because two things here are not what
  * the types suggest. Refreshing into an organization the user is not a member
@@ -101,12 +104,8 @@ export async function createOrgForSession(input: {
  */
 async function refreshInto(
   sealedSession: string,
-  workosUserId: string
+  organizationId: string | null
 ): Promise<string> {
-  const memberships = await workos().userManagement.listOrganizationMemberships(
-    { userId: workosUserId, statuses: ["active"], limit: 1 }
-  )
-  const organizationId = memberships.data[0]?.organizationId
   if (!organizationId) {
     return sealedSession
   }
