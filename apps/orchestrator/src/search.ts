@@ -1,4 +1,8 @@
-import { GoogleConnectRequest, siteHost } from "@workspace/contracts"
+import {
+  GoogleConnectRequest,
+  searchConsoleUrl,
+  siteHost,
+} from "@workspace/contracts"
 import {
   activeDomainHost,
   appendEvent,
@@ -15,6 +19,7 @@ import {
   type Tenancy,
   users,
 } from "@workspace/db"
+import { aboutOf, onGoogle } from "./address-copy.ts"
 import {
   accessFor,
   addSite,
@@ -715,18 +720,27 @@ export async function tell(
 
 /**
  * `announce`: one message, keyed by the instance, worded by the model from
- * the host or else the template (heartbeat-write.ts).
+ * the moment's brief or else the template (address-copy.ts), with the
+ * owner's own Search Console page a tap away.
  */
 export async function announce(
   env: { OPENROUTER_API_KEY?: string },
   kit: Tenancy,
   { org_id: orgId, host }: SearchParams
 ): Promise<void> {
-  const text = await writeUpdate(env, kit, orgId, {
-    facts: { host },
-    template: `${host} is now in your Google Search Console. I've sent Google your page list. New sites take days to a few weeks to show up.`,
+  const text = await writeUpdate(
+    env,
+    kit,
+    orgId,
+    onGoogle(host, await aboutOf(kit, orgId))
+  )
+  await tell(kit, orgId, searchInstanceId(orgId, host), {
+    text: [text],
+    button: {
+      label: "Open in Google Search Console",
+      action: { kind: "open", url: searchConsoleUrl(host) },
+    },
   })
-  await tell(kit, orgId, searchInstanceId(orgId, host), { text: [text] })
 }
 
 /**

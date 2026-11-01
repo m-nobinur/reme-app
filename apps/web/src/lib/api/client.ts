@@ -32,6 +32,7 @@ import {
   type RegistrantDetails,
   SiteMedia,
   StaffDirectory,
+  searchConsoleUrl,
   Uuid,
   WorkspaceStatus,
 } from "@workspace/contracts"
@@ -268,9 +269,27 @@ type Logged = Extract<Attention, { kind: "report" | "alert" }>
 /** The headline and the line under it for a report or an alert. */
 function logged(item: Logged): { title: string; detail: string } {
   if (item.kind === "report") {
-    return {
-      title: `Published v${item.revision.version}`,
-      detail: `Version ${item.revision.version} is live on your site.`,
+    switch (item.what) {
+      case "domain_live":
+        return {
+          title: `Your website is live on ${item.host ?? "your own address"}`,
+          detail: "Customers can now find you at your own address.",
+        }
+      case "google_added":
+        return {
+          title: "Google now knows about your website",
+          detail: `${item.host ?? "Your website"} is in your Google Search Console, with every page sent.`,
+        }
+      default:
+        return item.revision?.version === 1
+          ? {
+              title: "Your website is live",
+              detail: "Customers can now find you online and ask for a quote.",
+            }
+          : {
+              title: "Your changes are live",
+              detail: "The latest version of your website is up now.",
+            }
     }
   }
   switch (item.reason) {
@@ -418,6 +437,14 @@ function toAttention(
         ...(item.kind === "alert" && item.reason === "build_failed"
           ? { stopped: item.cause ?? "other" }
           : {}),
+        ...(item.kind === "report" &&
+          item.what === "google_added" &&
+          item.host && {
+            link: {
+              label: "Open in Google Search Console",
+              href: searchConsoleUrl(item.host),
+            },
+          }),
         raisedBy: SYSTEM,
         raisedById: null,
         raisedAt: item.at,

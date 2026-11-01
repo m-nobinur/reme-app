@@ -58,6 +58,18 @@ function actionOf(item: AttentionItem) {
       </Link>
     )
   }
+  if ((item.kind === "report" || item.kind === "alert") && item.link) {
+    return (
+      <a
+        className={ACTION}
+        href={item.link.href}
+        rel="noopener noreferrer"
+        target="_blank"
+      >
+        {item.link.label}
+      </a>
+    )
+  }
   return undefined
 }
 

@@ -945,7 +945,7 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     expect(live.reading?.write).toEqual({ state: "done" })
     expect(unserved.reading).not.toHaveProperty("write")
     expect((await live.reading?.tell?.())?.text).toMatch(
-      new RegExp(`^${p.name} is live.*adding it to your Google Search Console`)
+      new RegExp(`^${p.name} is now live.*adding it to Google too`)
     )
     expect(
       JSON.parse((await p.store.ROUTES.get(`host:${p.name}`)) ?? "{}")

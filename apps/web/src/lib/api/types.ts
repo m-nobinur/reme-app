@@ -94,7 +94,12 @@ type AttentionBase = {
 
 export type AttentionItem =
   // A failed build's alert carries why it stopped.
-  | (AttentionBase & { kind: "report" | "alert"; stopped?: BuildStopCause })
+  // A report the owner can follow up on carries its link (Search Console).
+  | (AttentionBase & {
+      kind: "report" | "alert"
+      stopped?: BuildStopCause
+      link?: { label: string; href: string }
+    })
   // A reminder that came due and is not done; `id` is the reminder's.
   | (AttentionBase & { kind: "reminder" })
   // A question is answered in the chat, on the card the assistant posted.

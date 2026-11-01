@@ -703,9 +703,10 @@ export async function readDueReminders(
 }
 
 /**
- * Reports and alerts from the last `hours`, newest first: a publish, a
- * failed build, a build parked on its budget, a publish the probes rolled
- * back, a job that kept failing. Reached through the org's recently touched assignments, so the
+ * Reports and alerts from the last `hours`, newest first: a publish, the
+ * owner's own domain going live, the site added to Google, a failed build, a
+ * build parked on its budget, a publish the probes rolled back, a job that
+ * kept failing. Reached through the org's recently touched assignments, so the
  * event index is probed per build rather than the org's whole log scanned.
  */
 async function readFeed(
@@ -713,7 +714,7 @@ async function readFeed(
   hours: number,
   limit: number
 ): Promise<(Report | Alert)[]> {
-  const [rows, paused] = await Promise.all([
+  const [rows, paused, reached] = await Promise.all([
     db
       .select({
         eventId: events.eventId,
@@ -752,6 +753,20 @@ async function readFeed(
       .from(events)
       .where(
         sql`${events.type} = 'alert.raised' and ${events.payload}->>'kind' = 'job.paused' and ${events.occurredAt} > now() - make_interval(hours => ${hours})`
+      )
+      .orderBy(sql`${events.eventId} desc`)
+      .limit(limit),
+    // The address and Google belong to no build either.
+    db
+      .select({
+        eventId: events.eventId,
+        type: events.type,
+        at: events.occurredAt,
+        host: sql<string | null>`${events.payload}->>'host'`,
+      })
+      .from(events)
+      .where(
+        sql`${events.type} in ('domain.live', 'search.property_added') and ${events.occurredAt} > now() - make_interval(hours => ${hours})`
       )
       .orderBy(sql`${events.eventId} desc`)
       .limit(limit),
@@ -798,8 +813,22 @@ async function readFeed(
       reason: "job_paused",
     })
   )
+  const done = reached.flatMap((row): Report[] =>
+    row.host
+      ? [
+          {
+            kind: "report",
+            event_id: row.eventId,
+            assignment_id: null,
+            at: iso(row.at),
+            what: row.type === "domain.live" ? "domain_live" : "google_added",
+            host: row.host,
+          },
+        ]
+      : []
+  )
   // Event ids are ULIDs, so the string order is the time order.
-  return [...built, ...jobs]
+  return [...built, ...jobs, ...done]
     .sort((a, b) => (a.event_id < b.event_id ? 1 : -1))
     .slice(0, limit)
 }

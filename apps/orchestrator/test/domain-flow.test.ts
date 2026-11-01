@@ -67,7 +67,7 @@ const FIXED = {
   [`${NAME} CAA`]: { Status: 0 },
 }
 
-function fakeKit() {
+function fakeKit({ google = false } = {}) {
   const row = {
     id: "dom",
     orgId: "org",
@@ -89,12 +89,21 @@ function fakeKit() {
   const keys = new Set<string>()
   const writes = { n: 0 }
   const db = {
-    // A row read has a where; the first-publish read of deployments has none.
+    // A row read has a where; the reads of the first publish and of the
+    // Google connection have none; the facts read orders its rows.
     select: () => ({
       from: () =>
-        Object.assign(Promise.resolve([{ at: Date.now() - 60_000 }]), {
-          where: async () => [row],
-        }),
+        Object.assign(
+          Promise.resolve([
+            { at: Date.now() - 60_000, ...(google && { state: "active" }) },
+          ]),
+          {
+            where: () =>
+              Object.assign(Promise.resolve([row]), {
+                orderBy: async () => [],
+              }),
+          }
+        ),
     }),
     // The task sync after a row write; tasks are tested in packages/db.
     execute: async () => [],
@@ -195,15 +204,18 @@ describe("a look", () => {
   })
 
   it("holds a valid domain the edge does not answer for as a certificate still deploying", async () => {
-    const { kit, row } = fakeKit()
-    stubNet(
-      {
-        [`${BASE}/h-${NAME}`]: () => hostname(NAME, "pending", "initializing"),
-        [`${BASE}/h-${WWW}`]: () => hostname(WWW, "active", "active"),
-        [`https://${WWW}/`]: () => new Response(null, { status: 525 }),
-      },
-      FIXED
-    )
+    const pending = () =>
+      stubNet(
+        {
+          [`${BASE}/h-${NAME}`]: () =>
+            hostname(NAME, "pending", "initializing"),
+          [`${BASE}/h-${WWW}`]: () => hostname(WWW, "active", "active"),
+          [`https://${WWW}/`]: () => new Response(null, { status: 525 }),
+        },
+        FIXED
+      )
+    const { kit, row } = fakeKit({ google: true })
+    pending()
     const seen = await look(env, kit, "org", "dom")
     expect(seen.result).toMatchObject({
       status: "pending_certificate",
@@ -211,10 +223,22 @@ describe("a look", () => {
     })
     // Nothing for the owner to do here, so no button and no block.
     expect(await seen.reading?.tell?.()).toEqual({
-      text: expect.stringContaining("Your secure certificate is being issued"),
+      text: `Your setting for ${WWW} is in, so it just needs its security padlock now, which usually takes a few minutes.`,
     })
     expect(seen.reading).not.toHaveProperty("write")
     expect(row.state).toBe("verifying")
+
+    // With Google not connected yet, the wait is the moment to offer it.
+    const fresh = fakeKit()
+    pending()
+    const offered = await look(env, fresh.kit, "org", "dom")
+    expect(await offered.reading?.tell?.()).toEqual({
+      text: expect.stringContaining("let me connect your website to Google"),
+      button: {
+        label: "Connect Google",
+        action: { kind: "connect", service: "google" },
+      },
+    })
   })
 
   it("keeps a guarded claim unverified until its ownership TXT is in public DNS", async () => {

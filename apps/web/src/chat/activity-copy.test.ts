@@ -445,7 +445,7 @@ describe("segment copy", () => {
         names: { domain: "spark.co.uk", provider: "123-reg" },
       })
     expect(pillLine(address("records"), ctx)).toBe(
-      "Reme is waiting for your DNS change"
+      "Reme is waiting for your domain setting"
     )
     expect(pillLine(address("choose"), ctx)).toBe(
       "Reme is waiting for your choice of web address"
@@ -837,7 +837,7 @@ describe("page lines", () => {
       "12 clicks and 340 appearances on Google in the last 28 days. Data read today, 9:30 am"
     )
     expect(standingLine(at("domain", "waiting"), ctx)).toBe(
-      "Waiting for your DNS change"
+      "Waiting for your domain setting"
     )
     expect(
       standingLine(at("purchase", "done"), ctx, { renews: "1 October 2027" })
@@ -862,12 +862,12 @@ describe("page lines", () => {
       })
     expect(proofOf(done("find_out", "choose"), ctx)).toBeNull()
     expect(proofOf(done("find_out", "records"), ctx)).toEqual({
-      text: "Your DNS points spark.co.uk at your website",
+      text: "The setting for spark.co.uk is in",
       at: STAMP,
     })
     // The furthest, not the first, and never a go-live segment's own "loads".
     expect(proofOf(done("records", "certificate"), ctx)?.text).toBe(
-      "The certificate for spark.co.uk is active"
+      "The security padlock for spark.co.uk is ready"
     )
     expect(
       proofOf(segment("golive", "done", { steps: done("loads").steps }), ctx)
@@ -907,10 +907,10 @@ describe("page lines", () => {
       }))
     expect(
       standingLine(segment("domain", "now", { steps: steps(1) }), ctx)
-    ).toBe("The certificate is on its way")
+    ).toBe("Adding the security padlock")
     expect(
       standingLine(segment("domain", "now", { steps: steps(2) }), ctx)
-    ).toBe("Checking your website loads on it")
+    ).toBe("Checking your website opens on it")
   })
 
   it("reads the build's step at work, never a count of the whole", () => {

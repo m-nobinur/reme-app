@@ -24,8 +24,8 @@ const KIND: Record<
     icon: STATE_MARKS.waiting.Icon,
     variant: "secondary",
   },
-  // Every report is a publish.
-  report: { label: "Report", icon: RocketLaunchIcon, variant: "secondary" },
+  // Something the owner started that finished: a publish, their domain, Google.
+  report: { label: "Update", icon: RocketLaunchIcon, variant: "secondary" },
   alert: {
     label: "Alert",
     icon: STATE_MARKS.failed.Icon,

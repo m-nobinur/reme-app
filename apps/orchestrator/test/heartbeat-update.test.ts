@@ -2,11 +2,16 @@ import { ADDRESS_ASK } from "@workspace/contracts"
 import {
   conversationMessages,
   conversations,
+  domains,
   eq,
+  events,
   openTask,
+  ownerTasks,
+  putOff,
   readTasks,
   serverMessageId,
   setStep,
+  sql,
   staff,
   supersedeFact,
   type Tenancy,
@@ -19,7 +24,7 @@ import {
   type writeText,
   writeUpdate,
 } from "../src/heartbeat-write.ts"
-import { sayLive } from "../src/publish.ts"
+import { offerAddress, sayLive } from "../src/publish.ts"
 import { announce, searchInstanceId } from "../src/search.ts"
 import { freshOrg, kit as pool } from "./fixture.ts"
 import { stubNet } from "./fixtures/domains.ts"
@@ -66,7 +71,7 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
       .map((p) => p.text)
   }
 
-  it("say the site is live as they did", async () => {
+  it("say the site is live, and ask about an address the build's offer never asked", async () => {
     expect(
       await posted(
         (orgId) =>
@@ -74,7 +79,7 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
         () => "site.live:site-1"
       )
     ).toEqual([
-      "Congratulations, your website is live. Customers can now find you online. You can view it with the Visit your website button, or ask me to open it.",
+      "Congratulations, your website is live. Customers can now find you online and ask for a quote at any time. Whenever you're ready for an address of your own, it takes a couple of minutes and customers trust it more than the free one.",
     ])
   })
 
@@ -174,7 +179,7 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
     })
     const { parts, task } = await liveFor("hello@sparkleclean.co.uk")
     expect(parts.find((p) => p.type === "text")).toMatchObject({
-      text: "Congratulations, your website is live. Your email is on sparkleclean.co.uk, so I'll put the site there. It's with 123-Reg.",
+      text: "Congratulations, your website is live. Your email runs on sparkleclean.co.uk, so you already own the right address for it: customers who've emailed you will recognise it, and Google will tie your website to the name you've used all along. Shall I put it there?",
     })
     expect(parts.find((p) => p.type === "data-button")?.data).toEqual({
       label: "Connect sparkleclean.co.uk",
@@ -192,6 +197,193 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
     vi.unstubAllGlobals()
   })
 
+  /** A fresh org with a chat, `setup` run in it, then `say`, and what landed under `key`. */
+  async function spoken(
+    setup: (
+      db: Parameters<Parameters<Tenancy["withOrg"]>[1]>[0],
+      orgId: string
+    ) => Promise<unknown>,
+    say: (orgId: string) => Promise<void>,
+    key: (orgId: string) => string
+  ) {
+    const orgId = await freshOrg(pool)
+    await pool.withOrg({ orgId }, async (db) => {
+      const [chief] = await db
+        .select({ id: staff.id })
+        .from(staff)
+        .where(eq(staff.staffCode, "COS-001"))
+      await db.insert(conversations).values({
+        orgId,
+        kind: "assistant",
+        createdByStaffId: chief?.id as string,
+      })
+      await setup(db, orgId)
+    })
+    await say(orgId)
+    const [row] = await pool.withOrg({ orgId }, (db) =>
+      db
+        .select({ content: conversationMessages.content })
+        .from(conversationMessages)
+        .where(eq(conversationMessages.id, serverMessageId(key(orgId))))
+    )
+    const parts =
+      (
+        row?.content as
+          | { parts: { type: string; text?: string; data?: unknown }[] }
+          | undefined
+      )?.parts ?? []
+    return {
+      orgId,
+      text: parts.find((p) => p.type === "text")?.text,
+      button: parts.find((p) => p.type === "data-button")?.data,
+      asks: parts.some((p) => p.type === "data-build_questions"),
+    }
+  }
+
+  /** A name no other run of this suite holds, since live names are unique. */
+  let name = ""
+  const fresh = () => {
+    name = `d${crypto.randomUUID().slice(0, 8)}.co.uk`
+  }
+
+  const claim = (
+    db: Parameters<Parameters<Tenancy["withOrg"]>[1]>[0],
+    orgId: string,
+    state: "awaiting_dns" | "verifying" | "failed",
+    lastCheck: unknown = null
+  ) =>
+    db.insert(domains).values({
+      orgId,
+      siteId: orgId,
+      name,
+      primaryHost: name,
+      origin: "connected",
+      method: "records",
+      state,
+      lastCheck,
+    })
+
+  const live = (orgId: string) =>
+    sayLive({}, pool, orgId, "site-1", "https://sparkle.example.test/")
+
+  it("offers the address once while the first build runs, with the card, and opens the task", async () => {
+    const offered = await spoken(
+      async () => undefined,
+      (orgId) => offerAddress({}, pool, orgId),
+      (orgId) => `address.offer:${orgId}`
+    )
+    expect(offered.text).toMatch(/^While I put your website together/)
+    expect(offered.asks).toBe(true)
+    const tasks = await pool.withOrg({ orgId: offered.orgId }, readTasks)
+    expect(
+      tasks
+        .find((t) => t.kind === "address")
+        ?.steps.find((s) => s.step === "find_out")
+    ).toMatchObject({ state: "blocked" })
+    // An address task already there: nothing more is offered.
+    await offerAddress({}, pool, offered.orgId)
+    const posts = await pool.withOrg({ orgId: offered.orgId }, (db) =>
+      db.select({ id: conversationMessages.id }).from(conversationMessages)
+    )
+    expect(posts).toHaveLength(1)
+  })
+
+  it("brings the setting back at publish while it is still due, with a button to show it", async () => {
+    fresh()
+    const said = await spoken(
+      (db, orgId) => claim(db, orgId, "awaiting_dns"),
+      live,
+      () => "site.live:site-1"
+    )
+    expect(said.text).toContain(
+      `Now's the moment to add the setting for ${name}`
+    )
+    expect(said.button).toEqual({
+      label: "Show the setting",
+      action: { kind: "ask", text: `Show me the setting for ${name}` },
+    })
+  })
+
+  it("says the padlock is on its way at publish when the setting is in", async () => {
+    fresh()
+    const said = await spoken(
+      (db, orgId) =>
+        claim(db, orgId, "verifying", { status: "pending_certificate" }),
+      live,
+      () => "site.live:site-1"
+    )
+    expect(said.text).toContain(`while ${name} gets its security padlock`)
+    expect(said.button).toMatchObject({ label: "Visit your website" })
+  })
+
+  it("brings a lapsed claim's setting back at publish, with a button to connect it again", async () => {
+    fresh()
+    const said = await spoken(
+      async (db, orgId) => {
+        await openTask(db, orgId, "address", { name })
+        await claim(db, orgId, "failed")
+      },
+      live,
+      () => "site.live:site-1"
+    )
+    expect(said.text).toContain(`${name} wasn't connected in time`)
+    expect(said.button).toEqual({
+      label: `Connect ${name}`,
+      action: { kind: "ask", text: `Put the site on ${name}` },
+    })
+  })
+
+  it("offers Google at publish to an owner who said no to an address of their own", async () => {
+    const said = await spoken(
+      async (db, orgId) => {
+        const task = await openTask(db, orgId, "address")
+        await db
+          .update(ownerTasks)
+          .set({ state: "declined" })
+          .where(eq(ownerTasks.id, task))
+      },
+      live,
+      () => "site.live:site-1"
+    )
+    expect(said.text).toContain("connect your Google account")
+    expect(said.button).toEqual({
+      label: "Connect Google",
+      action: { kind: "connect", service: "google" },
+    })
+  })
+
+  it("asks once more at publish about an address put off during the build", async () => {
+    const said = await spoken(
+      async (db, orgId) => {
+        const task = await openTask(db, orgId, "address")
+        await putOff(db, task, 7)
+      },
+      live,
+      () => "site.live:site-1"
+    )
+    expect(said.text).toContain(
+      "Whenever you're ready for an address of your own"
+    )
+    expect(said.asks).toBe(true)
+  })
+
+  it("leaves the live message to a domain ready and waiting, and marks the launch", async () => {
+    fresh()
+    const said = await spoken(
+      (db, orgId) => claim(db, orgId, "verifying", { status: "valid" }),
+      live,
+      () => "site.live:site-1"
+    )
+    expect(said.text).toBeUndefined()
+    const marked = await pool.withOrg({ orgId: said.orgId }, (db) =>
+      db
+        .select({ id: events.eventId })
+        .from(events)
+        .where(sql`${events.type} = 'site.launch_deferred'`)
+    )
+    expect(marked).toHaveLength(1)
+  })
+
   it("announce Search Console as they did", async () => {
     const host = "sparkle.example.test"
     expect(
@@ -200,7 +392,7 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
         (orgId) => searchInstanceId(orgId, host)
       )
     ).toEqual([
-      `${host} is now in your Google Search Console. I've sent Google your page list. New sites take days to a few weeks to show up.`,
+      `Google now knows about ${host}, and I've sent it every page on your website. New websites usually take a few days to a few weeks to start showing in search, and I'll tell you how it's doing as people find you.`,
     ])
   })
 })
@@ -293,7 +485,7 @@ describe("a model-written update", () => {
     const write = writer(UPDATE.template)
     await writeUpdate(env, kit, "org", UPDATE, write)
     expect(write.mock.calls[0]?.[1]).toMatch(
-      /bold for the one key fact, inline code for a DNS value or record name, a numbered list for steps[^\n]*a link[^\n]*No headings, no tables/
+      /bold for the one key fact, inline code for a DNS value or record name, a numbered list for steps[^\n]*No links: a button under the message opens whatever the owner needs[^\n]*No headings, no tables/
     )
   })
 
@@ -317,9 +509,43 @@ describe("a model-written update", () => {
       15_000
     )
   })
+
+  it("hands the model the moment's brief and keeps the house style in what it returns", async () => {
+    const { kit } = kitFor()
+    const brief = "Say why it matters to the business."
+    const write = writer(
+      "www.brightclean.co.uk took 3 days — I've let it go for now."
+    )
+    expect(
+      await writeUpdate(env, kit, "org", { ...UPDATE, brief }, write)
+    ).toBe("www.brightclean.co.uk took 3 days, I've let it go for now.")
+    expect(write).toHaveBeenCalledWith(
+      "test-key",
+      expect.stringMatching(/never point at the screen/),
+      { facts: UPDATE.facts, draft: UPDATE.template, brief },
+      15_000
+    )
+  })
 })
 
 describe("faithful", () => {
+  it("reads what the owner sees: a value only in a link's target is missing", () => {
+    const facts = { host: "sparkle.co.uk" }
+    expect(
+      faithful(
+        "[Removing this link is not allowed](https://sparkle.co.uk) is on Google.",
+        facts
+      )
+    ).toBe(false)
+    expect(faithful("**sparkle.co.uk** is on Google.", facts)).toBe(true)
+  })
+
+  it("refuses a message cut off mid-sentence", () => {
+    const facts = { host: "sparkle.co.uk" }
+    expect(faithful("sparkle.co.uk is live. Customers near", facts)).toBe(false)
+    expect(faithful("sparkle.co.uk is live.", facts)).toBe(true)
+  })
+
   it("wants every value verbatim and no other number or link", () => {
     const facts = { host: "sparkle.co.uk", slug: "sparkle-stg.remeai.co.uk" }
     expect(

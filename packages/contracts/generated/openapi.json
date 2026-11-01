@@ -1304,7 +1304,9 @@
                     "what": {
                       "type": "string",
                       "enum": [
-                        "published"
+                        "published",
+                        "domain_live",
+                        "google_added"
                       ]
                     },
                     "revision": {
@@ -1326,6 +1328,11 @@
                         "version"
                       ],
                       "additionalProperties": false
+                    },
+                    "host": {
+                      "type": "string",
+                      "maxLength": 253,
+                      "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
                     }
                   },
                   "required": [
@@ -1333,8 +1340,7 @@
                     "event_id",
                     "assignment_id",
                     "at",
-                    "what",
-                    "revision"
+                    "what"
                   ],
                   "additionalProperties": false
                 },
@@ -11036,7 +11042,9 @@
               "what": {
                 "type": "string",
                 "enum": [
-                  "published"
+                  "published",
+                  "domain_live",
+                  "google_added"
                 ]
               },
               "revision": {
@@ -11058,6 +11066,11 @@
                   "version"
                 ],
                 "additionalProperties": false
+              },
+              "host": {
+                "type": "string",
+                "maxLength": 253,
+                "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
               }
             },
             "required": [
@@ -11065,8 +11078,7 @@
               "event_id",
               "assignment_id",
               "at",
-              "what",
-              "revision"
+              "what"
             ],
             "additionalProperties": false
           },
@@ -52017,7 +52029,9 @@
                     "what": {
                       "type": "string",
                       "enum": [
-                        "published"
+                        "published",
+                        "domain_live",
+                        "google_added"
                       ]
                     },
                     "revision": {
@@ -52039,6 +52053,11 @@
                         "version"
                       ],
                       "additionalProperties": false
+                    },
+                    "host": {
+                      "type": "string",
+                      "maxLength": 253,
+                      "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
                     }
                   },
                   "required": [
@@ -52046,8 +52065,7 @@
                     "event_id",
                     "assignment_id",
                     "at",
-                    "what",
-                    "revision"
+                    "what"
                   ],
                   "additionalProperties": false
                 },

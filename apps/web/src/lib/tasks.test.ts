@@ -130,7 +130,7 @@ it("says Waiting on you, and what for, on every stage that waits on the owner", 
   })
   expect(row("Your own address")).toMatchObject({
     status: "yours",
-    detail: "Make the DNS change for spark.co.uk",
+    detail: "Add the setting for spark.co.uk",
   })
   expect(row("Show up on Google")).toMatchObject({
     status: "yours",

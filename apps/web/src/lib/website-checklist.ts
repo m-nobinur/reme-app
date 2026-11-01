@@ -1,4 +1,4 @@
-import type { ActivitySegment } from "@workspace/contracts"
+import { type ActivitySegment, searchConsoleUrl } from "@workspace/contracts"
 import {
   type CopyContext,
   notStarted,
@@ -214,7 +214,14 @@ export function checklistFor(
             }),
             mark: MARK[google.state],
             status: segmentKind(google),
-            action: nextAction(google, "Google"),
+            action:
+              google.state === "done" && workspace.host
+                ? {
+                    kind: "visit",
+                    label: "Open in Google Search Console",
+                    href: searchConsoleUrl(workspace.host),
+                  }
+                : nextAction(google, "Google"),
           }
         : {
             id: "google",

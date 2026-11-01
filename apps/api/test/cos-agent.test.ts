@@ -362,6 +362,47 @@ describe("the CoS's instructions", () => {
       /tell the owner when something happens only while something is watching for it[^\n]*Never end a reply on "I'll\.\.\." with no tool call/
     )
   })
+
+  describe("on the website's own address and Google", () => {
+    it("speak with the why and a benefit in the owner's terms, never the plumbing", () => {
+      expect(INSTRUCTIONS).toMatch(
+        /website's own address or Google, talk like a sharp, helpful assistant[^\n]*what is happening, why it matters to this business[^\n]*what happens next, and the one thing they can do/
+      )
+      expect(INSTRUCTIONS).toMatch(
+        /Never use these words with the owner: DNS, CNAME, record, SSL, certificate, property, sitemap, propagation/
+      )
+      expect(INSTRUCTIONS).toMatch(
+        /No opener such as "Good news", "Great" or "Nice work", and at most one exclamation mark/
+      )
+    })
+
+    it("make the build's address offer when it did not land, once, with its benefit", () => {
+      expect(INSTRUCTIONS).toMatch(
+        /When the first build starts, I offer the address myself[^\n]*still no address task, that offer did not land, so make it in your next reply, once[^\n]*goes live on it the moment they publish/
+      )
+    })
+
+    it("put the address or Google off on not now, and keep a domain whose setting must wait", () => {
+      expect(INSTRUCTIONS).toMatch(
+        /not now to the address or to Google, call put_off with that kind/
+      )
+      expect(INSTRUCTIONS).toMatch(
+        /setting will have to wait[^\n]*don't put anything off: the domain stays saved[^\n]*goes live on its free address first/
+      )
+      expect(INSTRUCTIONS).toMatch(
+        /asks to see the setting for a domain that is being connected[^\n]*call connect_domain with that name: it shows the same card again/
+      )
+    })
+
+    it("leave Google to the offer once the setting is in, and never offer a purchase while buying is off", () => {
+      expect(INSTRUCTIONS).toMatch(
+        /Once the owner's setting is in, I offer Google myself, with a Connect Google button; when that message is in the conversation, don't offer it again/
+      )
+      expect(INSTRUCTIONS).toMatch(
+        /When the workspace's buying is false, never offer to buy a domain or call find_domain/
+      )
+    })
+  })
 })
 
 describe("a tool's schema", () => {

@@ -348,7 +348,7 @@ describe("what waits on the owner", () => {
         upcoming: [],
         done: [],
       })[0]?.title
-    ).toBe("Make the DNS change for pebblewick.bnwise.tech")
+    ).toBe("Add the setting for pebblewick.bnwise.tech")
   })
 
   it("follows the furthest step, so a stale choice never stands for the DNS change", () => {
@@ -361,7 +361,7 @@ describe("what waits on the owner", () => {
         { id: "records", state: "waiting" },
       ],
     }
-    expect(pillLine(stale, ctx)).toBe("Wren is waiting for your DNS change")
+    expect(pillLine(stale, ctx)).toBe("Wren is waiting for your domain setting")
     expect(segmentTitle(stale, ctx)).toMatch(/pebblewick\.bnwise\.tech/)
     const choosing: ActivitySegment = {
       ...stale,

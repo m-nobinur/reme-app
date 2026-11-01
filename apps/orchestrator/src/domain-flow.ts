@@ -22,13 +22,16 @@ import {
   domainHeldElsewhere,
   domains,
   eq,
+  events,
   failureCode,
   listOrgIds,
   type OrgScopedDb,
   orgs,
   pgCode,
   postAssistantMessage,
+  readTasks,
   type SQL,
+  searchConnections,
   sql,
   syncTasks,
   type Tenancy,
@@ -36,6 +39,15 @@ import {
 } from "@workspace/db"
 import { canonical } from "@workspace/facade"
 import { z } from "zod"
+import {
+  aboutOf,
+  CONNECT_GOOGLE,
+  domainTakesOver,
+  googleOffer,
+  liveOnDomain,
+  padlockLine,
+  VISIT,
+} from "./address-copy.ts"
 import { applyUrl } from "./domain-connect.ts"
 import {
   alreadyPointsAtUs,
@@ -529,7 +541,7 @@ export function statusText(check: DomainCheck, name: string, primary: string) {
       return `Nearly there. ${host} still has an old ${first.type} record (${first.value}) in the way. Delete it and I'll pick it up from there.`
     }
     case "pending_certificate":
-      return `I can see your records for ${primary}. Your secure certificate is being issued; I'll tell you when it's live.`
+      return padlockLine(primary)
     case "invalid_configuration":
       return `${primary} no longer points at your website. Put the record back and I'll pick it up again.`
     default:
@@ -551,7 +563,7 @@ function nextStep(
     return `${name} was removed. Offer to connect it again.`
   return (
     statusText(check, name, primary) ??
-    "Nothing to do: the records are not there yet and I'm watching for them."
+    "Nothing to do: the setting is not there yet and I'm watching for it."
   )
 }
 
@@ -785,10 +797,18 @@ export async function look(
   domainId: string,
   refresh?: boolean
 ): Promise<Observed<Seen>> {
-  const read = await kit.withOrg({ orgId }, async (db) => ({
-    row: await readDomain(db, domainId),
-    publishedAt: await firstPublished(db),
-  }))
+  const read = await kit.withOrg({ orgId }, async (db) => {
+    const [connection] = await db
+      .select({ state: searchConnections.state })
+      .from(searchConnections)
+    return {
+      row: await readDomain(db, domainId),
+      publishedAt: await firstPublished(db),
+      google:
+        connection?.state === "active" ||
+        (await readTasks(db)).some((t) => t.kind === "google"),
+    }
+  })
   const { row } = read
   if (!row || !connecting(row.state)) return { result: { gone: true } }
   const seen = await currentCheck(env, row, refresh)
@@ -875,7 +895,23 @@ export async function look(
                 : `Add the records at ${where}`,
         },
       }),
-      ...(text && { tell: async () => ({ text, ...(button && { button }) }) }),
+      // The setting is in and only the padlock is left: the moment to offer
+      // Google, once, unless it is connected or the owner already answered.
+      ...(txt.length === 0 &&
+      check.status === "pending_certificate" &&
+      !read.google
+        ? {
+            tell: async () => ({
+              text: await writeUpdate(
+                env,
+                kit,
+                orgId,
+                googleOffer(seen.primary, await aboutOf(kit, orgId))
+              ),
+              button: CONNECT_GOOGLE,
+            }),
+          }
+        : text && { tell: async () => ({ text, ...(button && { button }) }) }),
     },
   }
 }
@@ -907,7 +943,7 @@ export async function nudge(
         domain: row.name,
         ...(provider.success && { provider: provider.data.name }),
       },
-      template: `I'm still waiting for the records for ${row.name}.${where} There's no need to tell me when they're in; I'll see them.`,
+      template: `I haven't seen the setting for ${row.name} yet.${where} There's no need to tell me when it's in; I'll see it.`,
     }),
     ...(button && { button }),
   }
@@ -1005,24 +1041,48 @@ export async function served(
       .where(
         sql`${domains.state} = 'removed' and ${domains.removedAt} = ${claim.row.activatedAt?.toISOString() ?? null}::timestamptz`
       )
-    return { ...claim, replaced: replaced?.host }
+    // A launch: ready before the first publish, which left its live message
+    // to this one (`site.launch_deferred`, publish.ts), and replacing nothing.
+    const [deferred] = await db
+      .select({ at: events.occurredAt })
+      .from(events)
+      .where(sql`${events.type} = 'site.launch_deferred'`)
+      .limit(1)
+    const launch =
+      !!deferred &&
+      !replaced &&
+      Math.abs(
+        (claim.row.activatedAt?.getTime() ?? 0) - deferred.at.getTime()
+      ) <
+        60 * MINUTE
+    return { ...claim, replaced: replaced?.host, launch }
   })
   if (!found) return { result: { gone: true } }
-  const { row, slug, replaced } = found
+  const { row, slug, replaced, launch } = found
   const ready = await reaches(row.primaryHost, row.siteId)
   // Serving is the proof Google is moved on: the new host added, the old one let go.
   let google: "added" | "moved" | null = null
-  let letGo = slug
   if (ready) {
     // Only now do the slug host and the other half send visitors on.
     await writePointer(env, kit, orgId, row.siteId, slug)
     google = await moveGoogle(env, kit, orgId, slug)
-    if (replaced && google) {
-      const moved = await moveGoogle(env, kit, orgId, replaced)
-      if (moved === "moved") [google, letGo] = [moved, replaced]
+    if (replaced && google) await moveGoogle(env, kit, orgId, replaced)
+    // What the owner's notifications read as the domain going live.
+    try {
+      await kit.withOrg({ orgId }, async (db) =>
+        appendEvent(db, {
+          orgId,
+          assignmentId: null,
+          staffId: null,
+          type: "domain.live",
+          payload: { domain_id: domainId, host: row.primaryHost },
+          idempotencyKey: await eventKey(`${domainId}:live`),
+        })
+      )
+    } catch (error) {
+      if (pgCode(error) !== "23505") throw error
     }
   }
-  const gsc = "Google Search Console"
   return {
     result: { gone: false, at: Date.now(), ready },
     reading: {
@@ -1031,31 +1091,23 @@ export async function served(
       // Only this proof makes `loads` done; the rows keep it in progress.
       ...(ready && {
         write: { state: "done" },
-        tell: async () => ({
-          text: await writeUpdate(env, kit, orgId, {
-            facts: {
-              host: row.primaryHost,
-              old_host: slug,
-              ...(replaced && { replaced_domain: replaced }),
-              ...(google && { google: gsc }),
+        tell: async () => {
+          const about = await aboutOf(kit, orgId)
+          return {
+            text: await writeUpdate(
+              env,
+              kit,
+              orgId,
+              launch
+                ? liveOnDomain(row.primaryHost, about, !!google)
+                : domainTakesOver(row.primaryHost, about, !!google, replaced)
+            ),
+            button: {
+              label: VISIT,
+              action: { kind: "open", url: `https://${row.primaryHost}/` },
             },
-            template: `${row.primaryHost} is live. ${slug} now forwards to it, so links you've shared still work.${
-              replaced
-                ? ` ${replaced} is no longer used, so its DNS record can be deleted.`
-                : ""
-            }${
-              google === "moved"
-                ? ` I'm adding it to your ${gsc} and taking ${letGo} out of it.`
-                : google
-                  ? ` I'm adding it to your ${gsc} too.`
-                  : ""
-            }`,
-          }),
-          button: {
-            label: "Open your website",
-            action: { kind: "open", url: `https://${row.primaryHost}/` },
-          },
-        }),
+          }
+        },
       }),
     },
   }
@@ -1147,7 +1199,7 @@ export async function expireDomain(
         key: `${domainId}:failed`,
         text: await writeUpdate(env, kit, orgId, {
           facts: { ...facts, days: "3" },
-          template: `I didn't see the records for ${name} within 3 days, so I've stopped watching.${where} Ask me again any time.`,
+          template: `I didn't see the setting for ${name} within 3 days, so I've let it go for now.${where} Ask me again any time.`,
         }),
         button: again,
       }

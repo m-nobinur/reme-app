@@ -478,9 +478,9 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     kind: "domain",
     working: [
       onDomain((d) => `Checking ${d}`),
-      onDomain((d) => `Checking the records for ${d}`),
+      onDomain((d) => `Checking the setting for ${d}`),
       "Checking your domain",
-      "Checking your DNS",
+      "Checking your domain's setting",
     ],
     done: [onDomain((d) => `Checked ${d}`), "Checked your domain"],
     fail: [onDomain((d) => `check ${d}`), "check your domain"],
@@ -1232,7 +1232,7 @@ const websiteNow = (segment: ActivitySegment) => {
 const WAITING: Partial<Record<ActivitySegment["kind"], string>> = {
   onboarding: "your answer",
   golive: "your approval to publish",
-  domain: "your DNS change",
+  domain: "your domain setting",
   purchase: "your payment",
   google: "you to sign in",
   review: "your approval to publish",
@@ -1244,8 +1244,8 @@ const STEP_WAITING: Readonly<Record<string, string>> = {
   find_out: "your answer",
   choose: "your choice of web address",
   purchase: "your payment",
-  records: "your DNS change",
-  ownership: "your DNS change",
+  records: "your domain setting",
+  ownership: "your domain setting",
   sign_in: "you to sign in",
   permissions: "you to allow access",
   verify: "your help with Google",
@@ -1522,10 +1522,12 @@ const WAIT_TITLES: Readonly<Record<string, (d: string | null) => string>> = {
   choose: () => "Choose a name for your website",
   purchase: (d) => (d ? `Pay for ${d}` : "Pay for your domain"),
   payment: (d) => (d ? `Pay for ${d}` : "Pay for your domain"),
-  records: (d) => (d ? `Make the DNS change for ${d}` : "Make your DNS change"),
+  records: (d) =>
+    d ? `Add the setting for ${d}` : "Add the setting for your domain",
   ownership: (d) =>
-    d ? `Make the DNS change for ${d}` : "Make your DNS change",
-  dns: (d) => (d ? `Make the DNS change for ${d}` : "Make your DNS change"),
+    d ? `Add the setting for ${d}` : "Add the setting for your domain",
+  dns: (d) =>
+    d ? `Add the setting for ${d}` : "Add the setting for your domain",
   sign_in: () => "Sign in to Google",
   permissions: () => "Give Google the permission it asks for",
   verify: () => "Help Google check your website",
@@ -1629,14 +1631,14 @@ const STEP_LABELS: Partial<
     find_out: "Current address",
     choose: "Name",
     purchase: "Purchase",
-    records: "DNS change",
+    records: "Domain setting",
     ownership: "Ownership",
-    certificate: "Certificate",
+    certificate: "Security padlock",
     loads: "Live check",
   },
   domain: {
-    dns: "DNS change",
-    certificate: "Certificate",
+    dns: "Domain setting",
+    certificate: "Security padlock",
     loads: "Live check",
   },
   purchase: {
@@ -1768,9 +1770,9 @@ export const notStarted = (segment: ActivitySegment) =>
  */
 const PROVED: Readonly<Record<string, (n: Names) => string>> = {
   purchase: (n) => `${startDomain(n)} is registered in your name`,
-  records: (n) => `Your DNS points ${domain(n)} at your website`,
+  records: (n) => `The setting for ${domain(n)} is in`,
   ownership: (n) => `Ownership of ${domain(n)} is confirmed`,
-  certificate: (n) => `The certificate for ${domain(n)} is active`,
+  certificate: (n) => `The security padlock for ${domain(n)} is ready`,
   loads: (n) => `Your website loads at ${domain(n)}`,
   sign_in: () => "You signed in to Google",
   permissions: () => "Google can read your search data",
@@ -1963,7 +1965,11 @@ export const PAGE_WORDS = {
   notPublished: "Not published yet",
   notConnected: "Not connected",
   afterLive: "Connect it once your website is live",
-  afterDomain: "Connect it once your own domain is live",
+  afterDomain: "Connect it once you have your own domain",
+  /** Google connected before the first publish, which hands the site to it. */
+  googleEarly: "Connected, I'll add your site when it's live",
+  /** The owner's domain proven ready before the first publish. */
+  domainReady: "Ready, goes live when you publish",
 } as const
 
 type PageExtras = {
@@ -1980,24 +1986,33 @@ type PageExtras = {
 /** An address or domain step at work, for a standing row, which shows no steps. */
 const STEP_NOW: Readonly<Record<string, string>> = {
   purchase: "Registering the name",
-  records: "Setting up the records",
+  records: "Looking for the setting",
   ownership: "Checking the domain is yours",
-  certificate: "The certificate is on its way",
-  loads: "Checking your website loads on it",
+  certificate: "Adding the security padlock",
+  loads: "Checking your website opens on it",
 }
 
 /** A standing row's line while its job is at work, where the panel's steps would say it. */
 const standingNow = (segment: ActivitySegment): string | undefined => {
   const step = segment.steps.find((s) => s.state === "now")?.id
+  const done = (id: string) =>
+    segment.steps.some((s) => s.id === id && s.state === "done")
   switch (segment.kind) {
     case "address":
+      // The padlock is ready and the live check waits: only a site never
+      // published holds a domain there.
+      if (!step && done("certificate") && !done("loads"))
+        return PAGE_WORDS.domainReady
       return step && STEP_NOW[step]
     case "domain":
       return (step && STEP_NOW[step]) || STEP_NOW.certificate
     case "purchase":
       return STEP_NOW.purchase
     case "google":
-      return "Checking your site with Google"
+      // Signed in with nothing to verify yet: the site goes to Google once live.
+      return done("sign_in") && !step
+        ? PAGE_WORDS.googleEarly
+        : "Checking your site with Google"
   }
 }
 
