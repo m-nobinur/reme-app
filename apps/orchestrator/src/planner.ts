@@ -526,7 +526,16 @@ function unusedDirections(
   return directionsFor(industry, library).filter((d) => !used.has(d.id))
 }
 
-/** One row per combination other businesses in the industry were planned with. */
+/** `- key (count)` per distinct key, most used first. */
+function tally(keys: readonly string[]): string[] {
+  const counts = new Map<string, number>()
+  for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1)
+  return [...counts]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([key, n]) => `- ${key} (${n})`)
+}
+
+/** One row per combination and home order other businesses in the industry were planned with. */
 export function diversityNote(
   recent: readonly RecentDesign[],
   industry: IndustryId | undefined,
@@ -534,20 +543,27 @@ export function diversityNote(
 ): string[] {
   const used = recent.filter((r) => r.direction)
   if (used.length === 0) return []
-  const counts = new Map<string, number>()
-  for (const r of used) {
-    const key = `${r.direction} + hero ${r.hero ?? "none"} + services ${r.services ?? "none"}`
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
   const unused = unusedDirections(industry, recent, library)
+  const homes = used.flatMap((r) =>
+    r.home ? [r.home.split(",").join(", ")] : []
+  )
   return [
     `Other ${industry ?? "service"} businesses' sites, planned most recently (up to 20), use these direction, home hero and home services combinations. Plan one that is not on this list. The owner's own choices above still win.`,
-    ...[...counts]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([combo, n]) => `- ${combo} (${n})`),
+    ...tally(
+      used.map(
+        (r) =>
+          `${r.direction} + hero ${r.hero ?? "none"} + services ${r.services ?? "none"}`
+      )
+    ),
     ...(unused.length > 0
       ? [
           `Directions none of them uses yet: ${unused.map((d) => d.id).join(", ")}. Unless the owner chose one, take the one of these that fits this business best.`,
+        ]
+      : []),
+    ...(homes.length > 0
+      ? [
+          "Their home pages hold these sections in this order. Give this home page another order or another mix of sections, from the kinds the home page may hold, keeping every section the plan needs and the owner's choices.",
+          ...tally(homes),
         ]
       : []),
   ]
@@ -555,7 +571,8 @@ export function diversityNote(
 
 /**
  * The plan's direction as a retry reads it when another business in the
- * industry already has it and one is left that none has; never the owner's pick.
+ * industry already has it, or it is not in the library, and one is left that
+ * none has; never the owner's pick.
  */
 export function sharedDirection(
   blueprint: Blueprint,
@@ -563,17 +580,21 @@ export function sharedDirection(
   recent: readonly RecentDesign[],
   library: readonly DesignDirection[]
 ): string[] {
+  const known = library.some((d) => d.id === blueprint.direction)
+  const taken = [...new Set(recent.flatMap((r) => r.direction ?? []))]
   if (
     ownerChoices(facts).direction ||
-    !recent.some((r) => r.direction === blueprint.direction)
+    (known ? !taken.includes(blueprint.direction) : taken.length === 0)
   )
     return []
   const unused = unusedDirections(industryOf(facts), recent, library)
-  return unused.length > 0
-    ? [
-        `direction ${blueprint.direction} is another business's in this industry already; take the one of ${unused.map((d) => d.id).join(", ")} that fits this business best, with its own section order and variants`,
-      ]
-    : []
+  if (unused.length === 0) return []
+  const take = `take the one of ${unused.map((d) => d.id).join(", ")} that fits this business best, with its own section order and variants`
+  return [
+    known
+      ? `direction ${blueprint.direction} is another business's in this industry already; ${take}`
+      : `another business in this industry has ${taken.join(", ")} already; ${take}`,
+  ]
 }
 
 /** The direction recent sites used least, the first such in library order. */
@@ -589,20 +610,32 @@ function leastUsed(
 const paletteUses = (id: string, recent: readonly RecentDesign[]) =>
   recent.filter((r) => r.palette === id).length
 
-/** The direction's palette recent sites used least, the first such in its order. */
+/**
+ * The direction's palette recent sites in the trade used least, ties going in
+ * the trade's own order: the list rotated to the trade's place among the
+ * direction's industries, so two trades on one direction start apart.
+ * shortcut: a direction with more trades than palettes (bold_young) gives
+ * every palettes.length-th trade the same start; seed by name if that shows.
+ */
 function leastUsedPalette(
   direction: DesignDirection,
-  recent: readonly RecentDesign[]
+  recent: readonly RecentDesign[],
+  industry: IndustryId | undefined
 ): DesignDirection["palettes"][number] {
-  return direction.palettes.reduce((best, id) =>
+  const { palettes } = direction
+  const at =
+    Math.max(0, direction.industries.indexOf(industry as IndustryId)) %
+    palettes.length
+  return [...palettes.slice(at), ...palettes.slice(0, at)].reduce((best, id) =>
     paletteUses(id, recent) < paletteUses(best, recent) ? id : best
   )
 }
 
 /**
- * The plan with a palette fewer recent sites in the industry share: when the
- * owner picked none and the plan's preset is used more than the direction's
- * least used, that one instead, so two businesses in a trade do not look alike.
+ * The plan with code's palette unless the owner gave colours: the direction's
+ * least used in the trade, ties in the trade's order, so two businesses in a
+ * trade, or two trades on one direction, do not look alike. The feature list
+ * names the palette, so it names the new one.
  */
 function unsharedPalette(
   blueprint: Blueprint,
@@ -611,13 +644,75 @@ function unsharedPalette(
   library: readonly DesignDirection[]
 ): Blueprint {
   const direction = library.find((d) => d.id === blueprint.direction)
-  const { palette } = blueprint
-  if (!direction || palette.kind !== "preset" || ownerChoices(facts).palette)
-    return blueprint
-  const least = leastUsedPalette(direction, recent)
-  return paletteUses(least, recent) < paletteUses(palette.id, recent)
-    ? { ...blueprint, palette: { kind: "preset", id: least } }
-    : blueprint
+  if (!direction || ownerChoices(facts).palette) return blueprint
+  const id = leastUsedPalette(direction, recent, industryOf(facts))
+  const label = (p: Blueprint["palette"]) =>
+    p.kind === "preset" ? PALETTES.find((q) => q.id === p.id)?.label : undefined
+  const [was, now] = [label(blueprint.palette), label({ kind: "preset", id })]
+  return {
+    ...blueprint,
+    palette: { kind: "preset", id },
+    features:
+      was && now
+        ? blueprint.features.map((f) => f.replaceAll(was, now))
+        : blueprint.features,
+  }
+}
+
+/** A direction id the model stitched onto a library id (`counsel_numbered_rows`), as that direction. */
+function libraryDirection(
+  blueprint: Blueprint,
+  library: readonly DesignDirection[]
+): Blueprint {
+  if (library.some((d) => d.id === blueprint.direction)) return blueprint
+  const base = library
+    .filter((d) => blueprint.direction.startsWith(`${d.id}_`))
+    .sort((a, b) => b.id.length - a.id.length)[0]
+  return base ? { ...blueprint, direction: base.id } : blueprint
+}
+
+/** Levenshtein distance between two lists. */
+function editDistance(a: readonly string[], b: readonly string[]): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i]
+    for (let j = 1; j <= b.length; j++)
+      row[j] = Math.min(
+        (prev[j] ?? 0) + 1,
+        (row[j - 1] ?? 0) + 1,
+        (prev[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1)
+      )
+    prev = row
+  }
+  return prev[b.length] ?? 0
+}
+
+/**
+ * The home page as a retry reads it when its section kinds are close to
+ * another business's in the trade (edit distance under half the longer list);
+ * never when the owner described the arrangement.
+ */
+export function sharedHome(
+  blueprint: Blueprint,
+  facts: readonly FactRecord[],
+  recent: readonly RecentDesign[]
+): string[] {
+  if (ownerChoices(facts).directionNote) return []
+  const kinds =
+    blueprint.pages
+      .find((p) => p.page === "home")
+      ?.sections.map((s) => s.kind) ?? []
+  const close = recent
+    .flatMap((r) => (r.home ? [r.home.split(",")] : []))
+    .find(
+      (other) =>
+        editDistance(kinds, other) / Math.max(kinds.length, other.length) < 0.5
+    )
+  return close
+    ? [
+        `the home page's sections (${kinds.join(", ")}) are close to another business's in this industry (${close.join(", ")}); give it another order or another mix of sections, from the kinds the home page may hold`,
+      ]
+    : []
 }
 
 const PURPOSE: Record<PlannedKind, string> = {
@@ -1078,7 +1173,7 @@ export function fallbackBlueprint(input: {
   const fonts = owner.fonts ?? direction.fonts
   const palette = owner.palette ?? {
     kind: "preset" as const,
-    id: leastUsedPalette(direction, recent),
+    id: leastUsedPalette(direction, recent, industry),
   }
   const pairLabel = FONT_PAIRS.find((p) => p.id === fonts)?.label ?? fonts
   const colours =
@@ -1404,8 +1499,14 @@ export async function plan(input: {
   const prompt = plannerPrompt({ ...input, library })
   const calls: Call[] = []
   const errors: string[] = []
+  // A retry that plans from scratch fixes the named faults and makes new ones, such as a dropped page.
+  let rejected: Blueprint | null = null
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     const last = errors.at(-1)
+    const before = rejected
+      ? `<previous_attempt>\n${JSON.stringify(rejected)}\n</previous_attempt>\nReturn this plan with only the faults below fixed; keep everything else as it is.\n`
+      : ""
+    rejected = null
     try {
       const reply = await input.complete({
         model: input.route.model,
@@ -1413,7 +1514,7 @@ export async function plan(input: {
         maxTokens: input.route.maxTokens,
         system: prompt.system,
         user: last
-          ? `${prompt.user}\n<previous_attempt_failed>\n${last}\n</previous_attempt_failed>`
+          ? `${prompt.user}\n${before}<previous_attempt_failed>\n${last}\n</previous_attempt_failed>`
           : prompt.user,
         sessionId: input.sessionId,
         schema: SCHEMA,
@@ -1424,19 +1525,25 @@ export async function plan(input: {
         throw new Error(z.prettifyError(parsed.error).slice(0, 2000))
       }
       const blueprint = unsharedPalette(
-        withOwnerChoices(parsed.data, input.facts),
+        withOwnerChoices(libraryDirection(parsed.data, library), input.facts),
         input.facts,
         input.recent,
         library
       )
       const wrong = [
         ...problems(blueprint, { facts: input.facts, library }),
-        // The last attempt keeps a plan whose only fault is a shared direction over code's plan.
+        // The last attempt keeps a plan whose only fault is a shared direction or home over code's plan.
         ...(attempt < ATTEMPTS
-          ? sharedDirection(blueprint, input.facts, input.recent, library)
+          ? [
+              ...sharedDirection(blueprint, input.facts, input.recent, library),
+              ...sharedHome(blueprint, input.facts, input.recent),
+            ]
           : []),
       ]
-      if (wrong.length > 0) throw new Error(wrong.join("\n"))
+      if (wrong.length > 0) {
+        rejected = blueprint
+        throw new Error(wrong.join("\n"))
+      }
       return { blueprint, source: "model", calls, errors }
     } catch (thrown) {
       errors.push(

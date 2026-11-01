@@ -214,7 +214,8 @@ export const pairs = (xs) =>
  * The per-industry row. `builds` are `{id, industry, tuple, sequence, hash,
  * foldHash}`. Similarity is 1 minus the mean pairwise distance, so higher is
  * more alike; `dupes` counts pairs whose whole tuple is equal, which must be 0.
- * A build with no screenshot has a null hash and drops out of those means.
+ * A build with no screenshot has a null hash and drops out of those means,
+ * as one with no home sections read drops out of the sequence distance.
  */
 export function summarise(builds) {
   const byIndustry = Map.groupBy(builds, (b) => b.industry)
@@ -238,7 +239,9 @@ export function summarise(builds) {
       pairs: distinct("pair"),
       palettes: distinct("palette"),
       seqDistance: mean(
-        all.map(([a, b]) => sequenceDistance(a.sequence, b.sequence))
+        all
+          .filter(([a, b]) => a.sequence.length && b.sequence.length)
+          .map(([a, b]) => sequenceDistance(a.sequence, b.sequence))
       ),
       pageSimilarity: sim("hash"),
       foldSimilarity: sim("foldHash"),

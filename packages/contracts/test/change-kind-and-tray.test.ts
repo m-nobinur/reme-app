@@ -114,11 +114,31 @@ describe("recorded CoS fixtures", () => {
     "../../../evals/fixtures/cos-chat.jsonl",
   ]
 
+  // Recorded on staging while the eval org had a site; it now asks to build first.
+  const earlier = [
+    {
+      input: {
+        text: "Change the headline on my homepage to say 'Spotless homes, every week'.",
+        change_kind: "copy",
+        label: "your homepage headline",
+      },
+    },
+    {
+      input: {
+        text: "Change my headline to 'Fresh every Friday'.",
+        change_kind: "copy",
+        label: "your headline",
+      },
+    },
+  ]
+
   it.each(files)("%s: every request_change call still parses", (file) => {
-    const inputs = objectsIn(file).filter(
-      (o) => o.toolName === "request_change" && "input" in o
-    )
-    expect(inputs.length).toBeGreaterThan(0)
+    const inputs = [
+      ...earlier,
+      ...objectsIn(file).filter(
+        (o) => o.toolName === "request_change" && "input" in o
+      ),
+    ]
     for (const call of inputs) {
       expect(OwnerChangeRequest.safeParse(call.input).success).toBe(true)
     }

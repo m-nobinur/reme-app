@@ -86,8 +86,14 @@ export function serialise(run) {
     sessions[name] = turns.map((turn, i) => {
       const id = `${name}.${i + 1}`
       const { mode, text, deny } = turn.owner
-      owner[id] = { mode, text, deny, outcome: turn.outcome }
-      const kept = turn.chunks.filter((c) => !TRANSIENT.has(c.type))
+      owner[id] = {
+        mode,
+        text,
+        deny,
+        outcome: turn.outcome,
+        parts: turn.parts && redact(turn.parts),
+      }
+      const kept = (turn.chunks ?? []).filter((c) => !TRANSIENT.has(c.type))
       for (const chunk of mergeDeltas(kept)) {
         lines.push({ turn: id, chunk: redact(chunk) })
       }

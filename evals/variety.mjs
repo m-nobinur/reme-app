@@ -113,6 +113,10 @@ async function load(dir) {
     ? JSON.parse(readFileSync(bp, "utf8"))
     : undefined
   const sequence = sequenceOf(layout)
+  if (sequence.length === 0)
+    console.error(
+      `no layout export or content/pages/home.json under ${dir}: sequence distance left out for it`
+    )
   const png = first(
     join(dir, "home-1440.png"),
     join(dir, "screenshots/home-1440.png")

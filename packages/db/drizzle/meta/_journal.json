@@ -239,6 +239,13 @@
       "when": 1793513014475,
       "tag": "0033_recent_designs_palette",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793557990633,
+      "tag": "0034_recent_designs_home",
+      "breakpoints": true
     }
   ]
 }

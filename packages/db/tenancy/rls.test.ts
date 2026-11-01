@@ -286,8 +286,8 @@ const SECURITY_DEFINER_FUNCTIONS: Record<
       }
     },
   },
-  // The planner's diversity note (ADR-038, migrations 0014, 0033). What crosses
-  // tenants is the row shape, so the shape is the probe: four library ids,
+  // The planner's diversity note (ADR-038, migrations 0014, 0033, 0034). What
+  // crosses tenants is the row shape, so the shape is the probe: library ids,
   // no org id, no text. A column added to it fails here. The caller's own org
   // is excluded in the body; the fixtures hold no planned site to drive that.
   recent_designs: {
@@ -296,7 +296,7 @@ const SECURITY_DEFINER_FUNCTIONS: Record<
         select pg_get_function_result(
           'public.recent_designs(uuid, text)'::regprocedure) as result`
       const shape =
-        "TABLE(direction text, hero text, services text, palette text)"
+        "TABLE(direction text, hero text, services text, palette text, home text)"
       return {
         granted: [row?.result === shape ? shape : null],
         refused: [],

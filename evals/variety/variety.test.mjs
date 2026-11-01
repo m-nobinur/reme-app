@@ -268,6 +268,23 @@ test("the hash separates different layouts and holds still for the same one", ()
   assert.equal(hashDistance(fold(topSame), fold(bandsAcross)), 0)
 })
 
+test("a build whose home sections were not read drops out of the sequence distance", () => {
+  const build = (id, sequence) => ({
+    id,
+    industry: "legal",
+    tuple: { direction: id },
+    sequence,
+    hash: null,
+    foldHash: null,
+  })
+  assert.equal(summarise([build("1", []), build("2", [])])[0].seqDistance, null)
+  assert.equal(
+    summarise([build("1", ["hero"]), build("2", ["faq"]), build("3", [])])[0]
+      .seqDistance,
+    1
+  )
+})
+
 test("the summary counts duplicate tuples and averages similarity per industry", () => {
   const same = {
     direction: "a",
