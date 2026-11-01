@@ -150,7 +150,7 @@ async function signup(
       bounded(client.userManagement.createOrganizationMembership(options)),
   }
   try {
-    const org = await createOrg(kit, directory, {
+    const { workosOrganizationId, ...org } = await createOrg(kit, directory, {
       name: parsed.data.name,
       idempotencyKey: key,
       workosUserId: session.workosUserId,
@@ -177,7 +177,12 @@ async function signup(
         )
       )
     }
-    return Response.json(org, { status: 201 })
+    // Out of the body, as ADR-029 keeps the vendor id out of `Org`: web
+    // refreshes the session into it without listing memberships again.
+    return Response.json(org, {
+      status: 201,
+      headers: { "workos-organization-id": workosOrganizationId },
+    })
   } catch (error) {
     if (!(error instanceof EmailTaken)) throw error
     return failure(409, {

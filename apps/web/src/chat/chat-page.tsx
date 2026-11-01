@@ -48,7 +48,7 @@ import { LAST_SHOWN, OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { answerBuildQuestion } from "./build-questions"
 import { BuildStopped } from "./build-stopped"
-import { conversationList, unstored } from "./conversations"
+import { conversationList, seedOpening, unstored } from "./conversations"
 import { cosTools, liveKey, liveState, questionTitles } from "./cos-tools"
 import { saveDesignAnswer } from "./design"
 import { domainPurchase } from "./domain-purchase"
@@ -81,7 +81,8 @@ export function ChatPage() {
   const navigate = useNavigate()
   const { id } = useParams({ strict: false })
   const router = useRouter()
-  const { active, conversations } = frame.useLoaderData()
+  const { active, conversations, opening } = frame.useLoaderData()
+  seedOpening(opening)
   // Onboarding's opening message plays in, the first time it is seen.
   const onboarding = conversations?.some(
     (each) => each.id === id && each.kind === "onboarding"
