@@ -2,12 +2,14 @@
 import { plain } from "../accent"
 import Base from "../layouts/Base.astro"
 import Sections from "../layouts/Sections.astro"
+import { sharePhoto } from "../header-photo"
 import { site } from "../site-config"
 ---
 
 <Base
   title={site.quoteTitle || plain(site.quoteHeading)}
   description={site.quoteDescription || site.quoteIntro}
+  image={sharePhoto("quote")}
 >
   <Sections page="quote" />
 </Base>

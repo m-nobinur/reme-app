@@ -17,6 +17,8 @@ interface Props {
   description?: string
   jsonLd?: Record<string, unknown>[]
   noindex?: boolean
+  /** The page's share image, from src/header-photo.ts (its header photo, else the hero or logo). */
+  image?: { src: string; alt: string }
 }
 
 const props = Astro.props

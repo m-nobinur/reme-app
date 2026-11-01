@@ -1,6 +1,7 @@
 ---
 import Base from "../layouts/Base.astro"
 import Sections from "../layouts/Sections.astro"
+import { sharePhoto } from "../header-photo"
 import { site } from "../site-config"
 import { faqPage, localBusiness, webSite } from "../structured-data"
 
@@ -12,6 +13,7 @@ import { faqPage, localBusiness, webSite } from "../structured-data"
 <Base
   title={site.homeTitle || site.businessName}
   description={site.homeDescription || site.tagline || site.homeIntro}
+  image={sharePhoto("home")}
   jsonLd={[
     ...webSite(Astro.site),
     ...localBusiness(Astro.site),

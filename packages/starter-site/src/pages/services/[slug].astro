@@ -2,6 +2,7 @@
 import { plain } from "../../accent"
 import Base from "../../layouts/Base.astro"
 import Sections from "../../layouts/Sections.astro"
+import { sharePhoto } from "../../header-photo"
 import {
   faqPage,
   type ServiceItem,
@@ -28,6 +29,7 @@ const { service } = Astro.props
 <Base
   title={service.title || plain(service.heading || service.name)}
   description={service.description || service.body}
+  image={sharePhoto(`service:${service.id}`)}
   jsonLd={[...services(Astro.site, [service]), ...faqPage(service.faqs)]}
 >
   <Sections page="service" service={service} />

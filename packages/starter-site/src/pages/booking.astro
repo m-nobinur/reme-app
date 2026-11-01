@@ -6,10 +6,15 @@
 import ContactDetails from "../components/ContactDetails/ContactDetails.astro"
 import Hero from "../components/Hero/Hero.astro"
 import Base from "../layouts/Base.astro"
+import { sharePhoto } from "../header-photo"
 import { site } from "../site-config"
 ---
 
-<Base title={site.bookingHeading} description={site.bookingIntro}>
+<Base
+  title={site.bookingHeading}
+  description={site.bookingIntro}
+  image={sharePhoto("booking")}
+>
   <Hero heading={site.bookingHeading} lede={site.bookingIntro} />
   <section class="band">
     <div class="wrap">

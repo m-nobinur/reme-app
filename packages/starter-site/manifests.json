@@ -368,15 +368,22 @@
         "type": "boolean",
         "required": false,
         "description": "Keeps the page out of search results, as the 404 page does."
+      },
+      {
+        "name": "image",
+        "type": "{ src: string; alt: string }",
+        "required": false,
+        "description": "The page's share image, from src/header-photo.ts (its header photo, else the hero or logo)."
       }
     ],
     "constraints": [
       "The Base layout renders it; a page passes these props to Base.",
       "JSON-LD comes from src/structured-data.ts and is LocalBusiness, Service, WebSite or FAQPage only.",
-      "A page's title and description come from its own fields (servicesTitle, servicesDescription and so on), unique to the page; the business name is appended to a title that does not already carry it."
+      "A page's title and description come from its own fields (servicesTitle, servicesDescription and so on), unique to the page; the business name is appended to a title that does not already carry it.",
+      "The share image comes from src/header-photo.ts - the page's header photo when the build has one, else the site's hero, else the logo; a page whose config names none of them emits no og:image."
     ],
     "examples": [
-      "<Base title={site.contactHeading} description={site.contactIntro} jsonLd={localBusiness(Astro.site)}>"
+      "<Base title={site.contactHeading} description={site.contactIntro} jsonLd={localBusiness(Astro.site)} image={sharePhoto(\"contact\")}>"
     ],
     "forbidden": [
       "using it outside the Base layout",

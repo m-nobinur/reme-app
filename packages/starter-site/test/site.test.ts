@@ -646,6 +646,25 @@ describe("the head", () => {
       expect(meta("og:site_name"), page.file).toBe("BrightClean")
     }
   })
+
+  test("every page shares an image: the hero's on a photo-less page, absolute on the origin", () => {
+    for (const page of pagesOf(filled)) {
+      const content = (name: string) =>
+        page.elements.find(
+          (el) =>
+            el.tag === "meta" &&
+            (el.attrs.name === name || el.attrs.property === name)
+        )?.attrs.content
+      const image = content("og:image")
+      expect(image, page.file).toBeTruthy()
+      expect(image, page.file).toMatch(/^https:\/\/starter\.invalid\//)
+      expect(content("og:image:width"), page.file).toBe("640")
+      expect(content("og:image:height"), page.file).toBe("480")
+      expect(content("og:image:alt"), page.file).toBeTruthy()
+      expect(content("twitter:card"), page.file).toBe("summary_large_image")
+      expect(content("twitter:image"), page.file).toBe(image)
+    }
+  })
 })
 
 describe("routes", () => {

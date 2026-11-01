@@ -28,3 +28,16 @@ for (const [key, photo] of candidates) {
 }
 
 export const headerPhoto = (key: string): Photo | undefined => photos.get(key)
+
+/**
+ * The image a page shares on social: its header photo when the build has one,
+ * else the site's hero, else the logo. A page whose config names none of them
+ * has no share image, and Seo.astro emits no og:image for it.
+ */
+export const sharePhoto = (key: string): Photo | undefined =>
+  headerPhoto(key) ??
+  (hasPhoto(site.heroImage)
+    ? { src: site.heroImage, alt: site.heroImageAlt }
+    : hasPhoto(site.logo)
+      ? { src: site.logo, alt: site.logoAlt }
+      : undefined)

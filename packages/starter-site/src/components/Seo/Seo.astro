@@ -1,4 +1,6 @@
 ---
+import { getImage } from "astro:assets"
+import { hasPhoto, photoFile } from "../../photo-files"
 import { site } from "../../site-config"
 
 interface Props {
@@ -10,9 +12,11 @@ interface Props {
   jsonLd?: Record<string, unknown>[]
   /** Keeps the page out of search results, as the 404 page does. */
   noindex?: boolean
+  /** The page's share image, from src/header-photo.ts (its header photo, else the hero or logo). */
+  image?: { src: string; alt: string }
 }
 
-const { title, description = "", jsonLd = [], noindex = false } = Astro.props
+const { title, description = "", jsonLd = [], noindex = false, image } = Astro.props
 // A title that already names the business keeps it once.
 const pageTitle =
   site.businessName && !title.includes(site.businessName)
@@ -26,6 +30,20 @@ const blocks = jsonLd.map((item) =>
     "\\u003c"
   )
 )
+// The share image when the build has the file: one rendition no wider than
+// the social-card target, never upscaled, kept with the page's own image
+// service so crawlers get a real asset at an absolute URL (social cards need
+// a URL, not a srcset).
+const share = image && hasPhoto(image.src) ? await photoFile(image.src)() : null
+const ogImage = share
+  ? await getImage({
+      src: share.default,
+      width: Math.min(1200, share.default.width),
+      format: "webp",
+    })
+  : null
+const shareUrl = ogImage && Astro.site ? new URL(ogImage.src, Astro.site).href : ""
+const shareAlt = image?.alt ?? ""
 ---
 
 <title>{pageTitle}</title>
@@ -41,6 +59,14 @@ const blocks = jsonLd.map((item) =>
     <meta property="og:site_name" content={site.businessName} />
   )
 }
+{shareUrl && <meta property="og:image" content={shareUrl} />}
+{ogImage?.attributes.width && <meta property="og:image:width" content={String(ogImage.attributes.width)} />}
+{ogImage?.attributes.height && <meta property="og:image:height" content={String(ogImage.attributes.height)} />}
+{shareAlt && <meta property="og:image:alt" content={shareAlt} />}
+{shareUrl && <meta name="twitter:card" content="summary_large_image" />}
+{pageTitle && <meta name="twitter:title" content={pageTitle} />}
+{description && <meta name="twitter:description" content={description} />}
+{shareUrl && <meta name="twitter:image" content={shareUrl} />}
 {
   blocks.map((block) => (
     <script is:inline type="application/ld+json" set:html={block} />

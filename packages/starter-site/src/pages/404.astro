@@ -2,10 +2,11 @@
 import ActionLink from "../components/ActionLink/ActionLink.astro"
 import Hero from "../components/Hero/Hero.astro"
 import Base from "../layouts/Base.astro"
+import { sharePhoto } from "../header-photo"
 import { site } from "../site-config"
 ---
 
-<Base title={site.notFoundHeading} description="" noindex>
+<Base title={site.notFoundHeading} description="" noindex image={sharePhoto("404")}>
   <Hero heading={site.notFoundHeading} lede={site.notFoundBody}>
     <ActionLink href="/" label={site.homeLink} />
   </Hero>
