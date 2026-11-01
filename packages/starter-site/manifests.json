@@ -368,6 +368,12 @@
         "type": "boolean",
         "required": false,
         "description": "Keeps the page out of search results, as the 404 page does."
+      },
+      {
+        "name": "image",
+        "type": "{ src: string; alt: string }",
+        "required": false,
+        "description": "The picture a link to the page shows: the page's header photo. Without one, the home hero's."
       }
     ],
     "constraints": [

@@ -592,6 +592,15 @@ describe("structured data", () => {
     expect(validateJsonLd(items)).toEqual([])
   }, 60_000)
 
+  test("the quote page names the business", () => {
+    const quote = pagesOf(filled).find(
+      (page) => page.file === "quote/index.html"
+    )
+    expect(jsonLdOf(quote as Page).map((item) => item["@type"])).toContain(
+      "LocalBusiness"
+    )
+  })
+
   test("the validator rejects what schema.org does not define", () => {
     const problems = validateJsonLd([
       {
@@ -645,6 +654,37 @@ describe("the head", () => {
       expect(meta("og:title"), page.file).toBeTruthy()
       expect(meta("og:site_name"), page.file).toBe("BrightClean")
     }
+  })
+
+  test("every indexed page shows a picture and a large card when a link to it is shared", () => {
+    for (const page of pagesOf(filled).filter((p) => p.file !== "404.html")) {
+      const content = (attr: "name" | "property", key: string) =>
+        page.elements.find((el) => el.tag === "meta" && el.attrs[attr] === key)
+          ?.attrs.content
+      expect(content("property", "og:image"), page.file).toMatch(
+        new RegExp(`^${ORIGIN}/_astro/.+\\.jpg$`)
+      )
+      expect(content("name", "twitter:card"), page.file).toBe(
+        "summary_large_image"
+      )
+    }
+  })
+})
+
+describe("heading order", () => {
+  test("no page skips a level, the services pages included", () => {
+    const skips = pagesOf(filled).flatMap((page) => {
+      const levels = page.elements
+        .map((el) => /^h([1-6])$/.exec(el.tag)?.[1])
+        .filter(Boolean)
+        .map(Number)
+      return levels.flatMap((level, i) =>
+        i > 0 && level > (levels[i - 1] ?? 0) + 1
+          ? [`${page.file}: h${levels[i - 1]} then h${level}`]
+          : []
+      )
+    })
+    expect(skips).toEqual([])
   })
 })
 

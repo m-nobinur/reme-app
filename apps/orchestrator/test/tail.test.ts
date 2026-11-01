@@ -13,9 +13,11 @@ import { describe, expect, it } from "vitest"
 import { SITE_ROOT } from "../src/revise.ts"
 import {
   finishRevision,
+  inlineScriptHashes,
   runAxe,
   runInteraction,
   SEAL_PHOTOS,
+  siteHeaders,
   uploadDist,
 } from "../src/tail.ts"
 
@@ -456,5 +458,23 @@ describe("the build at the end of a report", () => {
       "mkdir -p dist && echo '<html></html>' > dist/index.html"
     )
     await expect(outcome).rejects.toThrow("reached the revision")
+  })
+})
+
+describe("the site's security headers", () => {
+  it("allow the inline script by hash and the analytics beacon, not JSON-LD or src scripts", async () => {
+    const script = "console.log(1)"
+    const hashes = await inlineScriptHashes(
+      `<script is:inline>${script}</script><script>${script}</script><script type="application/ld+json">{}</script><script src="/a.js"></script>`
+    )
+    const digest = Buffer.from(
+      await crypto.subtle.digest("SHA-256", enc(script))
+    ).toString("base64")
+    expect(hashes).toEqual([`'sha256-${digest}'`])
+    const csp = siteHeaders(hashes)["content-security-policy"]
+    expect(csp).toContain(
+      `script-src 'self' 'sha256-${digest}' https://static.cloudflareinsights.com`
+    )
+    expect(csp).toContain("connect-src 'self' https://cloudflareinsights.com")
   })
 })

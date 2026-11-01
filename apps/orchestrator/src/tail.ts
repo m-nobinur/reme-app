@@ -270,13 +270,46 @@ async function holdPhotos(
   )
 }
 
-const SECURITY_HEADERS = {
-  "content-security-policy":
-    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
+const sha256Base64 = async (text: string) =>
+  btoa(
+    String.fromCharCode(
+      ...new Uint8Array(
+        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
+      )
+    )
+  )
+
+/** The CSP hash of every executable inline script in the pages; data blocks such as JSON-LD are not run. */
+export async function inlineScriptHashes(html: string) {
+  const bodies = [
+    ...html.matchAll(
+      /<script(?![^>]*\b(?:src|type)=)[^>]*>([\s\S]*?)<\/script>/g
+    ),
+  ].flatMap(([, body]) => (body ? [body] : []))
+  return Promise.all(
+    [...new Set(bodies)].map(
+      async (body) => `'sha256-${await sha256Base64(body)}'`
+    )
+  )
+}
+
+/** Cloudflare adds its analytics beacon to proxied pages: it loads from `static.` and reports to the other host. */
+export const siteHeaders = (scriptHashes: readonly string[]) => ({
+  "content-security-policy": [
+    "default-src 'self'",
+    "img-src 'self' data:",
+    "style-src 'self' 'unsafe-inline'",
+    [
+      "script-src 'self'",
+      ...scriptHashes,
+      "https://static.cloudflareinsights.com",
+    ].join(" "),
+    "connect-src 'self' https://cloudflareinsights.com",
+  ].join("; "),
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-frame-options": "DENY",
-}
+})
 
 /**
  * A command's last 20 lines with the command's own exit code. Piped into
@@ -432,12 +465,13 @@ export async function finishRevision(input: {
       prefix,
       previous,
     })
+    const pages = await run("find dist -name '*.html' -type f -exec cat {} +")
     const parsed = DeploymentManifest.parse({
       revision_id: revisionId,
       site_id: orgId,
       org_id: orgId,
       routes: uploaded.routes,
-      headers: SECURITY_HEADERS,
+      headers: siteHeaders(await inlineScriptHashes(pages.stdout)),
       files: uploaded.files,
       built_at: new Date().toISOString(),
     })

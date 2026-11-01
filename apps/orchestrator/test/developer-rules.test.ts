@@ -98,6 +98,12 @@ describe("the Developer's site rules", () => {
     expect(rules).not.toContain(String.fromCharCode(0x2014))
   })
 
+  it("writes the business name as given, with no company suffix", () => {
+    expect(text(false)).toContain(
+      "Never add Ltd, Limited, LLC, Inc or any other company suffix"
+    )
+  })
+
   it("quotes a review only from the facts the owner recorded", () => {
     const rules = text(false)
     expect(rules).toContain("testimonials.review_1 and testimonials.review_2")

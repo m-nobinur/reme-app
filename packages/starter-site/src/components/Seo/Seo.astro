@@ -1,4 +1,6 @@
 ---
+import { getImage } from "astro:assets"
+import { photoFile } from "../../photo-files"
 import { site } from "../../site-config"
 
 interface Props {
@@ -10,15 +12,36 @@ interface Props {
   jsonLd?: Record<string, unknown>[]
   /** Keeps the page out of search results, as the 404 page does. */
   noindex?: boolean
+  /** The picture a link to the page shows: the page's header photo. Without one, the home hero's. */
+  image?: { src: string; alt: string }
 }
 
-const { title, description = "", jsonLd = [], noindex = false } = Astro.props
+const {
+  title,
+  description = "",
+  jsonLd = [],
+  noindex = false,
+  image,
+} = Astro.props
 // A title that already names the business keeps it once.
 const pageTitle =
   site.businessName && !title.includes(site.businessName)
     ? [title, site.businessName].filter(Boolean).join(" | ")
     : title
 const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : ""
+const picture = image ?? { src: site.heroImage, alt: site.heroImageAlt }
+const load = noindex || !Astro.site ? undefined : photoFile(picture.src)
+const card = load
+  ? await getImage({
+      src: (await load()).default,
+      width: 1200,
+      height: 630,
+      fit: "cover",
+      format: "jpg",
+      quality: 80,
+    })
+  : undefined
+const imageUrl = card && Astro.site ? new URL(card.src, Astro.site).href : ""
 // `<` escaped so a field value can never close the script element.
 const blocks = jsonLd.map((item) =>
   JSON.stringify({ "@context": "https://schema.org", ...item }).replace(
@@ -36,6 +59,9 @@ const blocks = jsonLd.map((item) =>
 {pageTitle && <meta property="og:title" content={pageTitle} />}
 {description && <meta property="og:description" content={description} />}
 {canonical && <meta property="og:url" content={canonical} />}
+{imageUrl && <meta property="og:image" content={imageUrl} />}
+{imageUrl && picture.alt && <meta property="og:image:alt" content={picture.alt} />}
+<meta name="twitter:card" content={imageUrl ? "summary_large_image" : "summary"} />
 {
   site.businessName && (
     <meta property="og:site_name" content={site.businessName} />

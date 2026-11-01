@@ -1,5 +1,6 @@
 ---
 import { plain } from "../accent"
+import { headerPhoto } from "../header-photo"
 import Base from "../layouts/Base.astro"
 import Sections from "../layouts/Sections.astro"
 import { site } from "../site-config"
@@ -15,6 +16,7 @@ import { localBusiness } from "../structured-data"
   title={site.aboutTitle || plain(site.aboutHeading)}
   description={site.aboutDescription || site.aboutIntro}
   jsonLd={localBusiness(Astro.site)}
+  image={headerPhoto("about")}
 >
   <Sections page="about" />
 </Base>

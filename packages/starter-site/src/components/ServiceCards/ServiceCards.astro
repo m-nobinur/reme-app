@@ -49,6 +49,9 @@ const variant = only
 const detail = variant === "alternating"
 const linked = !detail && hasRoute("/services/")
 const headed = !onServices && !only
+// A name sits one level under its section's h2; with no section head it sits under the page's h1, and so do a service page's fact labels.
+const Name = headed ? "h3" : "h2"
+const Label = only ? "h2" : "h3"
 // Cards per row on a wide screen: four in one row, otherwise rows of three,
 // a short last row centred (site.css counts the cards itself).
 const perRow = items.length === 4 ? 4 : 3
@@ -94,9 +97,9 @@ const perRow = items.length === 4 ? 4 : 3
                   )
                 )}
                 {item.name && (
-                  <h3>
+                  <Name>
                     {linked ? <a href={serviceHref(item)}>{item.name}</a> : item.name}
-                  </h3>
+                  </Name>
                 )}
                 {item.body && <p data-copy="service_body">{item.body}</p>}
                 {variant === "fleet" && item.includes.length > 0 && (
@@ -126,13 +129,13 @@ const perRow = items.length === 4 ? 4 : 3
                 )}
                 <div class="row-text">
                   {item.name && (
-                    <h3>
+                    <Name>
                       {linked ? (
                         <a href={serviceHref(item)}>{item.name}</a>
                       ) : (
                         item.name
                       )}
-                    </h3>
+                    </Name>
                   )}
                   {item.body && <p data-copy="service_body">{item.body}</p>}
                 </div>
@@ -160,7 +163,7 @@ const perRow = items.length === 4 ? 4 : 3
                 {/* The page's h1 names the service on its own page, and a
                     headed section's h2 sits above its cards: the bare name as
                     an h2 there repeats another page's heading. */}
-                {item.name && !only && (headed ? <h3>{item.name}</h3> : <h2>{item.name}</h2>)}
+                {item.name && !only && <Name>{item.name}</Name>}
                 {(item.detail || item.body) && (
                   <p class="service-detail-body" data-copy="service_detail">
                     {item.detail || item.body}
@@ -179,7 +182,7 @@ const perRow = items.length === 4 ? 4 : 3
                   {item.includes.length > 0 && (
                     <>
                       {site.serviceIncludesLabel && (
-                        <h3 class="facts-label">{site.serviceIncludesLabel}</h3>
+                        <Label class="facts-label">{site.serviceIncludesLabel}</Label>
                       )}
                       <ul class="check-list" data-copy="service_includes">
                         {item.includes.map((line) => (
@@ -194,7 +197,7 @@ const perRow = items.length === 4 ? 4 : 3
                   {item.for && (
                     <>
                       {site.serviceForLabel && (
-                        <h3 class="facts-label">{site.serviceForLabel}</h3>
+                        <Label class="facts-label">{site.serviceForLabel}</Label>
                       )}
                       <p data-copy="service_for">{item.for}</p>
                     </>

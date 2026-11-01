@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { PALETTES } from "@workspace/contracts"
 import sharp from "sharp"
@@ -8,6 +8,14 @@ import { type Built, build, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 const palette = PALETTES[0] as (typeof PALETTES)[number]
+
+/** The path a built icon is served at, `/_astro/<name>.<hash>.<ext>`, or undefined when there is none. */
+const iconPath = (dist: string, name: string, ext: string) => {
+  const file = readdirSync(join(dist, "_astro")).find((f) =>
+    new RegExp(`^${name}\\.[0-9a-f]{8}\\.${ext}$`).test(f)
+  )
+  return file && `/_astro/${file}`
+}
 
 describe("the mark", () => {
   test("takes the first letter or figure of the name", () => {
@@ -83,18 +91,20 @@ describe("a built site's favicon set", () => {
   }, 180_000)
   test("writes the SVG, the PNGs at their sizes and the manifest", async () => {
     const dist = initial.dist
-    expect(readFileSync(join(dist, "favicon.svg"), "utf8")).toMatch(
-      /^<svg [\s\S]*<path /
-    )
-    for (const [file, size] of [
-      ["favicon-32.png", 32],
-      ["apple-touch-icon.png", 180],
-      ["icon-192.png", 192],
-      ["icon-512.png", 512],
+    expect(
+      readFileSync(join(dist, iconPath(dist, "favicon", "svg") ?? ""), "utf8")
+    ).toMatch(/^<svg [\s\S]*<path /)
+    for (const [name, size] of [
+      ["favicon-32", 32],
+      ["apple-touch-icon", 180],
+      ["icon-192", 192],
+      ["icon-512", 512],
     ] as const) {
-      const meta = await sharp(join(dist, file)).metadata()
-      expect([file, meta.format, meta.width, meta.height]).toEqual([
-        file,
+      const meta = await sharp(
+        join(dist, iconPath(dist, name, "png") ?? "")
+      ).metadata()
+      expect([name, meta.format, meta.width, meta.height]).toEqual([
+        name,
         "png",
         size,
         size,
@@ -102,7 +112,11 @@ describe("a built site's favicon set", () => {
     }
     // The home-screen icon is opaque: iOS draws a transparent corner black.
     expect(
-      (await sharp(join(dist, "apple-touch-icon.png")).stats()).isOpaque
+      (
+        await sharp(
+          join(dist, iconPath(dist, "apple-touch-icon", "png") ?? "")
+        ).stats()
+      ).isOpaque
     ).toBe(true)
     const manifest = JSON.parse(
       readFileSync(join(dist, "site.webmanifest"), "utf8")
@@ -111,8 +125,14 @@ describe("a built site's favicon set", () => {
       name: "BrightClean",
       theme_color: expect.stringMatching(/^#/),
       icons: expect.arrayContaining([
-        expect.objectContaining({ src: "/icon-192.png", sizes: "192x192" }),
-        expect.objectContaining({ src: "/icon-512.png", sizes: "512x512" }),
+        expect.objectContaining({
+          src: iconPath(dist, "icon-192", "png"),
+          sizes: "192x192",
+        }),
+        expect.objectContaining({
+          src: iconPath(dist, "icon-512", "png"),
+          sizes: "512x512",
+        }),
       ]),
     })
     // Pages only: an icon is never a route in the sitemap.
@@ -128,9 +148,9 @@ describe("a built site's favicon set", () => {
         .map((e) => `${e.attrs.rel} ${e.attrs.href}`)
       expect(links, page.file).toEqual(
         expect.arrayContaining([
-          "icon /favicon-32.png",
-          "icon /favicon.svg",
-          "apple-touch-icon /apple-touch-icon.png",
+          `icon ${iconPath(initial.dist, "favicon-32", "png")}`,
+          `icon ${iconPath(initial.dist, "favicon", "svg")}`,
+          `apple-touch-icon ${iconPath(initial.dist, "apple-touch-icon", "png")}`,
           "manifest /site.webmanifest",
         ])
       )
@@ -140,17 +160,20 @@ describe("a built site's favicon set", () => {
         ),
         page.file
       ).toBe(true)
-      for (const href of ["favicon.svg", "favicon-32.png", "site.webmanifest"])
-        expect(existsSync(join(initial.dist, href))).toBe(true)
     }
   })
 
   test("draws the owner's logo in place of the initial", async () => {
-    const svg = readFileSync(join(logoed.dist, "favicon.svg"), "utf8")
+    const svg = readFileSync(
+      join(logoed.dist, iconPath(logoed.dist, "favicon", "svg") ?? ""),
+      "utf8"
+    )
     expect(svg).toContain("<image")
     expect(svg).toContain("data:image/png;base64,")
     // The logo's red reaches the PNG.
-    const { dominant } = await sharp(join(logoed.dist, "icon-192.png")).stats()
+    const { dominant } = await sharp(
+      join(logoed.dist, iconPath(logoed.dist, "icon-192", "png") ?? "")
+    ).stats()
     expect(dominant.r).toBeGreaterThan(dominant.g)
   })
 })

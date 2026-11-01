@@ -162,6 +162,8 @@ const values = {
    * the tagline, which then shows in the home about section.
    */
   homeIntro: "",
+  /** The footer's one line under the business name: under twelve words, in its own wording, never the hero's subhead. Empty falls back to the tagline. */
+  footerBlurb: "",
   /**
    * A short reassurance line under the hero's buttons, under twelve words,
    * about how easy the next step is ("Tell us about your home and we reply

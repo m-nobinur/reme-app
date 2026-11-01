@@ -10,6 +10,7 @@ import SiteHeader from "../components/SiteHeader/SiteHeader.astro"
 import { directionOf } from "../directions"
 import { markColours } from "../favicon"
 import { BODY_VAR, DISPLAY_VAR, fontTheme, pairOf } from "../fonts"
+import { iconFiles } from "../icon-files"
 import { site } from "../site-config"
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
   description?: string
   jsonLd?: Record<string, unknown>[]
   noindex?: boolean
+  image?: { src: string; alt: string }
 }
 
 const props = Astro.props
@@ -27,6 +29,7 @@ const pair = pairOf(site.font)
 const theme = brandTheme(site.brandColor, site.palette) + fontTheme(pair)
 const direction = directionOf(site.direction)
 const mark = markColours(site.palette, site.brandColor)
+const icons = await iconFiles()
 ---
 
 <html
@@ -39,10 +42,10 @@ const mark = markColours(site.palette, site.brandColor)
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <Seo {...props} />
-    {/* The favicon set src/pages writes from the brand; see src/favicon.ts. */}
-    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    {/* The favicon set src/pages writes from the brand; see src/icon-files.ts. */}
+    <link rel="icon" href={icons["favicon-32.png"]?.path} sizes="32x32" type="image/png" />
+    <link rel="icon" href={icons["favicon.svg"]?.path} type="image/svg+xml" />
+    <link rel="apple-touch-icon" href={icons["apple-touch-icon.png"]?.path} />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="theme-color" content={mark.primary} />
     {theme && <style is:inline set:html={theme} />}
