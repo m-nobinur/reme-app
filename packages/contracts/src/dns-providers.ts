@@ -16,8 +16,8 @@ export type DnsProviderEntry = {
   /** RDAP registrar names that break a tie between entries sharing a suffix. */
   registrars: readonly string[]
   /**
-   * The provider's DNS page. A landing page unless the per-domain link was
-   * tested signed in, recorded beside it with the date.
+   * The provider's DNS page: per-domain where public sources and a signed-out
+   * check agree (noted beside it with the date), otherwise a landing page.
    */
   settingsUrl: (domain: string) => string
   /** The provider's own article on adding a CNAME. */
@@ -77,7 +77,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "123-reg",
     nameservers: [".123-reg.co.uk"],
     registrars: [],
-    settingsUrl: page("https://www.123-reg.co.uk/secure/"),
+    settingsUrl: page(
+      "https://www.123-reg.co.uk/secure/cpanel/domain/overview"
+    ),
     helpUrl: "https://www.123-reg.co.uk/support/domains/",
     apex: "forward",
     mark: null,
@@ -185,7 +187,8 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "Porkbun",
     nameservers: [".ns.porkbun.com"],
     registrars: [],
-    settingsUrl: page("https://porkbun.com/account/domainsSpeedy"),
+    // Per-domain; signed out it keeps the path through login (checked 2026-11-01).
+    settingsUrl: (domain) => `https://porkbun.com/account/dns/${domain}`,
     helpUrl:
       "https://kb.porkbun.com/article/54-how-to-add-dns-records-on-porkbun",
     labels: { name: "Host", value: "Answer" },
@@ -197,7 +200,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "Hostinger",
     nameservers: [".dns-parking.com", ".hostinger.com"],
     registrars: [],
-    settingsUrl: page("https://hpanel.hostinger.com/domains"),
+    // Per-domain; signed out it keeps the path through login (checked 2026-11-01).
+    settingsUrl: (domain) =>
+      `https://hpanel.hostinger.com/domain/${domain}/dns`,
     helpUrl:
       "https://support.hostinger.com/en/articles/1583249-how-to-manage-dns-records-at-hostinger",
     labels: { name: "Name", value: "Points to" },
@@ -209,7 +214,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "Vercel",
     nameservers: [".vercel-dns.com"],
     registrars: [],
-    settingsUrl: page("https://vercel.com/dashboard/domains"),
+    settingsUrl: page("https://vercel.com/~/domains"),
     helpUrl: "https://vercel.com/docs/domains/managing-dns-records",
     apex: "alias",
     mark: "vercel",
@@ -238,7 +243,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
       ".second-ns.com",
     ],
     registrars: [],
-    settingsUrl: page("https://dns.hetzner.com/"),
+    settingsUrl: page("https://console.hetzner.com/"),
     helpUrl: "https://docs.hetzner.com/dns-console/dns/general/dns-overview/",
     apex: "forward",
     mark: "hetzner",
@@ -248,7 +253,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "OVHcloud",
     nameservers: [".ovh.net", ".anycast.me"],
     registrars: [],
-    settingsUrl: page("https://manager.eu.ovhcloud.com/"),
+    // Per-domain; signed out it keeps the path through login (checked 2026-11-01).
+    settingsUrl: (domain) =>
+      `https://manager.eu.ovhcloud.com/#/web/domain/${domain}/zone`,
     helpUrl:
       "https://help.ovhcloud.com/csm/en-gb-dns-edit-dns-zone?id=kb_article_view&sysparm_article=KB0051684",
     labels: { name: "Sub-domain", value: "Target" },
@@ -260,7 +267,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "NameSilo",
     nameservers: [".dnsowl.com"],
     registrars: [],
-    settingsUrl: page("https://www.namesilo.com/account_domains.php"),
+    // Per-domain; signed out it keeps the path through login (checked 2026-11-01).
+    settingsUrl: (domain) =>
+      `https://www.namesilo.com/account_domain_manage_dns.php?domain=${domain}`,
     helpUrl:
       "https://www.namesilo.com/support/v2/articles/domain-manager/dns-manager",
     labels: { name: "Hostname", value: "Target hostname" },
@@ -272,9 +281,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "Spaceship",
     nameservers: [".spaceship.net", ".spaceship.com"],
     registrars: [],
-    settingsUrl: page(
-      "https://www.spaceship.com/application/domain-list-application/"
-    ),
+    // Per-domain; signed out it keeps the path through login (checked 2026-11-01).
+    settingsUrl: (domain) =>
+      `https://www.spaceship.com/application/advanced-dns-application/manage/${domain}/`,
     helpUrl: "https://www.spaceship.com/knowledgebase/",
     labels: { name: "Host", value: "Value" },
     apex: "forward",
@@ -306,7 +315,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "DreamHost",
     nameservers: [".dreamhost.com"],
     registrars: [],
-    settingsUrl: page("https://panel.dreamhost.com/"),
+    settingsUrl: page(
+      "https://panel.dreamhost.com/index.cgi?tree=domain.manage"
+    ),
     helpUrl:
       "https://help.dreamhost.com/hc/en-us/articles/360035516812-Adding-custom-DNS-records",
     labels: { name: "Host", value: "Value" },
@@ -348,7 +359,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "DigitalOcean",
     nameservers: [".digitalocean.com"],
     registrars: [],
-    settingsUrl: page("https://cloud.digitalocean.com/networking/domains"),
+    // Per-domain; signed out it keeps the path through login (checked 2026-11-01).
+    settingsUrl: (domain) =>
+      `https://cloud.digitalocean.com/networking/domains/${domain}`,
     helpUrl:
       "https://docs.digitalocean.com/products/networking/dns/how-to/manage-records/",
     labels: { name: "Hostname", value: "Is an alias of" },
@@ -360,7 +373,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "Bluehost",
     nameservers: [".bluehost.com"],
     registrars: [],
-    settingsUrl: page("https://my.bluehost.com/"),
+    settingsUrl: page("https://my.bluehost.com/hosting/app"),
     helpUrl: "https://www.bluehost.com/help",
     apex: "forward",
     mark: null,
@@ -380,7 +393,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "Name.com",
     nameservers: [".name.com"],
     registrars: [],
-    settingsUrl: page("https://www.name.com/account/domain"),
+    // Per-domain once signed in; its login drops the target (checked 2026-11-01).
+    settingsUrl: (domain) =>
+      `https://www.name.com/account/domain/details/${domain}#dns`,
     helpUrl: "https://www.name.com/support",
     apex: "forward",
     mark: null,
@@ -390,7 +405,9 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     name: "Hover",
     nameservers: [".hover.com"],
     registrars: [],
-    settingsUrl: page("https://www.hover.com/control_panel"),
+    // Per-domain once signed in; its login drops the target (checked 2026-11-01).
+    settingsUrl: (domain) =>
+      `https://www.hover.com/control_panel/domain/${domain}/dns`,
     helpUrl: "https://help.hover.com/",
     apex: "forward",
     mark: null,
@@ -432,6 +449,91 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     registrars: [],
     settingsUrl: page("https://admin.names.co.uk/"),
     helpUrl: "https://www.names.co.uk/support/",
+    apex: "forward",
+    mark: null,
+  },
+  // Suffixes from here were seen with a live NS lookup on 2026-11-01.
+  {
+    id: "network-solutions",
+    name: "Network Solutions",
+    nameservers: [".worldnic.com"],
+    registrars: [],
+    settingsUrl: page(
+      "https://www.networksolutions.com/my-account/domain-center"
+    ),
+    helpUrl:
+      "https://www.networksolutions.com/help/article/manage-dns-adns-records",
+    apex: "forward",
+    mark: null,
+  },
+  {
+    // Register.com and Domain.com sign in through Network Solutions.
+    id: "register-com",
+    name: "Register.com",
+    nameservers: [".register.com"],
+    registrars: [],
+    settingsUrl: page(
+      "https://www.networksolutions.com/my-account/domain-center"
+    ),
+    helpUrl:
+      "https://www.networksolutions.com/help/article/manage-dns-adns-records",
+    apex: "forward",
+    mark: null,
+  },
+  {
+    id: "domain-com",
+    name: "Domain.com",
+    nameservers: [".domain.com"],
+    registrars: [],
+    settingsUrl: page(
+      "https://www.networksolutions.com/my-account/domain-center"
+    ),
+    helpUrl:
+      "https://www.networksolutions.com/help/article/manage-dns-adns-records",
+    apex: "forward",
+    mark: null,
+  },
+  {
+    // Tsohost's panel now redirects to 123-reg's.
+    id: "tsohost",
+    name: "Tsohost",
+    nameservers: [".tsohost.co.uk"],
+    registrars: [],
+    settingsUrl: page(
+      "https://www.123-reg.co.uk/secure/cpanel/domain/overview"
+    ),
+    helpUrl: "https://www.123-reg.co.uk/support/domains/",
+    apex: "forward",
+    mark: null,
+  },
+  {
+    id: "transip",
+    name: "TransIP",
+    nameservers: [".transip.net", ".transip.nl", ".transip.eu"],
+    registrars: [],
+    settingsUrl: page("https://www.transip.eu/cp/domain-hosting/"),
+    helpUrl: "https://www.transip.eu/knowledgebase/407-setting-a-cname-record/",
+    apex: "forward",
+    mark: null,
+  },
+  {
+    id: "infomaniak",
+    name: "Infomaniak",
+    nameservers: [".infomaniak.ch"],
+    registrars: [],
+    settingsUrl: page("https://manager.infomaniak.com/v3/ng/products/domain"),
+    helpUrl: "https://www.infomaniak.com/en/support/faq/2033",
+    apex: "forward",
+    mark: null,
+  },
+  {
+    id: "shopify",
+    name: "Shopify",
+    nameservers: [".shopify.com"],
+    registrars: [],
+    settingsUrl: page("https://admin.shopify.com/settings/domains"),
+    helpUrl:
+      "https://help.shopify.com/en/manual/domains/managing-domains/edit-dns-settings",
     apex: "forward",
     mark: null,
   },
