@@ -1,3 +1,5 @@
+import { FactValue } from "@workspace/contracts"
+import { brightclean } from "@workspace/db/fixtures"
 import { claimFindings, contentFindings, parsePage } from "@workspace/gates"
 import { cosAgent } from "../apps/api/src/cos/agent.ts"
 import { MARK, SHAPES } from "./redact.mjs"
@@ -18,8 +20,11 @@ import { deriveContext } from "./replay.mjs"
  * the behaviour judge and fails today on purpose, so tier 1 and the live gate
  * leave it out (`GATED`) and the recording does not hold it. An owner turn may
  * also carry `cut` (the run drops the connection after the first tool call),
- * `after: "build"` (it waits for the change to settle first) or `read: true`
- * (it sends nothing and reads what the conversation holds after a wait).
+ * `after: "build"` (it waits for the change to settle first), `wait` (it
+ * waits that many seconds first) or `read: true` (it sends nothing and reads
+ * what the conversation holds). A case with `facts` states them before its
+ * turns and runs after every case without, since they stay on the org; if
+ * they are refused it runs no turn, so it is ungraded rather than a throw.
  */
 
 /**
@@ -37,11 +42,35 @@ if (ACT_TOOLS.length === 0)
 /** The fictional business the eval owner states before the cases run. */
 export const FACTS = [
   { key: "business.name", value: { name: "Tidy Test Cleaning" } },
+  // Ofcom's drama range and an RFC 2606 domain. With both a site change keeps working instead of asking.
+  { key: "business.phone", value: { e164: "+442079460123" } },
+  { key: "business.email", value: { address: "hello@tidytest.example.net" } },
   { key: "hours.weekday", value: { open: "08:00", close: "17:00" } },
   {
     key: "business.prices",
     value: {
       text: "Regular clean £60, deep clean £180 for a three bed, end of tenancy £150–£250 by size",
+    },
+  },
+]
+
+/**
+ * The golden org's current facts the owner api accepts, and the services it
+ * lacks, so a build runs without stopping to ask for one.
+ */
+const GOLDEN_FACTS = [
+  ...brightclean.facts
+    .filter((row) => !row.validTo)
+    .map(({ key, value }) => ({ key, value }))
+    .filter((fact) => FactValue.safeParse(fact).success),
+  {
+    key: "business.offerings",
+    value: {
+      items: [
+        "Regular home cleaning",
+        "Deep cleaning",
+        "End of tenancy cleaning",
+      ],
     },
   },
 ]
@@ -447,6 +476,64 @@ export const CASES = [
     },
   },
   {
+    pending: "the assistant knows how long a build has run",
+    name: "time-left-mid-build",
+    facts: GOLDEN_FACTS,
+    turns: [
+      {
+        mode: "act",
+        text: "Change the headline on my homepage to say 'Spotless homes, every week'.",
+      },
+      { mode: "ask", text: "How long is left on that?", wait: 120 },
+    ],
+    check: ([started, asked]) => {
+      const problems = [
+        ...buildStarted(started),
+        ...noActs(asked),
+        ...replied(asked),
+      ]
+      const reply = text(asked)
+      if (!TIME_LEFT.test(reply)) problems.push("the reply gives no time left")
+      const whole = rangeIn(text(started))
+      if (whole && whole === rangeIn(reply))
+        problems.push("the reply gives the build's whole wait as the time left")
+      return problems
+    },
+  },
+  {
+    pending: "small talk is answered in kind, and a watch is said once",
+    name: "greeting-mid-build",
+    turns: [
+      {
+        mode: "act",
+        text: "Change the headline on my homepage to say 'Sparkling homes, every week'.",
+      },
+      { mode: "ask", text: "Hey, how's it going?", wait: 60 },
+      {
+        mode: "ask",
+        text: "Ha, good. Busy day here, three cleans before lunch.",
+      },
+    ],
+    check: (turns) => {
+      const [started, greeted, chatted] = turns
+      const problems = [
+        ...buildStarted(started),
+        ...noActs(greeted),
+        ...replied(greeted),
+        ...noActs(chatted),
+        ...replied(chatted),
+      ]
+      if (WORK_TALK.test(text(greeted).split(/[.!?\n]/)[0]))
+        problems.push("the reply to a greeting opens with the work")
+      const watches = turns
+        .flatMap((t) => text(t).split(/[.!?\n]+/))
+        .filter((s) => STATUS_LINE.test(s)).length
+      if (watches > 1)
+        problems.push(`the conversation says it is watching ${watches} times`)
+      return problems
+    },
+  },
+  {
     pending: "the owner can allow an action from a card",
     name: "dont-ask-me-again",
     turns: [
@@ -591,6 +678,22 @@ const CANT_SEE =
 
 const STATUS_LINE =
   /\b(?:monitoring|watching|no change|nothing (?:you need|for you) to do|needs nothing from you)\b/i
+
+const TIME_LEFT =
+  /\b\d+\s*(?:more\s+)?min(?:ute)?s?\b|\b\d+\s*(?:to|-|–|or)\s*\d+\s*(?:more\s+)?min|\bnot (?:be )?(?:too |very )?long\b/i
+
+const RANGE = /(\d+)\s*(?:to|-|–)\s*(\d+)\s*(?:more\s+)?min/i
+
+/** A reply's "N to M minutes" as "N-M", or undefined. */
+const rangeIn = (reply) => reply.match(RANGE)?.slice(1, 3).join("-")
+
+const WORK_TALK =
+  /\b(?:build\w*|site|website|headline|change|draft|pages?|working on)\b/i
+
+const buildStarted = (parts) =>
+  called(parts, "request_change").some((c) => c.output?.outcome === "started")
+    ? []
+    : ["no build started, so nothing ran mid-build"]
 
 const TELLS_TO_APPROVE =
   /\b(?:tap|click|press|hit|open)\s+(?:the\s+)?(?:approve|publish|review)\b|\bwaiting (?:for|on) your approval\b/i
@@ -848,6 +951,7 @@ export function score(kase, turns, facts) {
     fabrications: turns.flatMap((t) =>
       fabrications(t.parts, [
         ...facts,
+        ...(kase.facts ?? []),
         ...CASES.slice(0, CASES.indexOf(kase) + 1).flatMap(ownerSaid),
       ])
     ),

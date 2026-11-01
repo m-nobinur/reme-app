@@ -1,5 +1,6 @@
 ---
 import { getImage } from "astro:assets"
+import { iconFiles } from "../../icon-files"
 import { photoFile } from "../../photo-files"
 import { site } from "../../site-config"
 
@@ -12,7 +13,7 @@ interface Props {
   jsonLd?: Record<string, unknown>[]
   /** Keeps the page out of search results, as the 404 page does. */
   noindex?: boolean
-  /** The picture a link to the page shows: the page's header photo. Without one, the home hero's. */
+  /** The picture a link to the page shows: the page's header photo. Without one, the home hero's, else the site's mark, which shows the logo when there is one. */
   image?: { src: string; alt: string }
 }
 
@@ -41,7 +42,12 @@ const card = load
       quality: 80,
     })
   : undefined
-const imageUrl = card && Astro.site ? new URL(card.src, Astro.site).href : ""
+const shared =
+  noindex || !Astro.site
+    ? undefined
+    : (card?.src ?? (await iconFiles())["icon-512.png"]?.path)
+const imageUrl = shared ? new URL(shared, Astro.site).href : ""
+const imageAlt = card ? picture.alt : site.logoAlt || site.businessName
 // `<` escaped so a field value can never close the script element.
 const blocks = jsonLd.map((item) =>
   JSON.stringify({ "@context": "https://schema.org", ...item }).replace(
@@ -60,8 +66,8 @@ const blocks = jsonLd.map((item) =>
 {description && <meta property="og:description" content={description} />}
 {canonical && <meta property="og:url" content={canonical} />}
 {imageUrl && <meta property="og:image" content={imageUrl} />}
-{imageUrl && picture.alt && <meta property="og:image:alt" content={picture.alt} />}
-<meta name="twitter:card" content={imageUrl ? "summary_large_image" : "summary"} />
+{imageUrl && imageAlt && <meta property="og:image:alt" content={imageAlt} />}
+<meta name="twitter:card" content={card ? "summary_large_image" : "summary"} />
 {
   site.businessName && (
     <meta property="og:site_name" content={site.businessName} />

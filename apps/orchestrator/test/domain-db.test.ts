@@ -495,7 +495,7 @@ describe.skipIf(!url)("custom domains against a database", () => {
     const loads = await loadsOf(env, kit, site.orgId, domainId)
     expect(loads.result).toMatchObject({ gone: false, ready: true })
     expect(await loads.reading?.tell?.()).toEqual({
-      text: `www.${name} is now live! That's the address to put on your van, cards and quotes from today, and anyone using the old link lands on the new one, so nothing you've shared is lost.`,
+      text: `www.${name} is now live! That's the address to put on your cards and quotes from today, and anyone using the old link lands on the new one, so nothing you've shared is lost.`,
       button: {
         label: "Visit your website",
         action: { kind: "open", url: `https://www.${name}/` },

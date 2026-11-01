@@ -6874,6 +6874,7 @@ export interface components {
                   }[]
                 }
             )[]
+            tips?: ("business_email" | "local_phone")[]
             reminders?: {
               /** Format: uuid */
               reminder_id: string
@@ -12126,6 +12127,7 @@ export interface components {
             }[]
           }
       )[]
+      tips?: ("business_email" | "local_phone")[]
       reminders?: {
         /** Format: uuid */
         reminder_id: string
@@ -14443,7 +14445,7 @@ export interface components {
     }
     PutOffInput: {
       /** @enum {string} */
-      kind: "address" | "google"
+      kind: "address" | "google" | "business_email" | "local_phone"
       days?: number
     }
     PutOffOutput:

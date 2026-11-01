@@ -18,7 +18,11 @@ export const MARK = "REDACTED"
  */
 export const SHAPES = [
   ["url", /\bhttps?:\/\/[^\s"'<>)]+/gi],
-  ["email", /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi],
+  // RFC 2606's reserved domains are fiction by definition, so the eval's own business email may stay.
+  [
+    "email",
+    /[a-z0-9._%+-]+@(?!(?:[a-z0-9-]+\.)*example\.(?:com|net|org)(?![a-z0-9-]|\.[a-z0-9]))[a-z0-9.-]+\.[a-z]{2,}/gi,
+  ],
   ["host", /\b(?:[a-z0-9-]+\.)+(?:remeai\.co\.uk|workers\.dev)\b/gi],
   [
     "uuid",

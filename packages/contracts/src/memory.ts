@@ -3,6 +3,7 @@ import { Timestamp, Uuid } from "./common.ts"
 import { BUSINESS_ADDRESS_KEY } from "./domain.ts"
 import { Refused } from "./refused.ts"
 import { STAFF_CORRECTIONS_KEY, StaffCorrections } from "./skills.ts"
+import { TIPS_KEY } from "./task.ts"
 import { Text } from "./text.ts"
 
 // What the Chief of Staff remembers about the owner (ADR-042): one fact of
@@ -26,6 +27,7 @@ export const PRIVATE_FACT_KEYS: readonly string[] = [
   OWNER_MEMORY_REVIEW_KEY,
   BUSINESS_ADDRESS_KEY,
   STAFF_CORRECTIONS_KEY,
+  TIPS_KEY,
 ]
 
 /** The most the profile may hold, counted on its rendered text. */

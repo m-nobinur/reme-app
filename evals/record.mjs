@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 import { FACTS } from "./cos-cases.mjs"
 import { fixtureLeaks, MARK, mergeDeltas, SHAPES } from "./redact.mjs"
 import { replay } from "./replay.mjs"
-import { liveRun } from "./tier-2/cos-live.eval.mjs"
+import { liveRun, ONLY } from "./tier-2/cos-live.eval.mjs"
 
 /**
  * `pnpm record` runs the Chief of Staff cases on staging, as tier 2 does,
@@ -74,6 +74,7 @@ export function serialise(run) {
     run.stopped,
     run.spentUsd === null && "the run's spend is unknown",
     run.builds !== 0 && `${run.builds ?? "unknown"} unapproved build(s)`,
+    ONLY && "COS_CASES narrowed the run",
   ].filter(Boolean)
   if (refused.length > 0)
     throw new Error(`nothing recorded: ${refused.join("; ")}`)

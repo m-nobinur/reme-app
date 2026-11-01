@@ -232,6 +232,13 @@
       "when": 1793350705348,
       "tag": "0032_approval_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793513014475,
+      "tag": "0033_recent_designs_palette",
+      "breakpoints": true
     }
   ]
 }

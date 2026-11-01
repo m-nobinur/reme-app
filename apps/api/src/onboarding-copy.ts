@@ -267,10 +267,10 @@ Before the website, let's settle who I am on your team. Choose the name I'll go 
     const ask = `Would you like me to build a website for ${v.business}?`
     const thanks = (line: string) => (v.picked ? "" : `${line}\n\n`)
     return [
-      `${thanks(v.assistant ? `${v.assistant} it is!` : `Thanks${comma(v.owner)}.`)}I can also build ${v.business} a website, with a Request a quote page that sends each enquiry straight to me with the details you need to reply. If you already have a site, choose Skip for now.
+      `${thanks(`Thanks${comma(v.owner)}.`)}I can also build ${v.business} a website, with a Request a quote page that sends each enquiry straight to me with the details you need to reply. If you already have a site, choose Skip for now.
 
 ${ask}`,
-      `${thanks(v.assistant ? `I'm ${v.assistant} from now on${comma(v.owner)}.` : `Thanks${comma(v.owner)}.`)}One more thing I can do: build a website for ${v.business}. Every page would point visitors to Request a quote, and each enquiry would reach me with what you need to quote the job. If you already have a site, just skip this.
+      `${thanks(`Thanks${comma(v.owner)}.`)}One more thing I can do: build a website for ${v.business}. Every page would point visitors to Request a quote, and each enquiry would reach me with what you need to quote the job. If you already have a site, just skip this.
 
 ${ask}`,
       `${thanks(`Thanks${comma(v.owner)}.`)}If ${v.business} needs a website, I can build it. It would have a Request a quote page, so customers describe the job and the enquiry comes to me ready for a quote. If you already have one, skip this and I'll stick to enquiries and quotes.

@@ -57,7 +57,8 @@ holds that a yes would have started: running, waiting on a review, failed,
 published or live. It needs `COS_API_URL`, staging's WorkOS values and
 `OPENROUTER_API_KEY`, which must be the key staging's `reme-api` spends from:
 the run fails when that key's usage cannot be read or never moves. It skips
-without `COS_API_URL`, and the first nightly job sets none; the second job runs
+without `COS_API_URL`, and the first nightly job sets none; `COS_CASES`, a
+comma list of case names, runs only those, and `pnpm record` refuses such a run; the second job runs
 it (below). Both it and `pnpm record` start by running the e2e reapers, which
 delete probe owners and orgs older than an hour.
 
@@ -151,7 +152,8 @@ agent's instructions, tools or model change, and read the diff, which is what
 a golden fixture is for. Each re-record is a paid run. The header (`FACTS`
 and the owner's text from `cos-cases.mjs`) is written as it is, not
 redacted, so a fact or an utterance holding an email or a host makes every
-recording refuse until it is changed.
+recording refuse until it is changed; an email on an RFC 2606 reserved domain
+(example.com, example.net, example.org and their subdomains) is allowed.
 
     COS_API_URL=https://staging-api.remeai.co.uk \
       node --env-file=.env.local --experimental-transform-types evals/record.mjs

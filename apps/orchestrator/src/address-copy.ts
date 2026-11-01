@@ -57,8 +57,8 @@ export const CONNECT_GOOGLE: ServerButton = {
 /** A: the first build has started, and the owner has said nothing about an address yet. */
 export const addressOffer = (about: About): Update => ({
   facts: nameFact(about),
-  template: `While I put your website together, let's give it a proper home. A web address of your own does a lot of quiet work${about.business ? ` for ${about.business}` : ""}: customers trust it more than a long remeai.co.uk link, it looks right on your van and your quotes, and everything Google learns about your business builds up on a name you keep. If we sort it now, your website can go live on it the moment you're happy with the draft.`,
-  brief: `${context(about)}The first website build has just started. Offer the owner a web address of their own while it runs, with the benefits in their terms: customers trust it, it looks right on their van and quotes, and everything Google learns about the business builds up on a name they keep. Say that setting it up now means the website goes live on it the moment they publish. Ask nothing and say nothing of the card: it asks whether they have one. No exclamation mark.`,
+  template: `While I put your website together, let's give it a proper home. A web address of your own does a lot of quiet work${about.business ? ` for ${about.business}` : ""}: customers trust it more than a long remeai.co.uk link, it looks right on your quotes and cards, and Google's picture of your business builds up on a name you keep. If we sort it now, your website can go live on it the moment you're happy with the draft.`,
+  brief: `${context(about)}The first website build has just started. Offer the owner a web address of their own while it runs, with the benefits in their terms: customers trust it, it looks right on their quotes and cards, and Google's picture of the business builds up on a name they keep. Say that setting it up now means the website goes live on it the moment they publish. This follows the message that said the build has started, so do not say it started or mention the build's progress. Ask nothing and say nothing of the card: it asks whether they have one. No exclamation mark.`,
 })
 
 /** A, when the business email already runs on a domain of the owner's own. */
@@ -72,7 +72,7 @@ export const addressOfferOwn = (address: string, about: About): Update => ({
 export const googleOffer = (domain: string, about: About): Update => ({
   facts: { domain },
   template: `Your setting's in, so ${domain} just needs its security padlock now, which usually takes a few minutes. While that happens, let me connect your website to Google: once it's live I'll add it and send over every page, so people searching for what you do${about.area ? ` around ${about.area}` : ""} can start finding you, and I'll tell you how many see you there. It's one sign-in with your Google account, and I'll do the rest.`,
-  brief: `${context(about)}The owner just added the setting for their domain; only the security padlock is left, which takes minutes. Say that, then offer to connect their website to Google while they wait: once it's live you add it and send Google every page, so people nearby searching for what they do can find them, and you tell them how many see them in search. It is one sign-in with their Google account. Never promise a ranking or a date.`,
+  brief: `${context(about)}The owner just added the setting for their domain; only the security padlock is left, which takes minutes. Say that, then offer to connect their website to Google while they wait: once it's live you add it and send Google every page, so people nearby searching for what they do can find them, and you tell them how many see them in search. It takes one sign-in to their Google account. Never promise a ranking or a date.`,
 })
 
 /** The setting is in and Google is connected or settled: only the padlock is left. */
@@ -111,7 +111,7 @@ export const liveSettingLapsed = (domain: string, about: About): Update => ({
 export const liveGoogleOffer = (about: About): Update => ({
   facts: {},
   template: `Congratulations, your website is live! Next, let's make sure people can find it: connect your Google account and I'll add your website to Google, send over every page and tell you how many people see you in search. It's one sign-in, and I'll do the rest.`,
-  brief: `${context(about)}The owner's first website has just gone live on its free address; they chose not to use a domain of their own. Congratulate them once, then offer to connect their website to Google so people searching for what they do can find it: you add it, send Google every page and tell them how many see them in search. It is one sign-in with their Google account. Never promise a ranking or a date.`,
+  brief: `${context(about)}The owner's first website has just gone live on its free address; they chose not to use a domain of their own. Congratulate them once, then offer to connect their website to Google so people searching for what they do can find it: you add it, send Google every page and tell them how many see them in search. It takes one sign-in to their Google account. Never promise a ranking or a date.`,
 })
 
 /** G, when the owner's email names a domain of their own and no address was offered during the build. */
@@ -147,8 +147,8 @@ export const domainTakesOver = (
   replaced?: string
 ): Update => ({
   facts: { host, ...(replaced && { replaced_domain: replaced }) },
-  template: `${host} is now live! That's the address to put on your van, cards and quotes from today, and anyone using the old link lands on the new one, so nothing you've shared is lost.${replaced ? ` ${replaced} isn't used any more, so its setting can be deleted.` : google ? " I'm adding it to Google too and will tell you once it's in." : ""}`,
-  brief: `${context(about)}The owner's own domain has just taken over from the free address on their live website. Say so, that it is the address for their van, cards and quotes from today, and that old links still land on it.${replaced ? " The domain it replaced is no longer used, so its setting can be deleted." : google ? " Say you are adding it to Google too." : ""}`,
+  template: `${host} is now live! That's the address to put on your cards and quotes from today, and anyone using the old link lands on the new one, so nothing you've shared is lost.${replaced ? ` ${replaced} isn't used any more, so its setting can be deleted.` : google ? " I'm adding it to Google too and will tell you once it's in." : ""}`,
+  brief: `${context(about)}The owner's own domain has just taken over from the free address on their live website. Say so, that it is the address for their cards and quotes from today, and that old links still land on it.${replaced ? " The domain it replaced is no longer used, so its setting can be deleted." : google ? " Say you are adding it to Google too." : ""}`,
 })
 
 /** I: the website is in the owner's Search Console with every page sent. */

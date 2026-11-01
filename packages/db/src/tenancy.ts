@@ -404,13 +404,16 @@ export type RecentDesign = {
   direction: string | null
   hero: string | null
   services: string | null
+  /** The preset palette's id, null for the owner's own colours. */
+  palette: string | null
 }
 
 /**
- * The planner's diversity note (ADR-038): the direction and home hero and
- * services variants of up to 20 other businesses in `industry`, newest first,
- * never `orgId`'s own. SECURITY DEFINER (migration 0014), returning three
- * library ids per row and nothing that names or belongs to a business.
+ * The planner's diversity note (ADR-038): the direction, home hero and
+ * services variants and palette of up to 20 other businesses in `industry`,
+ * newest first, never `orgId`'s own. SECURITY DEFINER (migrations 0014,
+ * 0033), returning four library ids per row and nothing that names or
+ * belongs to a business.
  */
 export async function recentDesigns(
   kit: Tenancy,
@@ -420,12 +423,13 @@ export async function recentDesigns(
   return kit[pool].transaction(async (tx) => {
     await tx.execute(ENTER_APP_ROLE)
     const rows = await tx.execute<RecentDesign>(
-      sql`select direction, hero, services from public.recent_designs(${orgId}::uuid, ${industry})`
+      sql`select direction, hero, services, palette from public.recent_designs(${orgId}::uuid, ${industry})`
     )
-    return rows.map(({ direction, hero, services }) => ({
+    return rows.map(({ direction, hero, services, palette }) => ({
       direction,
       hero,
       services,
+      palette,
     }))
   })
 }

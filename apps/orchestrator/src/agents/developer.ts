@@ -36,6 +36,7 @@ import {
   type Tee,
   type TurnGate,
   toolInput,
+  useAgentFinish,
   useAgentStart,
   useDelivery,
   useInitialData,
@@ -74,6 +75,7 @@ import {
   ASK_CHIEF_DESCRIPTION,
   AskChiefInput,
   askedOptions,
+  PICKED,
   refuseQuestion,
 } from "../question.ts"
 import { logTurn } from "../quick.ts"
@@ -123,6 +125,8 @@ type Session = {
   /** Operations already reported as interrupted, so one failure wakes the Workflow once. */
   interruptions: Set<string>
   budgetExhausted: boolean
+  /** The lead was sent back once this response for a report it ended without. */
+  reportNudged?: boolean
   /** The running delivery's abort signal: the stall watchdog's stop wakes the Workflow itself. */
   signal?: AbortSignal
 }
@@ -208,6 +212,27 @@ function wake(
       })
     )
     .catch(() => undefined)
+}
+
+/**
+ * The signal that sends the lead back to report, when its response called
+ * report_complete, every call was refused and nothing else woke the build.
+ * Null when there is nothing to send it back for.
+ */
+export function reportNudge(
+  calls: readonly { tool: string; isError?: boolean }[]
+) {
+  const reports = calls.filter((c) => c.tool === "report_complete")
+  if (
+    reports.length === 0 ||
+    calls.some((c) => !c.isError && WAKING_TOOLS.has(c.tool))
+  )
+    return null
+  return {
+    kind: "signal" as const,
+    type: "report.refused",
+    body: "Your report_complete call was refused, so nothing is reported and the build is still waiting on you. Writing that it is reported does not report it. Read the refusal, fix exactly what it names, and call report_complete again.",
+  }
 }
 
 /** The tools that wake the Workflow themselves when they succeed. */
@@ -483,6 +508,7 @@ function render({ id }: AgentProps) {
     // here, and a failure that woke the Workflow before may wake it again.
     current.gate.open()
     current.interruptions.clear()
+    current.reportNudged = false
     current.signal = signal
     if (askedForBuildRole && brief.role && !onBuildRole) {
       setOnBuildRole(true)
@@ -597,6 +623,23 @@ function render({ id }: AgentProps) {
   // caches, is the same for every build; only a planned first build's
   // instructions call it.
   for (const tool of developerTools(current)) useTool(tool)
+
+  // #527: a refused report followed by prose that says it reported is no
+  // report. The lead is sent back once with what to do; a second miss ends
+  // the turn as unreported, as before.
+  useAgentFinish(({ response, append }) => {
+    const nudge = reportNudge(response.toolCalls)
+    if (
+      !nudge ||
+      current.reportNudged ||
+      current.budgetExhausted ||
+      current.interruptions.size > 0 ||
+      current.signal?.aborted
+    )
+      return
+    current.reportNudged = true
+    append(nudge)
+  })
 
   useResponseFinish(({ response }) => {
     // A turn that wakes the Workflow ends in an accepted report or a
@@ -978,10 +1021,19 @@ export const reportComplete = (current: Session) =>
     harness: true,
     durable: true,
     async run({ data, harness, step }) {
+      // The owner's own picks are never put to them as questions, so one in
+      // left_out is dropped rather than refused: refusing it once left a lead
+      // that wrote "reported" in prose and ended its turn (#527).
+      const leftOut = (data.left_out ?? []).filter(
+        (item) => !PICKED.includes(item.field)
+      )
       // Thrown before the build runs, so the model fixes the list and calls again.
-      for (const item of data.left_out ?? []) {
+      for (const item of leftOut) {
         const refusal = refuseQuestion(item)
-        if (refusal) throw new Error(`left_out ${item.field}: ${refusal}`)
+        if (refusal)
+          throw new Error(
+            `Not reported yet: report_complete refused left_out ${item.field}. ${refusal} Fix that item, or drop it from left_out and name it in risks, then call report_complete again. Writing that the build is reported does not report it.`
+          )
       }
       const { spec } = current.runtime
       const orgId = spec.org_id
@@ -1027,8 +1079,8 @@ export const reportComplete = (current: Session) =>
         checks: checksOf({ check, build, custom }),
         risks: data.risks,
         decisions_needed: data.decisions_needed,
-        ...(data.left_out?.length && {
-          left_out: data.left_out.map((item) => ({
+        ...(leftOut.length && {
+          left_out: leftOut.map((item) => ({
             ...item,
             options: askedOptions(item),
           })),

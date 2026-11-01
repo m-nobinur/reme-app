@@ -101,6 +101,13 @@ it("tells the brief about the business so the model can use its name, trade and 
   expect(addressOffer(BARE).brief).not.toContain("About the business")
 })
 
+it("assumes no van, and the offer that follows the build's own message does not repeat it", () => {
+  for (const [, update] of moments(DOX)) {
+    expect(`${update.template} ${update.brief}`).not.toMatch(/\bvan\b/i)
+  }
+  expect(addressOffer(DOX).brief).toContain("do not say it started")
+})
+
 it("says the padlock line in plain words, with no promise to report back", () => {
   expect(padlockLine("www.dox.co.uk")).toBe(
     "Your setting for www.dox.co.uk is in, so it just needs its security padlock now, which usually takes a few minutes."

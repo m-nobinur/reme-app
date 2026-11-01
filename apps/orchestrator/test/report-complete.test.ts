@@ -48,7 +48,9 @@ vi.mock("../src/tail.ts", async (importOriginal) => ({
   },
 }))
 
-const { reportComplete } = await import("../src/agents/developer.ts")
+const { reportComplete, reportNudge } = await import(
+  "../src/agents/developer.ts"
+)
 
 const ORG = "10000001-0000-4000-8000-000000000000"
 let state = "implementing"
@@ -138,9 +140,51 @@ describe("report_complete", () => {
           options: null,
         },
       ])
-    ).rejects.toThrow(/left_out business.insurance/)
+    ).rejects.toThrow(
+      /^Not reported yet: report_complete refused left_out business.insurance\..*call report_complete again/
+    )
     expect(finished).toEqual([])
     expect(emitted).toEqual([])
+  })
+
+  // #527, the recorded legal-04 report: the owner's own pick in left_out was
+  // refused, the lead wrote "reported complete" in prose and the build failed.
+  it("drops an owner's own pick from left_out and reports the rest", async () => {
+    state = "implementing"
+    const question = (field: string, text: string) => ({
+      field,
+      options: null,
+      question: text,
+      answer_schema: { type: "string", maxLength: 500 },
+    })
+    await call([
+      question(
+        "overview",
+        "How would you describe how the practice works with clients, day to day?"
+      ),
+      question(
+        "audience",
+        "Who does the practice mainly act for: employees, employers, or both?"
+      ),
+      question(
+        "proof",
+        "What record can the practice state, such as years trading, a regulator or memberships?"
+      ),
+      {
+        field: "testimonials.review_1",
+        options: null,
+        question:
+          "Do you have a client's review they have agreed can be quoted on the site?",
+        answer_schema: { type: "object" },
+      },
+    ])
+    expect(finished).toHaveLength(1)
+    expect(reports[0]?.left_out).toEqual([
+      expect.objectContaining({ field: "overview" }),
+      expect.objectContaining({ field: "audience" }),
+      expect.objectContaining({ field: "proof" }),
+    ])
+    expect(sent).toHaveLength(1)
   })
 
   // Row 8 of the measured build: a lead resumed after an interruption
@@ -158,4 +202,36 @@ describe("report_complete", () => {
       expect(result.output).toContain(now)
     }
   )
+})
+
+describe("a response that ends after a refused report", () => {
+  // The recorded legal-04 response: one refused report_complete, then prose.
+  it("sends the lead back to report", () => {
+    expect(
+      reportNudge([
+        { tool: "write", isError: false },
+        { tool: "report_complete", isError: true },
+      ])
+    ).toMatchObject({
+      kind: "signal",
+      type: "report.refused",
+      body: expect.stringMatching(/call report_complete again/),
+    })
+  })
+
+  it("sends nothing once a report or a question was accepted, or with no report tried", () => {
+    expect(
+      reportNudge([
+        { tool: "report_complete", isError: true },
+        { tool: "report_complete", isError: false },
+      ])
+    ).toBeNull()
+    expect(
+      reportNudge([
+        { tool: "report_complete", isError: true },
+        { tool: "ask_chief", isError: false },
+      ])
+    ).toBeNull()
+    expect(reportNudge([{ tool: "write", isError: false }])).toBeNull()
+  })
 })

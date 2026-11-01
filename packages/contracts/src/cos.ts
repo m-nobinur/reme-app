@@ -74,7 +74,7 @@ import {
   ScheduleSkillInput,
   ScheduleSkillOutput,
 } from "./skills.ts"
-import { OwnerTask, TaskKind } from "./task.ts"
+import { OwnerTask, TaskKind, TipKind } from "./task.ts"
 import { Text, ToolStep } from "./text.ts"
 
 // The Chief of Staff's tools and its event log (ADR-034). A tool's output is
@@ -208,6 +208,8 @@ export const CosWorkspace = z.strictObject({
    * the note of a step that waits on the owner. Optional, as `domains`.
    */
   tasks: z.array(OwnerTask).max(TaskKind.options.length).optional(),
+  /** The tips that may be offered now, none given before. Optional, as `tasks`. */
+  tips: z.array(TipKind).max(TipKind.options.length).optional(),
   /**
    * The open reminders, soonest first, each due time as the owner's wall
    * clock with its offset. The title is the owner's words: data, never
@@ -785,9 +787,12 @@ export const BuyDomainOutput = z.discriminatedUnion("outcome", [
 
 const Empty = z.strictObject({})
 
-/** `put_off`'s input: the offer the owner said not now to, and for how many days (7 when left out). */
+/**
+ * `put_off`'s input: the offer the owner said not now to, and for how many
+ * days (7 when left out); or a tip just given, which is never offered again.
+ */
 export const PutOffInput = z.strictObject({
-  kind: TaskKind,
+  kind: z.enum([...TaskKind.options, ...TipKind.options]),
   days: z.int().min(1).max(60).optional(),
 })
 

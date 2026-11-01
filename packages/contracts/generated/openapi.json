@@ -24138,6 +24138,17 @@
                       ]
                     }
                   },
+                  "tips": {
+                    "maxItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "business_email",
+                        "local_phone"
+                      ]
+                    }
+                  },
                   "reminders": {
                     "maxItems": 20,
                     "type": "array",
@@ -44021,6 +44032,17 @@
               ]
             }
           },
+          "tips": {
+            "maxItems": 2,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "business_email",
+                "local_phone"
+              ]
+            }
+          },
           "reminders": {
             "maxItems": 20,
             "type": "array",
@@ -52301,7 +52323,9 @@
             "type": "string",
             "enum": [
               "address",
-              "google"
+              "google",
+              "business_email",
+              "local_phone"
             ]
           },
           "days": {

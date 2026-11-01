@@ -1542,8 +1542,8 @@ describe("the onboarding copy", () => {
       ORGS.map((org) => question("build_for_me", voice({ org, tone }))).join(
         "\n"
       )
-    expect(at("friendly")).toContain("!")
-    expect(at("professional")).not.toContain("!")
+    expect(say(voice({ tone: "friendly" }), "Lovely!")).toBe("Lovely!")
+    expect(say(voice({ tone: "professional" }), "Lovely!")).toBe("Lovely.")
     expect(at("professional")).not.toMatch(/\bI'm\b|\bit's\b/i)
     expect(at("casual")).toMatch(/\bWant me to build\b/)
   })

@@ -71,6 +71,7 @@ import {
   SiteDocuments,
   SiteReview,
   TERMINAL_STATES,
+  TipKind,
   type UpdateReminderInput,
   type UpdateReminderOutput,
   type WorkspaceStatus,
@@ -87,6 +88,8 @@ import {
   openTask,
   readCorrections,
   readTasks,
+  readTipsGiven,
+  recordTip,
   type SQL,
   scheduledJobs,
   siteRevisions,
@@ -134,6 +137,7 @@ import {
   readProfile,
 } from "./memory.ts"
 import { knownZone, wallToUtc, zonedIso } from "./time.ts"
+import { tipsDue } from "./tips.ts"
 import type { Turn } from "./turns.ts"
 
 /**
@@ -369,7 +373,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   profile: ProfileLine[]
 }> {
   const now = new Date()
-  const [read, rows, { lines: profile }, reports, repairs, lives] =
+  const [read, rows, { lines: profile }, reports, repairs, lives, given] =
     await kit.withOrg({ orgId: owner.orgId }, (db) =>
       Promise.all([
         statusWithFacts(db, env, now),
@@ -395,6 +399,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
         db.execute<Life & { assignment_id: string }>(
           sql`select e.assignment_id, (extract(epoch from max(e.occurred_at) filter (where e.type <> ${AGENT_NOTE})) * 1000)::float8 as work_ms, (extract(epoch from max(e.occurred_at) filter (where ${resumed})) * 1000)::float8 as resumed_ms, (array_agg(e.payload->>'cause' order by e.event_id desc) filter (where ${resumed}))[1] as cause from events e join assignments a on a.id = e.assignment_id where a.kind in ('site.build', 'site.revise') and a.state not in ${TERMINAL_STATES} group by e.assignment_id`
         ),
+        readTipsGiven(db),
       ])
     )
   const { status, facts, tasks, waiting } = read
@@ -481,6 +486,12 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       last_check: DomainCheck.safeParse(r.lastCheck).data ?? null,
     })),
     tasks,
+    tips: tipsDue({
+      facts,
+      live: status.site.live !== null,
+      domains: rows.map((r) => r.state),
+      given,
+    }),
     waiting: waiting
       .slice(0, 20)
       .map((w) => ({ title: cut(w.title).slice(0, 120), since: w.since })),
@@ -1899,17 +1910,27 @@ export async function removal(
   })
 }
 
+const NEVER = "9999-12-31T00:00:00.000Z"
+const isTip = (kind: string): kind is TipKind => TipKind.safeParse(kind).success
+
 /**
  * An offer the owner said not now to, asked again after `days` (a week when
  * left out). The kind's open task is made if the offer came before it, then
  * set to `later`, so the same row comes back as the offer it was. Only the
  * owner's words move it, and the owner can start it again whenever they ask.
+ * A tip just given is remembered instead, and never comes back.
  */
 export async function putOff(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
   { kind, days = 7 }: PutOffInput
 ): Promise<PutOffOutput> {
   const until = new Date(Date.now() + days * 86_400_000).toISOString()
+  if (isTip(kind)) {
+    await kit.withOrg({ orgId: owner.orgId }, (db) =>
+      recordTip(db, owner.orgId, kind)
+    )
+    return { outcome: "put_off", until: NEVER }
+  }
   await kit.withOrg({ orgId: owner.orgId }, async (db) => {
     await openTask(db, owner.orgId, kind)
     await db.execute(sql`
