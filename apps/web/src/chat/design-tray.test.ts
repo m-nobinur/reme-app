@@ -3,10 +3,13 @@ import {
   type AskDesignInput,
   type AskDesignOutput,
   type Asset,
+  CALM_PALETTES,
   type DrawLogosRequest,
   LOGO_VARIANTS,
+  type LogoPalettes,
   type LogoRound,
   PALETTES,
+  type PaletteFromImage,
 } from "@workspace/contracts"
 import { QuestionTray } from "@workspace/ui/components/assistant/question-tray"
 import {
@@ -342,4 +345,100 @@ it("Pick for me after Yes keeps the upload and waits for the logo", async () => 
   await act(async () => undefined)
   expect(fake.kept).toEqual([])
   expect(tray.onFinish).not.toHaveBeenCalled()
+})
+
+const FROM_LOGO: PaletteFromImage[] = PALETTES.slice(4, 10).map(
+  ({ label, swatches: [paper = "", tint = "", primary = "", ink = ""] }) => ({
+    name: label,
+    stops: { paper, tint, primary, ink },
+  })
+)
+
+const WITH_PALETTE: AskDesignInput = {
+  questions: [
+    ...INPUT.questions.slice(0, 1),
+    {
+      id: "palette",
+      question: "Which colour palette feels right?",
+      visual: "palette",
+      card: {
+        step: "palette",
+        options: PALETTES.slice(0, 4).map((each) => ({
+          id: each.id,
+          label: each.label,
+          hint: null,
+          visual: { kind: "swatches", colors: [...each.swatches] },
+        })),
+        initial: CALM_PALETTES.slice(0, 4),
+        multiple: false,
+        preselected: [],
+        other: null,
+        skippable: false,
+      },
+    },
+  ],
+} as AskDesignInput
+
+it("shows each palette read from the logo as it arrives, and the loading state only until the first", async () => {
+  let arrived: (palettes: PaletteFromImage[]) => void = () => undefined
+  let finished: (read: LogoPalettes) => void = () => undefined
+  const fake = fakes()
+  fake.services.logoPalettes = (_id, onPalettes) => {
+    arrived = onPalettes
+    return new Promise((resolve) => {
+      finished = resolve
+    })
+  }
+  const tray = await render(fake.services, {
+    input: WITH_PALETTE,
+    start: { index: 2, answers: { logo: { logo: logo(uuid(10)) } } },
+  })
+  const tiles = () =>
+    tray.container.querySelectorAll('[role="radiogroup"] input[type="radio"]')
+  const surprise = () =>
+    [...tray.container.querySelectorAll("button")].find(
+      (each) => each.textContent?.trim() === "Surprise me"
+    )
+  const waiting = () =>
+    tray.container.querySelectorAll('[role="radiogroup"] > span[aria-hidden]')
+  expect(tray.container.textContent).toContain(
+    "Reading the colours in your logo"
+  )
+  expect(tiles()).toHaveLength(0)
+
+  await act(async () => arrived(FROM_LOGO.slice(0, 1)))
+  expect(tray.container.textContent).not.toContain(
+    "Reading the colours in your logo"
+  )
+  expect(tiles()).toHaveLength(1)
+  expect(waiting()).toHaveLength(3)
+  expect(surprise()).toBeUndefined()
+
+  await act(async () => arrived(FROM_LOGO.slice(0, 3)))
+  expect(tiles()).toHaveLength(3)
+  expect(waiting()).toHaveLength(1)
+
+  await act(async () => arrived(FROM_LOGO.slice(0, 5)))
+  await act(async () => finished({ palettes: FROM_LOGO }))
+  expect(tiles()).toHaveLength(4)
+  expect(waiting()).toHaveLength(0)
+  expect(surprise()).toBeDefined()
+})
+
+it("lets the owner pick the first palette while the rest are still being read", async () => {
+  const fake = fakes()
+  fake.services.logoPalettes = (_id, onPalettes) => {
+    onPalettes(FROM_LOGO.slice(0, 1))
+    return new Promise(() => undefined)
+  }
+  const tray = await render(fake.services, {
+    input: WITH_PALETTE,
+    start: { index: 2, answers: { logo: { logo: logo(uuid(10)) } } },
+  })
+  await tray.press(FROM_LOGO[0]?.name ?? "")
+  expect(
+    tray.container.querySelector<HTMLInputElement>(
+      `input[value="${FROM_LOGO[0]?.name}"]`
+    )?.checked
+  ).toBe(true)
 })

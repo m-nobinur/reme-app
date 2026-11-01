@@ -112,6 +112,10 @@ export async function localSites({ state, slug, orchestrator }) {
       })
     },
 
+    /** Every version of a fact the run seeded, so the next run starts without it. */
+    dropFact: (key) =>
+      sql`delete from facts where org_id = ${orgId} and key = ${key}`,
+
     close: () => sql.end(),
   }
 }

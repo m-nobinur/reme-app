@@ -617,6 +617,31 @@ export async function judgeChange(input: {
   return checks
 }
 
+/** Whether a report says the change was not made as asked and, read by code from the built pages, nothing changed. */
+export function isRefused(payload: unknown): boolean {
+  const report = CompletionReport.safeParse(payload).data
+  return (
+    report?.as_asked === false &&
+    report.text_changes?.length === 0 &&
+    !report.blocks?.length
+  )
+}
+
+/** Whether the change's last report is a refusal. */
+export async function refusedChange(kit: Tenancy, ids: Ids): Promise<boolean> {
+  const [row] = await kit.withOrg({ orgId: ids.orgId }, (db) =>
+    db
+      .select({ payload: events.payload })
+      .from(events)
+      .where(
+        sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'assignment.completion_reported'`
+      )
+      .orderBy(sql`${events.eventId} desc`)
+      .limit(1)
+  )
+  return isRefused(row?.payload)
+}
+
 /** The message a failed check sends back to the builder, once. */
 export const acceptanceMessage = (checks: readonly ChangeCheck[]) =>
   JSON.stringify({

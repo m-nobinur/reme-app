@@ -161,16 +161,17 @@ const LOGO_SHOWN = 4
 
 type LogoRead =
   | { state: "none" }
-  | { state: "reading" }
+  | { state: "reading"; palettes: PaletteFromImage[] }
   | { state: "failed"; retry: () => void }
   | { state: "ready"; palettes: PaletteFromImage[] }
 
-/** Asked for as soon as a logo is kept, so they are usually ready by the palette page. */
+/** Asked for as soon as a logo is kept; each palette shows as it is read. */
 function useLogoPalettes(assetId: string | undefined): LogoRead {
   const services = useTrayServices()
   const [read, setRead] = useState<{
     id: string
     palettes: PaletteFromImage[] | null
+    done: boolean
   } | null>(null)
   const [tries, setTries] = useState(0)
   // biome-ignore lint/correctness/useExhaustiveDependencies: a retry bumps tries to ask again for the same logo
@@ -178,24 +179,32 @@ function useLogoPalettes(assetId: string | undefined): LogoRead {
     if (!assetId || !services) return
     let live = true
     services
-      .logoPalettes(assetId)
-      .then(({ palettes }) => live && setRead({ id: assetId, palettes }))
-      .catch(() => live && setRead({ id: assetId, palettes: null }))
+      .logoPalettes(
+        assetId,
+        (palettes) => live && setRead({ id: assetId, palettes, done: false })
+      )
+      .then(
+        ({ palettes }) => live && setRead({ id: assetId, palettes, done: true })
+      )
+      .catch(() => live && setRead({ id: assetId, palettes: null, done: true }))
     return () => {
       live = false
     }
   }, [assetId, services, tries])
   if (!assetId || !services) return { state: "none" }
-  if (read?.id !== assetId) return { state: "reading" }
-  return read.palettes
-    ? { state: "ready", palettes: read.palettes }
-    : {
-        state: "failed",
-        retry: () => {
-          setRead(null)
-          setTries((n) => n + 1)
-        },
-      }
+  if (read?.id !== assetId) return { state: "reading", palettes: [] }
+  if (read.palettes) {
+    return read.done
+      ? { state: "ready", palettes: read.palettes }
+      : { state: "reading", palettes: read.palettes }
+  }
+  return {
+    state: "failed",
+    retry: () => {
+      setRead(null)
+      setTries((n) => n + 1)
+    },
+  }
 }
 
 /** The logo palette an answer picked: the palette itself, or its name as a reload brings it back. */
@@ -227,7 +236,7 @@ function LogoPalettes({
   label: string
   onPick: (palette: PaletteFromImage) => void
 }) {
-  if (read.state === "reading") {
+  if (read.state === "reading" && read.palettes.length === 0) {
     return (
       <div className="flex flex-col gap-2" role="status">
         <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
@@ -286,8 +295,17 @@ function LogoPalettes({
             <span className="sr-only">{palette.name}</span>
           </label>
         ))}
+        {Array.from(
+          { length: read.state === "reading" ? LOGO_SHOWN - shown.length : 0 },
+          (_, at) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: placeholders with no identity
+            <PendingSwatches key={at} />
+          )
+        )}
       </div>
-      {others.length > 0 ? <Surprise onClick={surprise} /> : null}
+      {read.state === "ready" && others.length > 0 ? (
+        <Surprise onClick={surprise} />
+      ) : null}
     </>
   )
 }

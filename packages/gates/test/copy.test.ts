@@ -126,12 +126,76 @@ describe("the copy gate", () => {
       page(
         "index.html",
         "Greenleaf garden landscaping in Bristol and Bath homes",
-        `<h1>Gardens made for Bristol</h1><p class="eyebrow">Why choose us</p><h2>Why choose <span class="accent">us</span></h2><h2>Our Services</h2>`
+        `<h1>Gardens made for Bristol</h1><p class="eyebrow">Services</p><h2>Why choose <span class="accent">us</span></h2><h2>Our Services</h2>`
       ),
     ])
     expect(found.map((f) => [f.problem, f.text])).toEqual([
       ["stock", "Why choose us"],
       ["stock", "Our Services"],
+    ])
+  })
+
+  it("lets a stock label stand as a heading the owner gave in their own words", () => {
+    const owner = factWords([
+      {
+        key: "site.content",
+        value: {
+          items: [
+            {
+              id: "story",
+              page: "about",
+              title: "Our story",
+              markdown: "We started in 2019 with one van.",
+            },
+          ],
+        },
+      } as unknown as FactRecord,
+    ])
+    const about = [
+      page(
+        "about/index.html",
+        "About Greenleaf garden landscaping in Bristol and Bath",
+        `<h1>Gardens made for Bristol</h1><h2>Our story</h2><h2>Why choose us</h2>`
+      ),
+    ]
+    expect(copyFindings(about, "", owner).map((f) => f.text)).toEqual([
+      "Why choose us",
+    ])
+    expect(copyFindings(about).map((f) => f.text)).toEqual([
+      "Our story",
+      "Why choose us",
+    ])
+  })
+
+  it("fails a heading that is the service area's own words", () => {
+    const found = copyFindings(
+      [
+        page(
+          "index.html",
+          "Greenleaf garden landscaping in Bristol and Bath homes",
+          `<h1>Gardens made for Bristol</h1><h2>Bristol and the villages around it</h2><h2>Gardens across Bath</h2>`
+        ),
+      ],
+      "Bristol and the villages around it"
+    )
+    expect(found.map((f) => [f.problem, f.text])).toEqual([
+      ["repeat", "Bristol and the villages around it"],
+    ])
+  })
+
+  it("fails every form of why-choose-us, as an eyebrow or a heading", () => {
+    const found = copyFindings([
+      page(
+        "index.html",
+        "Greenleaf garden landscaping in Bristol and Bath homes",
+        `<h1>Gardens made for Bristol</h1><p class="eyebrow">Why choose us</p><p class="eyebrow">Why us</p><h2>Why clients choose Greenleaf Gardens</h2><h2>Why homes stay with us</h2><h2>Why we use peat-free compost</h2>`
+      ),
+    ])
+    expect(found.map((f) => [f.problem, f.text])).toEqual([
+      ["stock", "Why choose us"],
+      ["stock", "Why us"],
+      ["stock", "Why clients choose Greenleaf Gardens"],
+      ["stock", "Why homes stay with us"],
     ])
   })
 
@@ -875,6 +939,19 @@ describe("a writer's page document", () => {
     markdown,
   })
   const options = { business: "Greenleaf Gardens" }
+
+  it("fails an about section left empty, and passes one with its words", () => {
+    const about = (blocks: PageDocument["sections"][number]["blocks"]) =>
+      documentFindings(
+        doc([{ id: "about", kind: "about", blocks }], { page: "about" }),
+        [],
+        options
+      )
+    expect(about([])).toEqual([
+      expect.stringContaining("the about section is empty"),
+    ])
+    expect(about([prose(words(60))])).toEqual([])
+  })
 
   it("passes a page of its own words", () => {
     expect(

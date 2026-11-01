@@ -1,6 +1,6 @@
 import {
   KeptLogo,
-  LogoPalettes,
+  type LogoPalettes,
   LogoRound,
   LogoRounds,
   PaletteFromImage,
@@ -40,6 +40,44 @@ async function read<T>(
   return parsed.data
 }
 
+/**
+ * The logo's palettes, one `PaletteFromImage` a line as the api finishes each.
+ * A stream that breaks after the first still gives what arrived.
+ */
+async function readLogoPalettes(
+  assetId: string,
+  onPalettes: (palettes: PaletteFromImage[]) => void
+): Promise<LogoPalettes> {
+  const response = await chatFetch("/api/palettes/from-logo", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ asset_id: assetId }),
+  })
+  const palettes: PaletteFromImage[] = []
+  const reader = (response.body as ReadableStream<Uint8Array>).getReader()
+  const decoder = new TextDecoder()
+  let pending = ""
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      pending += decoder.decode(value, { stream: !done })
+      const lines = pending.split("\n")
+      pending = lines.pop() ?? ""
+      for (const line of lines.filter(Boolean)) {
+        palettes.push(PaletteFromImage.parse(JSON.parse(line)))
+        onPalettes([...palettes])
+      }
+      if (done) break
+    }
+  } catch {
+    // Whatever arrived before the break is what there is.
+  }
+  if (palettes.length === 0) {
+    throw new Error("That did not come back as expected. Try again.")
+  }
+  return { palettes }
+}
+
 export const trayServices: TrayServices = {
   upload: (files) => uploadPhotos(files),
   reviewPhotos: (ids) =>
@@ -53,12 +91,7 @@ export const trayServices: TrayServices = {
       headers: { "idempotency-key": crypto.randomUUID() },
     })
   },
-  logoPalettes: (assetId) =>
-    read(LogoPalettes, "/api/palettes/from-logo", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ asset_id: assetId }),
-    }),
+  logoPalettes: readLogoPalettes,
   drawLogos: (request) => read(LogoRound, "/api/logos", write(request)),
   logoRounds: (toolCallId) =>
     read(

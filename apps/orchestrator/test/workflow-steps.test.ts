@@ -194,6 +194,8 @@ const script = {
   quiet: [] as number[],
   /** Whether each acceptance judgement of a briefed change passes, null undecided; none left passes. */
   accepts: [] as (boolean | null)[],
+  /** Whether the Developer's last report says the change was refused. */
+  refused: false as boolean,
   looks: [] as {
     request_id: string
     fact_id: string | null
@@ -339,6 +341,7 @@ vi.mock("../src/change.ts", () => ({
   changeContext: () => "",
   readDocuments: async () => ({}),
   recentChanges: async () => [],
+  refusedChange: async () => script.refused,
   judgeChange: async () => [
     { check: "c", passed: script.accepts.shift() ?? true, why: "w" },
   ],
@@ -533,6 +536,7 @@ type Setup = {
   quickDone?: boolean
   critic?: typeof script.critic
   accepts?: (boolean | null)[]
+  refused?: boolean
   quiet?: number[]
   photosFail?: boolean
   followUp?: boolean
@@ -727,6 +731,19 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     { lane: { ...copy, brief: BRIEF }, accepts: [false, false] },
     { outcome: "preview_ready" },
   ],
+  // A change the Developer refused twice, with the pages unchanged, ends instead of reading as ready.
+  [
+    "briefed change refused",
+    [completion, completion],
+    {
+      lane: { ...copy, brief: BRIEF },
+      accepts: [false, false],
+      refused: true,
+      origin: "owner",
+      followUp: true,
+    },
+    { outcome: "failed" },
+  ],
   [
     "briefed change accepted",
     [completion],
@@ -787,6 +804,7 @@ describe("the assignment Workflow's step names", () => {
     script.again = []
     script.quiet = [...(setup.quiet ?? [])]
     script.accepts = [...(setup.accepts ?? [])]
+    script.refused = setup.refused ?? false
     script.followUp = setup.followUp ?? false
     photoStep.fail = setup.photosFail ?? false
     photoStep.appended.length = 0
@@ -1095,6 +1113,7 @@ describe("the assignment Workflow's step names", () => {
         "photos failed",
         "design critique repaired",
         "briefed change sent back once",
+        "briefed change refused",
         "briefed change accepted",
         "briefed change with an undecided check",
         "owner's planned build",

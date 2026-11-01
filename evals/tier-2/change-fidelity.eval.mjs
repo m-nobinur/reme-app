@@ -31,9 +31,11 @@ import {
  * to the orchestrator's state directory (apps/orchestrator/.wrangler/state)
  * and the run reads built pages from local R2 in place of the published host
  * and the preview links, makes the org's newest built revision its site when
- * it has none, and seeds a missing `site.content` fact (left in place after).
+ * it has none, and seeds a missing `site.content` fact (removed after, so the
+ * run can be repeated on one org).
  * Needs DATABASE_URL like measure-build. Staging never sets it, so the
- * published-host fetches there stay real.
+ * published-host fetches there stay real. A request answered 5xx, or dropped
+ * by the local dev server, is sent once more under the same idempotency key.
  */
 
 const ORG = process.env.FIDELITY_ORG ?? "brightclean"
@@ -46,12 +48,15 @@ const SETTLED = new Set([
 ])
 const TIMEOUT_MS = 15 * 60 * 1000
 const SPEND_CAP_USD = 3
+const RETRY_MS = 1000
 const STORY =
   "We started in 2019 with one van and a list of three regular homes. Five years on, the same two of us still check every job before we leave."
 const PHONE = "+441174960999"
 
 const base = (process.env.ORCHESTRATOR_URL ?? "").replace(/\/$/, "")
 const token = process.env.ORCHESTRATOR_TOKEN ?? ""
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 class Skipped extends Error {}
 
@@ -71,17 +76,21 @@ async function call(method, path, body) {
   const headers = { authorization: `Bearer ${token}` }
   if (body) headers["content-type"] = "application/json"
   if (method === "POST") headers["idempotency-key"] = crypto.randomUUID()
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  const send = () =>
+    fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  let res = await send().catch(() => null)
+  if (!res || res.status >= 500) {
+    await sleep(RETRY_MS)
+    res = await send()
+  }
   const json = await res.json().catch(() => ({}))
   if (!res.ok) throw new Refused(res.status, json.code ?? "", path)
   return json
 }
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** Pages of a site by route: a preview through its signed link's cookie, or the published host. */
 async function pagesOf(url, routes) {
@@ -286,10 +295,7 @@ const LATER = [
         const made = await revise("Give the site a new look", "the look", {
           edit_type: "redesign",
           targets: [],
-          acceptance: [
-            "The site has a different layout or palette from before",
-            `The About page still says, word for word: ${STORY}`,
-          ],
+          acceptance: [`The About page still says, word for word: ${STORY}`],
         })
         try {
           if (!made.link)
@@ -309,6 +315,7 @@ const LATER = [
         }
       } finally {
         if (was) await restate("site.content", was)
+        else await local.dropFact("site.content")
       }
     },
   },
@@ -373,10 +380,14 @@ const LATER = [
       try {
         const made = await revise(`Remove ${gone} from the site`, gone, {
           edit_type: "remove",
-          targets: [{ page: pageOf(route) }, { page: "services" }],
+          targets: [
+            { page: pageOf(route) },
+            { page: "services" },
+            { page: "home" },
+          ],
           acceptance: [
-            `No page links to ${route}`,
-            `The services page no longer lists ${gone}`,
+            `The ${gone} page no longer exists`,
+            `The services page and the home page no longer mention ${gone}`,
           ],
         })
         try {

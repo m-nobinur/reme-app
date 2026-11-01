@@ -144,8 +144,8 @@ const slots = {
   servicesFaq3Answer: "",
   servicesFaq4Question: "",
   servicesFaq4Answer: "",
-  valuePropsEyebrow: "Why us",
-  valuePropsHeading: "Why choose us",
+  valuePropsEyebrow: "What you get",
+  valuePropsHeading: "What you can count on",
   /**
    * Three reasons to choose the business, each a fact or business.proof put
    * as a benefit. An icon is a key of ICONS in src/icons.ts that shows what

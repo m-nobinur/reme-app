@@ -9,6 +9,7 @@ import {
   BuildSummary,
   buildFailure,
   CHANGE_CHECKED,
+  CHANGE_REFUSED,
   ChangeChecked,
   CompletionReport,
   dashesToCommas,
@@ -126,6 +127,9 @@ export const DRAFT_BACK =
   "I couldn't make your change, so your earlier draft is still ready to publish. Nothing for you to do."
 
 export function stoppedText(kind: string, reason: string): string {
+  if (reason === CHANGE_REFUSED) {
+    return "I couldn't make that change, so your site is as it was. Tell me more about what you'd like, or say try again."
+  }
   return `${subject(kind)} couldn't finish: ${CAUSE_WORDS[buildFailure(reason).cause]}. Say try again, or tell me what to change.`
 }
 

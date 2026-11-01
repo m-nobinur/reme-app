@@ -41,6 +41,8 @@ const doc = (path: string) => {
 const main = (html: string) =>
   html.replace(/<(header|footer)[\s\S]*?<\/\1>/g, "")
 
+const CARD_LINE = "Right around the corner"
+
 let built: Built
 let pages: ReturnType<typeof readPages>
 beforeAll(async () => {
@@ -65,7 +67,7 @@ beforeAll(async () => {
     ],
   })
   built = await build({
-    site: { ...FILLED, areaTowns: "" },
+    site: { ...FILLED, areaTowns: "", areaCardLine: CARD_LINE },
     layout,
     files: planted({
       "services/weekly-clean.json": service,
@@ -86,6 +88,13 @@ describe("each thing once", () => {
       )
       .map((each) => each.file)
     expect(saying).toEqual(["service-area/index.html"])
+  })
+
+  test("the area card's line is the home page's, not the service area page's too", () => {
+    const saying = pages
+      .filter((each) => each.html.includes(CARD_LINE))
+      .map((each) => each.file)
+    expect(saying).toEqual(["index.html"])
   })
 
   test("the typical-scope note shows once on a page, however many trade blocks it has", () => {

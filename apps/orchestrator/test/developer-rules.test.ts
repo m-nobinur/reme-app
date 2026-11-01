@@ -137,6 +137,22 @@ describe("the Developer's site rules", () => {
     )
   })
 
+  it("keeps every why-choose-us form out of headings and eyebrows", () => {
+    expect(text(false)).toContain(
+      'Never a "why choose us" in any form (Why choose us, Why us, Why clients choose <name>, Why homes stay with us), as a heading or an eyebrow'
+    )
+  })
+
+  it("keeps the about section filled when each thing is said once", () => {
+    expect(text(false)).toContain("Never leave the about section empty")
+  })
+
+  it("keeps the service area's own words to the service area page", () => {
+    expect(text(false)).toContain(
+      "No heading, footerBlurb or areaCardLine on any page repeats service_area.text word for word"
+    )
+  })
+
   it("tells the builder a widening word needs the fact to carry it", () => {
     expect(text(false)).toContain('does not make "Fully insured"')
   })

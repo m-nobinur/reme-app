@@ -15,7 +15,13 @@ const hasContact = Boolean(
     site.serviceAreaText ||
     site.serviceArea
 )
-const blurb = site.footerBlurb || site.tagline
+// The area in its own words is the service area page's, not every page's footer.
+const says = (line: string) =>
+  site.serviceAreaText &&
+  line.toLowerCase().includes(site.serviceAreaText.toLowerCase())
+const blurb =
+  (site.footerBlurb && !says(site.footerBlurb) ? site.footerBlurb : "") ||
+  site.tagline
 const icons = await iconFiles()
 ---
 

@@ -1478,7 +1478,7 @@ function QuestionTray({
   const palettes = offeredPalettes(questions, answers)
   const paletteQuestion = questions.find((each) => each.visual === "palette")
   const paletteAnswer = paletteQuestion && answers[paletteQuestion.id]
-  const logoPalettes = fromLogo.state === "ready" ? fromLogo.palettes : []
+  const logoPalettes = "palettes" in fromLogo ? fromLogo.palettes : []
   const pickedFromLogo = logoPick(paletteAnswer, logoPalettes)
   // Previews show the picked logo palette, else the logo's first.
   const previewPalette =

@@ -142,7 +142,7 @@ const values = {
    * in under six words, as "Fully insured". Empty shows the photo bare.
    */
   heroCaption: "",
-  /** The footer's one line under the business name: under twelve words, in its own wording, never the hero's subhead. Empty falls back to the tagline. */
+  /** The footer's one line under the business name: under twelve words, in its own wording, never the hero's subhead or the service area's words. Empty falls back to the tagline. */
   footerBlurb: "",
   /**
    * A photo for the About and Contact page headers, as a path the build placed
