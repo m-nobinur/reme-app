@@ -11,7 +11,7 @@ const HOME = `<a href="/services/deep-clean/">Deep clean</a><a href="/services/e
 const PREVIEW_PAGE = `<h2>Services</h2><h2>Questions</h2><p>Our story</p><p>${STORY}</p><a href="tel:${NEW_PHONE}">call</a>`
 
 /** A measure-build org as the console shows it: offerings are strings, the phone is {e164}, no site.content. */
-function orchestrator({ failOn } = {}) {
+function orchestrator({ failOn, flaky } = {}) {
   const log = []
   const facts = {
     "business.offerings": {
@@ -38,7 +38,9 @@ function orchestrator({ failOn } = {}) {
     }
     assert.equal(url.searchParams.get("org"), "measure-clean-01")
     const path = url.pathname.replace("/assignments", "") || "/"
-    log.push([method, path, body])
+    log.push([method, path, body, init.headers?.["idempotency-key"]])
+    if (flaky && flaky.path === path && flaky.left-- > 0)
+      return json({ code: "dev.dropped" }, 500)
     if (method === "GET" && path === "/site")
       return json({ host: PUBLISHED, active: { revision_id: "rev-0" } })
     if (method === "GET" && path === "/facts")
@@ -141,6 +143,26 @@ test("a measure-build org runs the eval: string offerings, an {e164} phone, no s
         body.facts[0].value.e164 === NEW_PHONE
     )
   )
+})
+
+test("a request answered 5xx is sent once more under the same idempotency key", async () => {
+  const { table, error, log } = await run({
+    flaky: { path: "/", left: 1 },
+  })
+  assert.equal(error, undefined, table)
+  const creates = log.filter(
+    ([method, path]) => method === "POST" && path === "/"
+  )
+  assert.equal(creates[0][3], creates[1][3])
+  assert.notEqual(creates[1][3], creates[2][3])
+  assert.doesNotMatch(table, /FAILED/)
+})
+
+test("a request that keeps failing fails only its own row", async () => {
+  const { table, error } = await run({ flaky: { path: "/", left: 2 } })
+  assert.match(table, /\| add our story to About \|.*FAILED threw: 500/)
+  assert.match(table, /\| make the deep clean page richer \|.*\| ok \|/)
+  assert.match(error.message, /add our story to About: threw: 500/)
 })
 
 test("an undo is requested for review before it starts, from the moved draft", async () => {

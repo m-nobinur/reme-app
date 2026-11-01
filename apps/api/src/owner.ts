@@ -55,12 +55,7 @@ import { drawLogos, keepLogo, readLogos } from "./logo.ts"
 import { pushRoute } from "./push.ts"
 import { reminderRoute } from "./reminders.ts"
 import { setTimeZone } from "./time-zone.ts"
-import {
-  logoPalettes,
-  paletteFromImage,
-  reviewPhotos,
-  warmLogoPalettes,
-} from "./vision.ts"
+import { logoPalettes, paletteFromImage, reviewPhotos } from "./vision.ts"
 import { readActivity, readFacts, unchanged } from "./workspace.ts"
 import { readTaggedWorkspace } from "./workspace-tag.ts"
 
@@ -303,13 +298,7 @@ export async function ownerRoute(
   const kept = LOGO_KEEP_PATH.exec(pathname)
   if (kept && method === "POST") {
     const id = kept[1] as string
-    const response = await keepLogo(request, env, kit, owner, id)
-    if (response.ok) {
-      waitUntil(
-        warmLogoPalettes(env, kit, owner.orgId, id).catch(() => undefined)
-      )
-    }
-    return response
+    return keepLogo(request, env, kit, owner, id)
   }
   if (pathname === "/palettes/from-image" && method === "POST") {
     return paletteFromImage(request, env, kit, owner)

@@ -412,8 +412,12 @@ export const LOGO_PALETTES_MAX = 6
 
 /**
  * `POST /palettes/from-logo`: one vision call per kept logo, then held. Each
- * palette is brought to AA as `PaletteFromImage` is.
+ * palette is brought to AA as `PaletteFromImage` is. It answers
+ * `LOGO_PALETTES_LINES`: one `PaletteFromImage` a line, each sent as the
+ * model finishes it, so the first arrives before the call ends. The lines
+ * together are `LogoPalettes`, which is also what is held per logo.
  */
+export const LOGO_PALETTES_LINES = "application/x-ndjson"
 export const LogoPalettesRequest = z.strictObject({ asset_id: Uuid })
 export const LogoPalettes = z.strictObject({
   palettes: z.array(PaletteFromImage).min(1).max(LOGO_PALETTES_MAX),

@@ -1,4 +1,5 @@
 import type { PageDocument } from "@workspace/contracts"
+import { appendEvent } from "@workspace/db"
 import { describe, expect, it, vi } from "vitest"
 import {
   acceptanceMessage,
@@ -6,12 +7,15 @@ import {
   changeContext,
   checkedRoutes,
   checkPrompt,
+  isRefused,
   missingOwnerContent,
   pageText,
   parseChecks,
   redirectsFor,
+  refusedChange,
   routeOf,
 } from "../src/change.ts"
+import { freshOrg, kit, newAssignment } from "./fixture.ts"
 
 // retry.ts loads app.ts, which loads both at import time; neither is reached here.
 vi.mock("../src/sandbox.ts", () => ({ workKey: () => "" }))
@@ -531,4 +535,66 @@ describe("the ready line", () => {
       'Changed "Call 01234" to "Call 05678" on Home',
     ])
   })
+})
+
+describe("a change the Developer could not make", () => {
+  const report = (more: Record<string, unknown>) => ({
+    report_id: crypto.randomUUID(),
+    org_id: crypto.randomUUID(),
+    assignment_id: crypto.randomUUID(),
+    session_id: crypto.randomUUID(),
+    revision_id: crypto.randomUUID(),
+    summary: "Left About as it was.",
+    changes: [{ path: "src/pages/about.astro", reason: "Left as it was" }],
+    screenshots: [],
+    checks: [{ check: "astro build", exit_code: 0, output_key: null }],
+    risks: [],
+    decisions_needed: [],
+    reported_at: new Date().toISOString(),
+    ...more,
+  })
+  const pair = { before: "", after: "Our story", pages: ["/about/"] }
+
+  it("is refused when it says not as asked and the pages show no change", () => {
+    expect(isRefused(report({ as_asked: false, text_changes: [] }))).toBe(true)
+  })
+
+  it("is not refused when something changed, or the pages were not compared", () => {
+    expect(isRefused(report({ as_asked: false, text_changes: [pair] }))).toBe(
+      false
+    )
+    expect(isRefused(report({ as_asked: false }))).toBe(false)
+    expect(isRefused(report({ text_changes: [] }))).toBe(false)
+    expect(isRefused({})).toBe(false)
+  })
+
+  it.skipIf(!process.env.DATABASE_URL)(
+    "reads the assignment's last report from the event log",
+    async () => {
+      const orgId = await freshOrg(kit)
+      const ids = await newAssignment(kit, orgId)
+      const other = await newAssignment(kit, orgId)
+      const say = (assignmentId: string, more: Record<string, unknown>) =>
+        kit.withOrg({ orgId }, (db) =>
+          appendEvent(db, {
+            orgId,
+            assignmentId,
+            staffId: null,
+            type: "assignment.completion_reported",
+            payload: report({
+              org_id: orgId,
+              assignment_id: assignmentId,
+              ...more,
+            }),
+          })
+        )
+      expect(await refusedChange(kit, ids)).toBe(false)
+      await say(ids.assignmentId, { as_asked: false, text_changes: [] })
+      expect(await refusedChange(kit, ids)).toBe(true)
+      await say(other.assignmentId, { text_changes: [pair] })
+      expect(await refusedChange(kit, ids)).toBe(true)
+      await say(ids.assignmentId, { as_asked: false, text_changes: [pair] })
+      expect(await refusedChange(kit, ids)).toBe(false)
+    }
+  )
 })

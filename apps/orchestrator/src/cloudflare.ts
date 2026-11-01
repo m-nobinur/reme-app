@@ -9,6 +9,7 @@ import {
   Blueprint,
   type BuildLane,
   buildFailure,
+  CHANGE_REFUSED,
   type ChangeKind,
   PageDocument,
   siteUrl,
@@ -53,6 +54,7 @@ import {
   judgeChange,
   readDocuments,
   recentChanges,
+  refusedChange,
 } from "./change.ts"
 import {
   critiqueRound,
@@ -1039,11 +1041,17 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               })
             ).catch(() => null)
           )
-          if (
-            !checks ||
-            checks.every((c) => c.passed !== false) ||
-            judging === 2
-          ) {
+          const missed = checks?.some((c) => c.passed === false)
+          if (!checks || !missed || judging === 2) {
+            // A change the Developer could not make, with nothing changed,
+            // ends here rather than reading as a ready draft.
+            if (
+              missed &&
+              (await step.do(`refusal ${round}`, () =>
+                run((kit) => refusedChange(kit, ids))
+              ))
+            )
+              return fail(`refused ${round}`, CHANGE_REFUSED)
             accepted = true
           } else {
             const fresh = quickBase !== null

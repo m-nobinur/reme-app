@@ -1,4 +1,9 @@
-import type { FactRecord, GateResult, PageDocument } from "@workspace/contracts"
+import {
+  type FactRecord,
+  FactValue,
+  type GateResult,
+  type PageDocument,
+} from "@workspace/contracts"
 import { parse } from "parse5"
 
 /**
@@ -10,7 +15,8 @@ import { parse } from "parse5"
  *   included: the same words in another order or form ("Garden services" and
  *   "Our garden service");
  * - an h1 or h2 that is a stock label ("Our services", "Why choose us"),
- *   which may only be an eyebrow;
+ *   which may only be an eyebrow, and any h1, h2 or eyebrow that asks why to
+ *   choose, trust or hire someone ("Why clients choose Acme");
  * - two pages with the same title, or a process step whose words another
  *   step on the site already uses;
  * - a section's copy under its minimum word count;
@@ -147,6 +153,13 @@ export const STOCK_HEADINGS = [
   "why us",
 ]
 
+/** "Why choose us" in any form: why clients choose, trust, hire or book a business. */
+const WHY_CHOOSE =
+  /^why (?:\w+ ){0,2}(?:choose|pick|trust|hire|book|ride with|stay with)\b|^why us$/
+
+const isStock = (text: string) =>
+  STOCK_HEADINGS.includes(plainText(text)) || WHY_CHOOSE.test(plainText(text))
+
 /** Words that do not make one heading different from another. */
 const FILLER = new Set(
   "a an and are at by for from how in is it of on or our the to us we what when where who why with you your".split(
@@ -222,6 +235,7 @@ const alike = (a: Set<string>, b: Set<string>) => {
 type Read = {
   title: string
   headings: { tag: string; text: string; node: string }[]
+  eyebrows: { text: string; node: string }[]
   copy: { kind: CopyKind; text: string; node: string }[]
   /** Every `data-copy` value on the page, whether or not it has a word range. */
   marks: Set<string>
@@ -326,6 +340,7 @@ function read(html: string): Read {
   const out: Read = {
     title: "",
     headings: [],
+    eyebrows: [],
     copy: [],
     marks: new Set(),
     towns: [],
@@ -374,6 +389,10 @@ function read(html: string): Read {
       if (main && (tag === "h1" || tag === "h2") && !SHARED.has(kind ?? "")) {
         const text = squash(textOf(child))
         if (text) out.headings.push({ tag, text, node: at })
+      }
+      if (main && attr(child, "class")?.split(" ").includes("eyebrow")) {
+        const text = squash(textOf(child))
+        if (text) out.eyebrows.push({ text, node: at })
       }
       if (kind) out.marks.add(kind)
       const own =
@@ -509,19 +528,29 @@ const TERM_KEYS = new Set([
 /** The facts that name what the business does: the home headline has to. */
 const WORK_KEYS = new Set(["business.offerings", "business.industry"])
 
-/** What the copy may say: every word in the facts, those of them that name the work, and the stems of the service and trade names. */
+/**
+ * What the copy may say: every word in the facts, those of them that name the
+ * work, the stems of the service and trade names, and the headings the owner
+ * gave in their own words (a `site.content` title), which may be stock labels.
+ */
 export function factWords(facts: readonly FactRecord[]) {
   const known = new Set<string>()
   const terms = new Set<string>()
   const work = new Set<string>()
-  for (const fact of facts)
+  const owned = new Set<string>()
+  for (const fact of facts) {
+    const content = FactValue.safeParse({ key: fact.key, value: fact.value })
+    if (content.data?.key === "site.content")
+      for (const { title } of content.data.value.items)
+        owned.add(plainText(title))
     for (const word of stringsOf(fact.value).flatMap(wordsOf)) {
       known.add(word)
       if (TERM_KEYS.has(fact.key) && word.length >= 6) terms.add(word)
       if (WORK_KEYS.has(fact.key) && !FILLER.has(word) && word.length >= 4)
         work.add(word.slice(0, 5))
     }
-  return { known, terms, work }
+  }
+  return { known, terms, work, owned }
 }
 
 /**
@@ -536,6 +565,7 @@ export function copyFindings(
     known: new Set(),
     terms: new Set(),
     work: new Set(),
+    owned: new Set(),
   }
 ): CopyFinding[] {
   const found: CopyFinding[] = []
@@ -681,6 +711,16 @@ export function copyFindings(
       })
     }
 
+    for (const e of page.eyebrows)
+      if (WHY_CHOOSE.test(plainText(e.text)))
+        found.push({
+          file,
+          node: e.node,
+          problem: "stock",
+          text: e.text,
+          detail: `the eyebrow is a stock label that fits any business; name this business's service, customer or place`,
+        })
+
     for (const h of page.headings) {
       // "Leeds and around" is a place, not a headline: the h1 names the work.
       if (
@@ -696,13 +736,23 @@ export function copyFindings(
           text: h.text,
           detail: `the home h1 names no service or outcome; write what the customer gets from this business's work (a service or the trade), with the place as the supporting detail`,
         })
-      if (STOCK_HEADINGS.includes(plainText(h.text))) {
+      if (isStock(h.text) && !words.owned.has(plainText(h.text))) {
         found.push({
           file,
           node: h.node,
           problem: "stock",
           text: h.text,
           detail: `the ${h.tag} is a stock label; keep it as the eyebrow and write a heading that names this business's service or place`,
+        })
+        continue
+      }
+      if (places && plainText(h.text) === places) {
+        found.push({
+          file,
+          node: h.node,
+          problem: "repeat",
+          text: h.text,
+          detail: `the ${h.tag} is service_area.text word for word, which the service area page already shows as the area's own words; write a heading that names the place in new words`,
         })
         continue
       }
@@ -877,7 +927,7 @@ export function fieldFindings(
         `${name} is the same as ${twin}; each page needs its own ${meta === "Title" ? "title" : "description"}`
       )
     if (!headingField(name)) continue
-    if (STOCK_HEADINGS.includes(plainText(text))) {
+    if (isStock(text)) {
       found.push(
         `${name} "${text}" is a stock label; name this business's service, customer or place`
       )
@@ -907,6 +957,7 @@ const NOT_WORDS = new Set(["id", "type", "provenance", "src", "href", "icon"])
 /** A document's headings (each section's and each prose ## or ###) and its other lines, in page order. */
 function documentText(doc: PageDocument) {
   const headings: string[] = []
+  const eyebrows: string[] = []
   const lines: string[] = []
   const words = (value: unknown, key = ""): string[] =>
     NOT_WORDS.has(key)
@@ -920,6 +971,7 @@ function documentText(doc: PageDocument) {
             : []
   for (const section of doc.sections) {
     if (section.heading) headings.push(section.heading)
+    if (section.eyebrow) eyebrows.push(section.eyebrow)
     for (const line of [section.eyebrow, section.intro])
       if (line) lines.push(line)
     for (const block of section.blocks ?? []) {
@@ -935,7 +987,7 @@ function documentText(doc: PageDocument) {
       }
     }
   }
-  return { headings, lines }
+  return { headings, eyebrows, lines }
 }
 
 /**
@@ -973,9 +1025,23 @@ export function documentFindings(
     if (text && others.some((o) => (o[name] ?? "") === text))
       found.push(`the ${name} is another page's; write this page's own`)
   }
+  for (const section of doc.sections)
+    if (
+      section.kind === "about" &&
+      !section.intro &&
+      !(section.blocks ?? []).length
+    )
+      found.push(
+        `the about section is empty; say each fact once, but write business.overview and business.audience here in the site's voice, ${COPY_WORDS.about_body.aim[0]} to ${COPY_WORDS.about_body.aim[1]} words`
+      )
+  for (const eyebrow of own.eyebrows)
+    if (WHY_CHOOSE.test(plainText(eyebrow)))
+      found.push(
+        `the eyebrow "${eyebrow}" is a stock label that fits any business; name this business's service, customer or place`
+      )
   const seen = theirs.flatMap((t) => t.headings)
   for (const heading of own.headings) {
-    if (STOCK_HEADINGS.includes(plainText(heading))) {
+    if (isStock(heading)) {
       found.push(
         `the heading "${heading}" is a stock label; keep it as the eyebrow and name this business's service, customer or place`
       )

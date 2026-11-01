@@ -1,6 +1,7 @@
 import {
   type Asset,
   idempotencyKey,
+  LOGO_PALETTES_LINES,
   LOGO_PALETTES_MAX,
   type LogoPalettes,
   LogoPalettesRequest,
@@ -12,7 +13,7 @@ import {
   UPLOAD_MAX_BYTES,
 } from "@workspace/contracts"
 import type { Tenancy } from "@workspace/db"
-import { generateText, type LanguageModel, Output } from "ai"
+import { generateText, type LanguageModel, Output, streamText } from "ai"
 import { editUploads, sniff, uploadKey } from "./assets.ts"
 import type { Owner } from "./changes.ts"
 import { priceOf, stepCost } from "./cos/agent.ts"
@@ -125,7 +126,9 @@ const modelOf = (env: Env, deps: Deps) => {
 /**
  * One vision call, counted against the org's daily model cap: undefined
  * without a call when the day has no room for it, else the model's JSON.
- * A call that fails may still bill, so it stays counted at its worst.
+ * A call that fails may still bill, so it stays counted at its worst. With
+ * `stream`, each partial JSON the model has written so far goes to
+ * `onPartial` as it comes, and the call ends when `signal` does.
  */
 async function look(
   kit: Tenancy,
@@ -134,7 +137,8 @@ async function look(
   job: string,
   system: string,
   text: string,
-  pictures: { bytes: Uint8Array; type: string }[]
+  pictures: { bytes: Uint8Array; type: string }[],
+  stream?: { onPartial: (partial: unknown) => void; signal: AbortSignal }
 ): Promise<unknown> {
   const reserved = worstCall(
     price,
@@ -147,14 +151,14 @@ async function look(
   if (!reservation) return undefined
   let cost = reserved
   try {
-    const result = await generateText({
+    const request = {
       model,
       system,
       messages: [
         {
-          role: "user",
+          role: "user" as const,
           content: [
-            { type: "text", text },
+            { type: "text" as const, text },
             ...pictures.map((p) => ({
               type: "file" as const,
               data: p.bytes,
@@ -166,10 +170,28 @@ async function look(
       output: Output.json(),
       maxOutputTokens: VISION.maxOutputTokens,
       maxRetries: 0,
-      abortSignal: AbortSignal.timeout(VISION.callMs),
+    }
+    const timeout = AbortSignal.timeout(VISION.callMs)
+    if (!stream) {
+      const result = await generateText({ ...request, abortSignal: timeout })
+      cost = stepCost(price, result)
+      return result.output
+    }
+    const result = streamText({
+      ...request,
+      abortSignal: AbortSignal.any([timeout, stream.signal]),
+      // A failed call rejects `result.output` below; the default handler only logs.
+      onError: () => undefined,
     })
-    cost = stepCost(price, result)
-    return result.output
+    for await (const partial of result.partialOutputStream) {
+      stream.onPartial(partial)
+    }
+    const output = await result.output
+    cost = stepCost(price, {
+      usage: await result.usage,
+      providerMetadata: await result.providerMetadata,
+    })
+    return output
   } finally {
     await settleSpend(kit, { orgId }, reservation, {
       job,
@@ -460,17 +482,37 @@ export function logoPalettesOf(value: unknown): PaletteFromImage[] {
     .slice(0, LOGO_PALETTES_MAX)
 }
 
+/** The palettes of a partial answer the model has finished writing, in the order it wrote them. */
+export function finishedPalettes(
+  partial: unknown,
+  ended: boolean
+): PaletteFromImage[] {
+  const list = (partial as { palettes?: unknown } | null)?.palettes
+  if (!Array.isArray(list)) return []
+  // The last one is still being written unless the call ended or `ink`, the final stop, is in.
+  const written = ended
+    ? list
+    : list.filter(
+        (each, at) =>
+          at < list.length - 1 || Object.keys(each ?? {}).at(-1) === "ink"
+      )
+  return logoPalettesOf({ palettes: written })
+}
+
 /** Where a logo's palettes are held: the logo never changes under its id. */
 const logoPalettesKey = (orgId: string, assetId: string) =>
   `logo-palettes/${orgId}/${assetId}.json`
 
-/** How often a request waits on palettes another request is reading. */
-const READING_POLL_MS = 500
+const lines = (palettes: PaletteFromImage[]) =>
+  palettes.map((each) => `${JSON.stringify(each)}\n`).join("")
 
-const json = (body: ReadableStream | string) =>
-  new Response(body, { headers: { "content-type": "application/json" } })
+const asLines = (body: BodyInit) =>
+  new Response(body, { headers: { "content-type": LOGO_PALETTES_LINES } })
 
-/** `POST /palettes/from-logo`: one vision call per logo, then served from what was held. */
+/**
+ * `POST /palettes/from-logo`: one vision call per logo, answered a palette a
+ * line as the model finishes each, then served from what was held.
+ */
 export async function logoPalettes(
   request: Request,
   env: Env,
@@ -492,43 +534,10 @@ export async function logoPalettes(
     await held?.body.cancel()
     return invalid([{ path: ["asset_id"] }])
   }
-  const ready = held ?? (await landed(env, orgId, assetId))
-  if (ready) return json(ready.body)
-  return readLogoPalettes(env, kit, orgId, logo, facts, deps)
-}
-
-/** Starts reading a just-kept logo's palettes, so the palette page finds them held. */
-export async function warmLogoPalettes(
-  env: Env,
-  kit: Tenancy,
-  orgId: string,
-  assetId: string
-): Promise<void> {
-  const [facts, held] = await Promise.all([
-    kit.withOrg({ orgId }, readFacts),
-    env.SITES.head(logoPalettesKey(orgId, assetId)),
-  ])
-  const logo = logoOf(facts)
-  if (held || logo?.id !== assetId) return
-  await readLogoPalettes(env, kit, orgId, logo, facts)
-}
-
-/**
- * The palettes a read already in flight holds once it lands, or null when
- * none is in flight or it ended without them. The marker is checked before
- * the palettes, as the reader writes them before clearing it.
- */
-async function landed(env: Env, orgId: string, assetId: string) {
-  const key = logoPalettesKey(orgId, assetId)
-  const marker = await env.SITES.head(`${key}.reading`)
-  const until = Number(marker?.customMetadata?.started ?? 0) + VISION.callMs
-  while (Date.now() < until) {
-    await new Promise((resolve) => setTimeout(resolve, READING_POLL_MS))
-    const reading = await env.SITES.head(`${key}.reading`)
-    const ready = await env.SITES.get(key)
-    if (ready || !reading) return ready
+  if (held) {
+    return asLines(lines(((await held.json()) as LogoPalettes).palettes))
   }
-  return null
+  return readLogoPalettes(env, kit, orgId, logo, facts, request.signal, deps)
 }
 
 async function readLogoPalettes(
@@ -537,17 +546,32 @@ async function readLogoPalettes(
   orgId: string,
   logo: Asset,
   facts: Awaited<ReturnType<typeof readFacts>>,
-  deps: Deps = {}
+  gone: AbortSignal,
+  deps: Deps
 ): Promise<Response> {
   const model = modelOf(env, deps)
   if (!model) return unavailable()
-  const key = logoPalettesKey(orgId, logo.id)
   const trade = factValue(facts, "business.industry")?.name ?? null
-  try {
-    const [, allowed, object] = await Promise.all([
-      env.SITES.put(`${key}.reading`, "", {
-        customMetadata: { started: String(Date.now()) },
-      }),
+  const palettes: PaletteFromImage[] = []
+  const { readable, writable } = new TransformStream<string>()
+  const out = writable.getWriter()
+  const stop = new AbortController()
+  let open: (value: null) => void = () => undefined
+  const opened = new Promise<null>((resolve) => {
+    open = resolve
+  })
+  const take = (partial: unknown, ended: boolean) => {
+    for (const each of finishedPalettes(partial, ended).slice(
+      palettes.length
+    )) {
+      palettes.push(each)
+      // A closed stream means the owner left: stop paying for the rest.
+      out.write(lines([each])).catch(() => stop.abort())
+    }
+    if (palettes.length > 0) open(null)
+  }
+  const finished = (async (): Promise<Response | null> => {
+    const [allowed, object] = await Promise.all([
       useDaily(
         env,
         `vision-days/palette/${orgId}`,
@@ -574,25 +598,34 @@ async function readLogoPalettes(
       "vision_logo_palettes",
       LOGO_PALETTE_GUIDE,
       `<data source="onboarding" taint="untrusted_input">\n${JSON.stringify({ trade }).replace(/</g, "\\u003c")}\n</data>\nThe logo follows.`,
-      [picture]
+      [picture],
+      {
+        onPartial: (partial) => take(partial, false),
+        signal: AbortSignal.any([stop.signal, gone]),
+      }
     )
     if (output === undefined) return capped()
-    const palettes = logoPalettesOf(output)
+    take(output, true)
     if (palettes.length === 0) return unreadable()
-    const body = JSON.stringify({ palettes } satisfies LogoPalettes)
-    await env.SITES.put(key, body)
-    return json(body)
-  } catch (error) {
+    await env.SITES.put(
+      logoPalettesKey(orgId, logo.id),
+      JSON.stringify({ palettes } satisfies LogoPalettes)
+    )
+    await out.close()
+    return null
+  })().catch(async (error) => {
     console.error(
       JSON.stringify({
         code: "vision.logo_palettes_failed",
         error: error instanceof Error ? error.name : "unknown",
       })
     )
+    await out.abort(error).catch(() => undefined)
     return unavailable()
-  } finally {
-    await env.SITES.delete(`${key}.reading`)
-  }
+  })
+  // Headers wait for the first palette, so a refusal is still a status.
+  const refusal = await Promise.race([opened, finished])
+  return refusal ?? asLines(readable.pipeThrough(new TextEncoderStream()))
 }
 
 const tooLarge = () =>

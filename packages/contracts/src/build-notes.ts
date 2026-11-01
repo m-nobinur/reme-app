@@ -36,6 +36,7 @@ export const BUILD_FAILURES = {
   "sandbox.site_lost": { cause: "service", retry: "same_plan" },
   "pool.exhausted": { cause: "service", retry: "same_plan" },
   "workflow.errored": { cause: "service", retry: "same_plan" },
+  "change.refused": { cause: "unfinished", retry: "same_plan" },
   "information.unanswered": { cause: "unanswered", retry: null },
   "blueprint.undecided": { cause: "unanswered", retry: null },
 } as const satisfies Record<
@@ -52,6 +53,9 @@ export function buildFailure(reason: string | null): {
     ? BUILD_FAILURES[reason as keyof typeof BUILD_FAILURES]
     : { cause: "other", retry: null }
 }
+
+/** A change the Developer reported it could not make, with nothing changed on the built pages. */
+export const CHANGE_REFUSED = "change.refused"
 
 /** A build whose Workflow threw past its steps' retries. */
 export const WORKFLOW_ERRORED = "workflow.errored"

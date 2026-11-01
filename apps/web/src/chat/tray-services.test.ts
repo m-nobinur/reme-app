@@ -87,3 +87,85 @@ it("never hands a page an answer it could not read", async () => {
     "That did not come back as expected. Try again."
   )
 })
+
+const [paper = "", tint = "", primary = "", ink = ""] =
+  PALETTES[4]?.swatches ?? []
+const line = (name: string) =>
+  `${JSON.stringify({ name, stops: { paper, tint, primary, ink } })}\n`
+
+/** A body that sends each piece when asked, so a test holds the stream open between them. */
+function pieces() {
+  const encoder = new TextEncoder()
+  let controller!: ReadableStreamDefaultController<Uint8Array>
+  const body = new ReadableStream<Uint8Array>({
+    start: (c) => {
+      controller = c
+    },
+  })
+  return {
+    response: new Response(body, {
+      headers: { "content-type": "application/x-ndjson" },
+    }),
+    send: (text: string) => controller.enqueue(encoder.encode(text)),
+    end: () => controller.close(),
+    fail: () => controller.error(new Error("dropped")),
+  }
+}
+
+it("gives the logo's palettes as each line arrives, whole lines only", async () => {
+  const stream = pieces()
+  vi.stubGlobal("fetch", async () => stream.response)
+  const seen: string[][] = []
+  const done = trayServices.logoPalettes(ID, (so_far) =>
+    seen.push(so_far.map((each) => each.name))
+  )
+  const first = line("Harbour blue")
+  stream.send(first.slice(0, 30))
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  expect(seen).toEqual([])
+  stream.send(first.slice(30) + line("Warm clay").slice(0, 10))
+  await vi.waitFor(() => expect(seen).toEqual([["Harbour blue"]]))
+  stream.send(line("Warm clay").slice(10))
+  stream.end()
+  const { palettes } = await done
+  expect(seen).toEqual([["Harbour blue"], ["Harbour blue", "Warm clay"]])
+  expect(palettes.map((each) => each.name)).toEqual([
+    "Harbour blue",
+    "Warm clay",
+  ])
+})
+
+it("keeps the palettes that arrived when the stream breaks after the first", async () => {
+  const stream = pieces()
+  vi.stubGlobal("fetch", async () => stream.response)
+  const done = trayServices.logoPalettes(ID, () => undefined)
+  stream.send(line("Harbour blue"))
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  stream.fail()
+  expect((await done).palettes.map((each) => each.name)).toEqual([
+    "Harbour blue",
+  ])
+})
+
+it("throws when no palette arrives, and with the api's sentence when it refuses", async () => {
+  vi.stubGlobal("fetch", async () => new Response(""))
+  await expect(trayServices.logoPalettes(ID, () => undefined)).rejects.toThrow(
+    "That did not come back as expected. Try again."
+  )
+  vi.stubGlobal("fetch", async () =>
+    Response.json(
+      {
+        class: "validation",
+        code: "palette.unreadable",
+        message:
+          "I couldn't find clear colours in that picture. Try another one.",
+        occurred_at: "2026-10-23T09:00:00Z",
+        detail: {},
+      },
+      { status: 422 }
+    )
+  )
+  await expect(trayServices.logoPalettes(ID, () => undefined)).rejects.toThrow(
+    "Try another one"
+  )
+})

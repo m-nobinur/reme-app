@@ -1,6 +1,8 @@
 import {
   type Asset,
   ErrorEnvelope,
+  LOGO_PALETTES_LINES,
+  LogoPalettes,
   PALETTE_AA_PAIRS,
   PaletteFromImage,
 } from "@workspace/contracts"
@@ -12,6 +14,7 @@ import { DAILY_CAP_USD } from "../src/cos/turns.ts"
 import { worstCall } from "../src/onboarding-agent.ts"
 import { contrast, paletteRoles, readableStops } from "../src/palette.ts"
 import {
+  finishedPalettes,
   logoPalettes,
   logoPalettesOf,
   looksOf,
@@ -19,6 +22,7 @@ import {
   paletteFromImage,
   paletteOf,
 } from "../src/vision.ts"
+import { readFacts } from "../src/workspace.ts"
 import { ledger } from "./spend-ledger.ts"
 
 /** `#rrggbb` from channels, so no colour literal sits in the code. */
@@ -143,6 +147,34 @@ describe("palettes read from a logo", () => {
     expect(read[0]?.name).toBe("Harbour blue")
     expect(read.map((p) => p.name)).not.toContain("Same again")
     expect(logoPalettesOf("nonsense")).toEqual([])
+  })
+
+  it("counts a palette as finished once the next begins or its ink is in, and all of them at the end", () => {
+    const whole = (primary: string) => ({
+      name: "Harbour blue",
+      paper: hex(250, 250, 250),
+      tint: hex(230, 236, 242),
+      primary,
+      ink: hex(15, 27, 42),
+    })
+    const first = whole(hex(30, 58, 95))
+    const { ink: _, ...unfinished } = whole(hex(90, 20, 20))
+    expect(finishedPalettes(null, false)).toEqual([])
+    expect(finishedPalettes({ palettes: [{ name: "Har" }] }, false)).toEqual([])
+    expect(finishedPalettes({ palettes: [unfinished] }, false)).toEqual([])
+    expect(finishedPalettes({ palettes: [first] }, false)).toHaveLength(1)
+    expect(
+      finishedPalettes({ palettes: [first, unfinished] }, false)
+    ).toHaveLength(1)
+    expect(
+      finishedPalettes({ palettes: [unfinished, first] }, false)
+    ).toHaveLength(1)
+    expect(
+      finishedPalettes(
+        { palettes: [first, { ...unfinished, ink: hex(1, 2, 3) }] },
+        true
+      )
+    ).toHaveLength(2)
   })
 })
 
@@ -339,71 +371,258 @@ describe("POST /palettes/from-logo", () => {
     bytes: 9,
     use: "logo",
   } as Asset
-  const kit = {
-    withOrg: async () => [{ key: "media.uploads", value: { items: [logo] } }],
-  } as unknown as Tenancy
   const key = `logo-palettes/org-a/${logo.id}.json`
-  const reading = `${key}.reading`
+  const books = (spent = 0) => {
+    const { kit, rows } = ledger(spent)
+    return {
+      rows,
+      kit: {
+        withOrg: (at: unknown, run: unknown) =>
+          run === readFacts
+            ? [{ key: "media.uploads", value: { items: [logo] } }]
+            : kit.withOrg(at as never, run as never),
+      } as unknown as Tenancy,
+    }
+  }
   const sites = () => {
-    const objects = new Map<
-      string,
-      { body: string; customMetadata?: Record<string, string> }
-    >()
+    const objects = new Map<string, string>([[`uploads/org-a/${logo.id}`, "x"]])
     return {
       objects,
+      list: async ({ prefix }: { prefix: string }) => ({
+        objects: [...objects.keys()]
+          .filter((k) => k.startsWith(prefix))
+          .map((k) => ({ key: k })),
+      }),
       get: async (k: string) => {
-        const o = objects.get(k)
-        return o ? { body: new Response(o.body).body } : null
+        const body = objects.get(k)
+        return body === undefined
+          ? null
+          : {
+              body: new Response(body).body,
+              json: async () => JSON.parse(body),
+            }
       },
-      head: async (k: string) => objects.get(k) ?? null,
-      delete: async (k: string) => {
-        objects.delete(k)
+      put: async (k: string, body: string) => {
+        objects.set(k, body)
       },
     }
   }
-  const ask = () =>
+  const ask = (signal?: AbortSignal) =>
     new Request("https://api.test/palettes/from-logo", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ asset_id: logo.id }),
+      signal,
     })
-  const inFlight = (SITES: ReturnType<typeof sites>) =>
-    SITES.objects.set(reading, {
-      body: "",
-      customMetadata: { started: String(Date.now()) },
-    })
+  const palette = (name: string, primary: string) => ({
+    name,
+    paper: hex(250, 250, 250),
+    tint: hex(230, 236, 242),
+    primary,
+    ink: hex(15, 27, 42),
+  })
+  const harbour = palette("Harbour blue", hex(30, 58, 95))
+  const clay = palette("Warm clay", hex(160, 80, 50))
 
-  it("waits for a read already in flight rather than paying for a second", async () => {
+  /** A model that writes the answer a piece at a time, each when the test lets it. */
+  const writing = () => {
+    let controller!: ReadableStreamDefaultController<Record<string, unknown>>
+    let begun: () => void = () => undefined
+    const started = new Promise<void>((resolve) => {
+      begun = resolve
+    })
+    const model = new MockLanguageModelV4({
+      doStream: async ({ abortSignal }) => ({
+        stream: new ReadableStream({
+          start(c) {
+            controller = c
+            begun()
+            c.enqueue({ type: "stream-start", warnings: [] })
+            c.enqueue({ type: "text-start", id: "t" })
+            abortSignal?.addEventListener("abort", () =>
+              c.error(abortSignal.reason)
+            )
+          },
+        }) as never,
+      }),
+    })
+    return {
+      model,
+      started,
+      write: (delta: string) =>
+        controller.enqueue({ type: "text-delta", id: "t", delta }),
+      end: () => {
+        controller.enqueue({ type: "text-end", id: "t" })
+        controller.enqueue({
+          type: "finish",
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: {
+            inputTokens: {
+              total: 900,
+              noCache: 900,
+              cacheRead: 0,
+              cacheWrite: 0,
+            },
+            outputTokens: { total: 120, text: 120, reasoning: 0 },
+          },
+        })
+        controller.close()
+      },
+    }
+  }
+  const lineReader = (response: Response) => {
+    const reader = (response.body as ReadableStream<Uint8Array>)
+      .pipeThrough(new TextDecoderStream())
+      .getReader()
+    let pending = ""
+    return {
+      next: async () => {
+        while (!pending.includes("\n")) {
+          const { done, value } = await reader.read()
+          if (done) return null
+          pending += value
+        }
+        const at = pending.indexOf("\n")
+        const line = pending.slice(0, at)
+        pending = pending.slice(at + 1)
+        return PaletteFromImage.parse(JSON.parse(line))
+      },
+    }
+  }
+  const soon = () => new Promise((resolve) => setTimeout(resolve, 20))
+
+  it("sends the first palette before the call ends, then the rest, and holds the list", async () => {
     const SITES = sites()
-    inFlight(SITES)
-    setTimeout(() => {
-      SITES.objects.set(key, { body: JSON.stringify({ palettes: [] }) })
-      SITES.objects.delete(reading)
-    }, 600)
-    const response = await logoPalettes(
+    const live = writing()
+    const books_ = books()
+    const pending = logoPalettes(
       ask(),
       { SITES } as unknown as Env,
-      kit,
+      books_.kit,
       owner,
-      { model: null }
+      { model: live.model }
     )
+    await live.started
+    live.write(`{"palettes": [${JSON.stringify(harbour)}, {"name": "Wa`)
+    const response = await pending
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ palettes: [] })
+    expect(response.headers.get("content-type")).toBe(LOGO_PALETTES_LINES)
+    const read = lineReader(response)
+    expect((await read.next())?.name).toBe("Harbour blue")
+    expect(SITES.objects.has(key)).toBe(false)
+
+    live.write(
+      `rm clay", "paper": "${clay.paper}", "tint": "${clay.tint}", "primary": "${clay.primary}", "ink": "${clay.ink}"}`
+    )
+    expect((await read.next())?.name).toBe("Warm clay")
+    live.write(`, ${JSON.stringify({ ...clay, name: "Clay again" })}]}`)
+    live.end()
+    expect(await read.next()).toBeNull()
+    expect(
+      LogoPalettes.parse(
+        JSON.parse(SITES.objects.get(key) as string)
+      ).palettes.map((p) => p.name)
+    ).toEqual(["Harbour blue", "Warm clay"])
+    expect(books_.rows.map((r) => r.type)).toEqual([
+      "cos.background_reserve",
+      "cos.background_step",
+    ])
   })
 
-  it("reads them itself once the read in flight ends without them", async () => {
+  it("serves what was held a palette a line, with no call", async () => {
     const SITES = sites()
-    inFlight(SITES)
-    setTimeout(() => SITES.objects.delete(reading), 600)
-    const started = Date.now()
+    const live = writing()
+    const palettes = [harbour, clay].map((p) =>
+      PaletteFromImage.parse({
+        name: p.name,
+        stops: { paper: p.paper, tint: p.tint, primary: p.primary, ink: p.ink },
+      })
+    )
+    SITES.objects.set(key, JSON.stringify({ palettes }))
     const response = await logoPalettes(
       ask(),
       { SITES } as unknown as Env,
-      kit,
+      books().kit,
+      owner,
+      { model: live.model }
+    )
+    expect(response.headers.get("content-type")).toBe(LOGO_PALETTES_LINES)
+    expect((await response.text()).trim().split("\n")).toEqual(
+      palettes.map((p) => JSON.stringify(p))
+    )
+    expect(live.model.doStreamCalls).toHaveLength(0)
+  })
+
+  it("answers 422 when the call ends with no readable palette, and holds nothing", async () => {
+    const SITES = sites()
+    const live = writing()
+    const pending = logoPalettes(
+      ask(),
+      { SITES } as unknown as Env,
+      books().kit,
+      owner,
+      { model: live.model }
+    )
+    await live.started
+    live.write(`{"palettes": [{"name": "x"}]}`)
+    live.end()
+    const response = await pending
+    expect(response.status).toBe(422)
+    expect(ErrorEnvelope.parse(await response.json()).code).toBe(
+      "palette.unreadable"
+    )
+    expect(SITES.objects.has(key)).toBe(false)
+  })
+
+  it("answers 429 and calls no model once the day's cap has no room", async () => {
+    const live = writing()
+    const response = await logoPalettes(
+      ask(),
+      { SITES: sites() } as unknown as Env,
+      books(DAILY_CAP_USD).kit,
+      owner,
+      { model: live.model }
+    )
+    expect(response.status).toBe(429)
+    expect(live.model.doStreamCalls).toHaveLength(0)
+  })
+
+  it("stops the call when the owner leaves, and holds nothing", async () => {
+    const SITES = sites()
+    const live = writing()
+    const gone = new AbortController()
+    const pending = logoPalettes(
+      ask(gone.signal),
+      { SITES } as unknown as Env,
+      books().kit,
+      owner,
+      { model: live.model }
+    )
+    await live.started
+    live.write(`{"palettes": [${JSON.stringify(harbour)}, {"na`)
+    const response = await pending
+    const read = lineReader(response)
+    await read.next()
+    gone.abort()
+    await soon()
+    expect(live.model.doStreamCalls[0]?.abortSignal?.aborted).toBe(true)
+    expect(SITES.objects.has(key)).toBe(false)
+  })
+
+  it("refuses a logo that is not the one held now", async () => {
+    const response = await logoPalettes(
+      new Request("https://api.test/palettes/from-logo", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          asset_id: "22222222-0000-4000-8000-000000000000",
+        }),
+      }),
+      { SITES: sites() } as unknown as Env,
+      books().kit,
       owner,
       { model: null }
     )
-    expect(response.status).toBe(503)
-    expect(Date.now() - started).toBeLessThan(5_000)
+    expect(response.status).toBe(400)
   })
 })

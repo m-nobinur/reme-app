@@ -123,6 +123,12 @@ describe("what the owner reads", () => {
     )
   })
 
+  it("says a change it could not make left the site as it was", () => {
+    expect(stoppedText("site.revise", "change.refused")).toBe(
+      "I couldn't make that change, so your site is as it was. Tell me more about what you'd like, or say try again."
+    )
+  })
+
   it("names the planned pages by the names the owner picked them by", () => {
     const pages = (ids: string[]) => ({
       ...plan,

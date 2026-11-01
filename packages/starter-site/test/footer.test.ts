@@ -49,4 +49,13 @@ describe("the footer's blurb", () => {
       []
     )
   }, 180_000)
+
+  test("falls back to the tagline when it says the service area", async () => {
+    const shown = await blurbs({
+      ...FILLED,
+      footerBlurb: `Home cleaning across ${FILLED.serviceAreaText}.`,
+    })
+    expect(shown.length).toBeGreaterThan(0)
+    expect(new Set(shown)).toEqual(new Set([FILLED.tagline]))
+  }, 180_000)
 })
