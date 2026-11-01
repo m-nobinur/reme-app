@@ -5792,6 +5792,15 @@ export interface components {
         pages: string[]
       }[]
       text_changes_left?: number
+      blocks?: {
+        page: string
+        section: string
+        block: string | null
+        /** @enum {string} */
+        change: "added" | "removed" | "changed" | "moved"
+        before: string
+        after: string
+      }[]
       notes?: {
         about: string
         why: string
@@ -6058,6 +6067,7 @@ export interface components {
         | "schedule_skill"
         | "ask_developer"
         | "get_review"
+        | "read_site"
         | "get_preview"
       )[]
       text: string
@@ -6550,6 +6560,7 @@ export interface components {
           | "schedule_skill"
           | "ask_developer"
           | "get_review"
+          | "read_site"
           | "get_preview"
         description: string
         input_schema: {
@@ -7326,6 +7337,38 @@ export interface components {
                 live_now: boolean
                 published_at: string | null
                 recorded: boolean
+                edit_type:
+                  | (
+                      | "add_content"
+                      | "update_content"
+                      | "remove"
+                      | "move"
+                      | "format"
+                      | "style"
+                      | "add_section"
+                      | "add_page"
+                      | "redesign"
+                    )
+                  | null
+                targets: {
+                  page: string
+                  section?: string
+                  block?: string
+                }[]
+                checks: {
+                  check: string
+                  passed: boolean
+                  why: string
+                }[]
+                blocks?: {
+                  page: string
+                  section: string
+                  block: string | null
+                  /** @enum {string} */
+                  change: "added" | "removed" | "changed" | "moved"
+                  before: string
+                  after: string
+                }[]
                 recent: {
                   /** Format: uuid */
                   ref: string
@@ -7333,6 +7376,20 @@ export interface components {
                   state: string
                   /** Format: date-time */
                   at: string
+                  edit_type:
+                    | (
+                        | "add_content"
+                        | "update_content"
+                        | "remove"
+                        | "move"
+                        | "format"
+                        | "style"
+                        | "add_section"
+                        | "add_page"
+                        | "redesign"
+                      )
+                    | null
+                  pages: string[]
                 }[]
               }
             | {
@@ -9443,6 +9500,2030 @@ export interface components {
           turn_id: string
           tool_call_id: string
           /** @constant */
+          tool: "read_site"
+          output:
+            | {
+                /** @constant */
+                outcome: "found"
+                /** @enum {string} */
+                about: "live" | "draft"
+                pages: {
+                  page: string
+                  title: string | null
+                  sections: {
+                    id: string
+                    kind: string
+                    heading: string | null
+                    blocks: {
+                      id: string
+                      /** @enum {string} */
+                      type:
+                        | "prose"
+                        | "checklist"
+                        | "table"
+                        | "faq"
+                        | "steps"
+                        | "cards"
+                        | "media"
+                        | "callout"
+                        | "cta"
+                        | "quote"
+                      /** @enum {string} */
+                      provenance: "owner" | "facts" | "trade"
+                    }[]
+                  }[]
+                }[]
+                document?: {
+                  /** @enum {string} */
+                  page:
+                    | "home"
+                    | "about"
+                    | "services"
+                    | "service"
+                    | "service_area"
+                    | "contact"
+                    | "quote"
+                  slug?: string
+                  title?: string
+                  description?: string
+                  sections: (
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "hero"
+                        /** @enum {string} */
+                        variant?:
+                          | "wash"
+                          | "split_arch"
+                          | "split_frame"
+                          | "dark_center"
+                          | "text_led"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "trust_strip"
+                        /** @enum {string} */
+                        variant?: "icons" | "phrases"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "service_cards"
+                        /** @enum {string} */
+                        variant?:
+                          | "photo_cards"
+                          | "numbered_rows"
+                          | "alternating"
+                          | "fleet"
+                          | "practice_list"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "value_props"
+                        /** @enum {string} */
+                        variant?: "default" | "hairline_rows"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "steps"
+                        /** @enum {string} */
+                        variant?: "circles" | "dark_band" | "timeline"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "about"
+                        /** @enum {string} */
+                        variant?: "default" | "panel_split"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "testimonials"
+                        /** @enum {string} */
+                        variant?: "featured" | "wall"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "gallery"
+                        /** @enum {string} */
+                        variant?: "default"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "service_area"
+                        /** @enum {string} */
+                        variant?: "default" | "town_list"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "faq"
+                        /** @enum {string} */
+                        variant?: "split" | "stacked"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "cta_band"
+                        /** @enum {string} */
+                        variant?: "solid" | "photo"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "contact"
+                        /** @enum {string} */
+                        variant?: "default"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "quote_form"
+                        /** @enum {string} */
+                        variant?: "default"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "content"
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                    | {
+                        id: string
+                        /** @constant */
+                        kind: "custom"
+                        name: string
+                        eyebrow?: string
+                        heading?: string
+                        intro?: string
+                        blocks?: (
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "prose"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              markdown: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "checklist"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: string[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "table"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              caption?: string
+                              columns: string[]
+                              rows: string[][]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "faq"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                question: string
+                                answer: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "steps"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cards"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              items: {
+                                title: string
+                                body: string
+                                icon?: string
+                              }[]
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "media"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              src: string
+                              alt: string
+                              caption?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "callout"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "cta"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              body: string
+                              label?: string
+                              href?: string
+                            }
+                          | {
+                              id: string
+                              /** @constant */
+                              type: "quote"
+                              /** @enum {string} */
+                              provenance: "owner" | "facts" | "trade"
+                              eyebrow?: string
+                              heading?: string
+                              text: string
+                              author: string
+                            }
+                        )[]
+                      }
+                  )[]
+                }
+                notes: string[]
+              }
+            | {
+                /** @constant */
+                outcome: "no_documents"
+              }
+            | {
+                /** @constant */
+                outcome: "none"
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
           tool: "get_preview"
           output:
             | {
@@ -9526,6 +11607,7 @@ export interface components {
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
+            | "read_site"
             | "get_preview"
           )[]
           steps: number
@@ -9577,6 +11659,7 @@ export interface components {
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
+            | "read_site"
             | "get_preview"
           )[]
           steps: number
@@ -9626,6 +11709,7 @@ export interface components {
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
+            | "read_site"
             | "get_preview"
           )[]
           steps: number
@@ -9675,6 +11759,7 @@ export interface components {
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
+            | "read_site"
             | "get_preview"
           )[]
           steps: number
@@ -9724,6 +11809,7 @@ export interface components {
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
+            | "read_site"
             | "get_preview"
           )[]
           steps: number
@@ -9773,6 +11859,7 @@ export interface components {
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
+            | "read_site"
             | "get_preview"
           )[]
           steps: number
@@ -10229,6 +12316,9 @@ export interface components {
         [key: string]: string
       }
       files: {
+        [key: string]: string
+      }
+      redirects?: {
         [key: string]: string
       }
       /** Format: date-time */
@@ -11349,6 +13439,38 @@ export interface components {
           live_now: boolean
           published_at: string | null
           recorded: boolean
+          edit_type:
+            | (
+                | "add_content"
+                | "update_content"
+                | "remove"
+                | "move"
+                | "format"
+                | "style"
+                | "add_section"
+                | "add_page"
+                | "redesign"
+              )
+            | null
+          targets: {
+            page: string
+            section?: string
+            block?: string
+          }[]
+          checks: {
+            check: string
+            passed: boolean
+            why: string
+          }[]
+          blocks?: {
+            page: string
+            section: string
+            block: string | null
+            /** @enum {string} */
+            change: "added" | "removed" | "changed" | "moved"
+            before: string
+            after: string
+          }[]
           recent: {
             /** Format: uuid */
             ref: string
@@ -11356,6 +13478,20 @@ export interface components {
             state: string
             /** Format: date-time */
             at: string
+            edit_type:
+              | (
+                  | "add_content"
+                  | "update_content"
+                  | "remove"
+                  | "move"
+                  | "format"
+                  | "style"
+                  | "add_section"
+                  | "add_page"
+                  | "redesign"
+                )
+              | null
+            pages: string[]
           }[]
         }
       | {
@@ -12109,6 +14245,37 @@ export interface components {
       change_kind?: "copy" | "style" | "section" | "photo" | "creative"
       /** @description A short name for the change in the owner's terms, as the panel and the ready line say it after "updating": "your hero title", "your phone number", "the colours". */
       label?: string
+      brief?: {
+        /**
+         * @description add_content: new words in an existing section. update_content: reword what is there. remove: take a block, section, page or service off the site. move: reorder sections or blocks. format: the same words in another form, such as a list or a table. style: colours, fonts or spacing across the site. add_section: a new section on a page. add_page: a new page. redesign: a new look or layout.
+         * @enum {string}
+         */
+        edit_type:
+          | "add_content"
+          | "update_content"
+          | "remove"
+          | "move"
+          | "format"
+          | "style"
+          | "add_section"
+          | "add_page"
+          | "redesign"
+        /** @description The page, section and block ids the change touches, from read_site. Empty only for style or redesign. */
+        targets: {
+          page: string
+          section?: string
+          block?: string
+        }[]
+        /** @description The finished words in the site's voice, as markdown. Where the owner gave the text, their words exactly. Omit it when nothing new is written. */
+        content?: string
+        /** @description Where it goes, by id: "after section faq on home", "as the first block of section story". */
+        placement?: string
+        /** @description What must stay as it is beyond the targets, when the owner said so. */
+        keep?: string
+        /** @description Two or three checks anyone can make by reading the page: "The About page has a section headed Our story", "The FAQ section comes before the services on home". */
+        acceptance: string[]
+        owner_words: string
+      }
       /** @description Set when the owner wrote the words in the panel: once the change starts they are also posted in this conversation, or in the newest one when none is named. */
       chat?: {
         /** Format: uuid */

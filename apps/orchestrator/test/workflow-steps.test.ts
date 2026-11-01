@@ -162,7 +162,12 @@ const script = {
   /** The revision a warm sandbox names, if any. */
   held: null as string | null,
   /** The lane the created event recorded; none is an instance from before lanes. */
-  lane: {} as { lane?: string; change_kind?: string | null; kind?: string },
+  lane: {} as {
+    lane?: string
+    change_kind?: string | null
+    kind?: string
+    brief?: unknown
+  },
   /** The steers logged before the Developer was admitted. */
   early: [] as { event_id: string; message: string; owner: boolean }[],
   /** Whether the one-call quick edit gets to a report. */
@@ -187,6 +192,8 @@ const script = {
   }[],
   /** How long ago each stall check finds the build's newest event; none left is never. */
   quiet: [] as number[],
+  /** Whether each acceptance judgement of a briefed change passes; none left passes. */
+  accepts: [] as boolean[],
   looks: [] as {
     request_id: string
     fact_id: string | null
@@ -327,6 +334,15 @@ const photoFiles = vi.hoisted(() => ({
 }))
 // BA5: the critic's rounds are driven in critic.test.ts; here each look finds
 // what the path scripts, none by default.
+vi.mock("../src/change.ts", () => ({
+  acceptanceMessage: () => "{}",
+  changeContext: () => "",
+  readDocuments: async () => ({}),
+  recentChanges: async () => [],
+  judgeChange: async () => [
+    { check: "c", passed: script.accepts.shift() ?? true, why: "w" },
+  ],
+}))
 vi.mock("../src/critic.ts", () => ({
   critiqueRound: async ({ round }: { round: number }) => ({
     round,
@@ -516,12 +532,14 @@ type Setup = {
   lane?: typeof script.lane
   quickDone?: boolean
   critic?: typeof script.critic
+  accepts?: boolean[]
   quiet?: number[]
   photosFail?: boolean
   followUp?: boolean
 }
 const full = { lane: "full" }
 const copy = { lane: "quick", change_kind: "copy" }
+const BRIEF = { edit_type: "move", targets: [], acceptance: ["a", "b"] }
 const FIX = {
   page: "home",
   section: "Hero",
@@ -702,6 +720,19 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     { lane: full, critic: [[FIX, FIX], []] },
     { outcome: "preview_ready" },
   ],
+  // A briefed copy change whose check fails goes to the Developer once, then on.
+  [
+    "briefed change sent back once",
+    [completion, completion],
+    { lane: { ...copy, brief: BRIEF }, accepts: [false, false] },
+    { outcome: "preview_ready" },
+  ],
+  [
+    "briefed change accepted",
+    [completion],
+    { lane: { ...copy, brief: BRIEF } },
+    { outcome: "preview_ready" },
+  ],
   // An owner's build plans and builds with no stop for a review.
   [
     "owner's planned build",
@@ -748,6 +779,7 @@ describe("the assignment Workflow's step names", () => {
     script.critic = [...(setup.critic ?? [])]
     script.again = []
     script.quiet = [...(setup.quiet ?? [])]
+    script.accepts = [...(setup.accepts ?? [])]
     script.followUp = setup.followUp ?? false
     photoStep.fail = setup.photosFail ?? false
     photoStep.appended.length = 0
@@ -1055,6 +1087,8 @@ describe("the assignment Workflow's step names", () => {
         "planned build",
         "photos failed",
         "design critique repaired",
+        "briefed change sent back once",
+        "briefed change accepted",
         "owner's planned build",
       ].sort()
     )

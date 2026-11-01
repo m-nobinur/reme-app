@@ -24,11 +24,13 @@ import {
 } from "../src/cos/memory.ts"
 import {
   guard,
+  keptNotes,
   operationsOf,
   promptOf,
   REFLECTION,
   reflect,
   reflectAfterTurn,
+  siteNotesOf,
   verdictOf,
   type Window,
   windowOf,
@@ -212,6 +214,25 @@ describe("what the model answers", () => {
     ])
     expect(operationsOf("Nothing to save.")).toBeNull()
     expect(operationsOf('{"operations": [{"action": "delete"}]}')).toBeNull()
+  })
+
+  it("keeps a site note only when it is the owner's own whole sentence and no business fact", () => {
+    const notes = siteNotesOf(
+      '{"operations": [], "site_notes": ["Use bullets,  not paragraphs.", "Prefers short headings", "Call us on 07700 900123."]}'
+    )
+    expect(notes).toEqual([
+      "Use bullets, not paragraphs.",
+      "Prefers short headings",
+      "Call us on 07700 900123.",
+    ])
+    expect(
+      keptNotes(notes, [
+        "Use bullets, not paragraphs. Thanks!",
+        "Call us on 07700 900123.",
+      ])
+    ).toEqual(["Use bullets, not paragraphs."])
+    expect(siteNotesOf('{"operations": []}')).toEqual([])
+    expect(siteNotesOf("no json")).toEqual([])
   })
 
   it("is asked with the instructions and a call that is scrubbed and costed", async () => {

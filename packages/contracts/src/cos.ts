@@ -29,18 +29,33 @@ import {
   BUILD_ACTIVITY_MAX,
   BuildStopCause,
   BuildSummary,
+  ChangeBrief,
+  ChangeTarget,
   CreateReminderRequest,
   E164,
+  EditType,
   FactValue,
   FactValueKey,
   OwnerAnswerText,
   OwnerChangeRequest,
+  PagePath,
   Reminder,
   ReviewValue,
   WorkspaceStatus,
 } from "./owner.ts"
+import {
+  BLOCK_PROVENANCE,
+  BLOCK_TYPES,
+  ContentId,
+  PageDocument,
+} from "./page.ts"
 import { Refused } from "./refused.ts"
-import { CompletionReport, GateName, SiteReview } from "./report.ts"
+import {
+  ChangeCheck,
+  CompletionReport,
+  GateName,
+  SiteReview,
+} from "./report.ts"
 import {
   ConnectGoogleInput,
   ConnectGoogleOutput,
@@ -50,6 +65,8 @@ import {
   GetSearchPerformanceOutput,
 } from "./search.ts"
 import {
+  CORRECTION_MAX,
+  CORRECTIONS_MAX,
   ReadSkillInput,
   ReadSkillOutput,
   SaveCorrectionInput,
@@ -245,6 +262,9 @@ export const ONBOARDING_GOAL = "Build my website from the details I gave you."
  * panel: the runner strips it before the tool runs.
  */
 export const CosChangeRequest = OwnerChangeRequest.extend({
+  brief: ChangeBrief.optional().describe(
+    "The change briefed after reading the site, as the site-change procedure says: for every change to the website's words, layout, pages or look. The tool adds the owner's message itself."
+  ),
   proof: z
     .string()
     .trim()
@@ -305,6 +325,13 @@ export const GetChangeOutput = z.discriminatedUnion("outcome", [
     live_now: z.boolean(),
     published_at: Timestamp.nullable(),
     recorded: z.boolean(),
+    /** The brief's edit type and targets, null and empty for a change sent without one. */
+    edit_type: EditType.nullable(),
+    targets: z.array(ChangeTarget).max(8),
+    /** The brief's acceptance checks as judged on the last build of it; empty before then. */
+    checks: z.array(ChangeCheck).max(3),
+    /** Each block and section it touched, before and after: what an undo puts back. */
+    blocks: CompletionReport.shape.blocks,
     recent: z
       .array(
         z.strictObject({
@@ -312,6 +339,9 @@ export const GetChangeOutput = z.discriminatedUnion("outcome", [
           label: ChangeLabel,
           state: ChangeState,
           at: Timestamp,
+          edit_type: EditType.nullable(),
+          /** The pages its blocks changed on. */
+          pages: z.array(PagePath).max(5),
         })
       )
       .max(5),
@@ -361,6 +391,58 @@ export const AskDeveloperOutput = z.discriminatedUnion("outcome", [
   }),
   z.strictObject({ outcome: z.literal("review_running"), ref: Uuid }),
   z.strictObject({ outcome: z.literal("no_site") }),
+  Refused,
+])
+
+/** `read_site`'s input: a page for its document in full; left out, the outline of every page. */
+export const ReadSiteInput = z.strictObject({
+  page: PagePath.optional().describe(
+    'A page\'s path from the outline, such as "about" or "services/deep-clean", for its sections and blocks in full. Leave it out for the outline.'
+  ),
+})
+
+/**
+ * `read_site`'s output: the page documents of the version a change would
+ * start from, the draft when one is waiting and otherwise the live site.
+ * The outline names every section and block id a change brief targets.
+ */
+export const ReadSiteOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("found"),
+    about: z.enum(["live", "draft"]),
+    pages: z
+      .array(
+        z.strictObject({
+          page: PagePath,
+          title: z.string().max(120).nullable(),
+          sections: z
+            .array(
+              z.strictObject({
+                id: ContentId,
+                kind: z.string().max(60),
+                heading: z.string().max(200).nullable(),
+                blocks: z
+                  .array(
+                    z.strictObject({
+                      id: ContentId,
+                      type: z.enum(BLOCK_TYPES),
+                      provenance: z.enum(BLOCK_PROVENANCE),
+                    })
+                  )
+                  .max(24),
+              })
+            )
+            .max(24),
+        })
+      )
+      .max(60),
+    document: PageDocument.optional(),
+    /** The owner's site notes: how they want the site worked on, their sentences as saved for the builder. */
+    notes: z.array(Text(CORRECTION_MAX)).max(CORRECTIONS_MAX),
+  }),
+  /** The site was built before page documents; its next change moves it to them. */
+  z.strictObject({ outcome: z.literal("no_documents") }),
+  z.strictObject({ outcome: z.literal("none") }),
   Refused,
 ])
 
@@ -793,6 +875,7 @@ export const COS_TOOLS = {
   schedule_skill: { input: ScheduleSkillInput, output: ScheduleSkillOutput },
   ask_developer: { input: AskDeveloperInput, output: AskDeveloperOutput },
   get_review: { input: GetReviewInput, output: GetReviewOutput },
+  read_site: { input: ReadSiteInput, output: ReadSiteOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -1049,6 +1132,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
   }),
   z.strictObject({
     ...Called,
+    tool: z.literal("read_site"),
+    output: COS_TOOLS.read_site.output,
+  }),
+  z.strictObject({
+    ...Called,
     tool: z.literal("get_preview"),
     output: GetPreviewOutput,
   }),
@@ -1157,6 +1245,8 @@ export type GetChangeOutput = z.infer<typeof GetChangeOutput>
 export type AskDeveloperInput = z.infer<typeof AskDeveloperInput>
 export type AskDeveloperOutput = z.infer<typeof AskDeveloperOutput>
 export type GetReviewInput = z.infer<typeof GetReviewInput>
+export type ReadSiteInput = z.infer<typeof ReadSiteInput>
+export type ReadSiteOutput = z.infer<typeof ReadSiteOutput>
 export type GetReviewOutput = z.infer<typeof GetReviewOutput>
 export type GetPreviewOutput = z.infer<typeof GetPreviewOutput>
 export type AnswerQuestionInput = z.infer<typeof AnswerQuestionInput>

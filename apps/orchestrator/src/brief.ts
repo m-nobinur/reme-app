@@ -7,6 +7,7 @@ import {
   FactSnapshot,
   type GateName,
   OFF_SITE_FACT_KEYS,
+  OwnerChangeRequest,
   type RuntimeSpec,
   ValidationReport,
 } from "@workspace/contracts"
@@ -30,6 +31,7 @@ import {
   signSpec,
 } from "@workspace/facade"
 import { HIDDEN_FACTS_KEY } from "@workspace/gates"
+import type { z } from "zod"
 import type { PhotoFile } from "./photo-step.ts"
 import { NPM_REGISTRY_HOST } from "./sandbox.ts"
 import { type Ids, repairsSoFar } from "./state.ts"
@@ -68,7 +70,13 @@ export type Brief = {
   fallback?: true
   /** The owner's corrections for the Developer, each their sentence as typed. */
   corrections?: string[]
+  /** The change brief, with the targeted pages' documents as the change starts. */
+  change?: { brief: OwnerBrief; context: string }
 }
+
+/** A change brief as the owner's assistant sent it, the owner's words with it. */
+export const OwnerBrief = OwnerChangeRequest.shape.brief.unwrap()
+export type OwnerBrief = z.infer<typeof OwnerBrief>
 
 /**
  * What failed on the attempt a retry starts again: the shape of a
@@ -146,6 +154,21 @@ export function retryContextSignal(brief: Brief) {
 }
 
 /**
+ * The change brief with the targeted sections and the recent changes,
+ * heard once beside the change request. The assistant wrote it from the
+ * owner's words, so it is tainted the same way.
+ */
+export function changeBriefSignal(brief: Brief) {
+  if (!brief.change) return null
+  return {
+    kind: "signal" as const,
+    type: "site.change_brief",
+    body: brief.change.context,
+    attributes: { taint: "untrusted_input" },
+  }
+}
+
+/**
  * The org's current facts the site may draw on: never the ones kept for the
  * assistant alone (`OFF_SITE_FACT_KEYS`), such as the owner's prices.
  */
@@ -206,6 +229,8 @@ export async function creationChoices(
   kind: string
   /** The failed build this one starts again (retry.ts). */
   retry_of: string | null
+  /** The change brief the owner's assistant wrote, when it sent one. */
+  brief: OwnerBrief | null
 }> {
   const [row] = await db
     .select({ payload: events.payload })
@@ -227,6 +252,7 @@ export async function creationChoices(
     change_kind: ChangeKind.safeParse(payload.change_kind).data ?? null,
     kind: typeof payload.kind === "string" ? payload.kind : "site.build",
     retry_of: typeof payload.retry_of === "string" ? payload.retry_of : null,
+    brief: OwnerBrief.safeParse(payload.brief).data ?? null,
   }
 }
 

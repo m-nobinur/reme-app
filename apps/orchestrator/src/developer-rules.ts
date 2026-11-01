@@ -239,6 +239,7 @@ export function buildRules(
     ...(revising
       ? [
           "- Touch only the files the change needs, and list only those in changes[] with what moved and why.",
+          ...CHANGE_RULES,
         ]
       : []),
     `- Every phone number, email, opening hour, service area, review or certification on the site must come from the facts below. The site needs ${ask.join(", ")}. If any of those is not listed below, call ask_chief for the first missing one, in that order, before you edit anything, and stop; never invent a value and never write a placeholder such as "TBD", "555", "lorem" or an example domain.`,
@@ -250,6 +251,23 @@ export function buildRules(
       : []),
   ]
 }
+
+/**
+ * How a briefed change is built, by its edit type: what each may touch, with
+ * one worked example each. Both change lanes read them.
+ */
+export const CHANGE_RULES: readonly string[] = [
+  "- A briefed change also arrives as a site.change_brief message: its edit_type, its targets by page, section and block id, the finished content, the placement, what to keep and two or three acceptance checks, with each targeted page's outline, the targeted sections as their document holds them and the site's recent changes. Build exactly the brief. Every acceptance check holds when you report; nothing outside the targets changes; a recent change stays unless the brief undoes it. Content the brief gives as the owner's words goes in word for word as an owner block.",
+  '- add_content adds the content to the targeted section where placement says, as a new block with a new id or new words in the targeted block; nothing else moves. Example: a callout "Same-day slots on weekdays" added after the hero\'s callout block.',
+  "- update_content rewords only the targeted blocks; their ids, types and order stay. Example: the third FAQ answer reworded, the other answers as they were.",
+  "- remove takes the targets off everywhere they show. A removed service leaves the services in src/site-config.ts, which takes its card, page, menu link, sitemap entry and structured data with it; also drop its row from any comparison table and every FAQ answer that names it. The platform sends the old page's address to /services/. Example: Oven cleaning removed: its services entry, its table row and the FAQ answer about ovens.",
+  "- move reorders the targeted sections or blocks in their document; their words and ids stay. Example: section faq moved above section services on home.",
+  "- format puts the same words in another block type: a list, a table, steps or cards. Example: the prose on what end of tenancy covers becomes a table block with columns Room and What we clean, every item kept.",
+  "- style changes the theme only: direction, palette, font and the theme tokens. No words change. Example: a warmer palette from the direction's own list.",
+  "- add_section adds one section with a new id where placement says, from the brief's content; the other sections stay as they are. Example: a content section story with an owner prose block, after the about intro.",
+  "- add_page adds the page the brief names with its document, and its link where the site lists pages; other pages stay. redesign may change layout, variants and theme across the site; every word and every owner block stays.",
+  "- A change that alters what a page is about updates that page's title and description in its document too. Structured data, the sitemap and the menus follow the documents and the services by themselves. To show the phone in the header, set headerPhone in src/site-config.ts from business.phone.",
+]
 
 /**
  * The owner's corrections for the Developer (`save_correction`), quoted as

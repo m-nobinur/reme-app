@@ -575,6 +575,25 @@ describe("hosts", () => {
     pointers.delete("host:brightclean.remeai.co.uk")
   })
 
+  it("sends a removed page's old path where its manifest says, with a 301", async () => {
+    const moved = crypto.randomUUID()
+    revision(ORG, moved, { redirects: { "/services/oven/": "/services/" } })
+    pointers.set("host:brightclean.remeai.co.uk", {
+      org_id: ORG,
+      site_id: ORG,
+      revision_id: moved,
+      config_version: 1,
+    })
+    for (const path of ["/services/oven/", "/services/oven"]) {
+      const { res } = await passedThrough("brightclean.remeai.co.uk", path)
+      expect(res.status).toBe(301)
+      expect(res.headers.get("location")).toBe("/services/")
+    }
+    const { res } = await passedThrough("brightclean.remeai.co.uk", "/no")
+    expect(res.status).toBe(404)
+    pointers.delete("host:brightclean.remeai.co.uk")
+  })
+
   it("passes nothing through on staging, which owns no service hostname", async () => {
     const { res, seen } = await passedThrough(
       "staging-api.remeai.co.uk",

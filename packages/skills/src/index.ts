@@ -5,6 +5,7 @@ import type {
 } from "@workspace/contracts"
 import { quoteReply } from "./procedures/quote-reply.ts"
 import { reviewReply } from "./procedures/review-reply.ts"
+import { siteChange } from "./procedures/site-change.ts"
 import { weeklyReview } from "./procedures/weekly-review.ts"
 
 /** Whose prompt a skill is for: the CoS, or a staff role. */
@@ -31,6 +32,7 @@ export const PROCEDURES: readonly Procedure[] = [
   weeklyReview,
   reviewReply,
   quoteReply,
+  siteChange,
 ]
 
 /**

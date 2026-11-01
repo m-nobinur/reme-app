@@ -369,8 +369,15 @@ function supportFrom(facts: readonly FactRecord[]): Support {
       continue
     // biome-ignore lint/suspicious/noUnnecessaryConditions: JSON.stringify returns undefined for an undefined value
     const json = JSON.stringify(fact.value) ?? ""
+    // The owner's own words only: an item's id and page are names, never support.
+    const owned = fact.value as { items?: { markdown?: unknown }[] } | null
     const text =
-      fact.key === "site.content" ? json.replace(OWNER_UNSUPPORTED, " ") : json
+      fact.key === "site.content"
+        ? (owned?.items ?? [])
+            .map((i) => String(i.markdown ?? ""))
+            .join("\n")
+            .replace(OWNER_UNSUPPORTED, " ")
+        : json
     for (const m of text.matchAll(/\d+(?:\.\d+)?/g))
       support.numbers.add(Number(m[0]))
     support.anyWords.push(stems(text))

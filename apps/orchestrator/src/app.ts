@@ -3,6 +3,7 @@ import {
   type BuildLane,
   BuildSummary,
   type ChangeKind,
+  EDIT_KIND,
   type EnvelopeBody,
   envelope,
   GetSearchPerformanceInput,
@@ -66,7 +67,7 @@ import {
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
-import { creationChoices, hideFacts, updateFacts } from "./brief.ts"
+import { creationChoices, hideFacts, OwnerBrief, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import { askDeveloper } from "./consult.ts"
 import {
@@ -331,6 +332,7 @@ bridge.post("/", async (c) => {
     change_kind?: unknown
     draft_revision_id?: unknown
     label?: unknown
+    brief?: unknown
   }
   const kind = typeof body.kind === "string" ? body.kind : "site.build"
   // Both are the console's test levers; an owner gets the defaults.
@@ -388,15 +390,19 @@ bridge.post("/", async (c) => {
       detail: {},
     })
   }
+  // A brief that does not fit is dropped like a label: the goal still carries the change.
+  const brief =
+    kind === "site.revise" ? OwnerBrief.safeParse(body.brief).data : undefined
   return createAssignment(c, key, {
     kind,
     goal,
     model,
     withhold,
-    ...pickLane(kind, body.change_kind),
+    ...pickLane(kind, brief ? EDIT_KIND[brief.edit_type] : body.change_kind),
     ...(typeof draft === "string" ? { draft } : {}),
     // A label that does not fit is dropped, never a reason to refuse the change.
     ...(label ? { label } : {}),
+    ...(brief ? { brief } : {}),
   })
 })
 
@@ -416,6 +422,7 @@ export type NewAssignment = {
   draft?: string
   /** A change's short name in the owner's terms, for the panel and the ready line. */
   label?: string
+  brief?: OwnerBrief
 }
 
 /** The row and its `assignment.created` event, or why not, in the caller's transaction. */
@@ -517,6 +524,7 @@ export async function insertAssignment(
       ...(input.draft ? { draft_revision_id: input.draft } : {}),
       ...(input.label ? { label: input.label } : {}),
       ...(input.retry_of ? { retry_of: input.retry_of.assignment_id } : {}),
+      ...(input.brief ? { brief: input.brief } : {}),
     },
     taint,
   })

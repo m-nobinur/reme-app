@@ -667,6 +667,16 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   const found = await manifestFor(c, host, pointer)
   if (!found) return notHere(c)
   const file = resolveSitePath(url.pathname, found.manifest.files)
+  const moved =
+    !file && found.manifest.redirects
+      ? found.manifest.redirects[
+          url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`
+        ]
+      : undefined
+  if (moved) {
+    c.header("cache-control", "no-cache")
+    return c.redirect(`${moved}${url.search}`, 301)
+  }
   if (!file) {
     if (!Object.hasOwn(found.manifest.files, MISSING_PAGE)) return notHere(c)
     return serve(

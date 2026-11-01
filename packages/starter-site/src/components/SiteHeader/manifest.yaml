@@ -12,6 +12,8 @@ constraints:
   - The Base layout renders it on every page.
   - Navigation and the action come from src/routes.ts, so a link shows only when
     its page exists and its label field is set.
+  - site.headerPhone, empty unless the owner asked for the phone in the header,
+    shows the number as a call link beside the action on wider screens.
   - The owner's logo (site.logo with site.logoAlt) replaces the business name at
     a fixed height; with no logo the name shows as text.
   - On a phone the links sit behind a native details menu labelled navMenu,

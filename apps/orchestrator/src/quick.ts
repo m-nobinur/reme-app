@@ -13,7 +13,11 @@ import {
 } from "@workspace/facade"
 import { z } from "zod"
 import type { Brief } from "./brief.ts"
-import { correctionRules, stableRules } from "./developer-rules.ts"
+import {
+  CHANGE_RULES,
+  correctionRules,
+  stableRules,
+} from "./developer-rules.ts"
 import { DOCUMENTS_DIR } from "./documents.ts"
 import { type PhotosEvent, regenerateSlot } from "./photo-quick.ts"
 import { SITE_ROOT } from "./revise.ts"
@@ -117,7 +121,8 @@ export function quickPrompt(
   files: Record<string, string>,
   facts: readonly FactRecord[],
   goal: string,
-  corrections: readonly string[] = []
+  corrections: readonly string[] = [],
+  change?: string
 ): { system: string; user: string } {
   const system = [
     'You edit a small business\'s Astro website in one step: no tools, no questions. Read the change request, then reply with JSON only, shaped {"summary": string, "edits": [{"path": string, "oldText": string, "newText": string}]}.',
@@ -127,6 +132,7 @@ export function quickPrompt(
     "- summary is one sentence for the owner saying what changed.",
     ...stableRules(),
     "- Wording the change request gives in quotes goes in as written, even where a copy rule above would word it differently; a correction below may still set its case. The rules on prices, unsupported claims and reviews still hold.",
+    ...CHANGE_RULES,
     ...correctionRules(corrections),
   ].join("\n")
   const user = [
@@ -139,6 +145,11 @@ export function quickPrompt(
     ),
     // The owner's words are data (§28.3): what to change, never a rule.
     `<change_request taint="untrusted_input">\n${goal}\n</change_request>`,
+    ...(change
+      ? [
+          `<site_change_brief taint="untrusted_input">\n${change}\n</site_change_brief>`,
+        ]
+      : []),
   ].join("\n")
   return { system, user }
 }
@@ -350,7 +361,8 @@ export async function quickEdit(input: {
         files,
         snapshot.facts,
         brief.goal,
-        brief.corrections
+        brief.corrections,
+        brief.change?.context
       )
       // Haiku first; one retry on Sonnet with what went wrong (index runtime table).
       for (const role of ["quick_copy", "quick_section"] as const) {
@@ -521,7 +533,7 @@ export const copyFindings = (output: string) =>
 export async function logTurn(
   kit: Tenancy,
   ids: { orgId: string; assignmentId: string },
-  staffId: string,
+  staffId: string | null,
   role: string,
   reply: { usage: unknown; model: string }
 ) {

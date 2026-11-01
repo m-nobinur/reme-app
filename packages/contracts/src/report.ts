@@ -1,6 +1,8 @@
 import { z } from "zod"
 import { AssignmentState, InformationRequest } from "./assignment.ts"
 import { Timestamp, Uuid } from "./common.ts"
+import { PagePath } from "./owner.ts"
+import { ContentId } from "./page.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -70,6 +72,31 @@ export const ValidationReport = z.strictObject({
   revision_id: Uuid,
   gates: z.array(GateResult).min(1),
   produced_at: Timestamp,
+})
+
+/** One block or section a change touched, as its text before and after; "" where there was none. */
+export const BlockChange = z.strictObject({
+  page: PagePath,
+  section: ContentId,
+  block: ContentId.nullable(),
+  change: z.enum(["added", "removed", "changed", "moved"]),
+  before: z.string().max(1_000),
+  after: z.string().max(1_000),
+})
+
+/** One of a change brief's acceptance checks, judged on the built pages, never by the builder. */
+export const ChangeCheck = z.strictObject({
+  check: Text(200),
+  passed: z.boolean(),
+  why: Text(300),
+})
+
+/** The `change.checked` event: a change's acceptance checks after one build of it. */
+export const CHANGE_CHECKED = "change.checked"
+export const ChangeChecked = z.strictObject({
+  report_id: Uuid,
+  round: z.int().min(1).max(2),
+  checks: z.array(ChangeCheck).min(1).max(3),
 })
 
 /**
@@ -142,6 +169,13 @@ export const CompletionReport = z.strictObject({
     .optional(),
   /** The pairs past the cap of 8. */
   text_changes_left: z.int().nonnegative().optional(),
+  /**
+   * What the change did to each block and section of the page documents,
+   * read by code from the old and new documents: the record a change is
+   * undone from. `block` is null for a section's own words or its place.
+   * Absent on a first build and on a site without documents.
+   */
+  blocks: z.array(BlockChange).max(24).optional(),
   /** The Developer's reasons for the choices an owner may ask about, written before its session ends. */
   notes: z
     .array(
@@ -199,4 +233,7 @@ export type GateName = z.infer<typeof GateName>
 export type GateResult = z.infer<typeof GateResult>
 export type ValidationReport = z.infer<typeof ValidationReport>
 export type CompletionReport = z.infer<typeof CompletionReport>
+export type BlockChange = z.infer<typeof BlockChange>
+export type ChangeCheck = z.infer<typeof ChangeCheck>
+export type ChangeChecked = z.infer<typeof ChangeChecked>
 export type SiteReview = z.infer<typeof SiteReview>

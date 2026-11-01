@@ -342,7 +342,10 @@ describe("the CoS's instructions", () => {
 
   it("tell the model the owner's words are the yes and to speak of the work as its own", () => {
     expect(INSTRUCTIONS).toMatch(
-      /request_change in the owner's own words, one change per call, as soon as the owner asks for it: never ask them to confirm it first/
+      /request_change in the owner's own words, one change per call, as soon as the owner asks for it\. Never ask them to confirm it first, with one exception the procedure gives: new copy you wrote that runs past a line, or a new section or page, is shown as a short draft first/
+    )
+    expect(INSTRUCTIONS).toMatch(
+      /read the site-change procedure with read_skill and follow it/
     )
     expect(INSTRUCTIONS).toMatch(
       /request_change comes back with outcome "started"[^\n]*never say queued[^\n]*Never ask them to approve it/
@@ -1658,6 +1661,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "get_workspace",
       "inspect_domain",
       "put_off",
+      "read_site",
       "read_skill",
       "remember",
       "save_correction",

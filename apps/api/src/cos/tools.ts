@@ -10,11 +10,15 @@ import {
   BuildSummary,
   type BuyDomainInput,
   type BuyDomainOutput,
+  CHANGE_CHECKED,
+  ChangeBrief,
+  ChangeChecked,
   type CheckDomainInput,
   CheckDomainOutput,
   CompletionReport,
   type ConnectDomainInput,
   ConnectDomainOutput,
+  ContentId,
   type CosChangeRequest,
   CosFacts,
   CosMessage,
@@ -23,10 +27,14 @@ import {
   type CreateReminderOutput,
   type DeleteReminderInput,
   type DeleteReminderOutput,
+  DOCUMENT_PAGES,
+  DOCUMENTS_KEY,
   type DomainBoughtInput,
   DomainCheck,
   DomainInspection,
   DomainRegistrantPrefill,
+  EDIT_KIND,
+  EditType,
   ErrorEnvelope,
   type Evidence,
   type FactRecord,
@@ -39,6 +47,7 @@ import {
   GetChangeOutput,
   type GetReviewInput,
   type GetReviewOutput,
+  GOAL_MAX,
   InformationAnswer,
   type InspectDomainInput,
   type InspectDomainOutput,
@@ -49,6 +58,8 @@ import {
   type PutOffOutput,
   type QuestionAnswer,
   REVIEW_FACT_KEYS,
+  type ReadSiteInput,
+  ReadSiteOutput,
   type RecordReviewInput,
   type RecordReviewOutput,
   type RemoveDomainInput,
@@ -57,6 +68,7 @@ import {
   type ReviewFactKey,
   type SetTimeZoneInput,
   type SetTimeZoneOutput,
+  SiteDocuments,
   SiteReview,
   TERMINAL_STATES,
   type UpdateReminderInput,
@@ -73,9 +85,11 @@ import {
   lowerNextDue,
   type OrgScopedDb,
   openTask,
+  readCorrections,
   readTasks,
   type SQL,
   scheduledJobs,
+  siteRevisions,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -113,7 +127,12 @@ import { offerZone } from "../time-zone.ts"
 import { EXPECTED_SECONDS, readFacts, statusWithFacts } from "../workspace.ts"
 import { readSession } from "./history.ts"
 import { STATE } from "./labels.ts"
-import { contentWords, inOwnersWords, readProfile } from "./memory.ts"
+import {
+  contentWords,
+  inOwnersWords,
+  ownerWords,
+  readProfile,
+} from "./memory.ts"
 import { knownZone, wallToUtc, zonedIso } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
@@ -555,6 +574,8 @@ export async function getChange(
           string | null
         >`(select e.payload->>'label' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
         report: sql<unknown>`(select e.payload from events e where e.assignment_id = assignments.id and e.type = 'assignment.completion_reported' order by e.event_id desc limit 1)`,
+        brief: sql<unknown>`(select e.payload->'brief' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+        checked: sql<unknown>`(select e.payload from events e where e.assignment_id = assignments.id and e.type = ${CHANGE_CHECKED} order by e.event_id desc limit 1)`,
         revisions: sql<
           string[]
         >`coalesce((select array_agg(r.id) from site_revisions r where r.assignment_id = assignments.id and r.version is not null), '{}')`,
@@ -587,6 +608,10 @@ export async function getChange(
         label: sql<
           string | null
         >`(select e.payload->>'label' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+        editType: sql<
+          string | null
+        >`(select e.payload->'brief'->>'edit_type' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+        blocks: sql<unknown>`(select e.payload->'blocks' from events e where e.assignment_id = assignments.id and e.type = 'assignment.completion_reported' order by e.event_id desc limit 1)`,
       })
       .from(assignments)
       .where(
@@ -604,6 +629,12 @@ export async function getChange(
   if (!read) return { outcome: "none" }
   const { row } = read
   const report = CompletionReport.safeParse(row.report).data
+  // The owner's raw words stay with the build, for audit only.
+  const { owner_words: _audit, ...asked } = (row.brief ?? {}) as Record<
+    string,
+    unknown
+  >
+  const brief = ChangeBrief.safeParse(asked).data
   const preview =
     PREVIEWABLE.has(row.state) && row.revisions.length > 0
       ? await previewExpiry(env, owner, row.id)
@@ -624,11 +655,23 @@ export async function getChange(
     live_now: read.liveNow,
     published_at: read.publishedAt && new Date(read.publishedAt).toISOString(),
     recorded: report?.text_changes !== undefined,
+    edit_type: brief?.edit_type ?? null,
+    targets: brief?.targets ?? [],
+    checks: ChangeChecked.safeParse(row.checked).data?.checks ?? [],
+    blocks: report?.blocks,
     recent: read.recent.map((r) => ({
       ref: r.id,
       label: labelOf(r.label),
       state: STATE[r.state],
       at: r.createdAt.toISOString(),
+      edit_type: EditType.safeParse(r.editType).data ?? null,
+      pages: [
+        ...new Set(
+          (CompletionReport.shape.blocks.safeParse(r.blocks).data ?? []).map(
+            (b) => b.page
+          )
+        ),
+      ].slice(0, 5),
     })),
   })
 }
@@ -702,6 +745,69 @@ export async function getReview(
   if (!review) return { outcome: "none" }
   const { org_id: _, revision_id: __, ...shown } = review
   return { outcome: "found", ...shown }
+}
+
+/**
+ * The page documents of the newest version that passed its checks: the
+ * draft while one waits, otherwise what the site serves. Without a page,
+ * the outline of every page by id; with one, that page's document too.
+ */
+export async function readSite(
+  { env, kit, owner }: Pick<ToolContext, "env" | "kit" | "owner">,
+  { page }: ReadSiteInput
+): Promise<ReadSiteOutput> {
+  const read = await kit.withOrg({ orgId: owner.orgId }, async (db) => {
+    const [newest] = await db
+      .select({ id: siteRevisions.id })
+      .from(siteRevisions)
+      .where(sql`${siteRevisions.version} is not null`)
+      .orderBy(sql`${siteRevisions.createdAt} desc`)
+      .limit(1)
+    const [serving] = await db
+      .select({ revisionId: deployments.revisionId })
+      .from(deployments)
+      .orderBy(sql`${deployments.configVersion} desc`)
+      .limit(1)
+    const notes = (await readCorrections(db)).lines.flatMap((l) =>
+      l.staff === "developer" ? [l.text] : []
+    )
+    return newest
+      ? { id: newest.id, live: serving?.revisionId === newest.id, notes }
+      : null
+  })
+  if (!read) return { outcome: "none" }
+  const stored = await env.SITES.get(
+    `sites/${owner.orgId}/${read.id}/${DOCUMENTS_KEY}`
+  )
+  const docs = SiteDocuments.safeParse(
+    await stored?.json().catch(() => null)
+  ).data
+  if (!docs || Object.keys(docs).length === 0)
+    return { outcome: "no_documents" }
+  return ReadSiteOutput.parse({
+    outcome: "found",
+    about: read.live ? "live" : "draft",
+    notes: read.notes,
+    pages: Object.entries(docs)
+      .sort(([a], [b]) =>
+        a === "home" ? -1 : b === "home" ? 1 : a.localeCompare(b)
+      )
+      .map(([path, doc]) => ({
+        page: path,
+        title: doc.title ?? null,
+        sections: doc.sections.map((s) => ({
+          id: s.id,
+          kind: s.kind,
+          heading: s.heading ?? null,
+          blocks: (s.blocks ?? []).map((b) => ({
+            id: b.id,
+            type: b.type,
+            provenance: b.provenance,
+          })),
+        })),
+      })),
+    ...(page && docs[page] ? { document: docs[page] } : {}),
+  })
 }
 
 /**
@@ -860,6 +966,125 @@ export const statedIn = (proof: string, message: string) =>
 const INSTRUCTION =
   /^\s*(?:please\s+)?(?:add|build|change|delete|do|drop|fix|make|move|put|rebuild|redo|remove|replace|restart|show|start|stop|take|try|update|use|can|could|would|will)\b/i
 
+const foldText = (text: string) =>
+  text
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+
+/** Shorter than this, owner text is a phrase, not content of their own. */
+const CONTENT_MIN = 20
+
+/**
+ * Whether `body` is whole sentences of `message`: it starts where a sentence
+ * starts and ends where one ends, so "fully insured" is never lifted out of
+ * "we are not fully insured".
+ */
+export function wholeSentencesIn(body: string, message: string): boolean {
+  const text = foldText(message)
+  const part = foldText(body)
+  const at = text.indexOf(part)
+  if (!part || at < 0) return false
+  const before = text.slice(0, at).trimEnd()
+  const after = text.slice(at + part.length).trimStart()
+  // The clause that leads in, such as "we aren't sure:", may turn the words around.
+  const lead = before.split(/[.!?]/).at(-1) ?? ""
+  return (
+    (before === "" || /[.!?:]$/.test(before)) &&
+    !(NEGATION.test(lead) || HEDGE.test(lead)) &&
+    !part.endsWith("?") &&
+    (after === "" || /[.!]$/.test(part) || /^[.!]/.test(after))
+  )
+}
+
+/** A lead-in that makes what follows a guess or a question, not the owner's statement. */
+const HEDGE = /\b(?:if|whether|maybe|perhaps|sure|think|might)\b/i
+
+/** A document path as `site.content` names its page: "service-area" is service_area, a service's own page is service. */
+const contentPage = (path: string | undefined) => {
+  if (!path) return null
+  const page = path.startsWith("services/") ? "service" : path.replace("-", "_")
+  return (DOCUMENT_PAGES as readonly string[]).includes(page)
+    ? (page as (typeof DOCUMENT_PAGES)[number])
+    : null
+}
+
+/**
+ * The owner's own words in a brief, kept as a `site.content` piece so every
+ * rebuild, re-plan and redesign keeps them word for word. Only when the
+ * brief's content, its markdown headings aside, is text the owner typed in
+ * `sessionId`; the assistant's own copy is never stored as theirs. A claim
+ * inside still faces the claims gate. Null unless saving failed: the change
+ * starts either way.
+ */
+async function recordContent(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string,
+  { brief }: CosChangeRequest
+): Promise<Response | null> {
+  if (!brief?.content) return null
+  const lines = brief.content.split("\n")
+  const body = lines
+    .filter((l) => !/^\s*#/.test(l))
+    .join("\n")
+    .trim()
+  const said = await ownerSaid({ kit, owner }, sessionId)
+  const source = said.find((m) => wholeSentencesIn(body, m))
+  if (body.length < CONTENT_MIN || !source) return null
+  const target = brief.targets[0]
+  const id = ContentId.safeParse(target?.block ?? target?.section).data
+  if (!id) return null
+  const heading = lines.find((l) => /^\s*#/.test(l))?.replace(/^\s*#+\s*/, "")
+  const piece = {
+    id,
+    page: contentPage(target?.page),
+    // A title the owner did not type is the assistant's, and the claims gate trusts this fact.
+    title:
+      heading && foldText(source).includes(foldText(heading))
+        ? heading.slice(0, 120)
+        : "Your words",
+    markdown: body.slice(0, 4_000),
+  }
+  try {
+    await kit.withOrg(
+      { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
+      async (db) => {
+        const rows = await readFacts(db)
+        const held =
+          FactValue.safeParse({
+            key: "site.content",
+            value: rows.find((r) => r.key === "site.content")?.value,
+          }).data?.value ?? null
+        const items = [
+          ...((held as { items: (typeof piece)[] } | null)?.items ?? []).filter(
+            (i) => i.id !== id
+          ),
+          piece,
+        ].slice(-40)
+        await stateFacts(
+          db,
+          owner,
+          [{ key: "site.content", value: { items } }],
+          rows
+        )
+      }
+    )
+    return null
+  } catch (error) {
+    console.error(
+      JSON.stringify({ code: "cos.content_failed", error: failureCode(error) })
+    )
+    return failure(503, {
+      class: "transient",
+      code: "content.unconfirmed",
+      message: "The owner's words for the site could not be saved.",
+      detail: {},
+    })
+  }
+}
+
 /** How long `business.proof` may grow: its fact's bound. */
 const PROOF_MAX = 600
 
@@ -951,16 +1176,33 @@ export async function startOwnerChange(
   return (
     (await recordContact(context, sessionId, input)) ??
     (await recordProof(context, sessionId, input)) ??
+    (await recordContent(context, sessionId, input)) ??
     startChange(
       context.env,
       context.kit,
       context.owner,
       input.text,
       approvalId,
-      input.change_kind,
-      input.label
+      input.brief ? EDIT_KIND[input.brief.edit_type] : input.change_kind,
+      input.label,
+      input.brief && {
+        ...input.brief,
+        owner_words: await lastOwnerMessage(context, sessionId, input.text),
+      }
     )
   )
+}
+
+/** The owner's newest message in this conversation, kept with a brief for audit; the change's text when none is logged. */
+async function lastOwnerMessage(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string,
+  fallback: string
+): Promise<string> {
+  const [newest] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    ownerWords(db, sessionId)
+  )
+  return (newest ?? fallback).slice(0, GOAL_MAX)
 }
 
 /** The owner's change, started as `/changes` starts it, keyed by the approval. */

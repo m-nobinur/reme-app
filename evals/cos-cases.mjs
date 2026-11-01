@@ -532,6 +532,55 @@ export const CASES = [
         : []),
     ],
   },
+  {
+    pending: SITE_CASE,
+    // A clear change is read, briefed and started, with no question.
+    name: "site-change-clear",
+    turns: [
+      {
+        mode: "act",
+        text: "Move the FAQ above the services on the home page.",
+      },
+    ],
+    check: ([moved]) => {
+      const problems = readsTheSite(moved)
+      const [change, ...more] = called(moved, "request_change")
+      const brief = change?.input?.brief
+      if (!change || more.length > 0)
+        problems.push("it did not start one change")
+      else if (brief?.edit_type !== "move")
+        problems.push("the brief is not a move")
+      else if (!brief.targets?.some((t) => t.page === "home" && t.section))
+        problems.push("the brief targets no section on home by id")
+      if (text(moved).includes("?")) problems.push("it asked a question")
+      return problems
+    },
+  },
+  {
+    pending: SITE_CASE,
+    // A vague request gets one concrete proposal, drafted before anything starts.
+    name: "site-change-vague",
+    turns: [{ mode: "act", text: "Make the deep clean page richer." }],
+    check: ([vague]) => {
+      const problems = [...readsTheSite(vague), ...noActs(vague)]
+      const said = text(vague)
+      if ((said.match(/\?/g) ?? []).length > 1)
+        problems.push("it asked more than one question")
+      if (!/\b(?:checklist|table|list|section|steps)\b/i.test(said))
+        problems.push("it proposed no concrete form")
+      return problems
+    },
+  },
+]
+
+/** The site-change procedure read and the site read before a change. */
+const readsTheSite = (parts) => [
+  ...(called(parts, "read_skill").some((c) => c.input?.name === "site-change")
+    ? []
+    : ["it did not read the site-change procedure"]),
+  ...(called(parts, "read_site").length > 0
+    ? []
+    : ["it did not read the site"]),
 ]
 
 const STILL_AT_WORK =

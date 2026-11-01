@@ -195,6 +195,25 @@ describe("the claims gate", () => {
       expect(verdict(main, content).passed, main).toBe(false)
   })
 
+  it("takes support from the owner's words in site content, never from an item's id or title", () => {
+    const content = [
+      ...PLAIN,
+      fact("site.content", {
+        items: [
+          {
+            id: "fully-insured-since-2012",
+            page: "about",
+            title: "Fully insured since 2012",
+            markdown: "We started with one van.",
+          },
+        ],
+      }),
+    ]
+    expect(verdict("<p>Fully insured since 2012</p>", content).passed).toBe(
+      false
+    )
+  })
+
   it("holds the About page's rephrased overview and audience to their facts", () => {
     const facts = [
       ...PLAIN,

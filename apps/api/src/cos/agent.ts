@@ -99,6 +99,7 @@ import {
   newContact,
   ownerSaid,
   putOff,
+  readSite,
   recordReview,
   removeDomain,
   requestChange,
@@ -210,7 +211,7 @@ ${VOICE}
 - The chat renders markdown. Keep replies clean, with plain sentences, and use formatting only where it helps: a numbered list for steps to do in order, bold for the one fact the owner must not miss, inline code for a DNS value, record name or other text they will copy, and a link with the page's name as its text when there is a URL to open. No headings, no tables (cards carry those), no bullet lists except for options, and never more than one bold phrase in a reply.
 - When work is finished, say what changed, what you checked and what is left, in that order, and only what is true. Leave out a part with nothing to say.
 - A call that shows the owner a card ends your turn until they answer it, so write your words before the call, never after. Always write at least one short line: one they can't read on the card, such as a recommendation with its reason, or what you are setting up. Never a line that points at it ("The card shows...") or repeats it. When the owner's message also answered your question or said something else, acknowledge that in the same line.
-- Before a tool that only reads (get_workspace, get_facts, get_change, get_review, ask_developer with mode answer, check_domain, inspect_domain, get_search_performance, get_indexing, read_skill), write nothing: the owner sees a line while it runs. Say what you found once, after it.
+- Before a tool that only reads (get_workspace, get_facts, get_change, get_review, read_site, ask_developer with mode answer, check_domain, inspect_domain, get_search_performance, get_indexing, read_skill), write nothing: the owner sees a line while it runs. Say what you found once, after it.
 - find_domain, check_domain, inspect_domain, get_search_performance and get_indexing take an optional step: a few words, in the owner's language, on what you are doing for them, shown while the call runs, such as "Checking the records for northsidegrooming.co.uk". At most 60 characters, no ids, no tool names.
 - Don't narrate your tools or your steps ("Let me check the workspace"): do it, then report. Agree with the owner only when they are right; when they are not, or you can't tell, say so plainly and what you would do instead.
 - Say each piece of news once. A message in the conversation the app posted itself, such as a domain update, was already shown to the owner, and so is check_domain's result: add only what they don't say, or that nothing has changed since.
@@ -246,7 +247,7 @@ Rules:
 - Use the facts when you help the owner: a guarantee, an insurance or an area they gave you belongs in a reply you draft for them.
 - Ask the owner at most one question per reply. If you need a fact to go on, ask for it in one sentence.
 - The work on the website is yours: speak of it in the first person and the active voice, such as "I'm putting your site together" or "I've started your change", never "It's building" or "The rebuild was queued". Never name the Developer or any other agent to the owner.
-- Start a change with request_change in the owner's own words, one change per call, as soon as the owner asks for it: never ask them to confirm it first. The text is the change's title: the change alone as a short instruction, without the chat around it ("Build the website again", not "I stopped that build because it got stuck. Can you start it again?"). When the owner's message holds the answer to an open question in the workspace, call answer_question with it, and pass whatever else they asked as request_change. Only answer with what the owner told you in this conversation.
+- Before any change to the website's words, layout, pages or look, read the site-change procedure with read_skill and follow it: it reads the site with read_site, briefs the change and checks the result. Start a change with request_change in the owner's own words, one change per call, as soon as the owner asks for it. Never ask them to confirm it first, with one exception the procedure gives: new copy you wrote that runs past a line, or a new section or page, is shown as a short draft first. The text is the change's title: the change alone as a short instruction, without the chat around it ("Build the website again", not "I stopped that build because it got stuck. Can you start it again?"). When the owner's message holds the answer to an open question in the workspace, call answer_question with it, and pass whatever else they asked as request_change. Only answer with what the owner told you in this conversation.
 - Never promise to change how you work, or a setting you have no tool for. The Now line shows the business's time zone, the one reminders run on; read today, tomorrow and weekdays against its date. When the owner gives a time in another zone, pass the time as they said it and that zone as time_zone, and say both in your reply, such as "8:00 AM UK time, which is 2:00 PM your time". A mistake is yours: say "I set the first one wrong", never that the owner did not approve or confirm something.
 - Say you will tell the owner when something happens only while something is watching for it: a change that has started, a domain being connected, a Google connection or a site review under way. Otherwise do the work in this turn with your tools, or say what stops you. Never end a reply on "I'll..." with no tool call.
 - A tool that is refused tells you why; explain it to the owner plainly. A tool whose outcome is unknown did not report back; say you could not confirm it, and do not guess what it did.
@@ -336,7 +337,9 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
   get_facts:
     "Read the business's facts in full: name, contact details, services, customers, service area, and the choices the owner made for you and the site.",
   get_change:
-    "Read a change's record by ref (from the workspace or recent); no ref is the latest. It gives what was asked, done, text_changes (before and after, read from the pages), what was left out, whether it is live, any open preview and the changes before.",
+    "Read a change's record by ref (from the workspace or recent); no ref is the latest. It gives what was asked, done, text_changes (before and after, read from the pages), what was left out, whether it is live, any open preview and the changes before. A briefed change also gives its edit_type and targets, checks (each acceptance check as judged on the built pages) and blocks (each block it touched, before and after, which is what an undo puts back).",
+  read_site:
+    "Read the website's page documents, the draft while one waits for the owner, else the live site: with no page, every page's sections and blocks by id, kind and heading; with page, that page's document in full. Use it before briefing a change, to target real ids and to see what is there.",
   ask_developer:
     "Ask about the owner's website, from the stored record of the version they can see (live, else the draft waiting for them): its pages, why it was made as it is, its checks, the facts and the recent changes. It changes nothing. mode answer answers now; mode review starts a check of the whole site that reports back later as an Update, one per version at a time. question is the owner's question, or what to focus on, in their words; pages are routes such as /about/ when they named some.",
   get_review:
@@ -394,6 +397,7 @@ const READ_TOOLS: readonly CosToolName[] = [
   "get_facts",
   "get_change",
   "get_review",
+  "read_site",
   "check_domain",
   "inspect_domain",
   "find_domain",
@@ -805,6 +809,11 @@ function resultTaint(result: CosToolResult): TaintLabel[] {
       return result.output.outcome === "found"
         ? ["inferred", "untrusted_input"]
         : []
+    case "read_site":
+      // The site's copy: the owner's words and the builder's.
+      return result.output.outcome === "found"
+        ? ["inferred", "untrusted_input"]
+        : []
     case "request_change":
       // The goal is the change as the CoS wrote it from the owner's words.
       return result.output.outcome === "started"
@@ -1137,6 +1146,7 @@ const BODIES = {
   get_change: getChange,
   ask_developer: askDeveloper,
   get_review: getReview,
+  read_site: readSite,
   request_change: requestChange,
   answer_question: answerQuestion,
   create_reminder: createReminder,
@@ -1567,6 +1577,10 @@ function toolsFor(run: AgentTurn, allowed: readonly CosToolName[] | null) {
     get_review: tool({
       ...describe("get_review"),
       inputSchema: modelInput("get_review"),
+    }),
+    read_site: tool({
+      ...describe("read_site"),
+      inputSchema: modelInput("read_site"),
     }),
     request_change: tool({
       ...describe("request_change"),

@@ -104,6 +104,23 @@ const AXES_MAX = 2
 const stated = (facts: readonly FactRecord[], key: string) =>
   facts.some((f) => f.key === key && f.provenance.source === "owner_stated")
 
+/**
+ * The owner's own words for the site (`site.content`), a fixed input to
+ * every plan and re-plan, as their design choices are: a plan places each
+ * piece and may move it, never drops or rewords it.
+ */
+export function ownerContent(facts: readonly FactRecord[]): string[] {
+  const items = factValue(facts, "site.content")?.items ?? []
+  return items.length === 0
+    ? []
+    : [
+        "The owner's own words for the site, each placed in the plan as an owner block, word for word; move one if the plan needs, never drop or reword it:",
+        ...items.map(
+          (i) => `- ${i.id}: "${i.title}", on ${i.page ?? "the page that fits"}`
+        ),
+      ]
+}
+
 /** The owner's own design answers: these win over the model and the note. */
 export function ownerChoices(facts: readonly FactRecord[]) {
   const palette = stated(facts, "site.palette")
@@ -1231,6 +1248,7 @@ export function plannerPrompt(input: {
     !owner.direction && !owner.palette && !owner.fonts && !owner.directionNote
       ? "- (none: the design is yours)"
       : null,
+    ...ownerContent(facts),
     "",
     ...diversityNote(input.recent, industry),
     ...(input.previous

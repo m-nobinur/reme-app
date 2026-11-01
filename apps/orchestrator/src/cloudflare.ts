@@ -48,6 +48,13 @@ import {
   takeSnapshot,
 } from "./brief.ts"
 import {
+  acceptanceMessage,
+  changeContext,
+  judgeChange,
+  readDocuments,
+  recentChanges,
+} from "./change.ts"
+import {
   critiqueRound,
   type Fix,
   LOOKS,
@@ -391,10 +398,14 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       change_kind?: ChangeKind | null
       plan?: boolean
       first?: boolean
+      /** A briefed change that moves things on the page, which the critic looks at. */
+      layout?: boolean
+      /** A briefed change, whose acceptance checks are judged. */
+      checked?: boolean
     } = await step.do("planning", () =>
       run(async (kit) => {
         await advance(kit, ids, "planning")
-        const { lane, change_kind, kind } = await kit.withOrg(
+        const { lane, change_kind, kind, brief } = await kit.withOrg(
           { orgId: ids.orgId },
           (db) => creationChoices(db, ids)
         )
@@ -405,7 +416,18 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         const plan =
           lane === "full" &&
           (kind === "site.build" || change_kind === "creative")
-        return { lane, change_kind, plan, first: kind === "site.build" }
+        const layout =
+          brief?.edit_type === "move" ||
+          brief?.edit_type === "format" ||
+          brief?.edit_type === "remove"
+        return {
+          lane,
+          change_kind,
+          plan,
+          first: kind === "site.build",
+          layout,
+          checked: Boolean(brief),
+        }
       })
     )
     // The owner's own address, offered while the first build runs, so it can
@@ -503,70 +525,74 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
      */
     const prepare = async (role: "quick_section" | null, handedOn: boolean) => {
       const briefStarted = Date.now()
-      const { brief, origin, kind, from, left, retry } = await run((kit) =>
-        kit.withOrg({ orgId: ids.orgId }, async (db) => {
-          const [row] = await db
-            .select()
-            .from(assignments)
-            .where(eq(assignments.id, ids.assignmentId))
-          if (!row) throw new NonRetryableError("assignment.not_found")
-          const choices = await creationChoices(db, ids)
-          const snapshot = await takeSnapshot(db, ids, choices.withhold)
-          const spec = await issueSpec(db, this.env, row, choices.model)
-          const corrections = skillsFor(
-            "developer",
-            await readCorrections(db)
-          ).flatMap((s) => (s.kind === "correction" ? [s.body] : []))
-          // A revise starts from what the site serves (ADR-032), or before
-          // the site is live from the owner's draft it was asked on.
-          const source =
-            row.kind === "site.revise" ? await reviseSource(db, ids) : null
-          if (row.kind === "site.revise" && !source) {
-            throw new NonRetryableError("site.not_published")
-          }
-          // The preview this edit superseded built its revision on the disk
-          // and may not have marked it yet: it is still taking screenshots.
-          const previewed = superseded
-            ? await latestRevision(db, superseded)
-            : null
-          const previous = choices.retry_of
-            ? await retryContext(db, choices.retry_of)
-            : undefined
-          const retryOf = choices.retry_of
-            ? {
-                of: choices.retry_of,
-                mode: buildFailure(await failureReason(db, choices.retry_of))
-                  .retry,
-              }
-            : null
-          const built: Brief = {
-            spec,
-            snapshot,
-            goal: row.goal,
-            goal_tainted:
-              row.kind === "site.revise" || choices.origin === "owner",
-            acceptance_criteria: row.acceptanceCriteria,
-            restore_key: source?.source_key ?? null,
-            map: null,
-            ...(role ? { role } : {}),
-            blueprint: Blueprint.safeParse(row.blueprint).data ?? null,
-            // The section lane's short prompt reads the site's last plan.
-            ...(role === "quick_section"
-              ? { site_plan: await latestBlueprint(db) }
-              : {}),
-            ...(previous ? { previous } : {}),
-            ...(retryOf?.mode === "fallback_model" ? { fallback: true } : {}),
-            ...(corrections.length > 0 ? { corrections } : {}),
-          }
-          return {
-            brief: built,
-            origin: choices.origin,
-            kind: row.kind,
-            from: source?.revision_id ?? null,
-            left: previewed?.status === "preview" ? previewed.id : null,
-            retry: retryOf,
-          }
-        })
+      const { brief, origin, kind, from, left, retry, change } = await run(
+        (kit) =>
+          kit.withOrg({ orgId: ids.orgId }, async (db) => {
+            const [row] = await db
+              .select()
+              .from(assignments)
+              .where(eq(assignments.id, ids.assignmentId))
+            if (!row) throw new NonRetryableError("assignment.not_found")
+            const choices = await creationChoices(db, ids)
+            const snapshot = await takeSnapshot(db, ids, choices.withhold)
+            const spec = await issueSpec(db, this.env, row, choices.model)
+            const corrections = skillsFor(
+              "developer",
+              await readCorrections(db)
+            ).flatMap((s) => (s.kind === "correction" ? [s.body] : []))
+            // A revise starts from what the site serves (ADR-032), or before
+            // the site is live from the owner's draft it was asked on.
+            const source =
+              row.kind === "site.revise" ? await reviseSource(db, ids) : null
+            if (row.kind === "site.revise" && !source) {
+              throw new NonRetryableError("site.not_published")
+            }
+            // The preview this edit superseded built its revision on the disk
+            // and may not have marked it yet: it is still taking screenshots.
+            const previewed = superseded
+              ? await latestRevision(db, superseded)
+              : null
+            const previous = choices.retry_of
+              ? await retryContext(db, choices.retry_of)
+              : undefined
+            const retryOf = choices.retry_of
+              ? {
+                  of: choices.retry_of,
+                  mode: buildFailure(await failureReason(db, choices.retry_of))
+                    .retry,
+                }
+              : null
+            const built: Brief = {
+              spec,
+              snapshot,
+              goal: row.goal,
+              goal_tainted:
+                row.kind === "site.revise" || choices.origin === "owner",
+              acceptance_criteria: row.acceptanceCriteria,
+              restore_key: source?.source_key ?? null,
+              map: null,
+              ...(role ? { role } : {}),
+              blueprint: Blueprint.safeParse(row.blueprint).data ?? null,
+              // The section lane's short prompt reads the site's last plan.
+              ...(role === "quick_section"
+                ? { site_plan: await latestBlueprint(db) }
+                : {}),
+              ...(previous ? { previous } : {}),
+              ...(retryOf?.mode === "fallback_model" ? { fallback: true } : {}),
+              ...(corrections.length > 0 ? { corrections } : {}),
+            }
+            return {
+              brief: built,
+              origin: choices.origin,
+              kind: row.kind,
+              from: source?.revision_id ?? null,
+              left: previewed?.status === "preview" ? previewed.id : null,
+              retry: retryOf,
+              change: choices.brief
+                ? { brief: choices.brief, recent: await recentChanges(db, ids) }
+                : null,
+            }
+          })
       )
       // The retry of failed checks starts from the site the failed build left.
       const carried =
@@ -604,6 +630,20 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       } else {
         // A first build seeds an empty site; a warm disk's site would linger.
         await sandbox.exec(`rm -rf ${SITE_ROOT}`)
+      }
+      if (change) {
+        const listed = await sandbox.exec(
+          `cd ${SITE_ROOT} && find ${DOCUMENTS_DIR} -name '*.json' -type f 2>/dev/null | sort`
+        )
+        const docs = await readDocuments(
+          listed.stdout.split("\n").filter(Boolean),
+          async (path) =>
+            (await sandbox.readFile(`${SITE_ROOT}/${path}`)).content
+        )
+        brief.change = {
+          brief: change.brief,
+          context: changeContext(change.brief, docs, change.recent),
+        }
       }
       return {
         brief,
@@ -726,6 +766,21 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       section = false
       return { role: "build" }
     }
+    /**
+     * A one-call edit whose result the critic or the acceptance check sends
+     * back: the Developer takes it at the section role from the edited disk,
+     * so the edit is kept and only what was missed is fixed.
+     */
+    const handOn = async () => {
+      quickBase = null
+      quick = "fell"
+      section = true
+      admitted = await admit("quick_section", true)
+      return admitted
+    }
+    /** Acceptance judging: how many times this build was judged, and whether that is over. */
+    let judged = 0
+    let accepted = false
 
     // The nanoclaw pair (§8.3): the tools wake this Workflow with an id, the
     // Workflow answers the Developer with a new submission.
@@ -873,7 +928,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         // second look saw not made go back once more, and a third look logs
         // what still shows. A look that did not run sends nothing back, and
         // the gates decide.
-        if (route.plan && looks < LOOKS) {
+        if ((route.plan || route.layout) && looks < LOOKS) {
           looks++
           const look = looks as Round
           const seen = await step.do(`critique ${look}`, async () => {
@@ -948,6 +1003,8 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                 : []
           if (again.length > 0) {
             asked = again
+            if (quickBase !== null && !(await handOn()))
+              return fail(`start ${round}.look`, "developer.start_failed")
             await step.do(`design repair ${round}`, async () => {
               await init(Developer, { id: ids.assignmentId }).dispatch({
                 idempotencyKey: `${ids.assignmentId}:design-repair-${round}`,
@@ -963,6 +1020,46 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           }
           // Nothing to repair, or this was the last check: no more looks.
           looks = LOOKS
+        }
+        // A briefed change is read against its acceptance checks before the
+        // gates, by a reader rather than the builder. One miss goes back once;
+        // a second is reported as it is in the ready line.
+        if (route.checked && judged < 2 && !accepted) {
+          judged++
+          const judging = judged as 1 | 2
+          const checks = await step.do(`acceptance ${round}`, () =>
+            run((kit) =>
+              judgeChange({
+                env: this.env,
+                kit,
+                ids,
+                report_id: payload.report_id,
+                revision_id: payload.revision_id,
+                round: judging,
+              })
+            ).catch(() => null)
+          )
+          if (!checks || checks.every((c) => c.passed) || judging === 2) {
+            accepted = true
+          } else {
+            const fresh = quickBase !== null
+            if (fresh && !(await handOn()))
+              return fail(`start ${round}.accept`, "developer.start_failed")
+            const lift = fresh ? {} : escalate()
+            await step.do(`acceptance repair ${round}`, async () => {
+              await init(Developer, { id: ids.assignmentId }).dispatch({
+                idempotencyKey: `${ids.assignmentId}:acceptance-${round}`,
+                message: {
+                  kind: "signal",
+                  type: "acceptance.failed",
+                  body: acceptanceMessage(checks),
+                  attributes: { taint: "inferred", ...lift },
+                },
+              })
+              return { failed: checks.filter((c) => !c.passed).length }
+            })
+            continue
+          }
         }
         await step.do(`validating ${round}`, () =>
           run((kit) =>

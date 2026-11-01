@@ -526,6 +526,7 @@
     "constraints": [
       "The Base layout renders it on every page.",
       "Navigation and the action come from src/routes.ts, so a link shows only when its page exists and its label field is set.",
+      "site.headerPhone, empty unless the owner asked for the phone in the header, shows the number as a call link beside the action on wider screens.",
       "The owner's logo (site.logo with site.logoAlt) replaces the business name at a fixed height; with no logo the name shows as text.",
       "On a phone the links sit behind a native details menu labelled navMenu, which needs no script.",
       "split puts the name left and the action right; centered puts the name between the links and the action; minimal shows the name over site.industry and keeps the links behind the menu at every width."
