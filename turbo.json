@@ -11,6 +11,8 @@
   // `noUndeclaredEnvVars` reads this file and lint fails on warnings.
   "globalPassThroughEnv": [
     "COS_API_URL",
+    "FIDELITY_LOCAL_STATE",
+    "FIDELITY_ORG",
     "GITHUB_STEP_SUMMARY",
     "LANGFUSE_SECRET_KEY",
     "ONBOARDING_EVAL_CAP_USD",

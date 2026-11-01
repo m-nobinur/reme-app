@@ -1,5 +1,5 @@
 import {
-  type Block,
+  Block,
   type Blueprint,
   PageDocument,
   SECTION_VARIANTS,
@@ -12,6 +12,7 @@ import {
   seedDocuments,
   servicesOf,
 } from "@workspace/starter-site/page-seed"
+import { z } from "zod"
 import { blueprintLayout } from "./blueprint.ts"
 
 /**
@@ -30,6 +31,45 @@ export const DOCUMENTS_DIR = "src/content/pages"
 
 /** The slots whose words are a page's, which the seed reads for a page with no document. */
 export const PAGE_FIELDS: ReadonlySet<string> = new Set(Object.keys(pageFields))
+
+type Shape = {
+  type?: string
+  const?: unknown
+  items?: Shape
+  properties?: Record<string, Shape>
+  required?: string[]
+  anyOf?: Shape[]
+  oneOf?: Shape[]
+}
+/** What every block has, named once before each type's own keys. */
+const BLOCK_COMMON = new Set(["id", "type", "provenance", "eyebrow", "heading"])
+const keysOf = (shape: Shape, skip: ReadonlySet<string>): string[] =>
+  Object.entries(shape.properties ?? {})
+    .filter(([key]) => !skip.has(key))
+    .map(([key, value]) => {
+      const name = `${key}${shape.required?.includes(key) ? "" : "?"}`
+      return value.type === "string" ? name : `${name}: ${shapeText(value)}`
+    })
+const shapeText = (shape: Shape): string =>
+  shape.type === "array"
+    ? `[${shape.items ? shapeText(shape.items) : ""}]`
+    : shape.type === "object"
+      ? `{${keysOf(shape, new Set()).join(", ")}}`
+      : "string"
+
+/**
+ * Each block type and its own keys, from the contract, for the writers'
+ * prompt: `prose {markdown}; ... cta {body, label?, href?}`. Structured
+ * output cannot hold them to it: Anthropic refuses the block union in even
+ * one section ("The compiled grammar is too large", 2026-11-01).
+ */
+const blockSchema = z.toJSONSchema(Block, { io: "output" }) as Shape
+export const BLOCK_SHAPES = (blockSchema.anyOf ?? blockSchema.oneOf ?? [])
+  .map(
+    (branch) =>
+      `${String(branch.properties?.type?.const)} {${keysOf(branch, BLOCK_COMMON).join(", ")}}`
+  )
+  .join("; ")
 
 /** The words a writer gives one section. */
 export type Words = {

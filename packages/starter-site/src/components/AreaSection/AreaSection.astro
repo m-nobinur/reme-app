@@ -26,8 +26,11 @@ const {
 } = Astro.props
 const towns = areaTowns(site.areaTowns)
 const onPage = Astro.url.pathname === "/service-area/"
-// The area in its own words where no towns stand for it, and always on its page.
-const place = onPage || towns.length === 0 ? site.serviceAreaText : ""
+// The area in its own words on its page, and where no towns stand for it on a site with no such page.
+const place =
+  onPage || (towns.length === 0 && !hasRoute("/service-area/"))
+    ? site.serviceAreaText
+    : ""
 // Off the service area page, the section points to it.
 const more = site.areaLink && hasRoute("/service-area/") && !onPage
 // On its own page the drawing is the header's (Sections.astro), so the
@@ -57,7 +60,7 @@ const hours = site.weekdayHours
         <div class="area-copy">
           <SectionHead eyebrow={eyebrow} heading={heading} />
           {body && <p class="area-body">{body}</p>}
-          <dl class="area-facts">
+          <dl class="area-facts" data-copy="area_facts">
             <div class="area-fact">
               <dt>
                 <span class="area-fact-icon">
@@ -135,7 +138,7 @@ const hours = site.weekdayHours
             towns={towns}
             seed={site.serviceAreaText}
             label={site.areaCardLabel}
-            line={site.areaCardLine || site.serviceAreaText}
+            line={site.areaCardLine}
           />
         )}
       </div>

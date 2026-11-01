@@ -83,6 +83,41 @@ describe("the batch client", () => {
     expect(slept).toEqual([1_000, 1_000, 1_000])
   })
 
+  it("retries a batch that reads as not found right after submitting, then fails if it stays missing", async () => {
+    let reads = 0
+    const slept: number[] = []
+    const options = {
+      apiKey: "k",
+      sleep: async (ms: number) => {
+        slept.push(ms)
+      },
+    }
+    const late = batchClient({
+      ...options,
+      fetch: async () =>
+        ++reads < 3
+          ? json({ error: { code: 404, message: "not found" } }, 404)
+          : json({ id: "batch_1", status: "completed", results: [] }),
+    })
+    expect((await late.wait("batch_1")).status).toBe("completed")
+    expect(reads).toBe(3)
+    expect(slept).toEqual([2_000, 2_000])
+
+    reads = 0
+    const missing = batchClient({
+      ...options,
+      fetch: async () => {
+        reads++
+        return json({ error: { code: 404, message: "not found" } }, 404)
+      },
+    })
+    const error = await missing
+      .wait("batch_gone")
+      .catch((e: unknown) => e as BatchError)
+    expect((error as BatchError).code).toBe("batch.http_404")
+    expect(reads).toBe(5)
+  })
+
   it("gives up waiting at the timeout and says where the batch is", async () => {
     const client = batchClient({
       apiKey: "k",

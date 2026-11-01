@@ -465,6 +465,20 @@ describe("the parallel first build", () => {
     expect(text).not.toContain("ask_chief for the first missing")
   })
 
+  it("gives the page writers each block type's own keys, read from the contract", () => {
+    const text = pageInstructions(planned)
+    for (const shape of [
+      "prose {markdown}",
+      "checklist {items: [string]}",
+      "table {caption?, columns: [string], rows: [[string]]}",
+      "faq {items: [{question, answer}]}",
+      "cards {items: [{title, body, icon?}]}",
+      "cta {body, label?, href?}",
+      "quote {text, author}",
+    ])
+      expect(text).toContain(shape)
+  })
+
   it("has each page writer write its title by feel in one reply, and the FAQ writer only the FAQ", () => {
     const page = pageInstructions(planned)
     expect(page).toContain(PAGE_WRITER_RULES)

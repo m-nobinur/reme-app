@@ -32,7 +32,8 @@ import { parse } from "parse5"
  * The starter marks what is checked with `data-copy="<kind>"` on the
  * elements whose words are counted. Every h1 and h2 inside <main> is
  * compared, each page's closing band included; headings outside it (the
- * footer's) are site chrome and are not read.
+ * footer's) are site chrome and are not read, and neither are the starter's
+ * own words that every service shows (SHARED).
  */
 
 /**
@@ -243,8 +244,15 @@ const LEAF = new Set(
     " "
   )
 )
-/** Marks of copy the site shows wherever it lists the services: one text, many places. */
-const SHARED = new Set(["service_body"])
+/** Marks of the starter's copy that several pages show: the services, their labels, the area and contact details. */
+const SHARED = new Set([
+  "area_facts",
+  "contact_details",
+  "service_body",
+  "service_name",
+  "service_label",
+  "typical_note",
+])
 const hasLeaf = (node: TreeNode): boolean =>
   (node.childNodes ?? []).some(
     (c) => (c.tagName && LEAF.has(c.tagName)) || hasLeaf(c)
@@ -255,13 +263,18 @@ export const REPEAT_WORDS = 6
 
 /**
  * A text's sentences of `REPEAT_WORDS` words or more, as two pages compare
- * them: their words, lowercase. A sentence with a phone number, an email or
- * a web address is contact detail, which every page may give.
+ * them: their words, lowercase. A sentence with a phone number, an email, a
+ * web address or a time of day is contact detail, which every page may give.
  */
 export function sentencesOf(text: string): string[] {
   return text
     .split(/(?<=[.!?])\s+|\n+/)
-    .filter((s) => !/\d[\d\s()+-]{6,}\d/.test(s) && !s.match(ADDRESSES))
+    .filter(
+      (s) =>
+        !/\d[\d\s()+-]{6,}\d/.test(s) &&
+        !/\d:\d\d/.test(s) &&
+        !s.match(ADDRESSES)
+    )
     .map(plainText)
     .filter((s) => s.split(" ").length >= REPEAT_WORDS)
 }
@@ -357,11 +370,11 @@ function read(html: string): Read {
       )
         out.indexed = false
       const main = inMain || tag === "main"
-      if (main && (tag === "h1" || tag === "h2")) {
+      const kind = attr(child, "data-copy")
+      if (main && (tag === "h1" || tag === "h2") && !SHARED.has(kind ?? "")) {
         const text = squash(textOf(child))
         if (text) out.headings.push({ tag, text, node: at })
       }
-      const kind = attr(child, "data-copy")
       if (kind) out.marks.add(kind)
       const own =
         shared ||

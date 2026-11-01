@@ -196,7 +196,8 @@ export async function writePages(input: {
   max: number
   staggerMs: number
   /**
-   * One model call; `attempt` 2 is the retry or the check's fix. `strict`
+   * One model call; `attempt` 2 is the retry or the check's fix, 3 the
+   * check's fix after a retry. `strict`
    * asks for the reply schema, which only the retry after an unparsable
    * reply does: in the paid check of 2026-10-16 every strict call missed the
    * writers' shared prompt cache (a service writer $0.068 strict, $0.018
@@ -204,7 +205,7 @@ export async function writePages(input: {
    */
   call: (
     index: number,
-    attempt: 1 | 2,
+    attempt: 1 | 2 | 3,
     user: string,
     strict: boolean
   ) => Promise<string>
@@ -244,14 +245,14 @@ export async function writePages(input: {
       }
       const check = await apply(index, reply)
       let note = ""
-      if (check && second)
-        note = ` The copy check still finds: ${findings(check)} Its part: ${partOf(task)}.`
-      else if (check) {
+      // A reply the check refuses gets its fix even after a retry: the
+      // retry is for a reply cut off or unparsable, the fix for its words.
+      if (check) {
         try {
           const fixed = parseReply(
             await call(
               index,
-              2,
+              second ? 3 : 2,
               `${user}\n<your_reply>\n${JSON.stringify({ values: reply.values, ...reply.written })}\n</your_reply>\n${check}`,
               false
             ),

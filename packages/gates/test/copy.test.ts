@@ -819,6 +819,35 @@ describe("each thing said once", () => {
     expect(two(card, card)).toEqual([])
     const trap = `<div aria-hidden="true"><label>${shared}</label></div>`
     expect(two(trap, trap)).toEqual([])
+    const hours = "<p>Weekdays 08:00 to 17:00, Saturdays 09:00 to 12:00.</p>"
+    expect(two(hours, hours)).toEqual([])
+    const note = `<p data-copy="typical_note">Typical for this kind of job. We confirm the details when we quote.</p>`
+    expect(two(note, note)).toEqual([])
+    const area = `<dl data-copy="contact_details"><div><dt>Area</dt><dd>Nettlewick and the villages around it</dd></div></dl>`
+    expect(two(area, area)).toEqual([])
+    const place = `<dl data-copy="area_facts"><div><dt>Where</dt><dd><p>Nettlewick and the villages around it</p></dd></div></dl>`
+    expect(two(place, place)).toEqual([])
+  })
+
+  it("leaves the service names and labels every service page shows out of the heading repeats", () => {
+    const found = copyFindings([
+      page(
+        "services/index.html",
+        "Greenleaf garden landscaping in Bristol and Bath homes",
+        `<h1>Gardens made for Bristol</h1><h2 data-copy="service_name">Weekly lawn mowing</h2>`
+      ),
+      page(
+        "services/weekly-lawn-mowing/index.html",
+        "Weekly lawn mowing in Bristol and Bath | Greenleaf Gardens",
+        `<h1>Weekly lawn mowing in Bristol</h1><h2 data-copy="service_label">What it usually covers</h2>`
+      ),
+      page(
+        "services/hedge-trimming/index.html",
+        "Hedge trimming in Bristol and Bath | Greenleaf Gardens",
+        `<h1>Hedge trimming around Bristol</h1><h2 data-copy="service_label">What it usually covers</h2>`
+      ),
+    ]).filter((f) => f.problem === "duplicate")
+    expect(found).toEqual([])
   })
 
   it("splits sentences and keeps those of six words or more, in lowercase words", () => {

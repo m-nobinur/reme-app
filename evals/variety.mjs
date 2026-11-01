@@ -7,6 +7,7 @@ import { BUSINESSES } from "./variety/businesses.mjs"
 import {
   decodePng,
   dhash,
+  layoutOf,
   sequenceOf,
   summarise,
   table,
@@ -25,6 +26,7 @@ import {
  * reads `sites/<org>/<revision>/source.tar.zst` and `screenshots/home-1440.png`
  * out of that bucket through wrangler (`--remote`, colour off); without it each
  * value is a local directory holding `site-config.ts` (or `src/site-config.ts`),
+ * with `content/pages/home.json` beside it on a site built with page documents,
  * `home-1440.png` (or `screenshots/home-1440.png`) and, optionally,
  * `blueprint.json`. `--baseline` is a `--json` file from an earlier run, usually
  * the same 18 built from `main`, and sits beside the new similarity. `--line`
@@ -86,7 +88,7 @@ function fetchRevision(bucket, ref, cache) {
   r2Get(bucket, `${prefix}source.tar.zst`, join(dir, "source.tar.zst"))
   execFileSync("sh", [
     "-c",
-    'zstd -dc "$1/source.tar.zst" | tar -x -C "$1" src/site-config.ts',
+    'zstd -dc "$1/source.tar.zst" | tar -x -C "$1" src',
     "sh",
     dir,
   ])
@@ -99,7 +101,13 @@ async function load(dir) {
     join(dir, "src/site-config.ts")
   )
   if (!config) throw new Error(`no site-config.ts under ${dir}`)
-  const { site, layout } = await import(pathToFileURL(resolve(config)).href)
+  const exported = await import(pathToFileURL(resolve(config)).href)
+  const { site } = exported
+  const doc = join(dirname(config), "content/pages/home.json")
+  const layout = layoutOf(
+    exported.layout,
+    existsSync(doc) ? JSON.parse(readFileSync(doc, "utf8")) : undefined
+  )
   const bp = join(dir, "blueprint.json")
   const blueprint = existsSync(bp)
     ? JSON.parse(readFileSync(bp, "utf8"))

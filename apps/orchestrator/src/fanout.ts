@@ -23,7 +23,12 @@ import {
   packVoice,
   stableRules,
 } from "./developer-rules.ts"
-import { DOCUMENTS_DIR, PAGE_FIELDS, skeletons } from "./documents.ts"
+import {
+  BLOCK_SHAPES,
+  DOCUMENTS_DIR,
+  PAGE_FIELDS,
+  skeletons,
+} from "./documents.ts"
 import { SEED_DIGEST, SEED_FIELDS, STARTER_FILES } from "./seed.ts"
 import { fieldLines } from "./write-pages.ts"
 
@@ -68,6 +73,21 @@ export const serviceCount = (brief: Brief) =>
         | { items?: unknown[] }
         | undefined
     )?.items?.length ?? SERVICES_MAX
+  )
+
+/** Each service's name field, spelt as business.offerings gives it. */
+export const offeredNames = (brief: Brief): Record<string, string> =>
+  Object.fromEntries(
+    (
+      (
+        brief.snapshot.facts.find((f) => f.key === "business.offerings")
+          ?.value as { items?: unknown[] } | undefined
+      )?.items ?? []
+    )
+      .slice(0, SERVICES_MAX)
+      .flatMap((name, i) =>
+        typeof name === "string" ? [[`service${i + 1}Name`, name]] : []
+      )
   )
 
 /** The facts the about page's writer owns when there is one, rather than the home page's. */
@@ -463,6 +483,7 @@ function childPrefix(
     "",
     "Rules:",
     `- The lead has written the shell: direction, font and colour in src/site-config.ts, and each page's sections are the Blueprint's. ${reading}`,
+    `- Each block is {id, type, provenance, eyebrow?, heading?} with its type's own keys and no others: ${BLOCK_SHAPES}.`,
     '- You have no tools. Reply with JSON only, shaped {"summary": string, "values": {"<field>": string}, "title": string, "description": string, "sections": {"<section id>": {"eyebrow": string, "heading": string, "intro": string, "blocks": [...]}}}. values has one entry for every field your task names and no other: the field\'s whole new text, or "" to leave it empty. sections has one entry for every section your task names and no other, and title and description come only when your task names them. Code writes each into its place while other writers fill the rest.',
     "- Write each section as its skeleton lays it out and as the starter reads it (src/page-document.ts; the document rules below say what each section shows). Keep every skeleton block's id and type and fill its words; leave out a block or an item you have nothing true for; add a block where your content plan needs one, with an id of its own. Never write kind, variant or purpose: those are the Blueprint's.",
     "- Follow your page's content plan: write the topics it owns under its outline's headings, in its order, for its target search, from its sources, and nothing another page owns. A block's provenance is facts when its words come from the facts, trade when they say what such work usually involves (the page labels it typical), and owner for a site.content piece placed word for word.",

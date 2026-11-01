@@ -77,6 +77,9 @@ describe("a theme from a preset's six roles", () => {
   const roles = (each: (typeof PALETTES)[number]) =>
     ROLES.map((role) => `${role}:${each[role]}`).join(" ")
 
+  // Pebble's paper is the pure white the page must not show.
+  const WHITE_PAPER = PALETTES.find((each) => each.id === "pebble")?.paper
+
   test("every preset reaches the page exactly, over any brand colour", () => {
     const red = colours.chosen["saturated red"] as string
     for (const each of PALETTES) {
@@ -89,19 +92,20 @@ describe("a theme from a preset's six roles", () => {
         each.id === "after_dark" || each.id === "ember"
           ? `;--ink:${each.paper};--paper:${each.ink};color-scheme:dark`
           : ""
+      // Design rule 5: a pure white paper leans toward the hue, any other is exact.
+      const paper = /--background:(#[0-9a-f]{6})/.exec(css)?.[1] ?? ""
+      expect(paper, each.id).not.toBe(WHITE_PAPER)
+      if (each.paper !== WHITE_PAPER) expect(paper, each.id).toBe(each.paper)
       expect(css, each.id).toBe(
-        `html:root{--brand:${each.primary};--brand-foreground:${each.paper};--brand-text:${text};--background:${each.paper};--foreground:${each.ink};--muted-foreground:${mutedOf(each)};--role-tint:${each.tint};--role-line:${each.line};--role-accent:${each.accent}${swap}}`
+        `html:root{--brand:${each.primary};--brand-foreground:${paper};--brand-text:${text};--background:${paper};--foreground:${each.ink};--muted-foreground:${mutedOf({ ...each, paper })};--role-tint:${each.tint};--role-line:${each.line};--role-accent:${each.accent}${swap}}`
       )
       // Secondary text eases off the ink and still reads on paper and tint.
-      const muted = mutedOf(each)
+      const muted = mutedOf({ ...each, paper })
       expect(muted, each.id).not.toBe(each.ink)
-      for (const ground of [each.paper, each.tint])
+      for (const ground of [paper, each.tint])
         expect(contrast(muted, ground), each.id).toBeGreaterThanOrEqual(AA)
-      // The label colour is the palette's paper, an AA pair on its primary.
-      expect(
-        contrast(each.paper, each.primary),
-        each.id
-      ).toBeGreaterThanOrEqual(AA)
+      // The label colour is the page's paper, an AA pair on its primary.
+      expect(contrast(paper, each.primary), each.id).toBeGreaterThanOrEqual(AA)
     }
   })
 

@@ -2,12 +2,13 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { deflateSync } from "node:zlib"
 import { AskDesignOutput, FactValue } from "@workspace/contracts"
-import { BUSINESSES, toFacts, toTray } from "./businesses.mjs"
+import { BUSINESSES, idsOf, toFacts, toTray } from "./businesses.mjs"
 import {
   decodePng,
   dhash,
   editDistance,
   hashDistance,
+  layoutOf,
   sequenceDistance,
   sequenceOf,
   summarise,
@@ -19,6 +20,15 @@ import {
 // fixtures
 
 const by = (industry) => BUSINESSES.filter((b) => b.industry === industry)
+
+test("every business seeds its own org and owner", () => {
+  for (const key of ["orgId", "userId"])
+    assert.equal(new Set(BUSINESSES.map((b) => idsOf(b)[key])).size, 18)
+  assert.notEqual(
+    idsOf(BUSINESSES.find((b) => b.id === "clean-01")).orgId,
+    idsOf(BUSINESSES.find((b) => b.id === "legal-01")).orgId
+  )
+})
 
 test("18 fictional businesses, six in each of three industries", () => {
   assert.equal(BUSINESSES.length, 18)
@@ -158,6 +168,25 @@ test("the tuple reads the layout and falls back to the legacy template for a bui
     "service_cards:fleet",
     "cta_band",
   ])
+})
+
+test("a site with page documents and no layout export reads its home document", () => {
+  const home = {
+    page: "home",
+    sections: [
+      { kind: "hero", variant: "text_led" },
+      { kind: "service_cards", variant: "practice_list" },
+    ],
+  }
+  const layout = layoutOf(undefined, home)
+  assert.deepEqual(sequenceOf(layout), [
+    "hero:text_led",
+    "service_cards:practice_list",
+  ])
+  const tuple = tupleOf({ site: { direction: "counsel" }, layout })
+  assert.deepEqual([tuple.hero, tuple.services], ["text_led", "practice_list"])
+  const exported = { home: [{ kind: "hero", variant: "wash" }] }
+  assert.equal(layoutOf(exported, home), exported)
 })
 
 /** A PNG of width x height whose grey comes from `grey(x, y)`, each row stored with filter type `filter`. */

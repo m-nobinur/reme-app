@@ -6,8 +6,8 @@ props:
   - name: variant
     type: '"default" | "hairline_rows"'
     required: false
-    description: "default: numbered reasons beside the heading, each in an icon
-      circle; hairline_rows: full-width rows under the heading, between
+    description: "default: reasons beside the heading, each in an icon circle and no
+      number; hairline_rows: full-width rows under the heading, between
       hairlines, a small icon leading each."
   - name: eyebrow
     type: string
@@ -35,9 +35,9 @@ constraints:
     renders only when its title or body is set.
   - Each valuePropNIcon is a key of ICONS in src/icons.ts that fits the reason;
     an empty or unknown one is picked from the reason's words.
-  - default numbers the reasons beside the heading, each in an icon circle;
-    hairline_rows sets them as full-width rows under the heading, divided by
-    hairlines, a small icon leading each and no number.
+  - default sets the reasons beside the heading, each in an icon circle and no
+    number; hairline_rows sets them as full-width rows under the heading,
+    divided by hairlines, a small icon leading each and no number.
   - Renders nothing when every title and body is empty.
 examples:
   - "<ValueProps />"

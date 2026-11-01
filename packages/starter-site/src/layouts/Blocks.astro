@@ -10,6 +10,7 @@ import type { Block } from "../page-document"
 import { hasPhoto } from "../photo-files"
 import { primaryAction } from "../routes"
 import { site } from "../site-config"
+import { typicalNote } from "../typical-note"
 import Markdown from "./Markdown.astro"
 import Photo from "./Photo.astro"
 
@@ -28,13 +29,12 @@ const action = (block: Extract<Block, { type: "cta" }>) => {
 {
   blocks.map((block) => {
     const Entry = block.heading ? "h4" : "h3"
+    const note = block.provenance === "trade" ? typicalNote(Astro.locals) : ""
     return (
       <div class:list={["block", `block-${block.type}`]} id={block.id}>
         {block.eyebrow && <p class="eyebrow">{block.eyebrow}</p>}
         {block.heading && <h3>{plain(block.heading)}</h3>}
-        {block.provenance === "trade" && site.typicalNote && (
-          <p class="typical-note">{site.typicalNote}</p>
-        )}
+        {note && <p class="typical-note" data-copy="typical_note">{note}</p>}
         {block.type === "prose" && <Markdown source={block.markdown} />}
         {block.type === "checklist" && (
           <ul class="check-list">

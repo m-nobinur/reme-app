@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { fidelity } from "./fidelity.mjs"
+import { checkProblems, fidelity } from "./fidelity.mjs"
 
 const brief = {
   edit_type: "add_section",
@@ -57,5 +57,21 @@ test("a missed check, a change off target and a change nothing judged fail", () 
       also: ["home"],
     }).passed,
     true
+  )
+})
+
+test("a check the judge could not decide neither passes nor fails the change, wherever it is scored", () => {
+  const unknown = { check: "b", passed: null, why: "no page given" }
+  assert.deepEqual(checkProblems([passing[0], unknown]), [])
+  assert.deepEqual(fidelity({ brief, checks: [passing[0], unknown] }), {
+    passed: true,
+    problems: [],
+  })
+  assert.deepEqual(checkProblems([unknown, { ...unknown, check: "c" }]), [
+    "no acceptance check could be decided",
+  ])
+  assert.deepEqual(
+    checkProblems([{ check: "a", passed: false, why: "no tel link" }, unknown]),
+    ["check failed: a (no tel link)"]
   )
 })

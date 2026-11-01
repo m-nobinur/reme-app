@@ -183,8 +183,7 @@ const values = {
    * The muted line under trade guidance: a block whose provenance is trade,
    * and the list under serviceIncludesLabel. Empty shows nothing.
    */
-  typicalNote:
-    "Typical for this kind of job. We confirm the details when we quote.",
+  typicalNote: "Typical scope. Confirmed in your quote.",
   serviceForLabel: "Who it is for",
   /**
    * Up to six services, one per business.offerings item that a fact

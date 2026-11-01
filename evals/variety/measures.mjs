@@ -55,6 +55,13 @@ export function tupleOf({ site, layout, blueprint }) {
 export const tupleKey = (t) =>
   [t.direction, t.hero, t.services, t.pair, t.palette].join("|")
 
+/**
+ * The layout the tuple and sequence read: the config's `layout` export, or,
+ * on a site built with page documents, its home document's sections.
+ */
+export const layoutOf = (layout, homeDocument) =>
+  layout ?? (homeDocument ? { home: homeDocument.sections } : undefined)
+
 /** The home page's section order as `kind:variant` tokens. */
 export const sequenceOf = (layout) =>
   (layout?.home ?? []).map((s) =>

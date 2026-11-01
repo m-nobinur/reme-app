@@ -20,8 +20,9 @@ export const PAIRS: Record<string, FontPair> = {
     display: { family: "Fraunces", weights: [500], italic: true },
     body: { family: "DM Sans", weights: [400, 500] },
   },
+  // The id predates the face: stored site.font values still hold it.
   instrument_worksans: {
-    display: { family: "Instrument Serif", weights: [400], italic: false },
+    display: { family: "Bodoni Moda", weights: [500], italic: false },
     body: { family: "Work Sans", weights: [400, 500] },
   },
   sora_manrope: {
@@ -66,7 +67,7 @@ export const BODY_VAR = "--face-body"
 
 const SERIF = new Set([
   "Fraunces",
-  "Instrument Serif",
+  "Bodoni Moda",
   "Newsreader",
   "Cormorant Garamond",
 ])

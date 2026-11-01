@@ -75,7 +75,7 @@ describe("a page document", () => {
         home.html
       )?.[0]
     expect(covers).toContain(
-      `<p class="typical-note">${FILLED.typicalNote}</p>`
+      `<p class="typical-note" data-copy="typical_note">${FILLED.typicalNote}</p>`
     )
     expect(home.html.match(/class="typical-note"/g)).toHaveLength(1)
   })

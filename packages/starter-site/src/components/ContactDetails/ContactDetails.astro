@@ -1,6 +1,7 @@
 ---
 import { pageFields } from "../../page-fields"
 import { phoneText } from "../../phone"
+import { hasRoute } from "../../routes"
 import { site } from "../../site-config"
 import Icon from "../Icon/Icon.astro"
 
@@ -34,7 +35,10 @@ const rows = [
     icon: "mapPin",
     // The nav's short label: the page heading may be a whole sentence.
     label: site.navServiceArea || pageFields.serviceAreaHeading,
-    value: site.serviceAreaText || site.serviceArea,
+    // The service area page says it once; a site without one says it here.
+    value: hasRoute("/service-area/")
+      ? ""
+      : site.serviceAreaText || site.serviceArea,
     href: "",
   },
 ].filter((row) => row.value)
@@ -42,7 +46,10 @@ const rows = [
 
 {
   rows.length > 0 && (
-    <dl class:list={["contact-details", `contact-${variant}`]}>
+    <dl
+      class:list={["contact-details", `contact-${variant}`]}
+      data-copy="contact_details"
+    >
       {rows.map((row) => (
         <div>
           <dt>

@@ -12,7 +12,7 @@ import {
   previewRevision,
   SETTLED,
 } from "./measure-build/watch.mjs"
-import { BUSINESSES, toFacts, toTray } from "./variety/businesses.mjs"
+import { BUSINESSES, idsOf, toFacts, toTray } from "./variety/businesses.mjs"
 
 /**
  * One measured build on local servers, for the creative builder's final pass:
@@ -97,9 +97,7 @@ const openrouter = process.env.OPENROUTER_API_KEY ?? ""
 if (!token || !openrouter)
   throw new Error("ORCHESTRATOR_TOKEN and OPENROUTER_API_KEY are required")
 
-const number = Number(business.id.replace(/\D/g, ""))
-const ORG_ID = `5ea5e000-0000-4000-8000-${String(number).padStart(12, "0")}`
-const USER_ID = `5ea5e000-0000-4000-8001-${String(number).padStart(12, "0")}`
+const { orgId: ORG_ID, userId: USER_ID } = idsOf(business)
 const SLUG = `measure-${business.id}`
 mkdirSync(out, { recursive: true })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))

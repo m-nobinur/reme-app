@@ -10,12 +10,8 @@
     "body": { "family": "DM Sans", "weights": [400, 500] }
   },
   "instrument_worksans": {
-    "label": "Instrument Serif and Work Sans",
-    "display": {
-      "family": "Instrument Serif",
-      "weights": [400],
-      "italic": false
-    },
+    "label": "Bodoni Moda and Work Sans",
+    "display": { "family": "Bodoni Moda", "weights": [500], "italic": false },
     "body": { "family": "Work Sans", "weights": [400, 500] }
   },
   "sora_manrope": {
