@@ -627,7 +627,7 @@ it("connects a name bought elsewhere once the registry shows it", async () => {
   await act(async () => tray.querySelector("a")?.click())
   await press(tray, "I've bought it")
   expect(chat.textContent).toContain(`${NAME} is yours.`)
-  expect(chat.querySelectorAll("ol > li")).toHaveLength(1)
+  expect(chat.querySelectorAll("tbody tr")).toHaveLength(1)
   expect(tray.textContent).toBe("")
 })
 

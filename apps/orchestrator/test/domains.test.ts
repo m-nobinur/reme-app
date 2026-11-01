@@ -6,8 +6,10 @@ import {
   CNAME_TARGET,
   type CustomHostname,
   claimHosts,
+  connectApex,
   deleteHostname,
   detectProvider,
+  diagnose,
   domainCheck,
   ensureHostname,
   getHostname,
@@ -51,6 +53,12 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+const GODADDY = {
+  id: "godaddy",
+  name: "GoDaddy",
+  settings_url: "https://dcc.godaddy.com/manage/dns",
+}
+
 describe("provider detection", () => {
   it("names GoDaddy and links our GoDaddy DNS page", async () => {
     stubNet()
@@ -58,52 +66,69 @@ describe("provider detection", () => {
       await detectProvider("sparklecleanbristol.co.uk", [
         "ns47.domaincontrol.com",
       ])
-    ).toEqual({
-      name: "GoDaddy",
-      settings_url: "https://dcc.godaddy.com/manage/dns",
-    })
+    ).toEqual({ provider: GODADDY })
   })
 
-  it("names 123 Reg through secureserver, which the nameservers alone would call GoDaddy", async () => {
+  it("names 123-reg by its Domain Connect name, which the nameservers alone would call GoDaddy", async () => {
     stubNet()
     expect(
       await detectProvider("sparkleclean123.co.uk", ["ns53.domaincontrol.com"])
     ).toEqual({
-      name: "123 Reg",
-      settings_url: "https://dcc.secureserver.net/manage/dns",
+      provider: {
+        id: "123-reg",
+        name: "123-reg",
+        settings_url: "https://www.123-reg.co.uk/secure/",
+      },
     })
   })
 
-  it("names Cloudflare and links the dashboard, though its answer has no urlControlPanel", async () => {
+  it("names Cloudflare and links the domain's own DNS page", async () => {
     stubNet()
     expect(
       await detectProvider("sparkleclean.co.uk", ["etienne.ns.cloudflare.com"])
     ).toEqual({
-      name: "Cloudflare",
-      settings_url: "https://dash.cloudflare.com/",
+      provider: {
+        id: "cloudflare",
+        name: "Cloudflare",
+        settings_url:
+          "https://dash.cloudflare.com/?to=/:account/sparkleclean.co.uk/dns/records",
+      },
     })
   })
 
   it.each([
     ["ns.123-reg.co.uk", "123-reg", "https://www.123-reg.co.uk/secure/"],
-    ["ns1043.ui-dns.com", "IONOS", "https://my.ionos.co.uk/domains"],
+    ["ns1043.ui-dns.com", "ionos", "https://my.ionos.co.uk/domains"],
+    ["ns-fh.ui-dns.co.uk", "fasthosts", "https://admin.fasthosts.co.uk/"],
     [
       "dns1.registrar-servers.com",
-      "Namecheap",
+      "namecheap",
       "https://ap.www.namecheap.com/domains/list/",
+    ],
+    [
+      "ns1.dns-parking.com",
+      "hostinger",
+      "https://hpanel.hostinger.com/domains",
+    ],
+    ["ns1.vercel-dns.com", "vercel", "https://vercel.com/dashboard/domains"],
+    [
+      "ns-1982.awsdns-55.co.uk",
+      "route-53",
+      "https://console.aws.amazon.com/route53/v2/hostedzones",
     ],
   ])(
     "names the owner's DNS host from its nameserver %s",
-    async (ns, name, link) => {
+    async (ns, id, link) => {
       stubNet()
-      expect(await detectProvider("plain.co.uk", [ns])).toEqual({
-        name,
+      expect((await detectProvider("plain.co.uk", [ns])).provider).toEqual({
+        id,
+        name: expect.any(String),
         settings_url: link,
       })
     }
   )
 
-  it("gives a provider that discovery names without a page the page of its nameservers", async () => {
+  it("reads a provider discovery names against the registry", async () => {
     stubNet(
       {
         "https://dc.ionos.example/v2/plain.co.uk/settings": Response.json({
@@ -119,12 +144,15 @@ describe("provider detection", () => {
       }
     )
     expect(await detectProvider("plain.co.uk", ["ns1043.ui-dns.com"])).toEqual({
-      name: "IONOS",
-      settings_url: "https://my.ionos.co.uk/domains",
+      provider: {
+        id: "ionos",
+        name: "IONOS",
+        settings_url: "https://my.ionos.co.uk/domains",
+      },
     })
   })
 
-  it("gives an unknown provider its name and no button", async () => {
+  it("gives a provider discovery names outside the registry its name and no button", async () => {
     stubNet(
       {
         "https://dc.example-dns.net/v2/unknown.co.uk/settings": Response.json({
@@ -141,9 +169,7 @@ describe("provider detection", () => {
     )
     expect(
       await detectProvider("unknown.co.uk", ["ns1.example-dns.net"])
-    ).toEqual({
-      name: "Example DNS",
-    })
+    ).toEqual({ provider: { name: "Example DNS" } })
   })
 
   it.each([
@@ -151,7 +177,7 @@ describe("provider detection", () => {
     "http://dcc.godaddy.com/manage/dns",
     "javascript:alert(1)//dcc.godaddy.com",
     "https://evil.example/?next=https://dcc.godaddy.com/manage/dns",
-  ])("never shows an off-allowlist urlControlPanel: %s", async (panel) => {
+  ])("never shows the urlControlPanel a domain names: %s", async (panel) => {
     stubNet(
       {
         "https://dc.example-dns.net/v2/unknown.co.uk/settings": Response.json({
@@ -166,8 +192,9 @@ describe("provider detection", () => {
         ),
       }
     )
-    const provider = await detectProvider("unknown.co.uk", [])
-    expect(provider).toEqual({ name: "GoDaddy" })
+    expect(await detectProvider("unknown.co.uk", [])).toEqual({
+      provider: GODADDY,
+    })
   })
 
   it("strips control characters from the name and caps it at 80", async () => {
@@ -184,7 +211,7 @@ describe("provider detection", () => {
         ),
       }
     )
-    const provider = await detectProvider("unknown.co.uk", [])
+    const { provider } = await detectProvider("unknown.co.uk", [])
     expect(provider?.name.startsWith("Example DNS x")).toBe(true)
     expect(provider?.name).toHaveLength(80)
   })
@@ -193,20 +220,83 @@ describe("provider detection", () => {
     const fetched = stubNet()
     expect(
       await detectProvider("wildcard.co.uk", ["ns53.domaincontrol.com."])
-    ).toEqual({
-      name: "GoDaddy",
-      settings_url: "https://dcc.godaddy.com/manage/dns",
-    })
+    ).toEqual({ provider: GODADDY })
     expect(
       urls(fetched).every((u) => u.startsWith("https://cloudflare-dns.com/"))
     ).toBe(true)
   })
 
-  it("gives nothing when neither discovery nor the nameservers know the provider", async () => {
+  it("gives only the nameservers' domain when nobody knows the provider, and logs it without the owner's", async () => {
     stubNet()
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
     expect(
-      await detectProvider("nobody.co.uk", ["ns1.example-dns.net"])
-    ).toBeNull()
+      await detectProvider("nobody.co.uk", [
+        "ns1.krystal-like.co.uk",
+        "ns2.krystal-like.co.uk",
+        "ns3.backup-dns.net",
+      ])
+    ).toEqual({ nameserver_host: "krystal-like.co.uk" })
+    const lines = log.mock.calls.map(([line]) => String(line))
+    expect(lines).toEqual([
+      JSON.stringify({
+        type: "domain.provider_unmatched",
+        nameserver_host: "krystal-like.co.uk",
+      }),
+      JSON.stringify({
+        type: "domain.provider_unmatched",
+        nameserver_host: "backup-dns.net",
+      }),
+    ])
+    expect(lines.join(" ")).not.toContain("nobody")
+  })
+
+  describe("on nameservers Squarespace and Google Cloud DNS share", () => {
+    const BOOTSTRAP = "https://data.iana.org/rdap/dns.json"
+    const RDAP = "https://rdap.nominet.uk/uk/domain/shared.co.uk"
+    const GOOGLE_NS = ["ns-cloud-c1.googledomains.com"]
+    const registrar = (fn: string) => ({
+      [BOOTSTRAP]: () =>
+        Response.json({
+          services: [[["uk"], ["https://rdap.nominet.uk/uk/"]]],
+        }),
+      [RDAP]: () =>
+        Response.json({
+          entities: [
+            {
+              roles: ["registrar"],
+              vcardArray: ["vcard", [["fn", {}, "text", fn]]],
+            },
+          ],
+        }),
+    })
+    const noCache = () =>
+      vi.stubGlobal("caches", {
+        default: { match: async () => undefined, put: async () => undefined },
+      })
+
+    it.each([
+      ["Squarespace Domains II LLC", "squarespace"],
+      ["NameCheap, Inc.", "google-cloud-dns"],
+    ])("reads registrar %s as %s", async (fn, id) => {
+      noCache()
+      stubNet(registrar(fn))
+      expect(
+        (await detectProvider("shared.co.uk", GOOGLE_NS)).provider?.id
+      ).toBe(id)
+    })
+
+    it("names neither when the registry cannot say, and never a wholesaler", async () => {
+      noCache()
+      stubNet({ [BOOTSTRAP]: () => new Response("{}", { status: 503 }) })
+      expect(await detectProvider("shared.co.uk", GOOGLE_NS)).toEqual({
+        nameserver_host: "googledomains.com",
+      })
+      noCache()
+      stubNet(registrar("Tucows Domains Inc."))
+      expect(
+        (await detectProvider("shared.co.uk", GOOGLE_NS)).provider?.name
+      ).toBe("Google Cloud DNS")
+    })
   })
 
   it.each([
@@ -231,7 +321,7 @@ describe("provider detection", () => {
           "_domainconnect.unknown.co.uk TXT": txtAnswer("unknown.co.uk", value),
         }
       )
-      expect(await detectProvider("unknown.co.uk", [])).toBeNull()
+      expect(await detectProvider("unknown.co.uk", [])).toEqual({})
       expect(
         urls(fetched).every((u) => u.startsWith("https://cloudflare-dns.com/"))
       ).toBe(true)
@@ -256,7 +346,7 @@ describe("provider detection", () => {
         ),
       }
     )
-    expect(await detectProvider("unknown.co.uk", [])).toBeNull()
+    expect(await detectProvider("unknown.co.uk", [])).toEqual({})
     const init = fetched.mock.calls.find(([u]) =>
       String(u).includes("example-dns")
     )?.[1] as RequestInit | undefined
@@ -281,7 +371,7 @@ describe("provider detection", () => {
         ),
       }
     )
-    expect(await detectProvider("unknown.co.uk", [])).toBeNull()
+    expect(await detectProvider("unknown.co.uk", [])).toEqual({})
   })
 })
 
@@ -660,6 +750,105 @@ describe("the records list", () => {
   })
 })
 
+describe("the bare domain at connect", () => {
+  const fresh = fakeInspection({
+    hosts: {
+      [APEX]: { a: ["192.0.2.10"], aaaa: [] },
+      [WWW]: { a: [], aaaa: [] },
+    },
+  })
+
+  it("aliases where the registry says the provider can, and forwards elsewhere", () => {
+    expect(connectApex(fresh, { id: "namecheap", name: "Namecheap" })).toBe(
+      "alias"
+    )
+    expect(connectApex(fresh, { id: "godaddy", name: "GoDaddy" })).toBe(
+      "forward"
+    )
+    expect(connectApex(fresh, { name: "Example DNS" })).toBe("forward")
+    expect(connectApex(fresh, undefined)).toBe("forward")
+  })
+
+  it("aliases wherever the bare domain already reaches us", () => {
+    const flat = fakeInspection({
+      hosts: { [APEX]: { a: ["104.21.0.10"], aaaa: [] } },
+    })
+    expect(connectApex(flat, { id: "godaddy", name: "GoDaddy" })).toBe("alias")
+  })
+})
+
+describe("diagnosing the records the owner added", () => {
+  const SUB = `dox.${APEX}`
+  const asked = [{ type: "CNAME" as const, name: "dox", value: CNAME_TARGET }]
+  const at = (records: Inspection["hosts"][string]) =>
+    fakeInspection({ sub: SUB, hosts: { [SUB]: records } })
+  const CLOUDFLARE = { id: "cloudflare", name: "Cloudflare" }
+
+  it("tells the owner to type just the subdomain when the zone was typed too", async () => {
+    stubNet(
+      {},
+      {
+        [`${SUB}.${APEX} A`]: {
+          Status: 0,
+          Answer: [
+            {
+              name: `${SUB}.${APEX}`,
+              type: 5,
+              TTL: 60,
+              data: `${CNAME_TARGET}.`,
+            },
+            { name: CNAME_TARGET, type: 1, TTL: 60, data: "104.21.0.10" },
+          ],
+        },
+      }
+    )
+    expect(await diagnose(at({ a: [], aaaa: [] }), asked, CLOUDFLARE)).toEqual({
+      kind: "doubled_name",
+      text: "Nearly there: in the Name box type just dox, and Cloudflare adds the rest.",
+    })
+  })
+
+  it("says nothing while no record shows anywhere yet", async () => {
+    stubNet()
+    expect(await diagnose(at({ a: [], aaaa: [] }), asked)).toBeNull()
+  })
+
+  it("names a wrong value and the one to use", async () => {
+    expect(
+      await diagnose(
+        at({ cname: "domains.remeai.co", a: [], aaaa: [] }),
+        asked,
+        { id: "namecheap", name: "Namecheap" }
+      )
+    ).toEqual({
+      kind: "wrong_value",
+      text: `The dox record points at domains.remeai.co. Change its value to ${CNAME_TARGET}.`,
+    })
+    expect(await diagnose(at({ a: ["192.0.2.10"], aaaa: [] }), asked)).toEqual({
+      kind: "wrong_value",
+      text: `The dox record points at 192.0.2.10. Make it a CNAME record with the value ${CNAME_TARGET}.`,
+    })
+  })
+
+  it("names an old address left beside ours", async () => {
+    const both = fakeInspection({
+      hosts: { [APEX]: { a: ["104.21.0.10", "192.0.2.10"], aaaa: [] } },
+    })
+    expect(
+      await diagnose(both, [{ type: "ALIAS", name: "@", value: CNAME_TARGET }])
+    ).toEqual({
+      kind: "left_behind",
+      text: "There's still an old @ setting pointing at 192.0.2.10. Delete that one and keep the new one.",
+    })
+  })
+
+  it("is null once every record reaches us", async () => {
+    expect(
+      await diagnose(at({ cname: CNAME_TARGET, a: [], aaaa: [] }), asked)
+    ).toBeNull()
+  })
+})
+
 describe("the custom hostname client", () => {
   const env = { CF_DOMAINS_TOKEN: "token", CF_DOMAINS_ZONE_ID: "zone" }
   const base =
@@ -886,9 +1075,9 @@ describe("Domain Connect apply page", () => {
   })
 
   it("names GoDaddy's page once GoDaddy says our template is live there", async () => {
-    const GODADDY =
+    const GODADDY_TEMPLATE =
       "https://domainconnect.api.godaddy.com/v2/domainTemplates/providers/remeai.co.uk/services/website"
-    stubNet({ [GODADDY]: () => new Response(null, { status: 200 }) })
+    stubNet({ [GODADDY_TEMPLATE]: () => new Response(null, { status: 200 }) })
     expect(await applyBase("sparklecleanbristol.co.uk")).toBe(
       "dcc.godaddy.com/manage"
     )

@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { DNS_PROVIDERS } from "@workspace/contracts"
 import { markOf } from "@workspace/ui/components/brand-mark"
 import { ConnectRow } from "@workspace/ui/components/connect-row"
 import { act, createElement } from "react"
@@ -9,13 +10,14 @@ import { expect, it } from "vitest"
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
 
-it("finds a provider's mark by its name, and none for a brand no library has", () => {
-  expect(markOf("IONOS")).toBe(markOf("ionos"))
-  expect(markOf("IONOS by 1&1")).toBe(markOf("IONOS"))
-  expect(markOf("Google Search Console")).toBeDefined()
-  expect(markOf("GoDaddy")).not.toBe(markOf("Cloudflare"))
-  expect(markOf("123-reg")).toBeUndefined()
-  expect(markOf("Fasthosts")).toBeUndefined()
+it("has a vendored mark for every registry provider that names one", () => {
+  for (const provider of DNS_PROVIDERS) {
+    if (provider.mark !== null) expect(markOf(provider.mark)).toBeDefined()
+  }
+  expect(markOf("google-search-console")).toBeDefined()
+  expect(markOf("godaddy")).not.toBe(markOf("cloudflare"))
+  expect(markOf(null)).toBeUndefined()
+  expect(markOf("hostinger-plus")).toBeUndefined()
 })
 
 it("draws a brand with no mark on a globe, and a new tab as one", async () => {

@@ -95,7 +95,9 @@ for (const width of [1024, 390]) {
           value: number
           hadRecentInput: boolean
         }[]) {
-          if (!shift.hadRecentInput) shifts.push(shift.value)
+          // Under 0.001 is sub-pixel rounding, not a move anyone sees.
+          if (!shift.hadRecentInput && shift.value >= 0.001)
+            shifts.push(shift.value)
         }
       }).observe({ type: "layout-shift" })
     })

@@ -772,8 +772,13 @@ function resultTaint(result: CosToolResult): TaintLabel[] {
         ? ["untrusted_input"]
         : []
     case "inspect_domain":
-      // The registrar is the registry's text, not ours.
-      return "registrar" in result.output ? ["untrusted_input"] : []
+      // The registrar, a nameserver's domain and a name only Domain Connect
+      // gave are the registry's or the domain's own DNS text, not ours.
+      return "registrar" in result.output ||
+        "nameserver_host" in result.output ||
+        ("dns_host" in result.output && !result.output.dns_host?.id)
+        ? ["untrusted_input"]
+        : []
     case "update_reminder":
     case "delete_reminder":
       // The reminder's title, in the owner's words.

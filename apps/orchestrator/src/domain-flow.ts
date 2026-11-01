@@ -9,9 +9,11 @@ import {
   type DomainRegistration,
   type DomainState,
   DomainStripe,
+  registrarIn,
   type ServerButton,
   SITE_HEADER,
   siteHost,
+  WHOLESALE_REGISTRARS,
 } from "@workspace/contracts"
 import {
   appendEvent,
@@ -42,6 +44,7 @@ import {
   CNAME_TARGET,
   type CustomHostname,
   claimHosts,
+  connectApex,
   DomainError,
   deleteHostname,
   detectProvider,
@@ -1029,14 +1032,20 @@ export async function inspectDomain(
         "I couldn't read the domain's DNS just now. Try again in a minute."
       )
   }
-  const dnsHost =
-    inspection &&
-    (await detectProvider(inspection.apex, inspection.nameservers))
+  const { provider, nameserver_host } = inspection
+    ? await detectProvider(inspection.apex, inspection.nameservers)
+    : {}
+  // A wholesaler sits behind the reseller the owner bought from, so it is never named.
+  const registrar =
+    known?.registrar && !registrarIn(known.registrar, WHOLESALE_REGISTRARS)
+      ? known.registrar
+      : undefined
   return DomainInspection.parse({
     name,
     registered: known?.registered ?? inspection !== null,
-    ...(known?.registrar && { registrar: known.registrar }),
-    ...(dnsHost && { dns_host: dnsHost }),
+    ...(registrar && { registrar }),
+    ...(provider && { dns_host: provider }),
+    ...(nameserver_host && { nameserver_host }),
     in_use: Object.values(inspection?.hosts ?? {}).some(
       (h) => h.cname || h.a.length + h.aaaa.length > 0
     ),
@@ -1077,8 +1086,9 @@ export async function connect(
   // A subdomain one level below its zone apex, like `book.x.co.uk`; no deeper.
   if (inspection.sub && relative(inspection.sub, inspection.apex).includes("."))
     return invalid()
-  const provider = await detectProvider(inspection.apex, inspection.nameservers)
-  const apex = apexMode(inspection, null)
+  const detected = await detectProvider(inspection.apex, inspection.nameservers)
+  const { provider } = detected
+  const apex = connectApex(inspection, provider)
   const base = {
     outcome: "connecting" as const,
     method: "records" as const,
@@ -1086,7 +1096,7 @@ export async function connect(
     steps: stillToAdd(recordsFor({ inspection, apex }), inspection),
     // A subdomain has no bare-address choice.
     ...(!inspection.sub && { apex }),
-    ...(provider && { provider }),
+    ...detected,
   }
   const pointed = alreadyPointsAtUs(inspection)
   let claimed:

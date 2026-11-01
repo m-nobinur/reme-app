@@ -2,6 +2,7 @@
 import type { CheckDomainOutput } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import {
+  copyAllText,
   DONE_WAITING,
   domainStatusText,
 } from "@workspace/ui/components/assistant/domain"
@@ -44,6 +45,7 @@ const RECORDS = {
   ],
 } as const
 const GODADDY = {
+  id: "godaddy",
   name: "GoDaddy",
   settings_url: "https://dcc.godaddy.com/manage/dns",
 }
@@ -120,7 +122,7 @@ afterEach(() => {
 it("asks for the owner's yes through the existing approval flow", async () => {
   const card = await draw({ approval: { approved: undefined } })
   expect(card.container.querySelector("h2")?.textContent).toBe(
-    `Put your website on ${NAME}`
+    `Use ${NAME} for your website`
   )
   expect(card.container.textContent).toContain("Your email is not affected.")
   expect(choices(card.container)).toEqual(["Cancel", "Connect"])
@@ -128,17 +130,31 @@ it("asks for the owner's yes through the existing approval flow", async () => {
   await card.unmount()
 })
 
-it("shows the records, a copy button for each value, and the provider button", async () => {
+/** The step titles, then each table row's cells as text. */
+const steps = (container: HTMLElement) =>
+  [...container.querySelectorAll("ol > li h3")].map((h) => h.textContent)
+const rows = (container: HTMLElement) =>
+  [...container.querySelectorAll("tr")].map((tr) =>
+    [...tr.children].map(
+      (cell) => (cell.querySelector("code") ?? cell).textContent
+    )
+  )
+
+it("signs in at a known provider, then shows the records as a table with a copy button per cell", async () => {
   const card = await draw(done({ ...RECORDS, provider: GODADDY }))
   const text = card.container.textContent ?? ""
-  expect(text).toContain("Your domain's settings are at GoDaddy.")
-  expect(text).toContain("There are 3 changes to make there.")
-  expect(text).toContain("Your email is not affected.")
-  const items = card.container.querySelectorAll("ol > li")
-  expect(items).toHaveLength(3)
-  expect(items[0]?.textContent).toContain("domains.remeai.co.uk")
-  expect(items[2]?.textContent).toContain(
-    `forward it to https://www.${NAME} as permanent`
+  expect(steps(card.container)).toEqual([
+    "Sign in to GoDaddy",
+    "Add these records",
+  ])
+  expect(rows(card.container)).toEqual([
+    ["Type", "Name", "Value"],
+    ["CNAME", "www", "domains.remeai.co.uk"],
+    ["TXT", "_acme-challenge.www", "abc123"],
+  ])
+  expect(text).toContain(`Then forward ${NAME} to https://www.${NAME}`)
+  expect(text).toContain(
+    "Your email is not affected. That's all. I'll keep an eye on it and tell you the moment it's working."
   )
   const link = card.container.querySelector("a")
   expect(link?.getAttribute("href")).toBe(GODADDY.settings_url)
@@ -147,11 +163,44 @@ it("shows the records, a copy button for each value, and the provider button", a
   expect(link?.textContent).toBe(
     "GoDaddyOpen your DNS settings (opens in a new tab)"
   )
+  expect(link?.querySelector('[data-slot="brand-mark"] img')).not.toBeNull()
   expect(
     [...card.container.querySelectorAll("button[aria-label]")].map((b) =>
       b.getAttribute("aria-label")
     )
-  ).toEqual(["Copy domains.remeai.co.uk", "Copy abc123"])
+  ).toEqual([
+    "Copy CNAME",
+    "Copy www",
+    "Copy domains.remeai.co.uk",
+    "Copy TXT",
+    "Copy _acme-challenge.www",
+    "Copy abc123",
+  ])
+  expect(buttons(card.container)).toContain("Copy all")
+  await card.unmount()
+})
+
+it("uses the provider's own field names and its one note", async () => {
+  const card = await draw(
+    done({
+      ...RECORDS,
+      apex: "alias",
+      provider: {
+        id: "cloudflare",
+        name: "Cloudflare",
+        settings_url:
+          "https://dash.cloudflare.com/?to=/:account/sparkleclean.co.uk/dns/records",
+      },
+      steps: [
+        { type: "CNAME", name: "www", value: "domains.remeai.co.uk" },
+        { type: "ALIAS", name: "@", value: "domains.remeai.co.uk" },
+      ],
+    })
+  )
+  expect(rows(card.container)[0]).toEqual(["Type", "Name", "Target"])
+  expect(card.container.textContent).toContain("Set Proxy status to DNS only.")
+  // The bare address is the ALIAS row, so no forward line.
+  expect(card.container.textContent).not.toContain("Then forward")
   await card.unmount()
 })
 
@@ -172,14 +221,8 @@ it("puts Add it for me first when the provider can add the record, with the reco
       apply_url: apply,
     })
   )
-  const text = card.container.textContent ?? ""
-  expect(text).toContain(
-    "Your domain's settings are at Cloudflare, and I can add the record there for you."
-  )
-  expect(text).toContain("Or make the 2 changes yourself:")
-  // The record it adds is www's; the bare address stays the owner's step.
-  expect(text).toContain(
-    "The address without www is still yours to set: the last step below."
+  expect(card.container.textContent).toContain(
+    "Cloudflare asks you to sign in and approve it, then brings you back here. Or add it yourself:"
   )
   const [first, settings] = card.container.querySelectorAll("a")
   expect(first?.textContent).toBe("Add it for me (opens in a new tab)")
@@ -187,7 +230,7 @@ it("puts Add it for me first when the provider can add the record, with the reco
   expect(first?.getAttribute("target")).toBe("_blank")
   expect(first?.getAttribute("rel")).toContain("noopener")
   expect(settings?.getAttribute("href")).toBe("https://dash.cloudflare.com/")
-  expect(card.container.querySelectorAll("ol > li")).toHaveLength(2)
+  expect(rows(card.container)).toHaveLength(2)
   expect(buttons(card.container)).toContain("OK")
   await card.unmount()
 })
@@ -195,24 +238,15 @@ it("puts Add it for me first when the provider can add the record, with the reco
 it("says the website is live, with no records or links, once it is on the domain", async () => {
   const card = await draw(done({ ...RECORDS, provider: GODADDY }), [NAME])
   expect(card.container.textContent).toBe(
-    `Put your website on ${NAME}Your website is live on ${NAME}.`
+    `Use ${NAME} for your websiteYour website is live on ${NAME}.`
   )
   expect(card.container.querySelector("a")).toBeNull()
   expect(buttons(card.container)).toEqual([])
   await card.unmount()
   // Another domain live leaves this one's records in place.
   const other = await draw(done(RECORDS), ["other.co.uk"])
-  expect(other.container.querySelectorAll("ol > li")).toHaveLength(3)
+  expect(rows(other.container)).toHaveLength(3)
   await other.unmount()
-})
-
-it("keeps every step a list item, so each shows its number", async () => {
-  const card = await draw(done(RECORDS))
-  // `display: flex` on an `li` drops its marker, so none of them may carry it.
-  for (const item of card.container.querySelectorAll("ol > li")) {
-    expect(item.className.split(" ")).not.toContain("flex")
-  }
-  await card.unmount()
 })
 
 it("says it is connecting, and offers no wait button, when there are no records to show", async () => {
@@ -240,10 +274,12 @@ it("shows a subdomain's one record with no line about the bare address", async (
       steps: [{ type: "CNAME", name: "book", value: "domains.remeai.co.uk" }],
     })
   )
-  const text = card.container.textContent ?? ""
-  expect(text).toContain("There is 1 change to make.")
-  expect(card.container.querySelectorAll("ol > li")).toHaveLength(1)
-  expect(text).not.toContain("without www")
+  expect(steps(card.container)).toEqual([
+    "Open your domain's settings",
+    "Add this record",
+  ])
+  expect(rows(card.container)).toHaveLength(2)
+  expect(card.container.textContent).not.toContain("without www")
   await card.unmount()
 })
 
@@ -259,32 +295,71 @@ it("copies a value to the clipboard", async () => {
   )
   await act(async () => copy?.click())
   expect(writeText).toHaveBeenCalledWith("domains.remeai.co.uk")
-  expect(card.container.querySelector('[role="status"]')?.textContent).toBe(
-    "Copied"
-  )
+  expect(
+    copy?.parentElement?.querySelector('[role="status"]')?.textContent
+  ).toBe("Copied")
   await card.unmount()
 })
 
-it("offers no provider button without a settings link, and names no provider without one", async () => {
+it("shows where to look, never a link, when the provider is not one we know", async () => {
+  const hint = (container: HTMLElement) =>
+    container.querySelector('[data-slot="settings-hint"]')?.textContent
+
   const named = await draw(
-    done({ ...RECORDS, provider: { name: "Namecheap" } })
+    done({ ...RECORDS, provider: { name: "Example DNS" } })
   )
-  expect(named.container.textContent).toContain("settings are at Namecheap.")
+  expect(steps(named.container)[0]).toBe("Sign in to Example DNS")
+  expect(hint(named.container)).toBe(
+    "Where your domain's settings liveLook for DNS or Manage DNS once you're signed in."
+  )
   expect(named.container.querySelector("a")).toBeNull()
   await named.unmount()
 
-  const unknown = await draw(done(RECORDS))
-  expect(unknown.container.textContent).toContain(
-    "where you manage your domain"
+  const traced = await draw(
+    done({ ...RECORDS, nameserver_host: "katapult.io" })
   )
+  expect(steps(traced.container)[0]).toBe("Open your domain's settings")
+  expect(hint(traced.container)).toContain(
+    "Its nameservers point to katapult.io, so start there."
+  )
+  expect(traced.container.querySelector("a")).toBeNull()
+  await traced.unmount()
+
+  const unknown = await draw(done(RECORDS))
+  expect(hint(unknown.container)).toContain(
+    "Usually where you bought it, or with whoever set up your old website."
+  )
+  expect(
+    unknown.container.querySelector('[data-slot="brand-mark"] svg')
+  ).not.toBeNull()
   expect(unknown.container.querySelector("a")).toBeNull()
   await unknown.unmount()
 })
 
-it("says what to do with the address without www, by how it is served", async () => {
-  const card = await draw(done({ ...RECORDS, apex: "alias" }))
-  const last = [...card.container.querySelectorAll("ol > li")].at(-1)
-  expect(last?.textContent).toContain("ALIAS or ANAME record at the root")
+it("copies the domain, every record and what they are for as plain text", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined)
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText },
+    configurable: true,
+  })
+  const expected = [
+    `Website settings for ${NAME}`,
+    `These point ${NAME} at its new website. Email is not affected.`,
+    "",
+    "CNAME record · Name: www · Value: domains.remeai.co.uk",
+    "TXT record · Name: _acme-challenge.www · Value: abc123",
+    "",
+    `Then forward ${NAME} to https://www.${NAME} as permanent, so the address without www works too.`,
+  ].join("\n")
+  expect(copyAllText(NAME, { ...RECORDS, steps: [...RECORDS.steps] })).toBe(
+    expected
+  )
+  const card = await draw(done(RECORDS))
+  const all = [...card.container.querySelectorAll("button")].find(
+    (b) => b.textContent === "Copy all"
+  )
+  await act(async () => all?.click())
+  expect(writeText).toHaveBeenCalledWith(expected)
   await card.unmount()
 })
 
@@ -433,7 +508,7 @@ it("draws a domain bought elsewhere as the connect's records, or that the regist
     result: { ...RECORDS, provider: GODADDY },
   })
   expect(connected.container.textContent).toContain(`${NAME} is yours.`)
-  expect(connected.container.querySelectorAll("ol > li")).toHaveLength(3)
+  expect(rows(connected.container)).toHaveLength(3)
   expect(connected.container.querySelector("a")?.getAttribute("href")).toBe(
     GODADDY.settings_url
   )

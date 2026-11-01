@@ -13,6 +13,7 @@ import { type ReactNode, useId } from "react"
  */
 export function ConnectRow({
   name,
+  mark,
   line,
   href,
   newTab = false,
@@ -20,6 +21,8 @@ export function ConnectRow({
   className,
 }: {
   name: string
+  /** The vendored mark's id; none draws the globe. */
+  mark?: string | null
   line: string
   href: string
   newTab?: boolean
@@ -38,7 +41,7 @@ export function ConnectRow({
       onClick={onClick}
       {...(newTab && { rel: "noopener noreferrer", target: "_blank" })}
     >
-      <BrandMark name={name} />
+      <BrandMark mark={mark} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="font-medium text-sm">{name}</span>
         <span className="text-muted-foreground text-sm">{line}</span>

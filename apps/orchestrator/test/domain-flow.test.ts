@@ -556,11 +556,42 @@ describe("inspecting a name the owner has", () => {
       registered: true,
       registrar: "123-reg",
       dns_host: {
+        id: "godaddy",
         name: "GoDaddy",
         settings_url: "https://dcc.godaddy.com/manage/dns",
       },
       in_use: true,
     })
+  })
+
+  it("never names a wholesale registrar, and hints at nameservers the registry lacks", async () => {
+    const plain = "plainclean.co.uk"
+    noCache()
+    stubNet(
+      {
+        [BOOTSTRAP]: registry,
+        [`${RDAP}/${plain}`]: held("Tucows Domains Inc."),
+      },
+      {
+        [`${plain} SOA`]: {
+          Status: 0,
+          Answer: [
+            { name: plain, type: 6, TTL: 60, data: "ns1. h. 1 1 1 1 1" },
+          ],
+        },
+        [`${plain} NS`]: {
+          Status: 0,
+          Answer: [
+            { name: plain, type: 2, TTL: 60, data: "ns1.katapult-like.uk." },
+          ],
+        },
+      }
+    )
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const found = await inspectDomain(plain)
+    expect(found).toMatchObject({ nameserver_host: "katapult-like.uk" })
+    expect(found).not.toHaveProperty("registrar")
+    expect(found).not.toHaveProperty("dns_host")
   })
 
   it("reads a free name from RDAP alone", async () => {

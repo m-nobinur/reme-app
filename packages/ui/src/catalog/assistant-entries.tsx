@@ -1463,6 +1463,7 @@ const RECORD_REVIEW_STATES = decisionStates(
 const DOMAIN = "sparkleclean.co.uk"
 const WWW = { type: "CNAME", name: "www", value: "domains.remeai.co.uk" }
 const GODADDY = {
+  id: "godaddy",
   name: "GoDaddy",
   settings_url: "https://dcc.godaddy.com/manage/dns",
 }
@@ -1476,9 +1477,10 @@ const connecting = (id: string, output: unknown, name = DOMAIN) =>
   })
 
 // The records a domain needs, as the orchestrator answers: with the provider
-// named and its own link, with only the bare-address alias, a subdomain's one
-// record, one that may touch email, one with no records to show, and one the
-// provider can add through Domain Connect.
+// named and its own link, with the bare-address alias in the provider's own
+// field names, traced only by its nameservers, with nothing traceable, a
+// subdomain's one record, one that may touch email, one with no records to
+// show, and one the provider can add through Domain Connect.
 const CONNECT_DOMAIN_STATES = [
   ...decisionStates(
     "connect_domain",
@@ -1502,7 +1504,26 @@ const CONNECT_DOMAIN_STATES = [
     method: "records",
     email_affected: false,
     apex: "alias",
-    provider: { name: "Namecheap" },
+    provider: {
+      id: "namecheap",
+      name: "Namecheap",
+      settings_url: "https://ap.www.namecheap.com/domains/list/",
+    },
+    steps: [WWW, { type: "ALIAS", name: "@", value: "domains.remeai.co.uk" }],
+  }),
+  connecting("traceable", {
+    outcome: "connecting",
+    method: "records",
+    email_affected: false,
+    apex: "forward",
+    nameserver_host: "katapult.io",
+    steps: [WWW],
+  }),
+  connecting("unknown", {
+    outcome: "connecting",
+    method: "records",
+    email_affected: false,
+    apex: "forward",
     steps: [WWW],
   }),
   connecting("email", {
@@ -1523,8 +1544,10 @@ const CONNECT_DOMAIN_STATES = [
     email_affected: false,
     apex: "forward",
     provider: {
+      id: "cloudflare",
       name: "Cloudflare",
-      settings_url: "https://dash.cloudflare.com/",
+      settings_url:
+        "https://dash.cloudflare.com/?to=/:account/sparkleclean.co.uk/dns/records",
     },
     steps: [WWW],
     apply_url:
@@ -2872,7 +2895,7 @@ const assistantCatalog = [
   ...(["ConnectDomain", "ConnectSteps"] as const).map((name) => ({
     name,
     render: () => (
-      <FixtureThread height="h-[230rem]" messages={CONNECT_DOMAIN_STATES} />
+      <FixtureThread height="h-[340rem]" messages={CONNECT_DOMAIN_STATES} />
     ),
   })),
   {
