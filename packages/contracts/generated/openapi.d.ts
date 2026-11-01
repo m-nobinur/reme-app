@@ -447,6 +447,7 @@ export interface components {
               | "quote.form"
               | "testimonials.review_1"
               | "testimonials.review_2"
+              | "site.content"
             value: {
               [key: string]: unknown
             }
@@ -829,6 +830,28 @@ export interface components {
                   name: string
                   /** @constant */
                   permission: true
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.content"
+                value: {
+                  items: {
+                    id: string
+                    page:
+                      | (
+                          | "home"
+                          | "about"
+                          | "services"
+                          | "service"
+                          | "service_area"
+                          | "contact"
+                          | "quote"
+                        )
+                      | null
+                    title: string
+                    markdown: string
+                  }[]
                 }
               }
           )
@@ -1671,6 +1694,28 @@ export interface components {
               permission: true
             }
           }
+        | {
+            /** @constant */
+            key: "site.content"
+            value: {
+              items: {
+                id: string
+                page:
+                  | (
+                      | "home"
+                      | "about"
+                      | "services"
+                      | "service"
+                      | "service_area"
+                      | "contact"
+                      | "quote"
+                    )
+                  | null
+                title: string
+                markdown: string
+              }[]
+            }
+          }
       )[]
       skippable: boolean
       ideas?: string[]
@@ -2051,6 +2096,28 @@ export interface components {
                   name: string
                   /** @constant */
                   permission: true
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.content"
+                value: {
+                  items: {
+                    id: string
+                    page:
+                      | (
+                          | "home"
+                          | "about"
+                          | "services"
+                          | "service"
+                          | "service_area"
+                          | "contact"
+                          | "quote"
+                        )
+                      | null
+                    title: string
+                    markdown: string
+                  }[]
                 }
               }
           )[]
@@ -2518,6 +2585,29 @@ export interface components {
             permission: true
           } | null
         }
+      | {
+          /** @constant */
+          key: "site.content"
+          skippable: boolean
+          prefill: {
+            items: {
+              id: string
+              page:
+                | (
+                    | "home"
+                    | "about"
+                    | "services"
+                    | "service"
+                    | "service_area"
+                    | "contact"
+                    | "quote"
+                  )
+                | null
+              title: string
+              markdown: string
+            }[]
+          } | null
+        }
     AskFactOutput:
       | {
           /** @constant */
@@ -2894,6 +2984,28 @@ export interface components {
                   name: string
                   /** @constant */
                   permission: true
+                }
+              }
+            | {
+                /** @constant */
+                key: "site.content"
+                value: {
+                  items: {
+                    id: string
+                    page:
+                      | (
+                          | "home"
+                          | "about"
+                          | "services"
+                          | "service"
+                          | "service_area"
+                          | "contact"
+                          | "quote"
+                        )
+                      | null
+                    title: string
+                    markdown: string
+                  }[]
                 }
               }
         }
@@ -4854,6 +4966,28 @@ export interface components {
                                     permission: true
                                   }
                                 }
+                              | {
+                                  /** @constant */
+                                  key: "site.content"
+                                  value: {
+                                    items: {
+                                      id: string
+                                      page:
+                                        | (
+                                            | "home"
+                                            | "about"
+                                            | "services"
+                                            | "service"
+                                            | "service_area"
+                                            | "contact"
+                                            | "quote"
+                                          )
+                                        | null
+                                      title: string
+                                      markdown: string
+                                    }[]
+                                  }
+                                }
                           }
                         | {
                             /** @constant */
@@ -5243,6 +5377,28 @@ export interface components {
                                     name: string
                                     /** @constant */
                                     permission: true
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "site.content"
+                                  value: {
+                                    items: {
+                                      id: string
+                                      page:
+                                        | (
+                                            | "home"
+                                            | "about"
+                                            | "services"
+                                            | "service"
+                                            | "service_area"
+                                            | "contact"
+                                            | "quote"
+                                          )
+                                        | null
+                                      title: string
+                                      markdown: string
+                                    }[]
                                   }
                                 }
                             )[]
@@ -6206,6 +6362,28 @@ export interface components {
               permission: true
             }
           }
+        | {
+            /** @constant */
+            key: "site.content"
+            value: {
+              items: {
+                id: string
+                page:
+                  | (
+                      | "home"
+                      | "about"
+                      | "services"
+                      | "service"
+                      | "service_area"
+                      | "contact"
+                      | "quote"
+                    )
+                  | null
+                title: string
+                markdown: string
+              }[]
+            }
+          }
       )[]
     }
     CosFeedback: {
@@ -6436,6 +6614,7 @@ export interface components {
               | "quote.form"
               | "testimonials.review_1"
               | "testimonials.review_2"
+              | "site.content"
             )[]
             domains?: {
               name: string
@@ -6985,6 +7164,28 @@ export interface components {
                     name: string
                     /** @constant */
                     permission: true
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "site.content"
+                  value: {
+                    items: {
+                      id: string
+                      page:
+                        | (
+                            | "home"
+                            | "about"
+                            | "services"
+                            | "service"
+                            | "service_area"
+                            | "contact"
+                            | "quote"
+                          )
+                        | null
+                      title: string
+                      markdown: string
+                    }[]
                   }
                 }
             )[]
@@ -9547,6 +9748,7 @@ export interface components {
         | "quote.form"
         | "testimonials.review_1"
         | "testimonials.review_2"
+        | "site.content"
       )[]
       domains?: {
         name: string
@@ -9923,6 +10125,7 @@ export interface components {
             | "quote.form"
             | "testimonials.review_1"
             | "testimonials.review_2"
+            | "site.content"
           )[]
         }
     DesignDirection: {
@@ -10793,6 +10996,28 @@ export interface components {
             name: string
             /** @constant */
             permission: true
+          }
+        }
+      | {
+          /** @constant */
+          key: "site.content"
+          value: {
+            items: {
+              id: string
+              page:
+                | (
+                    | "home"
+                    | "about"
+                    | "services"
+                    | "service"
+                    | "service_area"
+                    | "contact"
+                    | "quote"
+                  )
+                | null
+              title: string
+              markdown: string
+            }[]
           }
         }
     FailureReport: {
@@ -13647,6 +13872,28 @@ export interface components {
               permission: true
             }
           }
+        | {
+            /** @constant */
+            key: "site.content"
+            value: {
+              items: {
+                id: string
+                page:
+                  | (
+                      | "home"
+                      | "about"
+                      | "services"
+                      | "service"
+                      | "service_area"
+                      | "contact"
+                      | "quote"
+                    )
+                  | null
+                title: string
+                markdown: string
+              }[]
+            }
+          }
       )[]
     }
     SetTimeZoneInput: {
@@ -14847,6 +15094,7 @@ export interface components {
         | "quote.form"
         | "testimonials.review_1"
         | "testimonials.review_2"
+        | "site.content"
       )[]
       assistant_name: string | null
       assistant_avatar:
@@ -14936,6 +15184,7 @@ export interface components {
                 | "quote.form"
                 | "testimonials.review_1"
                 | "testimonials.review_2"
+                | "site.content"
               )[]
             }
         )[]

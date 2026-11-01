@@ -10,6 +10,7 @@ import {
   PaletteRoles,
   type TemplateId,
 } from "./onboarding.ts"
+import { SECTION_VARIANTS } from "./page.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -105,36 +106,6 @@ export const PALETTE_AA_PAIRS = [
   { text: "primary", on: "paper" },
   { text: "primary", on: "tint" },
 ] as const
-
-/**
- * The variants each section kind has. A kind with one look has `default`.
- * The starter's manifests are the source of truth for this table and VS's
- * drift test fails when they disagree, so a variant is added in both in one
- * change. Kinds are the starter's page-level components; the header and
- * footer belong to the layout, not to a page's section list.
- */
-export const SECTION_VARIANTS = {
-  hero: ["wash", "split_arch", "split_frame", "dark_center", "text_led"],
-  // "phrases" is kept so a stored plan that names it parses; the strip draws icons for both.
-  trust_strip: ["icons", "phrases"],
-  service_cards: [
-    "photo_cards",
-    "numbered_rows",
-    "alternating",
-    "fleet",
-    "practice_list",
-  ],
-  value_props: ["default"],
-  steps: ["circles", "dark_band", "timeline"],
-  about: ["default"],
-  testimonials: ["featured", "wall"],
-  gallery: ["default"],
-  service_area: ["default"],
-  faq: ["split", "stacked"],
-  cta_band: ["solid", "photo"],
-  contact: ["default"],
-  quote_form: ["default"],
-} as const
 
 type SectionKindKey = keyof typeof SECTION_VARIANTS
 const SECTION_KINDS = Object.keys(SECTION_VARIANTS) as [

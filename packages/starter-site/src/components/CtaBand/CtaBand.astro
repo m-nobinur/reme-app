@@ -1,6 +1,7 @@
 ---
 import Photo from "../../layouts/Photo.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
+import { pageFields } from "../../page-fields"
 import { phoneText } from "../../phone"
 import { hasPhoto } from "../../photo-files"
 import { primaryAction } from "../../routes"
@@ -10,16 +11,22 @@ import ActionLink from "../ActionLink/ActionLink.astro"
 interface Props {
   /** solid is the brand colour, photo puts site.ctaImage under it. */
   variant?: "solid" | "photo"
-  /** The h2, the page's own; empty is site.ctaHeading. */
+  /** The h2, the page's own; empty is the ctaHeading slot's default. */
   heading?: string
-  /** The sentence under it, the page's own; empty is site.ctaBody. */
+  /** The sentence under it, the page's own; empty is the ctaBody slot's default. */
   body?: string
+  /** The short label above the h2; empty is the ctaEyebrow slot's default. */
+  eyebrow?: string
+  /** The button's words; empty is site.ctaLabel, then the page it links to. */
+  label?: string
 }
 
 const {
   variant = "solid",
-  heading = site.ctaHeading,
-  body = site.ctaBody,
+  heading = pageFields.ctaHeading,
+  body = pageFields.ctaBody,
+  eyebrow = pageFields.ctaEyebrow,
+  label = site.ctaLabel,
 } = Astro.props
 const image =
   variant === "photo" && hasPhoto(site.ctaImage) ? site.ctaImage : ""
@@ -35,14 +42,14 @@ const image =
       )}
       <div class="wrap cta-inner">
         <div class="cta-text">
-          <SectionHead bare eyebrow={site.ctaEyebrow} heading={heading} />
+          <SectionHead bare eyebrow={eyebrow} heading={heading} />
           {body && <p class="cta-body">{body}</p>}
         </div>
         <div class="actions">
           {primaryAction && (
             <ActionLink
               href={primaryAction.href}
-              label={site.ctaLabel || primaryAction.label}
+              label={label || primaryAction.label}
             />
           )}
           {site.phone && (

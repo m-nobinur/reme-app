@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import sharp from "sharp"
 import { beforeAll, describe, expect, test } from "vitest"
-import { layout } from "../src/site-config"
+import { layout } from "../src/page-fields"
 import { type Built, build, type Page, readPages } from "./build"
 import { FILLED } from "./fixture"
 

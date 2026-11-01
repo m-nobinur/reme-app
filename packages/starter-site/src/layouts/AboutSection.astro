@@ -3,27 +3,37 @@ import { accentParts } from "../accent"
 import Icon from "../components/Icon/Icon.astro"
 import Section from "../components/Section/Section.astro"
 import { headerPhoto } from "../header-photo"
+import type { PageSection } from "../page-document"
 import { hasPhoto } from "../photo-files"
 import { hasRoute } from "../routes"
 import { site } from "../site-config"
+import Blocks from "./Blocks.astro"
+import Markdown from "./Markdown.astro"
 import Photo from "./Photo.astro"
 import SectionHead from "./SectionHead.astro"
 
 interface Props {
   /** The home page's short about section, or the about page's story and proof. */
   page: "home" | "about"
+  /**
+   * The page document's about section. On the about page its intro is the
+   * story, its `<id>-audience` block who the business serves and its
+   * `<id>-record` block the record beside the proof points; any other block
+   * follows the story.
+   */
+  section: PageSection
 }
 
-const { page } = Astro.props
-const story = site.overviewBody || site.overview
-const audience = site.audienceBody || site.audience
-// The copy gate counts proofBody, the writer's paragraph, never proof as given.
-const proof = site.proofBody || site.proof
-// Without an about page, the home page's section says who the business
-// serves too.
-const homeAudience =
-  !hasRoute("/about/") && (site.audienceBody || site.audience)
-const homeAbout = site.aboutIntro || site.overviewBody || site.overview
+const { page, section } = Astro.props
+const blocks = section.blocks ?? []
+const named = (what: string) =>
+  blocks.find((b) => b.id === `${section.id}-${what}`)
+const prose = (block: (typeof blocks)[number] | undefined) =>
+  block?.type === "prose" ? block : undefined
+const story = section.intro ?? ""
+const audience = prose(named("audience"))
+const record = prose(named("record"))
+const others = blocks.filter((b) => b !== audience && b !== record)
 // The story's photo: the owner's first gallery photo or none. Never the home
 // hero's, which the home page already shows, and none on an About page whose
 // header already opens on a photo: two photos stacked read as one twice.
@@ -46,23 +56,22 @@ const proofItems = [
     .map(([value, label]) => `${value} ${label?.toLowerCase()}`.trim()),
   ...[site.trust1, site.trust2, site.trust3].filter(Boolean),
 ]
-const storyHeading = story ? site.overviewHeading : site.audienceHeading
 // The audience h3 reads the same accent marks as the h2 above it.
-const audienceHead = accentParts(site.audienceHeading)
+const audienceHead = accentParts(audience?.heading ?? "")
 ---
 
 {
   page === "home" ? (
-    (homeAbout || homeAudience) && (
-      <Section
-        eyebrow={site.aboutEyebrow}
-        heading={site.homeAboutHeading || site.aboutHeading}
-      >
-        {site.homeIntro && site.tagline && (
-          <p class="section-lede">{site.tagline}</p>
+    (story || blocks.length > 0) && (
+      <Section eyebrow={section.eyebrow ?? ""} heading={section.heading ?? ""}>
+        {story && <p class="section-lede">{story}</p>}
+        {blocks.map((block) =>
+          block.type === "prose" ? (
+            <Markdown source={block.markdown} />
+          ) : (
+            <Blocks blocks={[block]} />
+          )
         )}
-        {homeAbout && <p>{homeAbout}</p>}
-        {homeAudience && <p>{homeAudience}</p>}
         {hasRoute("/about/") && site.aboutLink && (
           <p class="section-more">
             <a class="more-link" href="/about/">
@@ -74,13 +83,13 @@ const audienceHead = accentParts(site.audienceHeading)
     )
   ) : (
     <>
-      {(story || audience) && (
+      {(story || audience?.markdown || others.length > 0) && (
         <section class="band about-story">
           <div class:list={["wrap", "story-inner", photo && "story-split"]}>
             <div class="story-text">
               <SectionHead
-                eyebrow={site.overviewEyebrow}
-                heading={storyHeading}
+                eyebrow={section.eyebrow ?? ""}
+                heading={section.heading ?? ""}
               />
               {
                 story && (
@@ -89,7 +98,7 @@ const audienceHead = accentParts(site.audienceHeading)
                   </p>
                 )
               }
-              {story && audience && site.audienceHeading && (
+              {audience?.markdown && audience.heading && (
                 <h3>
                   {audienceHead.lead}
                   {audienceHead.accent && (
@@ -98,7 +107,10 @@ const audienceHead = accentParts(site.audienceHeading)
                   {audienceHead.tail}
                 </h3>
               )}
-              {audience && <p data-copy="about_body">{audience}</p>}
+              {audience?.markdown && (
+                <Markdown source={audience.markdown} copy="about_body" />
+              )}
+              {others.length > 0 && <Blocks blocks={others} />}
             </div>
             {photo && (
               <Photo
@@ -112,12 +124,13 @@ const audienceHead = accentParts(site.audienceHeading)
         </section>
       )}
       {proofItems.length >= 2 && (
-        <Section eyebrow={site.proofEyebrow} heading={site.proofHeading}>
+        <Section eyebrow={record?.eyebrow ?? ""} heading={record?.heading ?? ""}>
           <div class="proof-record">
-            {proof && (
-              <p data-copy={site.proofBody ? "proof_body" : undefined}>
-                {proof}
-              </p>
+            {record?.markdown && (
+              <Markdown
+                source={record.markdown}
+                copy={record.provenance === "owner" ? undefined : "proof_body"}
+              />
             )}
             <ul class="check-list">
               {proofItems.map((item) => (

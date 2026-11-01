@@ -63,17 +63,21 @@ export type CopyKind = keyof typeof COPY_WORDS
 
 /** What a section's copy is, by the starter's `data-copy` value, for the messages. */
 const LABEL: Record<CopyKind, string> = {
-  hero_lede: "the home hero's subhead (homeIntro)",
+  hero_lede: "the home hero's subhead (homeIntro; home.json's hero intro)",
   service_body: "a service card (serviceNBody)",
   service_detail: "a service page's intro (serviceNDetail)",
-  step_body: "a process step (stepNBody)",
+  step_body: "a process step (stepNBody; a steps block in the page's document)",
   faq_answer:
-    "an FAQ answer (faqNAnswer, or serviceNFaqMAnswer on a service page)",
-  about_body: "the about page's body (overviewBody and audienceBody together)",
-  approach_body: "an about page principle (approachNBody)",
-  proof_body: "the about page's record (proofBody)",
-  services_help: "the services page's helper (servicesHelpBody)",
-  contact_body: "the contact page's note on what to send (contactIncludeBody)",
+    "an FAQ answer (faqNAnswer, or serviceNFaqMAnswer on a service page; an faq block in the page's document)",
+  about_body:
+    "the about page's body (overviewBody and audienceBody together; about.json's about intro and its -audience block)",
+  approach_body:
+    "an about page principle (approachNBody; about.json's value_props cards)",
+  proof_body: "the about page's record (proofBody; about.json's -record block)",
+  services_help:
+    "the services page's helper (servicesHelpBody; services.json's service_cards prose block)",
+  contact_body:
+    "the contact page's note on what to send (contactIncludeBody; contact.json's contact prose block)",
 }
 
 /** A page's meta description, in characters: the brief's 140 to 160 with a few over. */

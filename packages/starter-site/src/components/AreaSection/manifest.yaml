@@ -7,6 +7,14 @@ props:
     type: string
     required: false
     description: The h2, off the service area page.
+  - name: eyebrow
+    type: string
+    required: false
+    description: The short label above the h2; empty is the areaEyebrow slot's default.
+  - name: body
+    type: string
+    required: false
+    description: The paragraph on working in the area; empty is the areaBody slot's default.
 constraints:
   - Reads areaTowns, areaBody, areaLink, serviceAreaText and serviceArea.
     areaTowns lists only places service_area.text names, one to a line; empty

@@ -1,6 +1,7 @@
 import {
   ANSWER_TEXT_MAX,
   CHOICE_FACT_KEYS,
+  CONTENT_FACT_KEYS,
   FactValue,
   FactValueKey,
   InformationRequest,
@@ -91,7 +92,11 @@ const INTERNALS =
   /\/(?:workspace|opt|tmp)\b|\bgit\b|\brepository\b|\bsandbox\b|\bcontainer\b|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/i
 
 /** Keys the owner picks or confirms elsewhere, never types: no question asks for one. */
-const PICKED: readonly string[] = [...CHOICE_FACT_KEYS, ...REVIEW_FACT_KEYS]
+const PICKED: readonly string[] = [
+  ...CHOICE_FACT_KEYS,
+  ...REVIEW_FACT_KEYS,
+  ...CONTENT_FACT_KEYS,
+]
 
 /**
  * Whether `text` may be put to the owner as it stands: one plain question,
@@ -160,6 +165,7 @@ export function inputOf(q: {
   const key = FactValueKey.exclude([
     ...CHOICE_FACT_KEYS,
     ...REVIEW_FACT_KEYS,
+    ...CONTENT_FACT_KEYS,
   ]).safeParse(q.field)
   if (key.success) return { kind: "fact", key: key.data }
   // Options `answers` would drop, being instructions rather than values, offer no choice.

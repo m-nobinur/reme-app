@@ -1,7 +1,7 @@
 ---
-// A page's body, from layout[page] in site-config. The page file keeps what
-// is its own (title, description, structured data); the order and variants of
-// its sections are data.
+// A page's body, from its document (src/documents.ts): each section in order,
+// its words and blocks from the document. The page file keeps what is its own
+// (title, description, structured data); everything a section says is data.
 import { plain } from "../accent"
 import { areaDeep, areaTowns } from "../area-map"
 import ActionLink from "../components/ActionLink/ActionLink.astro"
@@ -19,58 +19,49 @@ import Testimonials from "../components/Testimonials/Testimonials.astro"
 import TrustStrip from "../components/TrustStrip/TrustStrip.astro"
 import ValueProps from "../components/ValueProps/ValueProps.astro"
 import { directionOf } from "../directions"
+import { pageDocument } from "../documents"
 import { headerPhoto } from "../header-photo"
+import type { Block, PageSection } from "../page-document"
+import type { Page } from "../page-seed"
 import { phoneText } from "../phone"
 import { hasRoute, primaryAction } from "../routes"
-import {
-  type LayoutPage,
-  type LayoutSection,
-  layout,
-  site,
-} from "../site-config"
-import {
-  type ServiceItem,
-  serviceItems,
-  servicesFaqItems,
-} from "../structured-data"
+import { site } from "../site-config"
+import { type ServiceItem, serviceItems } from "../structured-data"
 import AboutSection from "./AboutSection.astro"
 import AreaArt from "./AreaArt.astro"
+import Blocks from "./Blocks.astro"
+import Markdown from "./Markdown.astro"
 import SectionHead from "./SectionHead.astro"
 
 interface Props {
-  page: LayoutPage
+  page: Page
   /** On a service's own page (page "service"), the service it is about. */
   service?: ServiceItem
 }
 
 const { page, service } = Astro.props
-// The page's h1 and lede, which are its own fields.
-const HEAD = {
-  home: [site.heroHeading || site.businessName, site.homeIntro || site.tagline],
-  about: [site.aboutHeading, site.aboutIntro],
-  services: [site.servicesHeading, site.servicesIntro],
-  service_area: [site.serviceAreaHeading, site.serviceAreaIntro],
-  contact: [site.contactHeading, site.contactIntro],
-  quote: [site.quoteHeading, site.quoteIntro],
-  service: [service?.heading || service?.name || "", service?.body ?? ""],
-} as const
-const [marked, lede] = HEAD[page]
-// Each page's closing band, the home page's where a page has none of its own.
-const CTA: Record<LayoutPage, [string, string]> = {
-  home: [site.ctaHeading, site.ctaBody],
-  about: [site.aboutCtaHeading, site.aboutCtaBody],
-  services: [site.servicesCtaHeading, site.servicesCtaBody],
-  service_area: [site.serviceAreaCtaHeading, site.serviceAreaCtaBody],
-  contact: [site.contactCtaHeading, site.contactCtaBody],
-  quote: ["", ""],
-  service: [service?.ctaHeading ?? "", service?.ctaBody ?? ""],
+const doc = pageDocument(page, service?.slug)
+// The custom sections the builder wrote, by name: a document naming one that
+// is not there fails the build rather than leave a hole in the page.
+const CUSTOM = import.meta.glob<{ default: (props: PageSection) => unknown }>(
+  "../components/custom/*.astro",
+  { eager: true }
+)
+const custom = (name: string) => {
+  const found = CUSTOM[`../components/custom/${name}.astro`]
+  if (!found)
+    throw new Error(
+      `the ${page} page's document places the custom section ${name}, and src/components/custom/${name}.astro does not exist`
+    )
+  return found.default
 }
-const [ctaHeading, ctaBody] = CTA[page]
+const first = <T extends Block["type"]>(section: PageSection, type: T) =>
+  (section.blocks ?? []).find(
+    (b): b is Extract<Block, { type: T }> => b.type === type
+  )
 // An inner page's header shows its own photo when the build has one, in the
 // hero's photo form; without one it is the plain text header.
 const pagePhoto = headerPhoto(service ? `service:${service.id}` : page)
-// The h1 shares a field with a section heading elsewhere, and shows no accent marks.
-const heading = plain(marked)
 const home = page === "home"
 // The service area page's header is a cover with the area drawn beside it.
 const areaCover = page === "service_area" && !pagePhoto
@@ -87,26 +78,12 @@ const offerings = site.offerings
   .split("\n")
   .map((item) => item.trim())
   .filter((item) => item && !named.has(item.toLowerCase()))
-const next = [site.quoteNext1, site.quoteNext2, site.quoteNext3].filter(Boolean)
-const about = page === "about"
-// The about page's own principles and visit steps, apart from the home page's.
-const approach = ([1, 2, 3, 4] as const).map((n) => ({
-  title: site[`approach${n}Title`],
-  body: site[`approach${n}Body`],
-  icon: site[`approach${n}Icon`],
-}))
-const visit = ([1, 2, 3, 4] as const)
-  .map((n) => ({
-    title: site[`aboutStep${n}Title`],
-    body: site[`aboutStep${n}Body`],
-  }))
-  .filter((item) => item.title || item.body)
 const talk = site.phone || site.email
 
 // A section with no variant of its own takes the direction's; a page hero
 // other than home's stays the plain one. Each component types its own
-// variants and a test checks the layout's and the directions' strings against
-// the contract, so one cast stands for all of them.
+// variants and a test checks the documents' and the directions' strings
+// against the contract, so one cast stands for all of them.
 const direction = directionOf(site.direction)
 const OF_DIRECTION: Partial<Record<string, string>> = {
   hero: home ? direction.hero : undefined,
@@ -115,33 +92,25 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
   faq: direction.faq,
   cta_band: direction.cta,
 }
-// A service page always shows its service's detail, what is included and who
-// it suits, whatever the plan laid out: the copy gate fails one without them,
-// and a plan with no service_cards cost the second perf run a repair round.
-const planned = layout[page]
-const afterHero = planned.findIndex((s) => s.kind === "hero") + 1
-const sections: LayoutSection[] =
-  page === "service" && !planned.some((s) => s.kind === "service_cards")
-    ? [
-        ...planned.slice(0, afterHero),
-        { kind: "service_cards" },
-        ...planned.slice(afterHero),
-      ]
-    : planned
 ---
 
 {
-  sections.map(({ kind, variant }) => {
-    const v = (variant ?? OF_DIRECTION[kind]) as never
-    switch (kind) {
-      case "hero":
+  (doc?.sections ?? []).map((section) => {
+    const v = (("variant" in section && section.variant) ||
+      OF_DIRECTION[section.kind]) as never
+    const eyebrow = section.eyebrow ?? ""
+    const heading = section.heading ?? ""
+    const intro = section.intro ?? ""
+    switch (section.kind) {
+      case "hero": {
+        const note = first(section, "callout")?.text ?? ""
         return (
           <Hero
             variant={pagePhoto ? (v ?? "split_frame") : v}
             inner={!home}
-            eyebrow={home ? site.heroEyebrow || site.industry : ""}
-            heading={heading}
-            lede={lede}
+            eyebrow={home ? eyebrow || site.industry : ""}
+            heading={plain(heading)}
+            lede={intro}
             image={
               home
                 ? { src: site.heroImage, alt: site.heroImageAlt }
@@ -149,7 +118,7 @@ const sections: LayoutSection[] =
             }
             caption={home ? site.heroCaption : ""}
             highlights={home ? serviceItems.slice(0, 3) : []}
-            note={home ? site.heroNote : ""}
+            note={home ? note : ""}
             deep={areaCover && areaDeep(site.direction)}
           >
             {areaCover && (
@@ -174,18 +143,22 @@ const sections: LayoutSection[] =
             )}
           </Hero>
         )
+      }
       case "trust_strip":
         return <TrustStrip variant={v} />
-      case "service_cards":
+      case "service_cards": {
+        const help = first(section, "prose")
         return (
           <>
-            <ServiceCards variant={v} only={service?.id} />
-            {page === "services" && site.servicesHelpBody && (
-              <Section
-                eyebrow={site.servicesHelpEyebrow}
-                heading={site.servicesHelpHeading}
-              >
-                <p data-copy="services_help">{site.servicesHelpBody}</p>
+            <ServiceCards
+              variant={v}
+              only={service?.id}
+              eyebrow={eyebrow}
+              heading={heading}
+            />
+            {page === "services" && help?.markdown && (
+              <Section eyebrow={help.eyebrow ?? ""} heading={help.heading ?? ""}>
+                <Markdown source={help.markdown} copy="services_help" />
                 {primaryAction && (
                   <p class="section-more">
                     <a class="more-link" href={primaryAction.href}>
@@ -209,69 +182,62 @@ const sections: LayoutSection[] =
             )}
           </>
         )
+      }
       case "value_props":
-        return about ? (
+        return (
           <ValueProps
-            eyebrow={site.approachEyebrow}
-            heading={site.approachHeading}
-            items={approach}
-            copy="approach_body"
+            eyebrow={eyebrow}
+            heading={heading}
+            items={(first(section, "cards")?.items ?? []).map((item) => ({
+              ...item,
+              icon: item.icon ?? "",
+            }))}
+            copy={page === "about" ? "approach_body" : undefined}
           />
-        ) : (
-          <ValueProps />
         )
       case "steps":
         return (
           <Steps
             variant={v}
-            heading={
-              (about ? site.aboutStepsHeading : service?.stepsHeading) ||
-              undefined
-            }
-            items={
-              about ? visit : service?.steps.length ? service.steps : undefined
-            }
+            eyebrow={eyebrow}
+            heading={heading}
+            items={first(section, "steps")?.items ?? []}
           />
         )
       case "about":
-        return <AboutSection page={home ? "home" : "about"} />
-      case "testimonials":
-        return <Testimonials variant={v} />
-      case "gallery":
-        return <Gallery />
-      case "service_area":
         return (
-          <AreaSection
-            heading={
-              home
-                ? site.homeAreaHeading || site.serviceAreaHeading
-                : about
-                  ? site.aboutAreaHeading
-                  : undefined
-            }
-          />
+          <AboutSection page={home ? "home" : "about"} section={section} />
         )
+      case "testimonials":
+        return <Testimonials variant={v} eyebrow={eyebrow} heading={heading} />
+      case "gallery":
+        return <Gallery eyebrow={eyebrow} heading={heading} />
+      case "service_area":
+        return <AreaSection eyebrow={eyebrow} heading={heading} body={intro} />
       case "faq":
         return (
           <Faq
             variant={v}
-            items={page === "services" ? servicesFaqItems : service?.faqs}
-            heading={
-              (page === "services"
-                ? site.servicesFaqHeading
-                : service?.faqHeading) || undefined
-            }
+            eyebrow={eyebrow}
+            heading={heading}
+            intro={intro}
+            items={first(section, "faq")?.items ?? []}
           />
         )
-      case "cta_band":
+      case "cta_band": {
+        const cta = first(section, "cta")
         return (
           <CtaBand
             variant={v}
-            heading={ctaHeading || site.ctaHeading}
-            body={ctaBody || site.ctaBody}
+            eyebrow={eyebrow}
+            heading={cta?.heading ?? ""}
+            body={cta?.body ?? ""}
+            label={cta?.label || site.ctaLabel}
           />
         )
-      case "contact":
+      }
+      case "contact": {
+        const note = first(section, "prose")
         return (
           <>
             <section class="band">
@@ -279,12 +245,9 @@ const sections: LayoutSection[] =
                 <ContactDetails variant="cards" />
               </div>
             </section>
-            {site.contactIncludeBody && (
-              <Section
-                eyebrow={site.contactIncludeEyebrow}
-                heading={site.contactIncludeHeading}
-              >
-                <p data-copy="contact_body">{site.contactIncludeBody}</p>
+            {note?.markdown && (
+              <Section eyebrow={note.eyebrow ?? ""} heading={note.heading ?? ""}>
+                <Markdown source={note.markdown} copy="contact_body" />
                 {hasRoute("/quote/") && site.contactFormLink && (
                   <p class="section-more">
                     <a class="more-link" href="/quote/">
@@ -296,11 +259,13 @@ const sections: LayoutSection[] =
             )}
           </>
         )
-      case "quote_form":
+      }
+      case "quote_form": {
         // The quote form sends by email until the platform has an endpoint
         // for it; see QuoteForm. Beside it, what happens next and the
         // business's own phone and email. A response time shows only when a
-        // fact gives one, in quoteNext2.
+        // fact gives one.
+        const next = (first(section, "checklist")?.items ?? []).filter(Boolean)
         return (
           <section class="band">
             <div class="wrap quote-layout">
@@ -309,10 +274,7 @@ const sections: LayoutSection[] =
                 <aside class="quote-aside">
                   {next.length > 0 && (
                     <>
-                      <SectionHead
-                        eyebrow={site.quoteEyebrow}
-                        heading={site.quoteAsideHeading}
-                      />
+                      <SectionHead eyebrow={eyebrow} heading={heading} />
                       <ol class="next-list">
                         {next.map((line) => (
                           <li>{line}</li>
@@ -323,7 +285,7 @@ const sections: LayoutSection[] =
                   {talk && (
                     <>
                       <SectionHead
-                        eyebrow={next.length > 0 ? "" : site.quoteEyebrow}
+                        eyebrow={next.length > 0 ? "" : eyebrow}
                         heading={site.quoteTalkHeading}
                       />
                       <ContactDetails />
@@ -334,6 +296,25 @@ const sections: LayoutSection[] =
             </div>
           </section>
         )
+      }
+      case "content":
+        return (
+          (heading || intro || (section.blocks ?? []).length > 0) && (
+            <section class="band section content-section" id={section.id}>
+              <div class="wrap section-inner">
+                <SectionHead eyebrow={eyebrow} heading={heading} />
+                <div class="section-body">
+                  {intro && <p class="section-lede">{intro}</p>}
+                  <Blocks blocks={section.blocks ?? []} />
+                </div>
+              </div>
+            </section>
+          )
+        )
+      case "custom": {
+        const Custom = custom(section.name)
+        return <Custom {...section} />
+      }
     }
   })
 }

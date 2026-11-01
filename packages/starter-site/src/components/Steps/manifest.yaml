@@ -9,11 +9,15 @@ props:
   - name: heading
     type: string
     required: false
-    description: The h2, where a page has its own; empty is site.stepsHeading.
+    description: The h2, where a page has its own; empty is the stepsHeading slot's default.
   - name: items
     type: "{ title: string; body: string }[]"
     required: false
     description: The steps, where a page has its own; empty is the site's step1 to step4.
+  - name: eyebrow
+    type: string
+    required: false
+    description: The short label above the h2; empty is the stepsEyebrow slot's default.
 constraints:
   - Reads step1Title to step3Body itself; a step renders only when one of its
     two fields is set. The numbers, 01 to 03, are drawn by CSS, not written into

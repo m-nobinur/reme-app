@@ -1,0 +1,79 @@
+---
+// A prose block's markdown (src/markdown.ts) as HTML, with no raw HTML.
+// `class` and `copy` go on each paragraph: a section that shows one
+// paragraph in its own style, and the copy gate's data-copy mark.
+import { parseMarkdown } from "../markdown"
+import Inline from "./Inline.astro"
+
+interface Props {
+  source: string
+  class?: string
+  copy?: string
+}
+
+const { source, class: className, copy } = Astro.props
+const blocks = parseMarkdown(source)
+---
+
+{
+  blocks.map((block) =>
+    block.type === "heading" ? (
+      block.level === 2 ? (
+        <h2>
+          <Inline nodes={block.children} />
+        </h2>
+      ) : (
+        <h3>
+          <Inline nodes={block.children} />
+        </h3>
+      )
+    ) : block.type === "paragraph" ? (
+      <p class={className} data-copy={copy}>
+        <Inline nodes={block.children} />
+      </p>
+    ) : block.type === "list" ? (
+      block.ordered ? (
+        <ol class="prose-list">
+          {block.items.map((item) => (
+            <li>
+              <Inline nodes={item} />
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <ul class="prose-list">
+          {block.items.map((item) => (
+            <li>
+              <Inline nodes={item} />
+            </li>
+          ))}
+        </ul>
+      )
+    ) : (
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {block.head.map((cell) => (
+                <th scope="col">
+                  <Inline nodes={cell} />
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((row) => (
+              <tr>
+                {row.map((cell) => (
+                  <td>
+                    <Inline nodes={cell} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  )
+}

@@ -1629,6 +1629,80 @@ picture {
   }
 }
 
+/* Blocks: a content section's typed blocks (src/layouts/Blocks.astro). */
+
+.block + .block {
+  margin-block-start: var(--space-xl);
+}
+
+.block > h3 {
+  margin-block: 0 var(--space-sm);
+}
+
+.prose-list {
+  padding-inline-start: 1.25em;
+}
+
+.prose-list li + li {
+  margin-block-start: var(--space-2xs);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.table-wrap :is(th, td) {
+  padding: var(--space-xs) var(--space-sm);
+  border-block-end: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-wrap thead th {
+  color: var(--brand-text);
+}
+
+.table-wrap caption {
+  padding-block-end: var(--space-xs);
+  color: var(--muted-foreground);
+  text-align: start;
+}
+
+.callout {
+  padding: var(--space-md) var(--space-lg);
+  border-inline-start: 3px solid var(--brand-line);
+  background: var(--brand-soft);
+}
+
+:is(.block-figure, .block-quote) {
+  margin: 0;
+}
+
+.block-figure img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-media);
+}
+
+.block-quote blockquote {
+  margin: 0 0 var(--space-xs);
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-size: var(--text-xl);
+  line-height: 1.35;
+}
+
+:is(.block-figure, .block-quote) figcaption {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
 /* Testimonials */
 
 .quote-grid {
@@ -2443,11 +2517,11 @@ picture {
 }
 
 /* Questions between hairlines, a plus that turns to a cross when open. */
-.faq details {
+:is(.faq, .block-faq) details {
   border-block-end: 1px solid var(--border);
 }
 
-.faq summary {
+:is(.faq, .block-faq) summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2460,15 +2534,15 @@ picture {
   list-style: none;
 }
 
-.faq summary:hover {
+:is(.faq, .block-faq) summary:hover {
   color: var(--brand-text);
 }
 
-.faq summary::-webkit-details-marker {
+:is(.faq, .block-faq) summary::-webkit-details-marker {
   display: none;
 }
 
-.faq summary::after {
+:is(.faq, .block-faq) summary::after {
   content: "";
   flex: none;
   width: 1.125rem;
@@ -2480,11 +2554,11 @@ picture {
   transition: transform 160ms ease;
 }
 
-.faq details[open] summary::after {
+:is(.faq, .block-faq) details[open] summary::after {
   transform: rotate(45deg);
 }
 
-.faq details p {
+:is(.faq, .block-faq) details p {
   margin: 0;
   padding-block-end: 1.25rem;
   max-width: 62ch;

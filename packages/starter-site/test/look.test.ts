@@ -4,7 +4,7 @@ import { PALETTES } from "@workspace/contracts"
 import { beforeAll, describe, expect, test } from "vitest"
 import { accentParts, plain } from "../src/accent"
 import { paletteFromBrand } from "../src/brand"
-import { layout } from "../src/site-config"
+import { layout } from "../src/page-fields"
 import { type Built, build, ROOT, readPages } from "./build"
 import { FILLED } from "./fixture"
 

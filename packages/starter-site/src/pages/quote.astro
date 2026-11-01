@@ -1,14 +1,15 @@
 ---
-import { plain } from "../accent"
+import { pageDocument } from "../documents"
 import Base from "../layouts/Base.astro"
 import Sections from "../layouts/Sections.astro"
-import { site } from "../site-config"
 import { localBusiness } from "../structured-data"
+
+const doc = pageDocument("quote")
 ---
 
 <Base
-  title={site.quoteTitle || plain(site.quoteHeading)}
-  description={site.quoteDescription || site.quoteIntro}
+  title={doc?.title ?? ""}
+  description={doc?.description ?? ""}
   jsonLd={localBusiness(Astro.site)}
 >
   <Sections page="quote" />

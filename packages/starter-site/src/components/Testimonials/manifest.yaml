@@ -6,6 +6,15 @@ props:
     type: '"featured" | "wall"'
     required: false
     description: featured sets the first review larger on a tint, wall sets them evenly.
+  - name: eyebrow
+    type: string
+    required: false
+    description: The short label above the h2; empty is the testimonialsEyebrow
+      slot's default.
+  - name: heading
+    type: string
+    required: false
+    description: The h2; empty is the testimonialsHeading slot's default.
 constraints:
   - Quote and author are fact fields from the testimonials.review_1 and
     testimonials.review_2 facts, reviews the owner confirmed the customer agreed

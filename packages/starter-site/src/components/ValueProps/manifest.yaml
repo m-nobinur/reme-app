@@ -7,11 +7,12 @@ props:
     type: string
     required: false
     description: The short label above the h2, where a page has its own; empty is
-      site.valuePropsEyebrow.
+      the valuePropsEyebrow slot's default.
   - name: heading
     type: string
     required: false
-    description: The h2, where a page has its own; empty is site.valuePropsHeading.
+    description: The h2, where a page has its own; empty is the valuePropsHeading
+      slot's default.
   - name: items
     type: "{ title: string; body: string; icon: string }[]"
     required: false

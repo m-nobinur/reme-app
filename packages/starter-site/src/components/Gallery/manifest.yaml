@@ -1,7 +1,15 @@
 component: Gallery
 path: src/components/Gallery/Gallery.astro
 summary: The gallery's photos, each with its alt text.
-props: []
+props:
+  - name: eyebrow
+    type: string
+    required: false
+    description: The short label above the h2; empty is the galleryEyebrow slot's default.
+  - name: heading
+    type: string
+    required: false
+    description: The h2; empty is the galleryHeading slot's default.
 constraints:
   - Path and alt text are composed fields filled from the gallery image slots; a
     photo renders only when it has both. The site ships with none.

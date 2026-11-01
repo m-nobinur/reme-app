@@ -17,7 +17,9 @@ import { fileURLToPath } from "node:url"
 import { parse } from "parse5"
 import sharp from "sharp"
 import { inject } from "vitest"
-import { fields, layout, site } from "../src/site-config"
+import type { layout } from "../src/page-fields"
+import { seedDocuments } from "../src/page-seed"
+import { fields, site } from "../src/site-config"
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url))
 /** A stand-in photo's one colour, as sharp takes it. */
@@ -73,12 +75,26 @@ async function astroBuild(dir: string, options: BuildOptions): Promise<string> {
   }
   symlinkSync(join(ROOT, "node_modules"), join(dir, "node_modules"), "dir")
   if (options.site || options.layout) {
+    // A fixture's page slots sit beside its settings; the seed reads them
+    // there, as it reads the slot sheet's defaults on a site with none.
     writeFileSync(
       join(dir, "src/site-config.ts"),
       `export const site = ${JSON.stringify(options.site ?? site, null, 2)}\n\n` +
-        `export const fields = ${JSON.stringify(fields, null, 2)}\n\n` +
-        `export const layout = ${JSON.stringify(options.layout ?? layout, null, 2)}\n`
+        `export const fields = ${JSON.stringify(fields, null, 2)}\n`
     )
+  }
+  // A layout of its own is a first build's documents with those sections.
+  if (options.layout) {
+    const docs = seedDocuments(
+      options.site ?? site,
+      options.layout,
+      !options.remove?.includes("about.astro")
+    )
+    for (const [path, doc] of Object.entries(docs)) {
+      const file = join(dir, "src/content/pages", path)
+      mkdirSync(dirname(file), { recursive: true })
+      writeFileSync(file, JSON.stringify(doc))
+    }
   }
   if (options.quoteForm !== undefined) {
     writeFileSync(

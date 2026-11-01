@@ -1,20 +1,16 @@
 ---
-import { plain } from "../accent"
+import { faqsOf, pageDocument } from "../documents"
 import Base from "../layouts/Base.astro"
 import Sections from "../layouts/Sections.astro"
-import { layout, site } from "../site-config"
-import { faqPage, services, servicesFaqItems } from "../structured-data"
+import { faqPage, services } from "../structured-data"
+
+const doc = pageDocument("services")
 ---
 
 <Base
-  title={site.servicesTitle || plain(site.servicesHeading)}
-  description={site.servicesDescription || site.servicesIntro}
-  jsonLd={[
-    ...services(Astro.site),
-    ...(layout.services.some((s) => s.kind === "faq")
-      ? faqPage(servicesFaqItems)
-      : []),
-  ]}
+  title={doc?.title ?? ""}
+  description={doc?.description ?? ""}
+  jsonLd={[...services(Astro.site), ...faqPage(faqsOf(doc))]}
 >
   <Sections page="services" />
 </Base>

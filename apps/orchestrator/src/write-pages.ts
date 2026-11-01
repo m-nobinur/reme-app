@@ -1,4 +1,5 @@
 import { limit } from "@workspace/gates"
+import { whereIs } from "./documents.ts"
 import {
   fieldsOfPrompt,
   pageCheck,
@@ -122,6 +123,13 @@ const label = (prompt: string) =>
 const message = (thrown: unknown) =>
   thrown instanceof Error ? thrown.message : String(thrown)
 
+/** Each page slot of `fields` with its place in the documents, for the lead to edit there. */
+const withPlaces = (fields: readonly string[]) =>
+  fields.map((field) => {
+    const where = whereIs(field)
+    return where ? `${field} (${where})` : field
+  })
+
 /** A `pageCheck` message's findings on one line. */
 const findings = (check: string) =>
   check
@@ -209,7 +217,7 @@ export async function writePages(input: {
           reply = { ...fixed, summary: fixed.summary || reply.summary }
           const left = pageCheck(await edit((s) => s), task.prompt)
           note = left
-            ? ` Still failing the copy check: ${findings(left)}`
+            ? ` Still failing the copy check: ${findings(left)} Where: ${withPlaces(fields.filter((f) => left.includes(f))).join("; ")}.`
             : " Fixed what the copy check found."
         } catch (thrown) {
           note = ` Its fix failed (${message(thrown).slice(0, 120)}); the copy check still finds: ${findings(check)}`
@@ -218,7 +226,7 @@ export async function writePages(input: {
       input.onWritten?.(task)
       return `- ${name}: ${reply.summary}${note}`
     } catch (thrown) {
-      return `- ${name}: failed (${message(thrown).slice(0, 160)}). Its fields are yours: ${fields.join(", ")}.`
+      return `- ${name}: failed (${message(thrown).slice(0, 160)}). Its fields are yours: ${withPlaces(fields).join("; ")}.`
     }
   }
   const bounded = limit(input.max)

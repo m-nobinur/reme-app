@@ -1,22 +1,28 @@
 ---
 import { plain } from "../../accent"
 import SectionHead from "../../layouts/SectionHead.astro"
-import { site } from "../../site-config"
+import { pageFields } from "../../page-fields"
 
 interface Props {
   /** circles on a tint band, dark_band beside its heading, timeline on a line. */
   variant?: "circles" | "dark_band" | "timeline"
-  /** The h2, where a page has its own; empty is site.stepsHeading. */
+  /** The h2, where a page has its own; empty is the stepsHeading slot's default. */
   heading?: string
   /** The steps, where a page has its own; empty is the site's step1 to step4. */
   items?: { title: string; body: string }[]
+  /** The short label above the h2; empty is the stepsEyebrow slot's default. */
+  eyebrow?: string
 }
 
 const {
   variant = "timeline",
-  heading = site.stepsHeading,
+  heading = pageFields.stepsHeading,
+  eyebrow = pageFields.stepsEyebrow,
   items = ([1, 2, 3, 4] as const)
-    .map((n) => ({ title: site[`step${n}Title`], body: site[`step${n}Body`] }))
+    .map((n) => ({
+      title: pageFields[`step${n}Title`],
+      body: pageFields[`step${n}Body`],
+    }))
     .filter((item) => item.title || item.body),
 } = Astro.props
 ---
@@ -31,7 +37,7 @@ const {
       ]}
     >
       <div class="wrap steps-inner">
-        <SectionHead eyebrow={site.stepsEyebrow} heading={heading} />
+        <SectionHead eyebrow={eyebrow} heading={heading} />
         <ol class="step-list">
           {items.map((item) => (
             <li>

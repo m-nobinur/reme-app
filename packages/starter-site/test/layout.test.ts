@@ -8,8 +8,9 @@ import {
 import { describe, expect, test } from "vitest"
 import { loadManifests, ROOT } from "../scripts/manifests"
 import { ICONS } from "../src/icons"
+import { layout, pageFields } from "../src/page-fields"
 import { quoteFormProblem } from "../src/quote-form"
-import { fields, layout, site } from "../src/site-config"
+import { fields, site } from "../src/site-config"
 
 type Entry = { kind: string; variant?: string }
 const recipes = JSON.parse(
@@ -92,7 +93,10 @@ describe("the page recipes", () => {
     for (const recipe of Object.values(recipes.pages)) {
       expect(existsSync(join(ROOT, recipe.page)), recipe.page).toBe(true)
       for (const field of recipe.fields) {
-        expect(Object.keys(site), recipe.page).toContain(field)
+        expect(
+          [...Object.keys(site), ...Object.keys(pageFields)],
+          recipe.page
+        ).toContain(field)
       }
     }
   })
@@ -124,7 +128,10 @@ describe("the page recipes", () => {
       const p = recipes.packs[pack]
       expect(p.cta, pack).toMatch(/^[A-Z][a-z]+( [a-z]+)+$/)
       for (const [key, value] of Object.entries(p.headings ?? {})) {
-        expect(Object.keys(site), `${pack}.${key}`).toContain(key)
+        expect(
+          [...Object.keys(site), ...Object.keys(pageFields)],
+          `${pack}.${key}`
+        ).toContain(key)
         expect(value, `${pack}.${key}`).not.toMatch(
           /[—!]|^(What we do|Services)$/
         )

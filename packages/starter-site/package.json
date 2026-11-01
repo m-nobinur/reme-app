@@ -44,6 +44,8 @@
   },
   "exports": {
     "./site-config": "./src/site-config.ts",
+    "./page-seed": "./src/page-seed.ts",
+    "./page-fields": "./src/page-fields.ts",
     "./brand": "./src/brand.ts",
     "./copy-check": "./src/copy-check.ts",
     "./icons": "./src/icons.ts",

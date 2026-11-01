@@ -45,6 +45,7 @@ const LABEL: Record<FactValueKey, string> = {
   "quote.form": "Quote request questions",
   "testimonials.review_1": "First review",
   "testimonials.review_2": "Second review",
+  "site.content": "Your words for the site",
 }
 
 /** `service_area` to `Service area`. */
@@ -169,8 +170,9 @@ export function factText(key: string, raw: unknown): string {
       .map((each) =>
         typeof each === "string"
           ? each
-          : ((each as { name?: string; label?: string }).name ??
+          : ((each as { name?: string }).name ??
             (each as { label?: string }).label ??
+            (each as { title?: string }).title ??
             "")
       )
       .join(", ")

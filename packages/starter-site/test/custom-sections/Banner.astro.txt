@@ -1,0 +1,17 @@
+---
+import Blocks from "../../layouts/Blocks.astro"
+import type { PageSection } from "../../page-document"
+
+type Props = PageSection
+const { heading = "", blocks = [] } = Astro.props
+const content = heading || blocks.length > 0
+---
+
+{ content && (
+  <section class="band custom-banner">
+    <div class="wrap">
+      <h2>{heading}</h2>
+      <Blocks blocks={blocks} />
+    </div>
+  </section>
+) }

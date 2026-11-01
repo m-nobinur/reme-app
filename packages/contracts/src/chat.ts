@@ -18,6 +18,8 @@ import {
 import {
   ANSWER_TEXT_MAX,
   BuildSummary,
+  CONTENT_FACT_KEYS,
+  type ContentFactKey,
   FactValue,
   type FactValueKey,
   GOAL_MAX,
@@ -161,7 +163,10 @@ export const AskFactOutput = z.discriminatedUnion("answer", [
  * tray's title is the web's copy for `about`. `skippable` marks a question
  * the owner may pass on; a call without it, as stored before it, is required.
  */
-type OpenKey = Exclude<FactValueKey, "media.uploads" | ReviewFactKey>
+type OpenKey = Exclude<
+  FactValueKey,
+  "media.uploads" | ReviewFactKey | ContentFactKey
+>
 
 export const AskOpenInput = z.strictObject({
   about: z.enum(
@@ -170,7 +175,8 @@ export const AskOpenInput = z.strictObject({
       .filter(
         (key) =>
           key !== "media.uploads" &&
-          !(REVIEW_FACT_KEYS as readonly string[]).includes(key)
+          !(REVIEW_FACT_KEYS as readonly string[]).includes(key) &&
+          !(CONTENT_FACT_KEYS as readonly string[]).includes(key)
       ) as [OpenKey, ...OpenKey[]]
   ),
   skippable: z.boolean().optional(),
