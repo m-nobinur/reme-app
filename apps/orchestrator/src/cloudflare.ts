@@ -1039,7 +1039,11 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               })
             ).catch(() => null)
           )
-          if (!checks || checks.every((c) => c.passed) || judging === 2) {
+          if (
+            !checks ||
+            checks.every((c) => c.passed !== false) ||
+            judging === 2
+          ) {
             accepted = true
           } else {
             const fresh = quickBase !== null
@@ -1056,7 +1060,9 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                   attributes: { taint: "inferred", ...lift },
                 },
               })
-              return { failed: checks.filter((c) => !c.passed).length }
+              return {
+                failed: checks.filter((c) => c.passed === false).length,
+              }
             })
             continue
           }

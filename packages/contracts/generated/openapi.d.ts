@@ -5800,6 +5800,7 @@ export interface components {
         change: "added" | "removed" | "changed" | "moved"
         before: string
         after: string
+        above?: string
       }[]
       notes?: {
         about: string
@@ -7358,7 +7359,7 @@ export interface components {
                 }[]
                 checks: {
                   check: string
-                  passed: boolean
+                  passed: boolean | null
                   why: string
                 }[]
                 blocks?: {
@@ -7369,6 +7370,7 @@ export interface components {
                   change: "added" | "removed" | "changed" | "moved"
                   before: string
                   after: string
+                  above?: string
                 }[]
                 recent: {
                   /** Format: uuid */
@@ -13461,7 +13463,7 @@ export interface components {
           }[]
           checks: {
             check: string
-            passed: boolean
+            passed: boolean | null
             why: string
           }[]
           blocks?: {
@@ -13472,6 +13474,7 @@ export interface components {
             change: "added" | "removed" | "changed" | "moved"
             before: string
             after: string
+            above?: string
           }[]
           recent: {
             /** Format: uuid */

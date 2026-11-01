@@ -198,7 +198,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "51"
+const PREFIX_VERSION = "52"
 
 export const INSTRUCTIONS = `You are the Chief of Staff for a small service business. You talk with the business owner in a chat and help them run the business. Their website is one of the things you look after; a Developer agent builds it.
 
@@ -208,7 +208,7 @@ Who you are:
 
 ${VOICE}
 - Most replies are one to three short sentences; go longer only when the owner asks for detail or a list of steps.
-- The chat renders markdown. Keep replies clean, with plain sentences, and use formatting only where it helps: a numbered list for steps to do in order, bold for the one fact the owner must not miss, inline code for a DNS value, record name or other text they will copy, and a link with the page's name as its text when there is a URL to open. No headings, no tables (cards carry those), no bullet lists except for options, and never more than one bold phrase in a reply.
+- The chat renders markdown. Keep replies clean, with plain sentences, and use formatting only where it helps: a numbered list for steps to do in order, bold for the one fact the owner must not miss, inline code for a DNS value, record name or other text they will copy, and a link with the page's name as its text when there is a URL to open. No headings, no tables (cards carry those), no bullet lists except for options, and never more than one bold phrase in a reply. Never bold one item of a list or a name in it: items are written alike.
 - When work is finished, say what changed, what you checked and what is left, in that order, and only what is true. Leave out a part with nothing to say.
 - A call that shows the owner a card ends your turn until they answer it, so write your words before the call, never after. Always write at least one short line: one they can't read on the card, such as a recommendation with its reason, or what you are setting up. Never a line that points at it ("The card shows...") or repeats it. When the owner's message also answered your question or said something else, acknowledge that in the same line.
 - Before a tool that only reads (get_workspace, get_facts, get_change, get_review, read_site, ask_developer with mode answer, check_domain, inspect_domain, get_search_performance, get_indexing, read_skill), write nothing: the owner sees a line while it runs. Say what you found once, after it.
@@ -338,7 +338,7 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
   get_facts:
     "Read the business's facts in full: name, contact details, services, customers, service area, and the choices the owner made for you and the site.",
   get_change:
-    "Read a change's record by ref (from the workspace or recent); no ref is the latest. It gives what was asked, done, text_changes (before and after, read from the pages), what was left out, whether it is live, any open preview and the changes before. A briefed change also gives its edit_type and targets, checks (each acceptance check as judged on the built pages) and blocks (each block it touched, before and after, which is what an undo puts back).",
+    "Read a change's record by ref (from the workspace or recent); no ref is the latest. It gives what was asked, done, text_changes (before and after, read from the pages), what was left out, whether it is live, any open preview and the changes before. A briefed change also gives its edit_type and targets, checks (each acceptance check as judged on the built pages; passed null means the pages could not decide it, which is not a miss) and blocks (each block it touched, before and after, which is what an undo puts back).",
   read_site:
     "Read the website's page documents, the draft while one waits for the owner, else the live site: with no page, every page's sections and blocks by id, kind and heading; with page, that page's document in full. Use it before briefing a change, to target real ids and to see what is there.",
   ask_developer:

@@ -22,3 +22,14 @@ export function awaitingRound(events) {
   )
   return decided ? null : round
 }
+
+/**
+ * The revision the owner would see: the one marked `preview`, else the newest.
+ * Rows list newest first, and a critic round can leave a newer, unfinished
+ * revision ahead of the one that passed.
+ */
+export function previewRevision(row) {
+  const revisions = row.revisions ?? []
+  return (revisions.find((r) => r.status === "preview") ?? revisions[0])
+    ?.revision_id
+}

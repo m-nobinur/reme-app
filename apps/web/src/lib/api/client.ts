@@ -41,19 +41,20 @@ import { factLabel } from "@workspace/ui/lib/facts"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { stoppedLines } from "../stopped"
 import { apiFetch, COOKIE, forwardedSession } from "./transport"
-import type {
-  AttentionItem,
-  DecisionOutcome,
-  OrgNode,
-  OrgSummary,
-  OwnerDataSource,
-  PreviewLinks,
-  StaffMember,
-  TransportedFact,
-  TransportedMessage,
-  Workspace,
-  WorkspacePoll,
-  WriteOutcome,
+import {
+  type AttentionItem,
+  type DecisionOutcome,
+  type OrgNode,
+  type OrgSummary,
+  type OwnerDataSource,
+  type PreviewLinks,
+  SessionEnded,
+  type StaffMember,
+  type TransportedFact,
+  type TransportedMessage,
+  type Workspace,
+  type WorkspacePoll,
+  type WriteOutcome,
 } from "./types"
 
 /**
@@ -333,7 +334,8 @@ const approvalTitle = (live: boolean) =>
  * `/workspace`, with the attention list trimmed. An approval whose target is
  * not a revision is left out: a decision names a revision, so it could only
  * offer buttons that do nothing, and `/workspace` lists none today. A session
- * with no organisation reads as a workspace with nothing in it.
+ * with no organisation reads as a workspace with nothing in it; a session that
+ * is gone throws `SessionEnded`, never an empty business.
  */
 async function workspaceStatus(
   etag: string | null = null
@@ -343,7 +345,10 @@ async function workspaceStatus(
   if (response?.status === 304) {
     return "unchanged"
   }
-  if (!response || response.status === 401 || response.status === 403) {
+  if (!response || response.status === 401) {
+    throw new SessionEnded()
+  }
+  if (response.status === 403) {
     return {
       status: {
         site: { host: null, url: null, live: null },

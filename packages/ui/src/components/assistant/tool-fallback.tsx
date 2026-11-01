@@ -4,6 +4,7 @@ import {
   type ToolCallMessagePartComponent,
   type ToolCallMessagePartProps,
   type ToolCallMessagePartStatus,
+  useAuiState,
   useScrollLock,
   useToolCallElapsed,
 } from "@assistant-ui/react"
@@ -15,7 +16,7 @@ import {
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
 import { ToolStatus } from "@workspace/ui/components/status-line"
-import { stepOf } from "@workspace/ui/lib/tool-state"
+import { repeatsPrevious, stepOf } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { memo, useCallback, useRef, useState } from "react"
 
@@ -475,6 +476,7 @@ function ToolFallbackApproval({
 
 const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   toolName,
+  toolCallId,
   args,
   argsText,
   status,
@@ -488,6 +490,9 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   const shouldRenderApproval =
     isRequiresAction && offersInterruptAction(status, approval, interrupt)
   const step = stepOf({ args, argsText })
+  const repeat = useAuiState((s) =>
+    repeatsPrevious(s.message.parts, toolCallId)
+  )
 
   const [open, setOpen] = useState(isRequiresAction)
   const [prevRequiresAction, setPrevRequiresAction] = useState(isRequiresAction)
@@ -495,6 +500,8 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
     setPrevRequiresAction(isRequiresAction)
     if (isRequiresAction) setOpen(true)
   }
+
+  if (repeat) return null
 
   if (!isRequiresAction) {
     return (

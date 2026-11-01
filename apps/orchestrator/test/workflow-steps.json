@@ -641,6 +641,19 @@
       "gates 1",
       "a11y 1",
       "keep warm"
+    ],
+    "briefed change with an undecided check": [
+      "claim 1",
+      "planning",
+      "sandbox 1",
+      "implementing",
+      "quick edit",
+      "critique 1",
+      "acceptance 1",
+      "validating 1",
+      "gates 1",
+      "a11y 1",
+      "keep warm"
     ]
   },
   "PublishWorkflow": {
@@ -834,6 +847,7 @@
       "say failed"
     ],
     "hostname held": ["hostnames", "held", "say held"],
+    "hostname refused": ["hostnames", "refused", "say refused"],
     "removed before the hostnames": ["hostnames"],
     "removed while waiting": ["hostnames", "look 1", "check 1", "look 2"],
     "bought in the sandbox": [

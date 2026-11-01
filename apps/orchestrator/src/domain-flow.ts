@@ -717,14 +717,17 @@ export async function currentCheck(
 // Workflow steps
 // ---------------------------------------------------------------------------
 
+/** Cloudflare's custom hostname codes 1407 to 1411: the name itself is refused. */
+const NAME_REFUSED = /^cloudflare\.14(0[7-9]|1[01])$/
+
 /**
  * The claim's custom hostnames, the apex and `www`, or a subdomain's one
  * (kept as `apex`), created or found and
  * kept in `cf_ids`, with each one's ownership TXT in `ownership`. Each id is stored as soon as its hostname exists, so a
  * retry after the second create fails still owns the first. `gone` for a
  * claim no longer connecting, `held` when Cloudflare has a hostname this
- * claim does not own. `sub` is whether the name is a subdomain, when the
- * caller has just read its zone.
+ * claim does not own, `refused` when it will never accept the name. `sub` is
+ * whether the name is a subdomain, when the caller has just read its zone.
  */
 export async function claimHostnames(
   env: Env,
@@ -732,7 +735,7 @@ export async function claimHostnames(
   orgId: string,
   domainId: string,
   sub?: boolean
-): Promise<"gone" | "held" | { ids: CfIds; ownership: Ownership }> {
+): Promise<"gone" | "held" | "refused" | { ids: CfIds; ownership: Ownership }> {
   const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
   if (!row || !connecting(row.state)) return "gone"
   const ids = { ...(row.cfIds as CfIds) }
@@ -754,6 +757,8 @@ export async function claimHostnames(
     } catch (error) {
       if (error instanceof DomainError && error.name === "domain.hostname_held")
         return "held"
+      if (error instanceof DomainError && NAME_REFUSED.test(error.name))
+        return "refused"
       throw error
     }
     // A hostname this claim already held and stored needs no write.
@@ -1141,7 +1146,7 @@ export async function notServed(
 
 /**
  * The claim fails: after 72 hours without going live, or when its hostname is
- * held elsewhere. The site stays on its slug host, the name is freed, the
+ * held elsewhere or refused. The site stays on its slug host, the name is freed, the
  * hostnames are deleted, and what to tell the owner is returned.
  */
 export async function expireDomain(
@@ -1151,7 +1156,7 @@ export async function expireDomain(
   kit: Tenancy,
   orgId: string,
   domainId: string,
-  reason: "timeout" | "held" | "unpublished"
+  reason: "timeout" | "held" | "refused" | "unpublished"
 ): Promise<Say | null> {
   const found = await kit.withOrg({ orgId }, async (db) => {
     const claim = await readClaim(db, env, eq(domains.id, domainId))
@@ -1186,6 +1191,14 @@ export async function expireDomain(
         template: `Your website isn't published yet, so I've let go of ${name} for now. Ask me to connect it again whenever you're ready.`,
       }),
       button: again,
+    }
+  if (reason === "refused")
+    return {
+      key: `${domainId}:failed`,
+      text: await writeUpdate(env, kit, orgId, {
+        facts,
+        template: `I couldn't connect ${name}: it can't be set up for a website here.${where} Check that the name is yours and isn't already in use with another service, or try a different one.`,
+      }),
     }
   return reason === "held"
     ? {

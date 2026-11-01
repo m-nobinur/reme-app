@@ -1,6 +1,7 @@
 import {
   AGENT_NOTE,
   AgentNote,
+  type BlockChange,
   Blueprint,
   type BuildQuestion,
   type BuildQuestions,
@@ -32,6 +33,7 @@ import {
 import { insertAssignment } from "./app.ts"
 import { assistantName } from "./assistant.ts"
 import { creationChoices, failureReason, lastReport } from "./brief.ts"
+import { plainLine, recentChanges, routeOf, titleOf } from "./change.ts"
 import { eventKey } from "./domain-flow.ts"
 import {
   logSpend,
@@ -147,7 +149,7 @@ function plannedPages(blueprint: unknown) {
 
 /** What a change says about itself: the owner's short name for it, and the new words of a copy change. */
 /** `nearest` when the build says it could not make the change as asked. */
-/** `missed` names the brief's checks the built pages still fail; `lines` says what changed, from the text changes. */
+/** `missed` names the brief's checks the built pages still fail; `lines` says what changed, from its block records and text changes. */
 export type Change = {
   label?: string
   words?: string
@@ -166,19 +168,69 @@ const onPage = (pages: readonly string[]) => {
   return `on ${name.charAt(0).toUpperCase()}${name.slice(1)}`
 }
 
-/** What a change did, in plain words, one line per text change, at most four. */
-export const changeLines = (
-  pairs: readonly { before: string; after: string; pages: string[] }[]
-): string[] =>
-  pairs
-    .slice(0, LINES_MAX)
-    .map(({ before, after, pages }) =>
-      !before
-        ? `Added ${quoted(after)} ${onPage(pages)}`
-        : !after
-          ? `Took off ${quoted(before)} ${onPage(pages)}`
-          : `Changed ${quoted(before)} to ${quoted(after)} ${onPage(pages)}`
-    )
+type Pair = { before: string; after: string; pages: string[] }
+
+const pairLine = ({ before, after, pages }: Pair) =>
+  !before
+    ? `Added ${quoted(after)} ${onPage(pages)}`
+    : !after
+      ? `Took off ${quoted(before)} ${onPage(pages)}`
+      : `Changed ${quoted(before)} to ${quoted(after)} ${onPage(pages)}`
+
+/** One block record in plain words: what was added, taken off, reworded or moved, and where. */
+function blockLine(b: BlockChange): string | null {
+  const pages = [routeOf(b.page)]
+  if (b.change === "moved")
+    return `Moved ${quoted(titleOf(b.after))} ${b.above ? `above ${quoted(b.above)}` : "to the end"} ${onPage(pages)}`
+  if (b.change !== "changed")
+    return pairLine({
+      before: titleOf(b.before),
+      after: titleOf(b.after),
+      pages,
+    })
+  const was = b.before.split("\n").map(plainLine).filter(Boolean)
+  const now = b.after.split("\n").map(plainLine).filter(Boolean)
+  const before = was.find((l) => !now.includes(l)) ?? ""
+  const after = now.find((l) => !was.includes(l)) ?? ""
+  return before || after ? pairLine({ before, after, pages }) : null
+}
+
+const wordsOf = (text: string) =>
+  text
+    .replace(/…$/, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .toLowerCase()
+
+/**
+ * What a change did, in plain words, at most four lines: its own block
+ * records, leaving out those it carried from an earlier change it replaced,
+ * then the text changes no record holds, such as the header or footer.
+ */
+export function changeLines(
+  pairs: readonly Pair[],
+  blocks: readonly BlockChange[] = [],
+  carried: readonly BlockChange[] = []
+): string[] {
+  const same = (a: BlockChange, b: BlockChange) =>
+    a.page === b.page &&
+    a.section === b.section &&
+    a.block === b.block &&
+    a.change === b.change &&
+    a.after === b.after
+  const own = blocks.filter((b) => !carried.some((c) => same(b, c)))
+  const recorded = blocks.flatMap((b) => [b.before, b.after]).map(wordsOf)
+  const held = (text: string) =>
+    text !== "" && recorded.some((r) => r.includes(wordsOf(text)))
+  return [
+    ...own.flatMap((b) => blockLine(b) ?? []),
+    ...pairs.filter((p) => !held(p.before) && !held(p.after)).map(pairLine),
+  ].slice(0, LINES_MAX)
+}
+
+/** A check as the owner reads it: "your", not "the owner's", and no full stop of its own. */
+const forOwner = (check: string) =>
+  check.replace(/\bthe owner['’]s\b/gi, "your").replace(/[\s.!]+$/, "")
 
 /** The same assignment always reads the same wording, so a replayed step posts what the first did. */
 const pick = <T>(seed: string, variants: readonly T[]) =>
@@ -206,7 +258,7 @@ export function readyText(
       return `I couldn't change ${label ?? "that"} exactly as you asked, so I made the nearest change I could. Have a look, and tell me if you'd like it done another way.${list}`
     }
     if (missed?.length) {
-      return `I've made the change to ${label ?? "your site"}, but this part didn't come out as asked: ${missed[0]}. Have a look, and tell me if you'd like me to try again.${list}`
+      return `I've made the change to ${label ?? "your site"}, but this part didn't come out as asked: ${forOwner(missed[0] ?? "")}. Have a look, and tell me if you'd like me to try again.${list}`
     }
     if (!label) {
       return `Your changes are ready. Have a look below.${list}`
@@ -311,10 +363,16 @@ async function changeOf(db: OrgScopedDb, ids: Ids): Promise<Change> {
   const asAsked = report?.as_asked
   const missed = (
     ChangeChecked.safeParse(payload(CHANGE_CHECKED)).data?.checks ?? []
-  ).flatMap((c) => (c.passed ? [] : [c.check]))
+  ).flatMap((c) => (c.passed === false ? [c.check] : []))
+  const blocks =
+    CompletionReport.shape.blocks.safeParse(report?.blocks).data ?? []
   const lines = changeLines(
     CompletionReport.shape.text_changes.safeParse(report?.text_changes).data ??
-      []
+      [],
+    blocks,
+    blocks.length > 0
+      ? (await recentChanges(db, ids)).flatMap((r) => r.blocks)
+      : []
   )
   return {
     ...(label && { label }),

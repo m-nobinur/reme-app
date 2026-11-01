@@ -26,21 +26,23 @@ import { titleText } from "@workspace/ui/lib/title"
 import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
 import { orgIntentCookie } from "@/lib/auth/org-intent"
+import { endSessionHere } from "@/lib/auth/sign-out"
 import { seenAtOf, seenCookie } from "@/lib/notifications"
 import { settingUp } from "@/lib/onboarding"
 import { source } from "./source"
-import type {
-  AttentionItem,
-  BusinessProfile,
-  DecisionOutcome,
-  OrgNode,
-  OrgSummary,
-  PipelineItem,
-  PreviewLinks,
-  StaffMember,
-  TransportedMessage,
-  Workspace,
-  WriteOutcome,
+import {
+  type AttentionItem,
+  type BusinessProfile,
+  type DecisionOutcome,
+  type OrgNode,
+  type OrgSummary,
+  type PipelineItem,
+  type PreviewLinks,
+  SessionEnded,
+  type StaffMember,
+  type TransportedMessage,
+  type Workspace,
+  type WriteOutcome,
 } from "./types"
 
 /**
@@ -185,11 +187,18 @@ export const pollWorkspace = createServerFn({ method: "GET" })
     async ({
       data,
     }): Promise<
-      { changed: false } | { changed: true; workspace: Workspace }
+      | { changed: false; signedOut?: true }
+      | { changed: true; workspace: Workspace }
     > => {
-      const read = await source.pollWorkspace(data.etag)
+      const read = await source.pollWorkspace(data.etag).catch((error) => {
+        if (!(error instanceof SessionEnded)) throw error
+        return endSessionHere().then(() => "signed-out" as const)
+      })
       if (read === "unchanged") {
         return { changed: false }
+      }
+      if (read === "signed-out") {
+        return { changed: false, signedOut: true }
       }
       return {
         changed: true,

@@ -192,8 +192,8 @@ const script = {
   }[],
   /** How long ago each stall check finds the build's newest event; none left is never. */
   quiet: [] as number[],
-  /** Whether each acceptance judgement of a briefed change passes; none left passes. */
-  accepts: [] as boolean[],
+  /** Whether each acceptance judgement of a briefed change passes, null undecided; none left passes. */
+  accepts: [] as (boolean | null)[],
   looks: [] as {
     request_id: string
     fact_id: string | null
@@ -532,7 +532,7 @@ type Setup = {
   lane?: typeof script.lane
   quickDone?: boolean
   critic?: typeof script.critic
-  accepts?: boolean[]
+  accepts?: (boolean | null)[]
   quiet?: number[]
   photosFail?: boolean
   followUp?: boolean
@@ -731,6 +731,13 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     "briefed change accepted",
     [completion],
     { lane: { ...copy, brief: BRIEF } },
+    { outcome: "preview_ready" },
+  ],
+  // A check the judge could not decide is not a miss: nothing goes back.
+  [
+    "briefed change with an undecided check",
+    [completion],
+    { lane: { ...copy, brief: BRIEF }, accepts: [null] },
     { outcome: "preview_ready" },
   ],
   // An owner's build plans and builds with no stop for a review.
@@ -1089,6 +1096,7 @@ describe("the assignment Workflow's step names", () => {
         "design critique repaired",
         "briefed change sent back once",
         "briefed change accepted",
+        "briefed change with an undecided check",
         "owner's planned build",
       ].sort()
     )

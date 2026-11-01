@@ -534,6 +534,30 @@ export function isRetried(
 }
 
 /**
+ * Whether the part just before this call is a finished call of the same
+ * tool with the same step, so both would draw one line: the second draws
+ * nothing ("Looked over your website's pages" twice, 2026-11-01).
+ */
+export function repeatsPrevious(
+  parts: readonly object[],
+  toolCallId: string
+): boolean {
+  const all = parts as (CallPart & { args?: unknown; argsText?: string })[]
+  const at = all.findIndex((p) => p.toolCallId === toolCallId)
+  const self = all[at]
+  const before = all[at - 1]
+  const finished = (p: CallPart | undefined) =>
+    p?.type === "tool-call" && !unresolved(p) && !p.isError
+  return (
+    at > 0 &&
+    finished(self) &&
+    finished(before) &&
+    before?.toolName === self?.toolName &&
+    stepOf(before as ToolPartView) === stepOf(self as ToolPartView)
+  )
+}
+
+/**
  * Whether a running reply already shows how it is getting on, so a trailing
  * status line would stack on it: its words, or a call still at work, which
  * draws its own line or card. `quiet` names the calls that draw nothing.
