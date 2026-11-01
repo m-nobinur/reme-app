@@ -10,7 +10,7 @@ import { Timestamp, TimeZone, Ulid, Uuid } from "./common.ts"
 import { Blueprint, DirectionId, FontPairId } from "./design.ts"
 import { FactRecord } from "./fact.ts"
 import { Asset, AvatarId, choiceFacts } from "./onboarding.ts"
-import { SiteLink } from "./site.ts"
+import { Hostname, SiteLink } from "./site.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -514,11 +514,17 @@ export const BuildSummary = z.strictObject({
 
 const Logged = { event_id: Ulid, assignment_id: Uuid.nullable(), at: Timestamp }
 
+/**
+ * Something the owner started that finished: a version published (with its
+ * revision), their own domain serving the site, or the site added to Google
+ * Search Console (each with its host).
+ */
 const ReportItem = z.strictObject({
   kind: z.literal("report"),
   ...Logged,
-  what: z.enum(["published"]),
-  revision: RevisionRef,
+  what: z.enum(["published", "domain_live", "google_added"]),
+  revision: RevisionRef.optional(),
+  host: Hostname.optional(),
 })
 /**
  * Why a build stopped, for the owner's sentence: it went quiet, the lead

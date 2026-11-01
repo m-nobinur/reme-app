@@ -12,6 +12,14 @@ import { Text, ToolStep } from "./text.ts"
  * refused; `needs_permission` a sign-in that left a Search Console box unticked,
  * or a grant that has since lost a scope or the Owner role on the property.
  */
+/**
+ * The owner's own Search Console page for the property a host was added as
+ * (a URL-prefix property, `https://{host}/`): what every "Open in Google
+ * Search Console" link opens.
+ */
+export const searchConsoleUrl = (host: string) =>
+  `https://search.google.com/search-console?resource_id=${encodeURIComponent(`https://${host}/`)}`
+
 export const SearchConnectionState = z.enum([
   "active",
   "needs_reauth",

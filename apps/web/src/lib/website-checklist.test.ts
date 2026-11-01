@@ -57,7 +57,7 @@ it("lists a live site with its own domain and Google, with each next action", ()
     "published|done|Published today, 12:00 PM|Visit your website",
     "address|done|spark.example.com|-",
     "d|done|Live|-",
-    "google|done|Verified, pages sent. Data read today, 10:30 AM|-",
+    "google|done|Verified, pages sent. Data read today, 10:30 AM|Open in Google Search Console",
   ])
   expect(rows[2]?.title).toBe("spark.co.uk")
 })
@@ -75,7 +75,7 @@ it("shows Google's clicks and appearances for the last 28 days once it has sent 
     NOW
   )
   expect(summary(rows).at(-1)).toBe(
-    "google|done|1 click and 340 appearances on Google in the last 28 days. Data read today, 10:30 AM|-"
+    "google|done|1 click and 340 appearances on Google in the last 28 days. Data read today, 10:30 AM|Open in Google Search Console"
   )
 })
 
@@ -97,7 +97,7 @@ it("treats a task nothing has begun as no row, and offers it", () => {
   ).toEqual([
     "published|done|Published today, 12:00 PM|Visit your website",
     "address|done|spark.example.com|Use your own domain",
-    "google|next|Connect it once your own domain is live|-",
+    "google|next|Connect it once you have your own domain|-",
   ])
 })
 
@@ -107,7 +107,7 @@ it("offers a domain and Google when the site has neither", () => {
   ).toEqual([
     "published|done|Published today, 12:00 PM|Visit your website",
     "address|done|spark.example.com|Use your own domain",
-    "google|next|Connect it once your own domain is live|-",
+    "google|next|Connect it once you have your own domain|-",
   ])
 })
 
@@ -165,7 +165,7 @@ it("shows an address waiting on the owner, a bought one with its renewal, and Go
       checklistFor(workspace([seg("golive", "done"), ...segments]), ZONE, NOW)
     ).slice(2)
   expect(rows(waiting("records"), seg("google", "waiting"))).toEqual([
-    "a|waiting|Waiting for your DNS change|Show the change",
+    "a|waiting|Waiting for your domain setting|Show the change",
     "google|waiting|Waiting for you to sign in|Sign in again",
   ])
   expect(rows(waiting("purchase"))[0]).toBe(

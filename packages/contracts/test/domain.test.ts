@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   ADDRESS_ASK,
+  AttentionItem,
   addressReply,
   BUY_REFUSALS,
   BuyDomainInput,
@@ -20,6 +21,7 @@ import {
   RemoveDomainOutput,
   ServerButtonPart,
   ServerMessage,
+  searchConsoleUrl,
   sellableTld,
 } from "../src/index.ts"
 import { HoldingPointer, RedirectPointer, SitePointer } from "../src/site.ts"
@@ -388,5 +390,32 @@ describe("addressReply", () => {
 
   it("says nothing for Not now", () => {
     expect(addressReply(ADDRESS_ASK.later)).toBeNull()
+  })
+})
+
+describe("what the owner hears about their address and Google", () => {
+  it("opens the URL-prefix property a host was added as", () => {
+    expect(searchConsoleUrl("dox.bnwise.tech")).toBe(
+      "https://search.google.com/search-console?resource_id=https%3A%2F%2Fdox.bnwise.tech%2F"
+    )
+  })
+
+  it("reports a domain going live and the site reaching Google, each with its host", () => {
+    const logged = {
+      kind: "report",
+      event_id: "01JZ8QK5M7N9P0R2T4V6W8X0Y3",
+      assignment_id: null,
+      at: "2026-11-01T10:00:00.000Z",
+    }
+    for (const what of ["domain_live", "google_added"]) {
+      expect(
+        AttentionItem.safeParse({ ...logged, what, host: "dox.bnwise.tech" })
+          .success
+      ).toBe(true)
+    }
+    expect(
+      AttentionItem.safeParse({ ...logged, what: "moved", host: "a.example" })
+        .success
+    ).toBe(false)
   })
 })

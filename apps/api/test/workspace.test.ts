@@ -952,7 +952,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     })
   })
 
-  it("reads the workspace in one transaction of thirteen statements", async () => {
+  it("reads the workspace in one transaction of fourteen statements", async () => {
     let transactions = 0
     let statements = 0
     const counted: Tenancy = {
@@ -974,11 +974,11 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     await readWorkspace(counted, busy.orgId, { SITE_HOST_SUFFIX: SUFFIX })
     expect(transactions).toBe(1)
     // The tenth reads the generated photos of the waiting approval; the
-    // reminders that came due and the paused jobs are one each, and the
-    // eleventh is the activity view's domain, Google, heartbeat and first
-    // publish rows, pipelined with the twelfth, its owner tasks, and the
-    // thirteenth, the business's zone.
-    expect(statements).toBe(13)
+    // reminders that came due, the paused jobs and the domain gone live or
+    // site added to Google are one each, and the twelfth is the activity
+    // view's domain, Google, heartbeat and first publish rows, pipelined with
+    // the thirteenth, its owner tasks, and the fourteenth, the business's zone.
+    expect(statements).toBe(14)
   })
 
   it("lists a reminder once it is due and until it is done, after the questions and before the alerts", async () => {

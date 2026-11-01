@@ -68,7 +68,7 @@ test("the list shows one row of each kind the contract has, in its order", async
 
 test("every alert reason and report has a row", async ({ page }) => {
   await open(page, "NotificationList reports and alerts")
-  await expect(page.locator('li[data-kind="report"]')).toHaveCount(1)
+  await expect(page.locator('li[data-kind="report"]')).toHaveCount(3)
   await expect(page.locator('li[data-kind="alert"]')).toHaveCount(4)
 })
 

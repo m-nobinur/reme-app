@@ -362,16 +362,36 @@ export const logSpend = (
  * An update that answers something the owner started (a site going live, a
  * domain connecting): what happened as `facts`, each value a string to be
  * quoted exactly, and today's fixed `template`, which is what the owner
- * gets whenever the model's text cannot be trusted.
+ * gets whenever the model's text cannot be trusted. `brief` says what this
+ * moment is for: the benefit to name and what to keep.
  */
-export type Update = { facts: Record<string, string>; template: string }
+export type Update = {
+  facts: Record<string, string>
+  template: string
+  brief?: string
+}
+
+/** Words an owner should never read in an update about their address or Google. */
+export const JARGON = [
+  "DNS",
+  "CNAME",
+  "record",
+  "SSL",
+  "certificate",
+  "property",
+  "sitemap",
+  "propagation",
+] as const
 
 const updatePrompt = (name: string | null) =>
   [
     `${youAre(name)} Something the owner started has just moved on, and you are telling them.`,
-    "You get the facts and a draft. Write the update in your own words as one short, warm message: the point first, then what happens next or what the owner can do.",
+    "You get the facts, a draft, and sometimes a brief saying what this moment is for. Write the update in your own words as one short message a sharp, helpful assistant would send: what happened, why it matters to this business, what happens next, and the one thing the owner can do, in whatever order reads naturally. Follow the brief; never quote it.",
+    `Speak in the owner's terms: their customers, being found by people nearby, their name on the van and the quotes. Never use these words: ${JARGON.join(", ")}. Say the setting, the security padlock, adding the website to Google, sending Google every page. Never promise a ranking, a position or a date.`,
+    "Confident and warm, never pushy: offer, never instruct, so no 'you should' or 'you need to'. British English, no em or en dashes. Start with what happened, never with an opener such as Good news, Great or Nice work. At most one exclamation mark, and only for a real win such as the website or the owner's own address going live.",
+    "The owner sees any button or card under the message, so never point at the screen ('the button below', 'the card below'): name what it does in passing ('one sign-in with your Google account'), or say nothing of it.",
     "Use every value in the facts exactly as written, with no quotation marks around it. Add no number, date, name, web address or DNS value that is not in the facts. No greeting, no thanks, no sign-off.",
-    "The chat renders markdown. Keep it plain, and format only where it helps: bold for the one key fact, inline code for a DNS value or record name, a numbered list for steps to do in order, and a link when a fact is a web address to open. No headings, no tables.",
+    "The chat renders markdown. Keep it plain, and format only where it helps: bold for the one key fact, inline code for a DNS value or record name, a numbered list for steps to do in order. No links: a button under the message opens whatever the owner needs, and a domain may not open yet. No headings, no tables.",
     `At most ${LIMITS.sentences} sentences and ${LIMITS.chars} characters, and at most one question.`,
   ].join("\n\n")
 
@@ -381,9 +401,10 @@ const UPDATE_TIMEOUT_MS = 15_000
 const QUOTES = ['"', "“", "'", "‘", "«"]
 
 /**
- * Whether `text` may stand in for the template: a message inside the limits,
- * every fact's value in it verbatim and not in quotation marks, no number the
- * facts do not hold, and no link or phone number other than theirs.
+ * Whether `text` may stand in for the template: a whole message inside the
+ * limits, ending on a full sentence (a cut-off one is refused), every fact's
+ * value in it verbatim and not in quotation marks, no number the facts do not
+ * hold, and no link or phone number other than theirs.
  */
 export function faithful(text: string, facts: Record<string, string>): boolean {
   const values = Object.values(facts)
@@ -391,10 +412,14 @@ export function faithful(text: string, facts: Record<string, string>): boolean {
     { key: "update", since: "", facts, trusted: Object.keys(facts) },
   ])
   if (reply.kind !== "message") return false
-  if (!values.every((value) => reply.text.includes(value))) return false
-  if (
-    values.some((value) => QUOTES.some((q) => reply.text.includes(q + value)))
-  )
+  // What the owner reads: a link's words, never its target, and no markers.
+  const shown = reply.text
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[*_`]/g, "")
+    .trim()
+  if (!/[.!?]["'”’)]*$/.test(shown)) return false
+  if (!values.every((value) => shown.includes(value))) return false
+  if (values.some((value) => QUOTES.some((q) => shown.includes(q + value))))
     return false
   const numbers = new Set(values.flatMap((value) => value.match(/\d+/g) ?? []))
   return (reply.text.match(/\d+/g) ?? []).every((n) => numbers.has(n))
@@ -419,7 +444,11 @@ export async function writeUpdate(
     const system = updatePrompt(
       await kit.withOrg({ orgId }, assistantName).catch(() => null)
     )
-    const data = { facts: update.facts, draft: update.template }
+    const data = {
+      facts: update.facts,
+      draft: update.template,
+      ...(update.brief && { brief: update.brief }),
+    }
     const reservation = await reserve(
       kit,
       orgId,
@@ -438,7 +467,7 @@ export async function writeUpdate(
       kept ? "written" : "template",
       written.spent
     ).catch(() => undefined)
-    return kept ? text : update.template
+    return kept ? dashesToCommas(text) : update.template
   } catch (error) {
     console.error(
       JSON.stringify({ code: "update.write_failed", error: failureCode(error) })

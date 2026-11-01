@@ -604,8 +604,8 @@ describe("later jobs", () => {
     expect(domain?.title).toMatch(/fixture\.example\.invalid$/)
     expect(domain?.line).toBe("Changes to make at your DNS provider")
     expect(domain?.steps.map((each) => [each.label, each.state])).toEqual([
-      ["DNS change", "waiting"],
-      ["Certificate", "next"],
+      ["Domain setting", "waiting"],
+      ["Security padlock", "next"],
       ["Live check", "next"],
     ])
     expect(purchase?.title).toMatch(/fixtureclean\.example\.invalid$/)
@@ -709,7 +709,7 @@ describe("completedOf", () => {
     expect(rows).toEqual([
       {
         id: "address:1:proof",
-        text: "Your DNS points spark.example.invalid at your website",
+        text: "The setting for spark.example.invalid is in",
         at: records,
         brief: null,
       },

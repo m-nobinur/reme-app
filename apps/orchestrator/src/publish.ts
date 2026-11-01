@@ -4,12 +4,14 @@ import {
   ApprovalDecision,
   ApprovalRequest,
   ApprovalTarget,
+  DomainCheck,
   type DomainInspection,
   type FactRecord,
   HoldingPointer,
   ownDomain,
   parseSiteRevision,
   RedirectPointer,
+  type ServerButton,
   SITE_PROBE_HEADER,
   SITE_REVISION_HEADER,
   SitePointer,
@@ -24,19 +26,36 @@ import {
   chiefStaffId,
   currentFact,
   deployments,
+  domains,
   eq,
+  events,
   type OrgScopedDb,
   openTask,
   orgOpen,
   orgs,
   postAssistantMessage,
   readTasks,
+  searchConnections,
   setStep,
   siteRevisions,
   sql,
   type Tenancy,
 } from "@workspace/db"
 import { checkBuild, checkContent, parsePage } from "@workspace/gates"
+import {
+  aboutOf,
+  addressOffer,
+  addressOfferOwn,
+  CONNECT_GOOGLE,
+  liveAddressAgain,
+  liveGoogleOffer,
+  liveOffer,
+  liveOwnAddress,
+  livePadlock,
+  liveSettingDue,
+  liveSettingLapsed,
+  VISIT,
+} from "./address-copy.ts"
 import { domainWaiting, inspectDomain } from "./domain-flow.ts"
 import { writeUpdate } from "./heartbeat-write.ts"
 import {
@@ -679,95 +698,44 @@ async function ownAddress(
   return "refused" in found || !found.registered || found.in_use ? null : found
 }
 
+const addressQuestions = () => ({
+  kind: "address" as const,
+  questions: [
+    {
+      id: crypto.randomUUID(),
+      text: ADDRESS_ASK.have,
+      input: {
+        kind: "choice" as const,
+        options: [ADDRESS_ASK.yes, ADDRESS_ASK.no, ADDRESS_ASK.later],
+      },
+      skippable: false,
+    },
+    {
+      id: crypto.randomUUID(),
+      text: ADDRESS_ASK.name,
+      input: { kind: "text" as const, maxLength: 253, email: false },
+      skippable: true,
+    },
+  ],
+})
+
+const connectOwn = (name: string): ServerButton => {
+  const label = `Connect ${name}`
+  return {
+    label: label.length <= 60 ? label : "Connect it",
+    action: { kind: "ask", text: `Put the site on ${name}` },
+  }
+}
+
 /**
- * The owner's first version is live: said once in their chat, keyed by the
- * site. The model words it from the facts, or the template stands
- * (heartbeat-write.ts). It also opens the address task. An email on its own
- * domain settles what the owner has: the line names the domain and where it
- * lives, with a Connect button. Otherwise the tray asks "Do you already have a
- * web address?" and the task waits on the answer.
+ * The address task opened, or reopened after being put off: settled when the
+ * owner's email names the domain, else waiting on the card's answer.
  */
-export async function sayLive(
-  env: { OPENROUTER_API_KEY?: string },
+async function openAddressTask(
   kit: Tenancy,
   orgId: string,
-  siteId: string,
-  url: string
-): Promise<void> {
-  // A domain ready and waiting goes live on this publish and says so itself.
-  if (await kit.withOrg({ orgId }, domainWaiting)) return
-  const visit = url.startsWith("https://") ? "Visit your website" : null
-  // Past finding out already: the owner is picking or buying a name, put it
-  // off or said no. Then the line says the site is live and asks nothing.
-  const settled = await kit.withOrg({ orgId }, async (db) => {
-    const task = (await readTasks(db)).find((t) => t.kind === "address")
-    return (
-      !!task &&
-      (task.state !== "active" ||
-        task.steps.some((s) => s.step === "find_out" && s.state === "done"))
-    )
-  })
-  const own = settled ? null : await ownAddress(kit, orgId)
-  const where = own?.dns_host?.name ?? own?.registrar
-  // No address in the words: the button opens the site.
-  const text = await writeUpdate(env, kit, orgId, {
-    facts: { ...(own && { address: own.name }), ...(where && { where }) },
-    template: own
-      ? `Congratulations, your website is live. Your email is on ${own.name}, so I'll put the site there.${where ? ` It's with ${where}.` : ""}`
-      : `Congratulations, your website is live. Customers can now find you online. ${visit ? `You can view it with the ${visit} button, or ask me to open it.` : "Ask me any time to open it."}`,
-  })
-  const connect = own && `Connect ${own.name}`
-  const posted = await postAssistantMessage(kit, {
-    orgId,
-    key: `site.live:${siteId}`,
-    message: {
-      text: [text],
-      ...(own
-        ? {
-            button: {
-              label: connect && connect.length <= 60 ? connect : "Connect it",
-              action: { kind: "ask", text: `Put the site on ${own.name}` },
-            },
-          }
-        : {
-            ...(visit && {
-              button: {
-                label: visit,
-                action: { kind: "open", url },
-              },
-            }),
-          }),
-      ...(!own &&
-        !settled && {
-          questions: {
-            kind: "address",
-            questions: [
-              {
-                id: crypto.randomUUID(),
-                text: ADDRESS_ASK.have,
-                input: {
-                  kind: "choice",
-                  options: [ADDRESS_ASK.yes, ADDRESS_ASK.no, ADDRESS_ASK.later],
-                },
-                skippable: false,
-              },
-              {
-                id: crypto.randomUUID(),
-                text: ADDRESS_ASK.name,
-                input: { kind: "text", maxLength: 253, email: false },
-                skippable: true,
-              },
-            ],
-          },
-        }),
-    },
-  })
-  if (posted === "busy" || posted === "waiting") {
-    throw new Error(`site.live_${posted}`)
-  }
-  // After the post, so a chat that was busy retries both. A repeat changes
-  // nothing, and a task past finding out keeps its steps.
-  if (settled) return
+  own: DomainInspection | null
+) {
   await kit.withOrg({ orgId }, async (db) => {
     const task = await openTask(
       db,
@@ -795,6 +763,189 @@ export async function sayLive(
           }
     )
   })
+}
+
+const busyThrow = (posted: string, what: string) => {
+  if (posted === "busy" || posted === "waiting") {
+    throw new Error(`${what}_${posted}`)
+  }
+}
+
+/**
+ * The first build has started: offer the owner their own address while it
+ * runs, once, so it can go live on the publish. An email on its own domain
+ * names it, with a Connect button; otherwise the card asks whether they have
+ * one. Nothing when an address task already exists. A busy chat throws, for
+ * the step's few retries; past them the CoS offers it in its next reply.
+ */
+export async function offerAddress(
+  env: { OPENROUTER_API_KEY?: string },
+  kit: Tenancy,
+  orgId: string
+): Promise<void> {
+  const open = await kit.withOrg({ orgId }, async (db) =>
+    (await readTasks(db)).some((t) => t.kind === "address")
+  )
+  if (open) return
+  const own = await ownAddress(kit, orgId)
+  const about = await aboutOf(kit, orgId)
+  const text = await writeUpdate(
+    env,
+    kit,
+    orgId,
+    own ? addressOfferOwn(own.name, about) : addressOffer(about)
+  )
+  const posted = await postAssistantMessage(kit, {
+    orgId,
+    key: `address.offer:${orgId}`,
+    message: {
+      text: [text],
+      ...(own
+        ? { button: connectOwn(own.name) }
+        : { questions: addressQuestions() }),
+    },
+  })
+  busyThrow(posted, "address.offer")
+  await openAddressTask(kit, orgId, own)
+}
+
+/**
+ * A domain ready and waiting takes the first publish's live message: marked
+ * with `site.launch_deferred`, so its own live message is the launch.
+ */
+async function deferToDomain(
+  kit: Tenancy,
+  orgId: string,
+  siteId: string
+): Promise<boolean> {
+  return kit.withOrg({ orgId }, async (db) => {
+    if (!(await domainWaiting(db))) return false
+    const [marked] = await db
+      .select({ id: events.eventId })
+      .from(events)
+      .where(sql`${events.type} = 'site.launch_deferred'`)
+      .limit(1)
+    if (!marked)
+      await appendEvent(db, {
+        orgId,
+        assignmentId: null,
+        staffId: null,
+        type: "site.launch_deferred",
+        payload: { site_id: siteId },
+      })
+    return true
+  })
+}
+
+/**
+ * The owner's first version is live: said once in their chat, keyed by the
+ * site, worded by the model from the moment's brief or else the template
+ * (address-copy.ts). What it adds depends on where their address stands:
+ * the padlock still coming, the setting still due (or held back until now
+ * for their current site), a claim that lapsed brought back, Google offered
+ * when they said no to an address, the address asked once more when they put
+ * it off, or, with no address offered yet, the email's domain or the card.
+ * A domain ready and waiting goes live on this publish and says so itself.
+ */
+export async function sayLive(
+  env: { OPENROUTER_API_KEY?: string },
+  kit: Tenancy,
+  orgId: string,
+  siteId: string,
+  url: string
+): Promise<void> {
+  if (await deferToDomain(kit, orgId, siteId)) return
+  const visit: ServerButton | undefined = url.startsWith("https://")
+    ? { label: VISIT, action: { kind: "open", url } }
+    : undefined
+  const { address, google, latest } = await kit.withOrg(
+    { orgId },
+    async (db) => {
+      const tasks = await readTasks(db)
+      const [claim] = await db
+        .select({
+          name: domains.name,
+          state: domains.state,
+          lastCheck: domains.lastCheck,
+        })
+        .from(domains)
+        .where(
+          sql`${domains.state} in ('awaiting_dns', 'verifying', 'failed', 'active')`
+        )
+        .orderBy(sql`${domains.createdAt} desc`)
+        .limit(1)
+      const [connection] = await db
+        .select({ state: searchConnections.state })
+        .from(searchConnections)
+      return {
+        address: tasks.find((t) => t.kind === "address"),
+        google:
+          tasks.some((t) => t.kind === "google") ||
+          connection?.state === "active",
+        latest: claim,
+      }
+    }
+  )
+  const about = await aboutOf(kit, orgId)
+  const asked = address?.steps.some(
+    (s) => s.step === "find_out" && s.state === "blocked"
+  )
+  let copy = liveOffer(about)
+  let button = visit
+  let questions: ReturnType<typeof addressQuestions> | undefined
+  let reopen = false
+  let own: DomainInspection | null = null
+  if (
+    latest &&
+    (latest.state === "awaiting_dns" || latest.state === "verifying")
+  ) {
+    const seen =
+      latest.state === "verifying" ||
+      DomainCheck.safeParse(latest.lastCheck).data?.status ===
+        "pending_certificate"
+    copy = seen
+      ? livePadlock(latest.name, about)
+      : liveSettingDue(latest.name, about)
+    if (!seen)
+      button = {
+        label: "Show the setting",
+        action: { kind: "ask", text: `Show me the setting for ${latest.name}` },
+      }
+  } else if (latest?.state === "failed" && address?.state === "active") {
+    copy = liveSettingLapsed(latest.name, about)
+    button = connectOwn(latest.name)
+  } else if (address?.state === "declined" && !google) {
+    copy = liveGoogleOffer(about)
+    button = CONNECT_GOOGLE
+  } else if (!address) {
+    own = await ownAddress(kit, orgId)
+    if (own) {
+      copy = liveOwnAddress(own.name, about)
+      button = connectOwn(own.name)
+    } else {
+      copy = liveAddressAgain(about)
+      questions = addressQuestions()
+    }
+    reopen = true
+  } else if (address.state === "later" || asked) {
+    copy = liveAddressAgain(about)
+    questions = addressQuestions()
+    reopen = true
+  }
+  const text = await writeUpdate(env, kit, orgId, copy)
+  const posted = await postAssistantMessage(kit, {
+    orgId,
+    key: `site.live:${siteId}`,
+    message: {
+      text: [text],
+      ...(button && { button }),
+      ...(questions && { questions }),
+    },
+  })
+  busyThrow(posted, "site.live")
+  // After the post, so a chat that was busy retries both. A repeat changes
+  // nothing, and a task past finding out keeps its steps.
+  if (reopen) await openAddressTask(kit, orgId, own)
 }
 
 /**

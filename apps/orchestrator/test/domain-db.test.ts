@@ -495,9 +495,9 @@ describe.skipIf(!url)("custom domains against a database", () => {
     const loads = await loadsOf(env, kit, site.orgId, domainId)
     expect(loads.result).toMatchObject({ gone: false, ready: true })
     expect(await loads.reading?.tell?.()).toEqual({
-      text: `www.${name} is live. ${site.slug} now forwards to it, so links you've shared still work.`,
+      text: `www.${name} is now live! That's the address to put on your van, cards and quotes from today, and anyone using the old link lands on the new one, so nothing you've shared is lost.`,
       button: {
-        label: "Open your website",
+        label: "Visit your website",
         action: { kind: "open", url: `https://www.${name}/` },
       },
     })
@@ -604,7 +604,7 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect(read(`www.${second}`)).toMatchObject({ org_id: site.orgId })
     const loads = await loadsOf(env, kit, site.orgId, secondId)
     expect((await loads.reading?.tell?.())?.text).toContain(
-      `www.${first} is no longer used`
+      `www.${first} isn't used any more, so its setting can be deleted`
     )
   })
 
@@ -671,12 +671,12 @@ describe.skipIf(!url)("custom domains against a database", () => {
 
     // With no model key, the nudge and the failed line are today's templates.
     expect((await nudge(env, kit, site.orgId, domainId, 1))?.text).toBe(
-      `I'm still waiting for the records for ${name}. There's no need to tell me when they're in; I'll see them.`
+      `I haven't seen the setting for ${name} yet. There's no need to tell me when it's in; I'll see it.`
     )
     expect(
       (await expireDomain(env, kit, site.orgId, domainId, "timeout"))?.text
     ).toBe(
-      `I didn't see the records for ${name} within 3 days, so I've stopped watching. Your site stays on ${site.slug}. Ask me again any time.`
+      `I didn't see the setting for ${name} within 3 days, so I've let it go for now. Your site stays on ${site.slug}. Ask me again any time.`
     )
     await expireDomain(env, kit, site.orgId, domainId, "timeout")
     expect(await rowOf(site.orgId, name)).toMatchObject({ state: "failed" })
@@ -871,7 +871,7 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect(await checkNow(env, kit, site.orgId, sub)).toMatchObject({
       state: "awaiting_dns",
       status: { status: "pending_certificate" },
-      next_step: expect.stringContaining(`records for ${sub}`),
+      next_step: expect.stringContaining(`setting for ${sub}`),
     })
   })
 

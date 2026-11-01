@@ -34,6 +34,8 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 // publish.test.ts; here only the assignment paths run.
 vi.mock("../src/publish.ts", () => ({
   PROBE_MINUTES: [0, 2, 5, 10],
+  LIVE_SAY: {},
+  offerAddress: async () => undefined,
   accessible: async () => true,
   activate: async () => ({}),
   // The superseded preview's revision: the one the served site now names.
@@ -138,7 +140,8 @@ vi.mock("../src/brief.ts", () => ({
     withhold: [],
     model: "A",
     origin: script.origin,
-    kind: "site.build",
+    // A change carries its kind; only a site's first build is a site.build.
+    kind: script.lane.change_kind ? "site.revise" : "site.build",
     ...script.lane,
   }),
   takeSnapshot: async () => ({}),

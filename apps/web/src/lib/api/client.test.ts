@@ -290,7 +290,7 @@ it("reads attention from the workspace, in its order and the owner's words", asy
     {
       kind: "report",
       id: report.event_id,
-      title: "Published v3",
+      title: "Your changes are live",
       raisedBy: "Reme",
       expiresAt: null,
     },
@@ -370,10 +370,55 @@ it("reads activity from /activity as reports and alerts", async () => {
     {
       kind: "report",
       id: report.event_id,
-      title: "Published v3",
+      title: "Your changes are live",
       raisedAt: AT,
     },
   ])
+})
+
+it("reports a first publish, the owner's domain going live and the site reaching Google, with Search Console a click away", async () => {
+  const first = {
+    ...report,
+    event_id: "01J8Z3K4M5N6P7Q8R9S0T1V2W5",
+    revision: { revision_id: REVISION, version: 1 },
+  }
+  const live = {
+    kind: "report",
+    event_id: "01J8Z3K4M5N6P7Q8R9S0T1V2W6",
+    assignment_id: null,
+    at: AT,
+    what: "domain_live",
+    host: "dox.bnwise.tech",
+  }
+  const google = {
+    ...live,
+    event_id: "01J8Z3K4M5N6P7Q8R9S0T1V2W7",
+    what: "google_added",
+  }
+  answers["GET /activity"] = { items: [google, live, first] }
+  const items = await apiSource.activity()
+  expect(items.map(({ title, detail }) => ({ title, detail }))).toEqual([
+    {
+      title: "Google now knows about your website",
+      detail:
+        "dox.bnwise.tech is in your Google Search Console, with every page sent.",
+    },
+    {
+      title: "Your website is live on dox.bnwise.tech",
+      detail: "Customers can now find you at your own address.",
+    },
+    {
+      title: "Your website is live",
+      detail: "Customers can now find you online and ask for a quote.",
+    },
+  ])
+  expect(items[0]).toMatchObject({
+    link: {
+      label: "Open in Google Search Console",
+      href: "https://search.google.com/search-console?resource_id=https%3A%2F%2Fdox.bnwise.tech%2F",
+    },
+  })
+  expect(items[1]).not.toHaveProperty("link")
 })
 
 it("reads the profile's facts from /facts", async () => {

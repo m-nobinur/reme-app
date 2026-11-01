@@ -40,8 +40,17 @@ const ACTION = buttonVariants({ variant: "outline", size: "sm" })
 
 const REPORTS: Record<Report["what"], { title: string; detail: string }> = {
   published: {
-    title: "Published v3",
-    detail: "Version 3 is live on your site.",
+    title: "Your changes are live",
+    detail: "The latest version of your website is up now.",
+  },
+  domain_live: {
+    title: "Your website is live on brightclean.co.uk",
+    detail: "Customers can now find you at your own address.",
+  },
+  google_added: {
+    title: "Google now knows about your website",
+    detail:
+      "brightclean.co.uk is in your Google Search Console, with every page sent.",
   },
 }
 

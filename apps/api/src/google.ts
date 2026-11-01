@@ -5,6 +5,7 @@ import {
   type ServerButton,
 } from "@workspace/contracts"
 import {
+  deployments,
   domains,
   postAssistantMessage,
   searchConnections,
@@ -71,6 +72,18 @@ export async function googleConnect(
   })
 }
 
+/** Google connected before the website's first publish, which hands it over. */
+const CONNECTED_EARLY =
+  "You're connected to Google. The moment your website goes live, I'll add it and send Google every page, then tell you once it's in."
+
+/** Whether the website has been published at least once. */
+async function published(kit: Tenancy, owner: Owner): Promise<boolean> {
+  const [row] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db.select({ id: deployments.id }).from(deployments).limit(1)
+  )
+  return !!row
+}
+
 /** Whether the org holds a saved, complete Google connection. */
 async function connected(kit: Tenancy, owner: Owner): Promise<boolean> {
   const [row] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
@@ -89,7 +102,7 @@ const RESULT: Record<
   { text: string; button?: ServerButton }
 > = {
   connected: {
-    text: "Google is connected. I'm adding your site to Search Console now and I'll tell you when it's in.",
+    text: "You're connected to Google. I'm adding your website now and sending over every page, and I'll tell you once it's in.",
   },
   // The owner's choice, not a fault: one quiet line and no button.
   cancelled: {
@@ -125,7 +138,10 @@ export async function googleResult(
   // Never "didn't connect" once the connection is saved.
   const said =
     result === "failed" && (await connected(kit, owner)) ? "connected" : result
-  const { text, button } = RESULT[said]
+  const { text, button } =
+    said === "connected" && !(await published(kit, owner))
+      ? { text: CONNECTED_EARLY, button: undefined }
+      : RESULT[said]
   await postAssistantMessage(kit, {
     orgId: owner.orgId,
     key: `google.result:${attempt}`,

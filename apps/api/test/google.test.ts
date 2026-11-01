@@ -217,7 +217,10 @@ describe.skipIf(!url)("connecting Google through the api", () => {
         .orderBy(conversationMessages.seq)
     )
     const texts = JSON.stringify(rows.at(-1)?.content)
-    expect(texts).toContain("Google is connected")
+    // Not published yet: the website goes to Google the moment it is live.
+    expect(texts).toContain(
+      "You're connected to Google. The moment your website goes live, I'll add it"
+    )
     expect(texts).not.toContain("didn't connect")
   })
 })

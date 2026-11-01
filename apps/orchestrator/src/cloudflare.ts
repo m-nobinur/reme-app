@@ -75,6 +75,7 @@ import {
   activate,
   LIVE_SAY,
   latestRevision,
+  offerAddress,
   PROBE_MINUTES,
   type PublishParams,
   probeHost,
@@ -404,6 +405,18 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         return { lane, change_kind, plan, first: kind === "site.build" }
       })
     )
+    // The owner's own address, offered while the first build runs, so it can
+    // be ready to go live on the publish. A chat still busy after the step's
+    // few retries leaves it to the CoS's next reply; the build never waits.
+    if (route.first) {
+      try {
+        await step.do("offer address", LIVE_SAY, () =>
+          run((kit) => offerAddress(this.env, kit, ids.orgId))
+        )
+      } catch {
+        // Offered by the CoS instead (agent.ts).
+      }
+    }
     if (route.plan) {
       await step.do("plan 1", () =>
         run((kit) => planRound({ env: this.env, kit, ids }))

@@ -349,12 +349,13 @@ export interface components {
             /** Format: date-time */
             at: string
             /** @enum {string} */
-            what: "published"
-            revision: {
+            what: "published" | "domain_live" | "google_added"
+            revision?: {
               /** Format: uuid */
               revision_id: string
               version: number
             }
+            host?: string
           }
         | {
             /** @constant */
@@ -3116,12 +3117,13 @@ export interface components {
           /** Format: date-time */
           at: string
           /** @enum {string} */
-          what: "published"
-          revision: {
+          what: "published" | "domain_live" | "google_added"
+          revision?: {
             /** Format: uuid */
             revision_id: string
             version: number
           }
+          host?: string
         }
       | {
           /** @constant */
@@ -14774,12 +14776,13 @@ export interface components {
             /** Format: date-time */
             at: string
             /** @enum {string} */
-            what: "published"
-            revision: {
+            what: "published" | "domain_live" | "google_added"
+            revision?: {
               /** Format: uuid */
               revision_id: string
               version: number
             }
+            host?: string
           }
         | {
             /** @constant */
