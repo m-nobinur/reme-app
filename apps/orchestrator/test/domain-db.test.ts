@@ -22,10 +22,12 @@ import {
   look,
   nudge,
   postStatus,
+  publishState,
   remove,
   repoint,
   revokeDomains,
   sweepDomains,
+  tellPublished,
 } from "../src/domain-flow.ts"
 import { sealToken } from "../src/google.ts"
 import { probe } from "../src/probe.ts"
@@ -359,13 +361,39 @@ describe.skipIf(!url)("custom domains against a database", () => {
     })
   })
 
-  it("refuses an unpublished site and a fourth pending claim", async () => {
+  it("claims for an unpublished site behind a coming-soon page, and refuses a fourth pending claim", async () => {
     stubNet()
     const site = await previewed()
     const { env } = domainEnv(site.store)
+    const early = unique()
     expect(
-      await connect(env, kit, site.orgId, { name: unique(), approval_id: "a" })
-    ).toMatchObject({ status: 409, code: "site.not_published" })
+      await connect(env, kit, site.orgId, { name: early, approval_id: "a" })
+    ).toMatchObject({ status: 201, output: { outcome: "connecting" } })
+    const earlyId = (await rowOf(site.orgId, early))?.id ?? ""
+    await claimHostnames(env, kit, site.orgId, earlyId)
+    // No page on a name before its records prove it the org's.
+    expect(await publishState(env, kit, site.orgId, earlyId)).toMatchObject({
+      published: false,
+    })
+    expect([...site.store.pointers.keys()]).toEqual([])
+    await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db
+        .update(domains)
+        .set({ state: "verifying", lastCheck: { status: "valid" } })
+        .where(eq(domains.id, earlyId))
+    )
+    await publishState(env, kit, site.orgId, earlyId)
+    for (const host of [early, `www.${early}`]) {
+      expect(
+        JSON.parse(site.store.pointers.get(`host:${host}`) ?? "null")
+      ).toMatchObject({
+        org_id: site.orgId,
+        holding: { name: expect.any(String) },
+      })
+    }
+    // A removal before any publish takes the page down and points nothing.
+    expect(await remove(env, kit, site.orgId, early)).toBeNull()
+    expect([...site.store.pointers.keys()]).toEqual([])
 
     const live = await published()
     for (let i = 0; i < 3; i++) {
@@ -379,6 +407,65 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect(
       await connect(env, kit, live.orgId, { name: unique(), approval_id: "a" })
     ).toMatchObject({ status: 409, code: "domain.too_many_pending" })
+  })
+
+  it("asks for the change at publish when the name serves a site today and ours is not live", async () => {
+    const name = unique()
+    stubNet({
+      [`${name} A`]: {
+        Status: 0,
+        Answer: [{ name, type: 1, TTL: 60, data: "192.0.2.10" }],
+      },
+    })
+    const draft = await previewed()
+    const { env } = domainEnv(draft.store)
+    const early = await connect(env, kit, draft.orgId, {
+      name,
+      approval_id: "a",
+    })
+    expect(early).toMatchObject({
+      status: 201,
+      output: { change_at_publish: true },
+    })
+    // Once the site is live the change is for now, as before.
+    const live = await published()
+    const other = `${name.split(".")[0]}x.co.uk`
+    stubNet({
+      [`${other} A`]: {
+        Status: 0,
+        Answer: [{ name: other, type: 1, TTL: 60, data: "192.0.2.10" }],
+      },
+    })
+    const now = await connect(env, kit, live.orgId, {
+      name: other,
+      approval_id: "a",
+    })
+    expect((now as { output: object }).output).not.toHaveProperty(
+      "change_at_publish"
+    )
+  })
+
+  it("tells every claim still connecting that the site was published", async () => {
+    stubNet()
+    const site = await previewed()
+    const { env } = domainEnv(site.store)
+    const sent: { id: string; type: string }[] = []
+    const told = {
+      ...env,
+      DOMAINS: {
+        ...env.DOMAINS,
+        get: async (instance: string) => ({
+          sendEvent: async (event: { type: string }) => {
+            sent.push({ id: instance, type: event.type })
+          },
+        }),
+      },
+    } as unknown as Env
+    const name = unique()
+    await connect(told, kit, site.orgId, { name, approval_id: "a" })
+    const id = (await rowOf(site.orgId, name))?.id ?? ""
+    await tellPublished(told, kit, site.orgId)
+    expect(sent).toEqual([{ id: `domain-${id}`, type: "published" }])
   })
 
   it("activates, points every host from the row, and removal puts the slug host back", async () => {
@@ -627,6 +714,9 @@ describe.skipIf(!url)("custom domains against a database", () => {
     )
     await activateDomain(env, kit, site.orgId, domainId)
     const hosts = [`www.${name}`, name, site.slug]
+    // The other half redirects only once the domain serves.
+    expect(site.store.pointers.has(`host:${name}`)).toBe(false)
+    await writePointer(env, kit, site.orgId, site.orgId, site.slug)
     expect(hosts.every((h) => site.store.pointers.has(`host:${h}`))).toBe(true)
     await clearPointers(env, kit, site.orgId)
     await revokeDomains(env, kit, site.orgId)
@@ -1012,14 +1102,13 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect(site.store.pointers.get(`host:${site.slug}`)).toBe(slugBefore)
   })
 
-  it("fails a claim still connecting past its deadline when its Workflow never did", async () => {
-    const net = stubNet()
-    const site = await published()
+  it("frees an unproven claim at 72 hours even before the first publish, so nobody squats a name", async () => {
+    stubNet()
+    const site = await previewed()
     const { env } = domainEnv(site.store)
     const name = unique()
     await connect(env, kit, site.orgId, { name, approval_id: "a" })
     const domainId = (await rowOf(site.orgId, name))?.id ?? ""
-    await claimHostnames(env, kit, site.orgId, domainId)
     const age = (ms: number) =>
       kit.withOrg({ orgId: site.orgId }, (db) =>
         db
@@ -1028,24 +1117,34 @@ describe.skipIf(!url)("custom domains against a database", () => {
           .where(eq(domains.id, domainId))
       )
     const HOUR = 60 * 60 * 1000
-    // Inside the deadline and its hour of grace: the Workflow's to end.
     await age(DEADLINE_MS + HOUR / 2)
+    expect(await sweepDomains(env, kit, site.orgId, "2026110100")).toEqual([])
+    await age(DEADLINE_MS + 2 * HOUR)
+    expect(await sweepDomains(env, kit, site.orgId, "2026110100")).toEqual([
+      expect.objectContaining({ key: `${domainId}:failed` }),
+    ])
+    expect(await rowOf(site.orgId, name)).toMatchObject({ state: "failed" })
+  })
+
+  it("counts a claim's 72 hours from a publish that came after it", async () => {
+    stubNet()
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    const name = unique()
+    await connect(env, kit, site.orgId, { name, approval_id: "a" })
+    const domainId = (await rowOf(site.orgId, name))?.id ?? ""
+    await claimHostnames(env, kit, site.orgId, domainId)
+    // Claimed four days ago, published just now: the records have 72 hours from today.
+    await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db
+        .update(domains)
+        .set({ createdAt: new Date(Date.now() - DEADLINE_MS - 24 * 3600_000) })
+        .where(eq(domains.id, domainId))
+    )
     expect(await sweepDomains(env, kit, site.orgId, "2026101906")).toEqual([])
     expect(await rowOf(site.orgId, name)).toMatchObject({
       state: "awaiting_dns",
     })
-    await age(DEADLINE_MS + 2 * HOUR)
-    expect(await sweepDomains(env, kit, site.orgId, "2026101906")).toEqual([
-      expect.objectContaining({
-        key: `${domainId}:failed`,
-        text: expect.stringContaining(`within 3 days`),
-      }),
-    ])
-    expect(await rowOf(site.orgId, name)).toMatchObject({ state: "failed" })
-    expect([...net.deleted].sort((a, b) => a.localeCompare(b))).toEqual([
-      `h-${name}`,
-      `h-www.${name}`,
-    ])
   })
 
   it("keeps the domain's pointers through a later publish and a rollback", async () => {

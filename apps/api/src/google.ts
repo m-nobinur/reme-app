@@ -5,9 +5,10 @@ import {
   type ServerButton,
 } from "@workspace/contracts"
 import {
-  activeDomainHost,
+  domains,
   postAssistantMessage,
   searchConnections,
+  sql,
   type Tenancy,
 } from "@workspace/db"
 import { bridge, type Owner, relay } from "./changes.ts"
@@ -164,15 +165,23 @@ export async function connectGoogle(
   if (row?.state === "active" && row.email) {
     return { connected: true, email: row.email }
   }
-  // Google learns the address customers keep, so it waits for a live domain.
-  const domain = await kit.withOrg({ orgId: owner.orgId }, activeDomainHost)
+  // Google learns the address customers keep, so it waits for the owner's
+  // own domain: live, or claimed and connecting, which the first publish or
+  // its activation hands to Google.
+  const [domain] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(sql`${domains.state} in ('awaiting_dns', 'verifying', 'active')`)
+      .limit(1)
+  )
   if (!domain) {
     return {
       outcome: "refused",
       error: {
         class: "validation",
         code: "search.needs_domain",
-        message: "Google comes once the website's own domain is live.",
+        message: "Google comes once the website has a domain of its own.",
       },
     }
   }

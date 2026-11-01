@@ -135,7 +135,7 @@ describe.skipIf(!url)("connecting Google through the api", () => {
     )
   })
 
-  it("connect_google: off, waiting for a live domain, the consent link, the connected account, or refused for a member", async () => {
+  it("connect_google: off, waiting for a domain of the owner's own, the consent link, the connected account, or refused for a member", async () => {
     const as = (who: Owner) => ({
       orgId: who.orgId,
       session: { workosUserId: who.workosUserId } as never,
@@ -147,7 +147,9 @@ describe.skipIf(!url)("connecting Google through the api", () => {
         {}
       )
     ).toEqual({ available: false })
-    // Google learns the address customers keep, so no link before a live domain.
+    // Google learns the address customers keep, so no link before the owner
+    // has a domain of their own; one still connecting is enough, since the
+    // first publish or its activation hands it to Google.
     expect(await connectGoogle({ env, kit, owner: as(me) }, {})).toMatchObject({
       outcome: "refused",
       error: { code: "search.needs_domain" },
@@ -161,7 +163,7 @@ describe.skipIf(!url)("connecting Google through the api", () => {
         primaryHost: `www.${name}`,
         origin: "connected",
         method: "records",
-        state: "active",
+        state: "awaiting_dns",
       })
     )
     expect(await connectGoogle({ env, kit, owner: as(me) }, {})).toEqual({

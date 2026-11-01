@@ -463,6 +463,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         tasks: [],
         waiting: [],
         reminders: [],
+        // No Stripe keys in the test env: purchases are off, so none is offered.
+        buying: false,
         expected_seconds: expect.any(Object),
         expected_range: {
           quick: "about 1 to 2 minutes",

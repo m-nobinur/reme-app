@@ -214,6 +214,11 @@ export const CosWorkspace = z.strictObject({
     .array(z.strictObject({ title: Text(120), since: Timestamp }))
     .max(20)
     .optional(),
+  /**
+   * Whether a domain can be bought here now. False while purchases are off,
+   * so no purchase is offered that would be refused. Optional, as `waiting`.
+   */
+  buying: z.boolean().optional(),
   /** How long each lane usually takes, so the CoS quotes the measured wait. */
   expected_seconds: WorkspaceStatus.shape.expected_seconds,
   /** Each lane's wait in the panel's words, for a build that has just started. */
@@ -591,6 +596,11 @@ export const ConnectDomainOutput = z.discriminatedUnion("outcome", [
     apex: z.enum(["alias", "forward"]).optional(),
     provider: DomainProvider.optional(),
     nameserver_host: NameserverHost.optional(),
+    /**
+     * The domain serves a website today and this one is not published yet:
+     * the records go in once it is, so the current site stays up meanwhile.
+     */
+    change_at_publish: z.literal(true).optional(),
     // A plain string, as `settings_url` is, so the model sees no `uri` format.
     apply_url: z
       .string()

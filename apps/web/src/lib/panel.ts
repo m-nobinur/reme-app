@@ -27,7 +27,7 @@ import type { AttentionItem, Workspace } from "./api/types"
 import { assistantOf, leading } from "./briefing"
 import { onboardingFor } from "./onboarding"
 import { dueLine, upcomingNotes } from "./reminders"
-import { ownDomainLive } from "./website-checklist"
+import { ownDomainClaimed } from "./website-checklist"
 
 /**
  * What the floating panel says, from what the frame has already read: the
@@ -503,12 +503,12 @@ export function panelFor(input: PanelInput): Panel | null {
     unstarted.find((segment) => segment.kind === "address") ?? unstarted[0]
   const upText = queued && rowLine(queued, ctx)
   // Google is never a line in the owner's voice: its sign-in, and only once
-  // their own domain is live.
+  // they have a domain of their own, live or connecting.
   const google = queued?.kind === "google"
   const upNext: UpNext | null =
     queued &&
     upText &&
-    (!google || ownDomainLive(activity.standing ?? [], workspace.host))
+    (!google || ownDomainClaimed(activity.standing ?? [], workspace.host))
       ? {
           id: queued.id,
           text: upText,

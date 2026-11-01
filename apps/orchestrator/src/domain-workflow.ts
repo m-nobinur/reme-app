@@ -26,17 +26,22 @@ import {
   claimHostnames,
   DEADLINE_MS,
   type DomainParams,
+  deadlineOf,
   expireDomain,
   look,
   NUDGE_AFTER_MS,
   nextWait,
   notServed,
   nudge,
+  PUBLISH_WAIT_MS,
   postStatus,
+  publishState,
+  REMIND_AFTER_MS,
   repoint,
   type Say,
   SETTLE,
   served,
+  waitingNote,
   withKit,
 } from "./domain-flow.ts"
 import { hold, probe } from "./probe.ts"
@@ -74,11 +79,14 @@ export const SAY_RETRIES: WorkflowStepConfig = {
  * only. It claims the two custom hostnames, then looks: at once, again on a
  * `check` nudge or on `nextWait`'s schedule (every minute for the first half
  * hour, every 10 minutes to two hours, hourly from then), until
- * the domain is ready, removed, or 72 hours old. Each look is a probe
- * (probe.ts), so the owner hears only a check that changed. Ready activates
- * it, probes `loads` on the same schedule until the host serves the site,
- * says it is live and writes the pointers again after `SETTLE`; 72 hours
- * fails it and frees the name. A removal starts `domain-{domain_id}-removed`
+ * the domain is ready, removed, or past its deadline (`deadlineOf`: 72 hours
+ * from the claim or the first publish, whichever is later). Each look is a probe
+ * (probe.ts), so the owner hears only a check that changed. Ready waits for
+ * the site's first publish if it has none, with the coming-soon page up and
+ * one reminder at 7 days, for 30 days; then activates it, probes `loads` on
+ * the same schedule until the host serves the site, says it is live and
+ * writes the pointers again after `SETTLE`. The deadline fails it and frees
+ * the name. A removal starts `domain-{domain_id}-removed`
  * with `settle`, which only writes the pointers again. A step body returns what to tell the owner
  * and a `say` step posts it, so a busy chat retries the post alone. Steps
  * carry ids only and every body is in domain-flow.ts; this is the order.
@@ -90,7 +98,6 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
     // The instance's creation time is durable; a clock read between steps
     // would move on every replay.
     const started = event.timestamp.getTime()
-    const deadline = started + DEADLINE_MS
     const settle = async () => {
       await step.sleep("settle", SETTLE)
       await step.do("pointers again", () =>
@@ -108,9 +115,51 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       }
     }
     const address = { orgId, kind: "address" as const }
+    // Ready before the site was ever published: wait for its publish, which
+    // sends `published`. The state is read before each wait, so a publish
+    // between the read and the wait costs at most one slice.
+    const published = async (): Promise<"published" | "gone" | "expired"> => {
+      let readyAt: number | undefined
+      let reminded = false
+      for (let n = 1; ; n++) {
+        const state = await step.do(`published ${n}`, () =>
+          withKit(env, (kit) => publishState(env, kit, orgId, domainId))
+        )
+        if (state.gone) return "gone"
+        if (state.published) return "published"
+        readyAt ??= state.at
+        if (state.at >= readyAt + PUBLISH_WAIT_MS) {
+          const message = await step.do("unpublished", () =>
+            withKit(env, (kit) =>
+              expireDomain(env, kit, orgId, domainId, "unpublished")
+            )
+          )
+          await say("say unpublished", message)
+          return "expired"
+        }
+        if (!reminded && state.at >= readyAt + REMIND_AFTER_MS) {
+          const message = await step.do("waiting", () =>
+            withKit(env, (kit) => waitingNote(env, kit, orgId, domainId))
+          )
+          await say("say waiting", message)
+          reminded = true
+        }
+        try {
+          await step.waitForEvent(`publish ${n}`, {
+            type: "published",
+            timeout: "1 hour",
+          })
+        } catch {
+          // No publish in this slice: read again.
+        }
+      }
+    }
     // Active, then said live only once the host serves the site, on the
     // claim's own schedule and deadline counted from the first `loads`.
     const live = async () => {
+      const waited = await published()
+      if (waited === "gone") return { outcome: "removed" }
+      if (waited === "expired") return { outcome: "failed" }
       const active = await step.do("activate", () =>
         withKit(env, async (kit) => {
           const done = await activateDomain(env, kit, orgId, domainId)
@@ -279,6 +328,7 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       if (seen.gone) return { outcome: "removed" }
       await say(`say ${n}`, seen.say)
       if (seen.ready) break
+      const deadline = deadlineOf(started, seen.published_at)
       if (seen.at >= deadline) {
         const message = await step.do("expire", () =>
           withKit(env, (kit) =>
@@ -289,15 +339,17 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
         return { outcome: "failed" }
       }
       // A day after the claim last moved, once per quiet period, and only
-      // while the owner is the one to act: a certificate being issued is ours.
+      // while the owner is the one to act: a certificate being issued is ours,
+      // and before the site's first publish the records may rightly wait.
       if (seen.changed) {
         quietSince = seen.at
         nudged = false
       }
       if (
         !nudged &&
+        seen.published_at !== null &&
         seen.status !== "pending_certificate" &&
-        seen.at - quietSince >= NUDGE_AFTER_MS
+        seen.at - Math.max(quietSince, seen.published_at) >= NUDGE_AFTER_MS
       ) {
         const since = quietSince
         const message = await step.do("nudge", () =>

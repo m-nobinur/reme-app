@@ -3,6 +3,7 @@ import {
   type EnvelopeBody,
   envelope,
   formatSiteRevision,
+  HoldingPointer,
   isPreviewHost,
   QUOTE_PATH,
   REQUEST_FAILED,
@@ -50,9 +51,12 @@ import { getCookie, setCookie } from "hono/cookie"
 type Bindings = Env
 type App = { Bindings: Bindings }
 
-/** What `host:{hostname}` holds: a site to serve, or a host to send visitors on to. */
-const Pointer = SitePointer.or(RedirectPointer)
-type Pointer = SitePointer | RedirectPointer
+/**
+ * What `host:{hostname}` holds: a site to serve, a host to send visitors on
+ * to, or an owner's domain waiting for the site's first publish.
+ */
+const Pointer = SitePointer.or(RedirectPointer).or(HoldingPointer)
+type Pointer = SitePointer | RedirectPointer | HoldingPointer
 
 /** The zone every Reme hostname is in. Any other host reaches the router as an owner's custom domain (Cloudflare for SaaS). */
 const ZONE = "remeai.co.uk"
@@ -77,6 +81,43 @@ const noPreview = (c: Context<App>) =>
  */
 const gone = (c: Context<App>) =>
   c.text("This site is no longer available.", 410, NO_STORE)
+
+const escapeHtml = (text: string) =>
+  text.replace(
+    /[&<>"']/g,
+    (ch) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        ch
+      ] ?? ch
+  )
+
+/**
+ * An owner's domain before the site's first publish: one page with the
+ * business's name and how to reach it, on every path. Never indexed, never
+ * cached, and without `SITE_HEADER`, so no check reads it as the site.
+ * `/.well-known/` stays the 404 it was, for whatever validates the host.
+ */
+function comingSoon(c: Context<App>, path: string, pointer: HoldingPointer) {
+  const hidden = { ...NO_STORE, "x-robots-tag": "noindex" }
+  if (path.startsWith("/.well-known/")) return notHere(c)
+  if (path === "/robots.txt")
+    return c.text("User-agent: *\nDisallow: /\n", 200, hidden)
+  const { name, phone, email } = pointer.holding
+  const contact = [
+    phone &&
+      `call <a href="tel:${escapeHtml(phone.replace(/\s/g, ""))}">${escapeHtml(phone)}</a>`,
+    email &&
+      `email <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>`,
+  ].filter(Boolean)
+  const reach = contact.length
+    ? `<p>In the meantime, ${contact.join(" or ")}.</p>`
+    : ""
+  return c.html(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${escapeHtml(name)}</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.6 system-ui,sans-serif;color-scheme:light dark;text-align:center;padding:24px;box-sizing:border-box}h1{font-size:2rem;margin:0 0 .5rem}p{margin:.25rem 0;opacity:.8}a{color:inherit}</style></head><body><main><h1>${escapeHtml(name)}</h1><p>Our new website is almost here.</p>${reach}</main></body></html>`,
+    200,
+    hidden
+  )
+}
 
 /** Says nothing about the host, so a guess still learns nothing. */
 const tooMany = (c: Context<App>) =>
@@ -614,6 +655,7 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   // this name, so it is 404 on every environment; a pointer that resolves and
   // a file that does not is this site's 404, below.
   if (!pointer) return notHere(c)
+  if ("holding" in pointer) return comingSoon(c, url.pathname, pointer)
   if ("redirect_to" in pointer) {
     // Revalidated like a page, so a browser drops it once the domain goes.
     c.header("cache-control", "no-cache")

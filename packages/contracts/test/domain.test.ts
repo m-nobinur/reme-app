@@ -22,7 +22,7 @@ import {
   ServerMessage,
   sellableTld,
 } from "../src/index.ts"
-import { RedirectPointer, SitePointer } from "../src/site.ts"
+import { HoldingPointer, RedirectPointer, SitePointer } from "../src/site.ts"
 import { ACCEPTED, REFUSED, verdict } from "./json-schema.ts"
 import { samples } from "./samples.ts"
 
@@ -175,6 +175,17 @@ describe("the site's pointers", () => {
     expect(
       RedirectPointer.safeParse({ redirect_to: "https://a.example" }).success
     ).toBe(false)
+  })
+
+  it("keeps a coming-soon page apart from a site and a redirect", () => {
+    expect(HoldingPointer.parse(samples.HoldingPointer)).toEqual(
+      samples.HoldingPointer
+    )
+    expect(SitePointer.safeParse(samples.HoldingPointer).success).toBe(false)
+    expect(RedirectPointer.safeParse(samples.HoldingPointer).success).toBe(
+      false
+    )
+    expect(HoldingPointer.safeParse(samples.SitePointer).success).toBe(false)
   })
 })
 

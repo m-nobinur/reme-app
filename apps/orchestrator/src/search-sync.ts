@@ -18,6 +18,7 @@ import {
   syncTasks,
   type Tenancy,
 } from "@workspace/db"
+import { domainWaiting } from "./domain-flow.ts"
 import {
   GoogleError,
   getSite,
@@ -197,10 +198,20 @@ export async function afterPublish(
     }
   })
   await quietly("sitemap", async () => {
-    const [connection] = await kit.withOrg({ orgId: p.orgId }, (db) =>
-      db.select({ state: searchConnections.state }).from(searchConnections)
+    const [connection, waiting] = await kit.withOrg(
+      { orgId: p.orgId },
+      async (db) => [
+        (
+          await db
+            .select({ state: searchConnections.state })
+            .from(searchConnections)
+        )[0],
+        await domainWaiting(db),
+      ]
     )
-    if (connection?.state !== "active") return
+    // A domain going live on this publish takes Google itself, so the slug
+    // host never becomes a property only to be moved.
+    if (connection?.state !== "active" || waiting) return
     let property: Awaited<ReturnType<typeof ownProperty>>
     try {
       property = await ownProperty(kit, p.orgId, siteUrlOf(p.host))

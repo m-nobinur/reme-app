@@ -36,6 +36,27 @@ export const ownDomainLive = (
       (s.state === "done" || (host !== null && s.names?.domain === host))
   )
 
+const CONNECTING_STEPS = ["records", "certificate", "loads"]
+
+/**
+ * Whether the owner has a domain of their own for Google to learn: live, or
+ * claimed and connecting, which the first publish or its activation hands to
+ * Google. A purchase still waiting for payment is not one yet.
+ */
+export const ownDomainClaimed = (
+  standing: readonly ActivitySegment[],
+  host: string | null
+) =>
+  ownDomainLive(standing, host) ||
+  standing.some(
+    (s) =>
+      s.kind === "address" &&
+      (s.state === "now" || s.state === "waiting") &&
+      s.steps.some(
+        (step) => CONNECTING_STEPS.includes(step.id) && step.state !== "next"
+      )
+  )
+
 /**
  * A row's one next action: a link, a visit to the approvals, a line said in
  * the chat, or Google's own sign-in, which needs no words from the owner.
@@ -182,7 +203,7 @@ export function checklistFor(
   // "not connected" would be a guess.
   if (standing) {
     const google = standing.find((s) => s.kind === "google" && !notStarted(s))
-    const domainLive = ownDomainLive(standing, workspace.host)
+    const claimed = ownDomainClaimed(standing, workspace.host)
     rows.push(
       google
         ? {
@@ -198,17 +219,16 @@ export function checklistFor(
         : {
             id: "google",
             title: PAGE_WORDS.google,
-            line: !workspace.live
-              ? PAGE_WORDS.afterLive
-              : domainLive
-                ? PAGE_WORDS.notConnected
+            line: claimed
+              ? PAGE_WORDS.notConnected
+              : !workspace.live
+                ? PAGE_WORDS.afterLive
                 : PAGE_WORDS.afterDomain,
             mark: "next",
             status: "google",
-            action:
-              workspace.live && domainLive
-                ? { kind: "google", label: "Connect Google" }
-                : null,
+            action: claimed
+              ? { kind: "google", label: "Connect Google" }
+              : null,
           }
     )
   }

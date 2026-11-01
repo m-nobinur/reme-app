@@ -46,7 +46,6 @@ import {
 } from "./domain-flow.ts"
 import { DomainError, zoneApex } from "./domains.ts"
 import type { Observed } from "./probe.ts"
-import { activeDeployment } from "./publish.ts"
 import { rdapLookup } from "./rdap.ts"
 import {
   attachHostname,
@@ -397,13 +396,6 @@ export async function buy(
           "resource",
           "domain.in_use",
           `${name} is already on this site.`
-        )
-      if (!(await activeDeployment(db, orgId)))
-        return refuse(
-          409,
-          "resource",
-          "site.not_published",
-          "Publish the site first, then buy a domain for it."
         )
       // An unpaid purchase holds its name from every other org, so an org
       // holds few at once, each abandoned by its Workflow if never paid.

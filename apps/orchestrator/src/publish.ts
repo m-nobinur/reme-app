@@ -6,6 +6,7 @@ import {
   ApprovalTarget,
   type DomainInspection,
   type FactRecord,
+  HoldingPointer,
   ownDomain,
   parseSiteRevision,
   RedirectPointer,
@@ -36,7 +37,7 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import { checkBuild, checkContent, parsePage } from "@workspace/gates"
-import { inspectDomain } from "./domain-flow.ts"
+import { domainWaiting, inspectDomain } from "./domain-flow.ts"
 import { writeUpdate } from "./heartbeat-write.ts"
 import {
   enteredFrom,
@@ -693,6 +694,8 @@ export async function sayLive(
   siteId: string,
   url: string
 ): Promise<void> {
+  // A domain ready and waiting goes live on this publish and says so itself.
+  if (await kit.withOrg({ orgId }, domainWaiting)) return
   const visit = url.startsWith("https://") ? "Visit your website" : null
   // Past finding out already: the owner is picking or buying a name, put it
   // off or said no. Then the line says the site is live and asks nothing.
@@ -967,7 +970,8 @@ export async function writePointer(
   kit: Pick<Tenancy, "withOrg">,
   orgId: string,
   siteId: string,
-  host: string
+  host: string,
+  redirects = true
 ): Promise<{ host: string }> {
   const live = await kit.withOrg({ orgId }, async (db) =>
     (await orgOpen(db))
@@ -982,18 +986,31 @@ export async function writePointer(
   }
   const { deployment, domain } = live
   if (!deployment) throw new Error("no deployment to point at")
+  const site = {
+    org_id: orgId,
+    site_id: siteId,
+    revision_id: deployment.revisionId,
+    config_version: deployment.configVersion,
+  }
   const pointer = JSON.stringify(
     SitePointer.parse({
-      org_id: orgId,
-      site_id: siteId,
-      revision_id: deployment.revisionId,
-      config_version: deployment.configVersion,
+      ...site,
       ...(domain && { canonical_host: domain, origin_host: host }),
     })
   )
   if (!domain) {
     await env.ROUTES.put(`host:${host}`, pointer)
     return { host }
+  }
+  if (!redirects) {
+    // A domain just activated: the slug host goes on serving the site until
+    // the domain answers, so no visitor is sent to a host that 404s.
+    await env.ROUTES.put(`host:${domain}`, pointer)
+    await env.ROUTES.put(
+      `host:${host}`,
+      JSON.stringify(SitePointer.parse(site))
+    )
+    return { host: domain }
   }
   // With an active custom domain the site is served on its primary host and
   // the other half and the slug host send visitors there. The served host
@@ -1005,6 +1022,44 @@ export async function writePointer(
   await env.ROUTES.put(`host:${otherHost(domain)}`, redirect)
   await env.ROUTES.put(`host:${host}`, redirect)
   return { host: domain }
+}
+
+/** The routing KV, which only this file names. */
+export type RoutesEnv = Pick<Env, "ROUTES">
+
+/**
+ * The coming-soon page on a claimed domain's hosts before the site is
+ * published. Never over a pointer another org holds, or a site or redirect
+ * already there: activation replaces it, and only this org's removal drops it.
+ */
+export async function writeHolding(
+  env: RoutesEnv,
+  orgId: string,
+  hosts: readonly string[],
+  holding: HoldingPointer["holding"]
+): Promise<void> {
+  const value = JSON.stringify(HoldingPointer.parse({ org_id: orgId, holding }))
+  for (const host of hosts) {
+    const held = await env.ROUTES.get(`host:${host}`, "json").catch(() => null)
+    if (held !== null && HoldingPointer.safeParse(held).data?.org_id !== orgId)
+      continue
+    await env.ROUTES.put(`host:${host}`, value)
+  }
+}
+
+/** This org's coming-soon pages on `hosts`, gone; anything else there stays. */
+export async function dropHolding(
+  env: RoutesEnv,
+  orgId: string,
+  hosts: readonly string[]
+): Promise<void> {
+  for (const host of hosts) {
+    const held = HoldingPointer.safeParse(
+      await env.ROUTES.get(`host:${host}`, "json").catch(() => null)
+    )
+    if (held.success && held.data.org_id === orgId)
+      await env.ROUTES.delete(`host:${host}`)
+  }
 }
 
 /**

@@ -6,6 +6,8 @@ import {
   applyLink,
   connect,
   currentCheck,
+  DEADLINE_MS,
+  deadlineOf,
   inspectDomain,
   look,
   nextWait,
@@ -87,7 +89,13 @@ function fakeKit() {
   const keys = new Set<string>()
   const writes = { n: 0 }
   const db = {
-    select: () => ({ from: () => ({ where: async () => [row] }) }),
+    // A row read has a where; the first-publish read of deployments has none.
+    select: () => ({
+      from: () =>
+        Object.assign(Promise.resolve([{ at: Date.now() - 60_000 }]), {
+          where: async () => [row],
+        }),
+    }),
     // The task sync after a row write; tasks are tested in packages/db.
     execute: async () => [],
     update: () => ({
@@ -138,6 +146,7 @@ describe("a look", () => {
       at: expect.any(Number),
       status: "conflicting_record",
       ready: false,
+      published_at: expect.any(Number),
       changed: true,
     })
     expect(first.reading).toMatchObject({
@@ -285,6 +294,7 @@ describe("a look", () => {
         at: expect.any(Number),
         status: "unknown_error",
         ready: false,
+        published_at: expect.any(Number),
       },
     })
     expect(writes.n).toBe(0)
@@ -500,6 +510,16 @@ it("looks every minute for the first half hour, every 10 to two hours, then hour
   const MIN = 60 * 1000
   expect([0, 29, 30, 119, 120, 71 * 60].map((m) => nextWait(m * MIN))).toEqual(
     [1, 1, 10, 10, 60, 60].map((m) => m * MIN)
+  )
+})
+
+it("gives unproven records 72 hours from the claim or the first publish, never longer before one", () => {
+  const HOUR = 60 * 60 * 1000
+  const claimed = Date.parse("2026-10-31T20:00:00Z")
+  expect(deadlineOf(claimed, null)).toBe(claimed + DEADLINE_MS)
+  expect(deadlineOf(claimed, claimed - HOUR)).toBe(claimed + DEADLINE_MS)
+  expect(deadlineOf(claimed, claimed + 10 * 24 * HOUR)).toBe(
+    claimed + 10 * 24 * HOUR + DEADLINE_MS
   )
 })
 

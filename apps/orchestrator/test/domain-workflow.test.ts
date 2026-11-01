@@ -29,6 +29,10 @@ const script = vi.hoisted(() => ({
   /** Whether every wait is ended by a `check` nudge. */
   nudged: false,
   told: undefined as string | undefined,
+  /** What each read of the site's publish finds, for a domain ready before it. */
+  publish: [] as unknown[],
+  /** Whether a wait for `published` is ended by the event. */
+  publishedEvent: false,
   /** The buy branch's answers, step by step. */
   buy: {
     payments: [] as string[],
@@ -88,6 +92,12 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   claimHostnames: async () => script.claim,
   look: async () => ({ result: script.seen.shift() ?? { gone: true } }),
   served: async () => ({ result: script.loads.shift() ?? { gone: true } }),
+  publishState: async () =>
+    script.publish.shift() ?? { gone: false, published: true, at: 0 },
+  waitingNote: async () => {
+    script.calls.push("waiting")
+    return { key: "waiting", text: "waiting" }
+  },
   nudge: async () => {
     script.calls.push("nudge")
     return { key: "nudge", text: "nudge" }
@@ -121,7 +131,8 @@ vi.mock("../src/search-start.ts", () => ({
   },
 }))
 
-const { DEADLINE_MS, nextWait } = await import("../src/domain-flow.ts")
+const { DEADLINE_MS, nextWait, PUBLISH_WAIT_MS, REMIND_AFTER_MS } =
+  await import("../src/domain-flow.ts")
 const { HOLD_MS, PAYMENT_ROUNDS } = await import("../src/domain-buy.ts")
 const { DomainWorkflow, MAX_CHECKS, SAY_RETRIES } = await import(
   "../src/domain-workflow.ts"
@@ -141,6 +152,8 @@ const at = (
     at: T0 + ms,
     status,
     ready,
+    // Published before the claim, so the records' 72 hours count from it.
+    published_at: T0 - HOUR,
     ...(say && { say: { key: say, text: say } }),
   }) as Seen
 
@@ -164,9 +177,16 @@ async function drive(
       names.push(name)
       waits.push(duration)
     },
-    waitForEvent: async (name: string, options: { timeout: number }) => {
+    waitForEvent: async (
+      name: string,
+      options: { type: string; timeout: number }
+    ) => {
       names.push(name)
       waits.push(options.timeout)
+      if (options.type === "published") {
+        if (script.publishedEvent) return { type: "published", payload: {} }
+        throw new Error("timed out")
+      }
       if (script.nudged)
         return { type: "check", payload: { told: script.told } }
       throw new Error("timed out")
@@ -187,6 +207,8 @@ beforeEach(() => {
   script.busy = false
   script.nudged = false
   script.told = undefined
+  script.publish = []
+  script.publishedEvent = false
   script.buy = { payments: [], started: {}, reads: [], ready: [], live: false }
   // By default the host serves the site at the first `loads`, which says live.
   script.loads = [loads(0, true)]
@@ -353,6 +375,74 @@ describe("the domain Workflow", () => {
     )
     expect(nudged.names.filter((n) => n.startsWith("wait "))).toHaveLength(5)
     expect(nudged.waits.slice(MAX_CHECKS)).toEqual(Array(5).fill(MIN))
+  })
+
+  it("waits for the site's first publish before activating a domain ready before it", async () => {
+    script.publishedEvent = true
+    script.publish = [
+      { gone: false, published: false, at: T0 + MIN },
+      { gone: false, published: true, at: T0 + 2 * MIN },
+    ]
+    const { names, waits, result } = await drive([at(MIN, "valid", true)])
+    expect(names).toEqual(steps.DomainWorkflow["waited for the first publish"])
+    expect(waits).toEqual(["1 hour", "30 seconds"])
+    expect(result).toEqual({ outcome: "active" })
+    expect(script.calls).toEqual(["activate", "search", "say live", "repoint"])
+  })
+
+  it("reminds once at 7 days and lets the name go at 30 without a publish", async () => {
+    script.publish = [0, MIN, REMIND_AFTER_MS, REMIND_AFTER_MS + HOUR]
+      .map((ms) => ({ gone: false, published: false, at: T0 + ms }))
+      .concat([{ gone: false, published: false, at: T0 + PUBLISH_WAIT_MS }])
+    const { names, result } = await drive([at(MIN, "valid", true)])
+    expect(names).toEqual(steps.DomainWorkflow["never published"])
+    expect(result).toEqual({ outcome: "failed" })
+    expect(script.calls).toEqual([
+      "waiting",
+      "say waiting",
+      "expire unpublished",
+      "say failed unpublished",
+    ])
+  })
+
+  it("ends quietly for a claim removed while it waits for the publish", async () => {
+    script.publish = [
+      { gone: false, published: false, at: T0 + MIN },
+      { gone: true },
+    ]
+    const { result } = await drive([at(MIN, "valid", true)])
+    expect(result).toEqual({ outcome: "removed" })
+    expect(script.calls).toEqual([])
+  })
+
+  it("frees an unproven claim at 72 hours even before the first publish, without a nudge", async () => {
+    const unpublished = (ms: number) =>
+      ({ ...at(ms), published_at: null }) as Seen
+    const { result } = await drive([
+      unpublished(MIN),
+      unpublished(25 * HOUR),
+      unpublished(72 * HOUR),
+    ])
+    expect(result).toEqual({ outcome: "failed" })
+    expect(script.calls).toEqual(["expire timeout", "say failed timeout"])
+  })
+
+  it("counts the records' 72 hours from a publish later than the claim", async () => {
+    const late = (ms: number) =>
+      ({ ...at(ms), published_at: T0 + 10 * 24 * HOUR }) as Seen
+    const { result } = await drive([
+      late(MIN),
+      late(11 * 24 * HOUR),
+      late(13 * 24 * HOUR),
+    ])
+    expect(result).toEqual({ outcome: "failed" })
+    // The quiet day counts from the publish too, not from the claim.
+    expect(script.calls).toEqual([
+      "nudge",
+      "say nudge",
+      "expire timeout",
+      "say failed timeout",
+    ])
   })
 
   it("fails a claim whose hostname is held elsewhere, without looking", async () => {

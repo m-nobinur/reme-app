@@ -1,4 +1,5 @@
 import {
+  domains,
   eq,
   events,
   type OrgScopedDb,
@@ -491,6 +492,40 @@ describe.skipIf(!url)("after a publish", () => {
         previousRevisionId: before,
       })
     ).toMatchObject({ sitemap: true })
+  })
+
+  it("leaves Google to a domain ready and waiting for this publish, so the slug host never becomes a property", async () => {
+    const { env, store, created } = searchEnv()
+    const { orgId } = await connected(env)
+    const revision = crypto.randomUUID()
+    await store.SITES.put(
+      `sites/${orgId}/${revision}/manifest.json`,
+      manifest(orgId, revision, "a")
+    )
+    const name = `w${crypto.randomUUID().slice(0, 8)}.co.uk`
+    await kit.withOrg({ orgId }, (db) =>
+      db.insert(domains).values({
+        orgId,
+        siteId: orgId,
+        name,
+        primaryHost: `www.${name}`,
+        origin: "connected",
+        method: "records",
+        state: "verifying",
+        lastCheck: { status: "valid" },
+      })
+    )
+    stubFetch()
+    expect(
+      await afterPublish(env, kit, {
+        orgId,
+        host: "waiting.example.test",
+        siteId: orgId,
+        revisionId: revision,
+        previousRevisionId: null,
+      })
+    ).toMatchObject({ started: false })
+    expect(created).toEqual([])
   })
 
   it("starts verification for a live host with no property, and pings even unconnected", async () => {

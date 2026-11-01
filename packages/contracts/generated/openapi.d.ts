@@ -3475,6 +3475,8 @@ export interface components {
             settings_url?: string
           }
           nameserver_host?: string
+          /** @constant */
+          change_at_publish?: true
           apply_url?: string
           evidence?: (
             | {
@@ -5574,6 +5576,8 @@ export interface components {
             settings_url?: string
           }
           nameserver_host?: string
+          /** @constant */
+          change_at_publish?: true
           apply_url?: string
           evidence?: (
             | {
@@ -6584,6 +6588,7 @@ export interface components {
               /** Format: date-time */
               since: string
             }[]
+            buying?: boolean
             expected_seconds?: {
               full: {
                 p50: number
@@ -8225,6 +8230,8 @@ export interface components {
                   settings_url?: string
                 }
                 nameserver_host?: string
+                /** @constant */
+                change_at_publish?: true
                 apply_url?: string
                 evidence?: (
                   | {
@@ -8761,6 +8768,8 @@ export interface components {
                   settings_url?: string
                 }
                 nameserver_host?: string
+                /** @constant */
+                change_at_publish?: true
                 apply_url?: string
                 evidence?: (
                   | {
@@ -9670,6 +9679,7 @@ export interface components {
         /** Format: date-time */
         since: string
       }[]
+      buying?: boolean
       expected_seconds?: {
         full: {
           p50: number
@@ -11178,6 +11188,15 @@ export interface components {
       )[]
       metadata: {
         [key: string]: unknown
+      }
+    }
+    HoldingPointer: {
+      /** Format: uuid */
+      org_id: string
+      holding: {
+        name: string
+        phone?: string
+        email?: string
       }
     }
     ImageSlot:
