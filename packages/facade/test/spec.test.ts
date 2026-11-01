@@ -133,9 +133,9 @@ describe("the roles", () => {
     const sonnet = "openrouter/anthropic/claude-sonnet-5.5"
     const haiku = "openrouter/anthropic/claude-haiku-5.5"
     expect(got).toEqual({
-      plan: { model: sonnet, effort: "high", maxTokens: 32_000 },
+      plan: { model: sonnet, effort: "high", maxTokens: 48_000 },
       build: { model: sonnet, effort: "medium", maxTokens: 32_000 },
-      page: { model: sonnet, effort: "medium", maxTokens: 16_000 },
+      page: { model: sonnet, effort: "medium", maxTokens: 32_000 },
       copy: { model: haiku, effort: "low", maxTokens: 8_000 },
       critic: { model: sonnet, effort: "medium", maxTokens: 4_000 },
       critic_recheck: { model: haiku, effort: "low", maxTokens: 2_000 },

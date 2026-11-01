@@ -186,7 +186,7 @@ describe("acceptance judging", () => {
       '<html><head><title>x</title><script>alert(1)</script></head><body><header><a href="tel:+44">020 7946 0000</a></header><main><h2>Questions</h2><ul><li>Do you bring supplies?</li></ul><p>Fish &amp; chips</p></main></body></html>'
     )
     expect(text).toBe(
-      "[header]\n020 7946 0000\n[/header]\n## Questions\n- Do you bring supplies?\nFish & chips"
+      "[header]\n020 7946 0000 [tel:+44]\n[/header]\n## Questions\n- Do you bring supplies?\nFish & chips"
     )
   })
 
@@ -198,6 +198,13 @@ describe("acceptance judging", () => {
         targets: [{ page: "services/end-of-tenancy" }],
       })
     ).toEqual(["/services/end-of-tenancy/"])
+    expect(
+      checkedRoutes({ ...brief, targets: [] }, ["/", "/about/", "/services/"])
+    ).toEqual(["/", "/about/"])
+    expect(checkedRoutes({ ...brief, targets: [] })).toEqual(["/"])
+    expect(
+      checkedRoutes({ ...brief, targets: [{ page: "about" }] }, ["/contact/"])
+    ).toEqual(["/about/"])
     expect(routeOf("service-area")).toBe("/service-area/")
   })
 

@@ -25,6 +25,22 @@ export const visibleText = (html) =>
     .replace(/\s+/g, " ")
 
 /**
+ * What a change's acceptance checks hold against it. A check the judge
+ * decided false is a problem; one it could not decide (null) is neither
+ * passed nor failed, so it counts for nothing, but a change none of whose
+ * checks were decided has no verdict at all.
+ */
+export function checkProblems(checks = []) {
+  if (checks.length === 0) return ["no acceptance check was judged"]
+  const problems = checks
+    .filter((c) => c.passed === false)
+    .map((c) => `check failed: ${c.check} (${c.why})`)
+  if (checks.every((c) => typeof c.passed !== "boolean"))
+    problems.push("no acceptance check could be decided")
+  return problems
+}
+
+/**
  * One change's score. `checks` are the last `change.checked` verdicts,
  * `blocks` the report's block records, `pages` the preview's HTML by route.
  * `verbatim` is the owner's own text, when the request gave some. Pages the
@@ -39,10 +55,7 @@ export function fidelity({
   verbatim,
   also = [],
 }) {
-  const problems = []
-  if (checks.length === 0) problems.push("no acceptance check was judged")
-  for (const miss of checks.filter((c) => !c.passed))
-    problems.push(`check failed: ${miss.check} (${miss.why})`)
+  const problems = checkProblems(checks)
   const targeted = new Set([...brief.targets.map((t) => t.page), ...also])
   const off = [...new Set(blocks.map((b) => b.page))].filter(
     (p) => targeted.size > 0 && !targeted.has(p)

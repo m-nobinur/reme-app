@@ -850,6 +850,48 @@ describe("the checks a schema cannot make", () => {
     expect(found.join("\n")).toMatch(/contact cannot hold gallery/)
   })
 
+  it("asks for what they check: each page once, the service page too, and none left out", () => {
+    const { system } = plannerPrompt({
+      facts: CLEANING,
+      recent: [],
+      previous: null,
+    })
+    expect(system).toContain(
+      "each once in pages: the service page is one entry"
+    )
+    expect(system).toContain("never a page left out")
+    // One service page entry fits the schema's nine with every starter page.
+    expect(good.pages.filter((p) => p.page === "service")).toHaveLength(1)
+    expect(problems(good, { facts: CLEANING, library: LIBRARY })).toEqual([])
+  })
+
+  it("lets a service's own name head its card on home and services, and no other heading twice", () => {
+    expect(
+      plannerPrompt({ facts: CLEANING, recent: [], previous: null }).system
+    ).toContain("except a service's own name")
+    const withSubheads = (subheadings: string[]) => ({
+      ...good,
+      content: (good.content ?? []).map((c) =>
+        c.page === "home" || c.page === "services"
+          ? {
+              ...c,
+              outline: c.outline.map((o, i) =>
+                i === 0 ? { ...o, subheadings } : o
+              ),
+            }
+          : c
+      ),
+    })
+    const headings = (blueprint: Blueprint) =>
+      problems(blueprint, { facts: CLEANING, library: LIBRARY }).filter((p) =>
+        p.startsWith("the outline heading")
+      )
+    expect(headings(withSubheads(["One thing", "Another"]))).toEqual([])
+    expect(headings(withSubheads(["Why Fairhaven picks us"]))).toEqual([
+      'the outline heading "Why Fairhaven picks us" is on home and services; every heading on the site is its own',
+    ])
+  })
+
   it("holds the content plan to one page per topic and heading, and a plan per page and offering", () => {
     expect(check(good)).toEqual([])
     const content = good.content ?? []
@@ -1108,6 +1150,74 @@ describe("planning a build", () => {
     ).not.toEqual(first.palette)
     const picked = [...other, fact("site.palette", { id: first.palette.id })]
     expect((await planFor(picked, recent)).palette).toEqual(first.palette)
+  })
+
+  it("gives two businesses in one trade different directions and home orders unless the owner picked one", async () => {
+    const library = [
+      ...LIBRARY,
+      {
+        ...AFTER_DARK,
+        id: "quiet_luxury",
+        industries: ["legal"],
+        hero: "split_frame",
+        services: "numbered_rows",
+        steps: "timeline",
+        faq: "split",
+      } as DesignDirection,
+    ]
+    const replyOf = (facts: FactRecord[], designs: RecentDesign[]) =>
+      JSON.stringify(fallbackBlueprint({ facts, recent: designs, library }))
+    const planWith = (
+      replies: string[],
+      facts: FactRecord[],
+      designs: RecentDesign[]
+    ) => {
+      const script = scripted(replies)
+      return plan({
+        complete: script.complete,
+        route: ROUTE,
+        sessionId: "s",
+        facts,
+        recent: designs,
+        previous: null,
+        library,
+      }).then((made) => ({ ...made, user: script.calls.map((c) => c.user) }))
+    }
+    const home = (b: Blueprint) =>
+      b.pages
+        .find((p) => p.page === "home")
+        ?.sections.map((s) => `${s.kind}:${s.variant}`)
+    const sameAsFirst = replyOf(LEGAL, [])
+    const first = (await planWith([sameAsFirst], LEGAL, [])).blueprint
+    const recent = [
+      { direction: first.direction, hero: null, services: null, palette: null },
+    ]
+    const other = business("legal", "Pike & Dunn Solicitors (fictional)")
+    expect(
+      plannerPrompt({ facts: other, recent, previous: null, library }).user
+    ).toContain("Directions none of them uses yet: quiet_luxury.")
+
+    const second = await planWith(
+      [sameAsFirst, replyOf(other, recent)],
+      other,
+      recent
+    )
+    expect(second.user[1]).toContain(
+      "direction counsel is another business's in this industry already; take the one of quiet_luxury"
+    )
+    expect(second.blueprint.direction).toBe("quiet_luxury")
+    expect(home(second.blueprint)).not.toEqual(home(first))
+
+    const kept = await planWith([sameAsFirst, sameAsFirst], other, recent)
+    expect(kept).toMatchObject({
+      source: "model",
+      blueprint: { direction: "counsel" },
+    })
+
+    const picked = [...other, fact("site.direction", { id: "counsel" })]
+    const own = await planWith([sameAsFirst], picked, recent)
+    expect(own.blueprint.direction).toBe("counsel")
+    expect(own.user).toHaveLength(1)
   })
 
   it("re-plans from the current Blueprint and the owner's words, and keeps it on failure", async () => {

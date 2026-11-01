@@ -344,7 +344,7 @@ export const ownerLogo = (facts: readonly FactRecord[]): Asset | undefined =>
  */
 /** What the starter's section look needs from the copy: design rules 2 and 3 as fields. */
 const LOOK_RULES = [
-  '- Every section heading has an eyebrow field (valuePropsEyebrow, galleryEyebrow, aboutEyebrow and the rest): keep it, or set a word or two for the section, never a claim and never empty. In each section heading field wrap the last clause in asterisks, as "Why agents keep *rebooking us*", so it shows in the accent; never in heroHeading, a Title or a Description.',
+  '- Every section heading has an eyebrow field (valuePropsEyebrow, galleryEyebrow, aboutEyebrow and the rest): keep it, or set a word or two for the section, never a claim and never empty. The home hero already sets its last word in the accent, so wrap the last clause in asterisks in one section heading field only, as "Why agents keep *rebooking us*", so it shows in the accent: two accents on the home page, never more, and never in heroHeading, a Title or a Description.',
 ]
 
 const CONTENT_RULES = [

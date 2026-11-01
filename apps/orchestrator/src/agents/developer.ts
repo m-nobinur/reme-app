@@ -62,6 +62,7 @@ import {
   copyInstructions,
   FAN_OUT,
   fansOut,
+  offeredNames,
   pageInstructions,
   serviceCount,
   siteValues,
@@ -762,6 +763,17 @@ const writePagesTool = (current: Session) =>
             : []
         })
       await sandbox.exec(`mkdir -p ${SITE_ROOT}/${DOCUMENTS_DIR}/services`)
+      // A service page's document is filed under its name's slug, so a home
+      // writer that fails would otherwise leave every service page unwritten.
+      await current.mutations(CONFIG, async () => {
+        const { content } = await stub.readFile(CONFIG)
+        const values = siteValues(content)
+        const unnamed = Object.entries(offeredNames(brief)).filter(
+          ([field]) => !values[field]
+        )
+        const config = setValues(content, Object.fromEntries(unnamed))
+        if (config !== content) await stub.writeFile(CONFIG, config)
+      })
       const apply = (index: number, reply: Reply) =>
         current.mutations(CONFIG, async () => {
           const task = tasks[index] as (typeof tasks)[number]
@@ -825,7 +837,7 @@ const writePagesTool = (current: Session) =>
       }
       const call = (
         index: number,
-        attempt: 1 | 2,
+        attempt: 1 | 2 | 3,
         userText: string,
         strict: boolean
       ) =>

@@ -252,6 +252,21 @@ describe("the content gate", () => {
     }
   })
 
+  it("reads no phone in a hashed file the build wrote on the site's own host", () => {
+    const icon = `https://${HOST}/_astro/icon-512.508825fe.png`
+    expect(contentClaimsIn(icon, [HOST])).toEqual([])
+    for (const text of [
+      `https://${HOST}/_astro/icon-512.508825fe.png/call-07700900123`,
+      `https://${HOST}/_astro-07700900123.png`,
+      "https://elsewhere.example/_astro/icon-07700900123.png",
+    ]) {
+      expect(
+        contentClaimsIn(text, [HOST]).map((c) => c.key),
+        text
+      ).toContain("447700900123")
+    }
+  })
+
   it("reads an email on the site's own host as an email", () => {
     expect(contentClaimsIn(`hello@${HOST}`, [HOST])).toEqual([
       { kind: "email", text: `hello@${HOST}`, key: `hello@${HOST}` },

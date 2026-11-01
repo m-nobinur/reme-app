@@ -173,10 +173,12 @@ describe("the Developer's site rules", () => {
     expect(rules).not.toContain("What to expect on a visit")
   })
 
-  it("asks for an eyebrow and an accent clause in every section heading", () => {
+  it("asks for an eyebrow in every section heading and one accent clause, since the hero takes the other", () => {
     const rules = text(false)
     expect(rules).toContain("Every section heading has an eyebrow field")
     expect(rules).toContain("*rebooking us*")
+    expect(rules).toContain("in one section heading field only")
+    expect(rules).not.toContain("In each section heading field wrap")
   })
 
   it("keeps the copy guidance short enough for the cached segment", () => {

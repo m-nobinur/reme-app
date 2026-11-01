@@ -62,6 +62,14 @@ describe("FontPair", () => {
     }
   })
 
+  it("sets every pair's headings at 500 or heavier, above its body copy", () => {
+    for (const { id, display, body } of FONT_PAIRS) {
+      const [heading] = display.weights
+      expect(heading, id).toBeGreaterThanOrEqual(500)
+      expect(heading, id).toBeGreaterThan(body.weights[0] ?? 400)
+    }
+  })
+
   it("refuses an unknown id, a weight CSS has no name for, no weights, a stray key", () => {
     const pair = sample<Obj>("FontPair")
     const display = pair.display as Obj

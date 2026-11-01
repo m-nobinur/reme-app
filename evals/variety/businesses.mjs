@@ -445,6 +445,15 @@ export const BUSINESSES = ENTRIES.map((e, at) => {
   }
 })
 
+/** The org and owner a measured build seeds for a business: one pair each, so no two businesses share an org. */
+export function idsOf(b) {
+  const n = String(BUSINESSES.indexOf(b) + 1).padStart(12, "0")
+  return {
+    orgId: `5ea5e000-0000-4000-8000-${n}`,
+    userId: `5ea5e000-0000-4000-8001-${n}`,
+  }
+}
+
 /** The stored facts an owner of this business would have stated, by key, in `FactValue`'s shapes. */
 export function toFacts(b) {
   const number = Number(b.id.replace(/\D/g, ""))

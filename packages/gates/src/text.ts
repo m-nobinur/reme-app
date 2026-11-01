@@ -78,15 +78,17 @@ const literal = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 /**
  * The text with the site's own host names blanked: each host exactly, in any
- * case, with an optional scheme. Every page names its own host (`og:url`,
- * canonical), and a slug can carry a date. The path, query and fragment after
- * it are still read, as is a host that only contains the site's, or an email
- * on it. No hosts, nothing blanked.
+ * case, with an optional scheme, and with it a file the build wrote under
+ * `/_astro/`, whose hashed name (`icon-512.508825fe.png`) can read as a phone.
+ * Every page names its own host (`og:url`, canonical, `og:image`), and a slug
+ * can carry a date. Any other path, query and fragment after it are still
+ * read, as is a host that only contains the site's, or an email on it. No
+ * hosts, nothing blanked.
  */
 function withoutOwnHosts(text: string, hosts: readonly string[]): string {
   if (!hosts.length) return text
   const own = new RegExp(
-    `(?<![a-z0-9.@-])(?:https?://)?(?:${hosts.map(literal).join("|")})(?![a-z0-9-]|\\.[a-z0-9])`,
+    `(?<![a-z0-9.@-])(?:https?://)?(?:${hosts.map(literal).join("|")})(?:/_astro/[\\w.-]+)?(?![a-z0-9-]|\\.[a-z0-9])`,
     "gi"
   )
   return text.replace(own, " ")

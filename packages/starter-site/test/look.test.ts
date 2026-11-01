@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, test } from "vitest"
 import { accentParts, plain } from "../src/accent"
 import { paletteFromBrand } from "../src/brand"
 import { layout } from "../src/page-fields"
+import { seedDocuments } from "../src/page-seed"
 import { type Built, build, ROOT, readPages } from "./build"
 import { FILLED } from "./fixture"
 
@@ -82,6 +83,78 @@ describe("eyebrows and accent clauses (rules 2 and 3)", () => {
     )
     expect(bare).toEqual([])
   })
+
+  // Limousine build: the home page's CTA band document held an empty eyebrow.
+  test("a section whose document leaves its eyebrow empty shows the slot's own", async () => {
+    const blank = await build({
+      site: {
+        ...FILLED,
+        ctaEyebrow: "",
+        faqEyebrow: "",
+        stepsEyebrow: "",
+        areaEyebrow: "",
+        valuePropsEyebrow: "",
+      },
+      layout,
+    })
+    const home =
+      readPages(blank.dist).find((each) => each.file === "index.html")?.html ??
+      ""
+    const sections = sectionsOf(home)
+    expect(sections.find((each) => each.includes("cta-band"))).toContain(
+      '<p class="eyebrow">Next step</p>'
+    )
+    const bare = sections
+      .filter((each) => withoutItems(each).includes("<h2"))
+      .filter((each) => !each.includes('class="eyebrow"'))
+    expect(bare).toEqual([])
+  }, 120_000)
+
+  // Legal build: a contact note led by an h3 under the h1, its section's own h2 never shown.
+  test("a contact note with no heading of its own sits under the section's", async () => {
+    const doc = seedDocuments(FILLED, layout, true)["contact.json"] as {
+      sections: {
+        kind: string
+        eyebrow?: string
+        heading?: string
+        blocks?: {
+          id: string
+          type: string
+          provenance: string
+          markdown?: string
+        }[]
+      }[]
+    }
+    const contact = doc.sections.find((each) => each.kind === "contact")
+    if (!contact) throw new Error("the seed has no contact section")
+    contact.eyebrow = "Contact details"
+    contact.heading = "Call or email the practice"
+    contact.blocks = [
+      {
+        id: "contact-note",
+        type: "prose",
+        provenance: "facts",
+        markdown: "### What to put in your message\n\nSay when.",
+      },
+    ]
+    const planted = await build({
+      site: FILLED,
+      layout,
+      files: {
+        "src/content/pages/contact.json": new TextEncoder().encode(
+          JSON.stringify(doc)
+        ),
+      },
+    })
+    const html =
+      readPages(planted.dist).find((each) => each.file === "contact/index.html")
+        ?.html ?? ""
+    const levels = [...html.matchAll(/<h([1-6])[\s>]/g)].map((m) =>
+      Number(m[1])
+    )
+    expect(levels.slice(0, 3)).toEqual([1, 2, 3])
+    expect(html).toContain("Call or email the practice")
+  }, 120_000)
 
   test("every section heading field can set a clause in the accent", () => {
     if (!built) throw new Error("the build did not run")
@@ -252,7 +325,6 @@ describe("numbered lists and photo-less service cards (rule 7)", () => {
     for (const list of [
       "step-list",
       "service-rows",
-      "value-list",
       "next-list",
       "offerings",
       "service-detail",
@@ -283,8 +355,9 @@ describe("numbered lists and photo-less service cards (rule 7)", () => {
   let some: Built | undefined
   let all: Built | undefined
   let direction: Built | undefined
+  let pictured: Built | undefined
   beforeAll(async () => {
-    ;[none, some, all, direction] = await Promise.all([
+    ;[none, some, all, direction, pictured] = await Promise.all([
       build({ site: FILLED, layout: cards }),
       build({
         site: {
@@ -296,8 +369,34 @@ describe("numbered lists and photo-less service cards (rule 7)", () => {
       }),
       build({ site: { ...FILLED, ...PHOTOS }, layout: cards }),
       build({ site: FILLED }),
+      build({ site: { ...FILLED, ...PHOTOS } }),
     ])
   }, 180_000)
+  test("a list takes numbers or icons, never both", () => {
+    const css = readFileSync(join(ROOT, "src/styles/site.css"), "utf8")
+    const counted = [
+      ...css.matchAll(/\.([\w-]+)\s*\{[^{}]*counter-reset/g),
+    ].map((m) => m[1] ?? "")
+    expect(counted).toContain("service-rows")
+    const both = [direction, pictured].flatMap((site) =>
+      site
+        ? readPages(site.dist).flatMap(({ file, html }) =>
+            [...html.matchAll(/<(ol|ul) class="([^"]*)">([\s\S]*?)<\/\1>/g)]
+              .filter(
+                ([, , classes, items]) =>
+                  counted.some((each) => classes?.split(" ").includes(each)) &&
+                  items?.includes("card-icon")
+              )
+              .map(([, , classes]) => `${file}: ${classes}`)
+          )
+        : []
+    )
+    expect(both).toEqual([])
+    const home = page(direction, "index.html")
+    expect(home).toContain('class="value-list"')
+    expect(home).toContain("card-icon")
+  })
+
   test("photo cards without a photo for every service become numbered rows", () => {
     for (const site of [none, some]) {
       const home = page(site, "index.html")
@@ -313,6 +412,18 @@ describe("numbered lists and photo-less service cards (rule 7)", () => {
     expect(page(direction, "index.html")).toContain("services-numbered_rows")
     expect(page(direction, "services/weekly-clean/index.html")).toContain(
       "services-alternating"
+    )
+  })
+
+  test("alternating rows off a service's own page point there instead of repeating it", () => {
+    const home = page(pictured, "index.html")
+    expect(home).toContain("services-alternating")
+    expect(home).toContain('href="/services/weekly-clean/"')
+    expect(home).toContain('data-copy="service_body"')
+    expect(home).not.toContain('data-copy="service_detail"')
+    expect(home).not.toContain('data-copy="service_includes"')
+    expect(page(pictured, "services/weekly-clean/index.html")).toContain(
+      'data-copy="service_includes"'
     )
   })
 })

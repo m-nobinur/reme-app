@@ -9,6 +9,7 @@ import {
   FONT_PAIRS,
   type ImageSlot,
   INDUSTRY_PACK,
+  type IndustryId,
   type IndustryPackId,
   LEGACY_FONT_PAIR,
   PALETTES,
@@ -311,11 +312,17 @@ export function problems(
     )
   }
   const pages = blueprint.pages.map((p) => p.page)
-  if (new Set(pages).size !== pages.length) found.push("a page is listed twice")
+  if (new Set(pages).size !== pages.length)
+    found.push(
+      "a page is listed twice; list each page once, the service page once for every offering (content holds it once per offering)"
+    )
   const wanted = wantedPages(context.facts)
   const missing = wanted.filter((page) => !pages.includes(page))
   const extra = pages.filter((page) => !wanted.includes(page))
-  if (missing.length > 0) found.push(`pages missing: ${missing.join(", ")}`)
+  if (missing.length > 0)
+    found.push(
+      `pages missing: ${missing.join(", ")}; plan every listed page, a short one where the facts are few`
+    )
   if (extra.length > 0) {
     found.push(
       `pages this site does not have: ${extra.join(", ")}; plan exactly ${wanted.join(", ")}`
@@ -392,7 +399,7 @@ export function problems(
       )
     }
   }
-  return [...found, ...sayOnce(blueprint, offeringsOf(context.facts).length)]
+  return [...found, ...sayOnce(blueprint, offeringsOf(context.facts))]
 }
 
 /** The offerings a site has a page for each of, six at most. */
@@ -414,9 +421,12 @@ const planLabel = (c: Pick<ContentPlan, "page" | "offering">) =>
  * offering, each topic and each heading on one page only, one FAQ, the
  * services compared in one table and each service page with detail of its
  * own. The process sits on the home page and nowhere else, which the pages'
- * kinds already hold.
+ * kinds already hold. A service's own name heads its card on every page that
+ * lists the services, as the copy gate allows (service_name).
  */
-function sayOnce(blueprint: Blueprint, offerings: number): string[] {
+function sayOnce(blueprint: Blueprint, names: readonly string[]): string[] {
+  const offerings = names.length
+  const named = new Set(names.map(wordsOf))
   const found: string[] = []
   const has = (page: PageId, kind: PlannedKind) =>
     blueprint.pages.some(
@@ -494,6 +504,7 @@ function sayOnce(blueprint: Blueprint, offerings: number): string[] {
       o.heading,
       ...o.subheadings,
     ])) {
+      if (named.has(wordsOf(line))) continue
       const first = heading.get(wordsOf(line))
       if (first)
         found.push(
@@ -505,10 +516,21 @@ function sayOnce(blueprint: Blueprint, offerings: number): string[] {
   return found
 }
 
+/** The industry's directions no recent site in it was planned with, in library order. */
+function unusedDirections(
+  industry: IndustryId | undefined,
+  recent: readonly RecentDesign[],
+  library: readonly DesignDirection[]
+): DesignDirection[] {
+  const used = new Set(recent.map((r) => r.direction))
+  return directionsFor(industry, library).filter((d) => !used.has(d.id))
+}
+
 /** One row per combination other businesses in the industry were planned with. */
 export function diversityNote(
   recent: readonly RecentDesign[],
-  industry: string | undefined
+  industry: IndustryId | undefined,
+  library: readonly DesignDirection[] = DIRECTIONS
 ): string[] {
   const used = recent.filter((r) => r.direction)
   if (used.length === 0) return []
@@ -517,12 +539,41 @@ export function diversityNote(
     const key = `${r.direction} + hero ${r.hero ?? "none"} + services ${r.services ?? "none"}`
     counts.set(key, (counts.get(key) ?? 0) + 1)
   }
+  const unused = unusedDirections(industry, recent, library)
   return [
     `Other ${industry ?? "service"} businesses' sites, planned most recently (up to 20), use these direction, home hero and home services combinations. Plan one that is not on this list. The owner's own choices above still win.`,
     ...[...counts]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([combo, n]) => `- ${combo} (${n})`),
+    ...(unused.length > 0
+      ? [
+          `Directions none of them uses yet: ${unused.map((d) => d.id).join(", ")}. Unless the owner chose one, take the one of these that fits this business best.`,
+        ]
+      : []),
   ]
+}
+
+/**
+ * The plan's direction as a retry reads it when another business in the
+ * industry already has it and one is left that none has; never the owner's pick.
+ */
+export function sharedDirection(
+  blueprint: Blueprint,
+  facts: readonly FactRecord[],
+  recent: readonly RecentDesign[],
+  library: readonly DesignDirection[]
+): string[] {
+  if (
+    ownerChoices(facts).direction ||
+    !recent.some((r) => r.direction === blueprint.direction)
+  )
+    return []
+  const unused = unusedDirections(industryOf(facts), recent, library)
+  return unused.length > 0
+    ? [
+        `direction ${blueprint.direction} is another business's in this industry already; take the one of ${unused.map((d) => d.id).join(", ")} that fits this business best, with its own section order and variants`,
+      ]
+    : []
 }
 
 /** The direction recent sites used least, the first such in library order. */
@@ -1202,13 +1253,13 @@ export function plannerPrompt(input: {
     "",
     "How to plan:",
     "- Plan the content first, then the design. content holds one entry per planned page, and the service page once per offering (offering 1 to 6, its place in business.offerings; every other page 0). Each entry gives the page's purpose; target_search, the search it is written to be found for, an offering and the area as a customer types it (\"end of tenancy cleaning in Leeds\"); topics, the subjects it owns; outline, its h2s in page order with the h3s under each; and sources, where its words come from: facts, owner (site.content, the owner's own words) and trade (the trade's usual practice, said as typical).",
-    "- Say each thing once. A topic belongs to one page only, and any other page that touches it links there. No two outline headings on the site match. One FAQ on the whole site, on one page. The process (steps) lives on the home page alone. The area's own words live on the service area page when there is one; a home page area section is then a short pointer to it. About is the business's own story and how it works, never the process or the area again.",
-    "- Every offering gets its own page and its own card. Its page says what the service is and the result, what it usually covers (the service cards section on that page shows it as a checklist labelled typical), who it suits, how to prepare, and how it differs from the other offerings, in content sections of its own. With two services or more the services page holds one content section with the table that compares them, once; each service page keeps only what differs.",
+    "- Say each thing once. A topic belongs to one page only, and any other page that touches it links there. No two outline headings on the site match, except a service's own name, which heads its card wherever the services are listed. One FAQ on the whole site, on one page. The process (steps) lives on the home page alone. The area's own words live on the service area page when there is one; a home page area section is then a short pointer to it. About is the business's own story and how it works, never the process or the area again.",
+    '- Every offering gets its own page and its own card. Its page says what the service is and the result, what it usually covers (the service cards section on that page shows it as a checklist labelled typical), who it suits, how to prepare, and how it differs from the other offerings, in content sections of its own. Name the service in each of its topics and headings ("getting ready for a deep clean", never a bare "how to prepare"), so no two service pages share one. With two services or more the services page holds one content section with the table that compares them, once; each service page keeps only what differs.',
     "- A content section (kind content, variant default) holds detail no starter section does, as prose, a checklist, a table, steps or cards. Plan one where the outline needs it, on a page whose kinds allow it, and say in purpose what it holds.",
     "- Rich, never padded: plan the topics the facts and the trade's usual practice can fill in full. A page with few facts has a short outline; never plan a section to make a page longer.",
     "- Start from one direction in the library below and keep it whole, changing at most two of its choices (fonts, palette, home hero variant, home services variant). A direction is a tested combination; a site stitched from several reads as nobody's.",
     "- Design like a studio, not a template. Pick the direction that fits this trade and this business's audience, a type pair with character, one dominant colour with one sharp accent. Lay each page out in its outline's order: the pack's starting order is only a fallback, and the direction keeps its fonts and palette whole while each section's order and variant are yours, within the kinds each page may hold. Vary variants across pages so no two pages read alike. Ornament budget: a list takes numbers or icons, never both, and at most two headings a page take the accent.",
-    "- The site has exactly the pages listed under the business's pages. Every page holds only the kinds listed for it below, and each section's variant is one listed for its kind.",
+    "- The site has exactly the pages listed under the business's pages, each once in pages: the service page is one entry, its sections shared by every offering's page, while content holds it once per offering. Plan every listed page even where the facts are few: a short outline from the trade's usual practice, never a page left out. Every page holds only the kinds listed for it below, and each section's variant is one listed for its kind.",
     "- Plan a section only when the facts can fill it. No testimonials without testimonial facts; no gallery without the owner's photos; no proof strip without business.proof. A section the owner picked under 'Picked as home page sections' is the exception: plan it where they are listed as planned, and give a gallery one upload slot per photo, three at most.",
     "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery, the header of a service, about or contact page. Use the owner's uploads first, as source upload with their asset id, each where its use places it: hero in the home hero, work in the service cards or the gallery, team in the about page's header; never the same photo twice on a page. The upload with use logo is the logo, never a photo slot. A generated photo shows the work: the finished result in a customer's own space, or the job under way with hands at work seen from the side, never a face or a whole person. Never generate one for an about section, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene in plain words; the alt says what it shows. Code sets each slot's aspect to its section's box.",
     "- Plan generated photos as one photographer's shot list for one shoot, taken from the content plan: each subject shows what its page's topics are about (an oven mid-clean for a deep clean, an empty rental ready for check-out for an end of tenancy clean). The hero is the establishing shot: the core service's finished result in the customer's own space (a whole room, a whole garden), never a street or skyline. Each service card is a different room, area or detail that shows that service at a glance (a worktop for regular cleaning, a bathroom for a deep clean), never the hero's scene again. A service's card and its page header show that service's own subject, indoors or out as the service is: gutters, fascias, soffits, roofs and windows seen from outside are exteriors in daylight, never a room. A photo CTA band is a calm texture (a wall in window light, foliage) that complements the rest. No two subjects share a room, a composition or a main prop. Prefer simple shapes (a worktop, a sink, a sofa, a bed, a desk) over mechanisms image models warp: hinges, taps seen up close, ladders.",
@@ -1284,7 +1335,7 @@ export function plannerPrompt(input: {
       : null,
     ...ownerContent(facts),
     "",
-    ...diversityNote(input.recent, industry),
+    ...diversityNote(input.recent, industry, library),
     ...(input.previous
       ? [
           "",
@@ -1378,7 +1429,13 @@ export async function plan(input: {
         input.recent,
         library
       )
-      const wrong = problems(blueprint, { facts: input.facts, library })
+      const wrong = [
+        ...problems(blueprint, { facts: input.facts, library }),
+        // The last attempt keeps a plan whose only fault is a shared direction over code's plan.
+        ...(attempt < ATTEMPTS
+          ? sharedDirection(blueprint, input.facts, input.recent, library)
+          : []),
+      ]
       if (wrong.length > 0) throw new Error(wrong.join("\n"))
       return { blueprint, source: "model", calls, errors }
     } catch (thrown) {

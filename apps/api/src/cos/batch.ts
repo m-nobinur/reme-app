@@ -57,6 +57,9 @@ type Options = {
   sleep?: (ms: number) => Promise<unknown>
 }
 
+const NOT_FOUND_READS = 5
+const NOT_FOUND_EVERY_MS = 2_000
+
 /** The id the API takes: its model slug, never the catalogue's `:batch` variant name. */
 export const slugOf = (model: string) => model.replace(/:batch$/, "")
 
@@ -114,7 +117,9 @@ export function batchClient(options: Options) {
     /**
      * Polls until the batch is terminal or `timeoutMs` has passed; the
      * returned status says which. A caller that cannot wait keeps the id and
-     * calls `get` later, since results are kept 30 days.
+     * calls `get` later, since results are kept 30 days. A batch just
+     * submitted can read as not found for a moment, so a 404 is retried
+     * briefly before it is an error.
      */
     async wait(
       id: string,
@@ -122,8 +127,19 @@ export function batchClient(options: Options) {
     ): Promise<Batch> {
       const every = wait.everyMs ?? 60_000
       let left = wait.timeoutMs ?? 24 * 60 * 60 * 1000
+      let missed = 0
       for (;;) {
-        const batch = await get(id)
+        const batch = await get(id).catch(async (error: unknown) => {
+          if (
+            !(error instanceof BatchError) ||
+            error.code !== "batch.http_404" ||
+            ++missed >= NOT_FOUND_READS
+          )
+            throw error
+          await sleep(NOT_FOUND_EVERY_MS)
+          return null
+        })
+        if (!batch) continue
         if ((TERMINAL as readonly string[]).includes(batch.status)) return batch
         if (left <= 0) return batch
         await sleep(Math.min(every, left))

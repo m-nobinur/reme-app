@@ -1,6 +1,12 @@
 import type { PageDocument } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
-import { sandboxFindings, type WriterTask, writerCheck } from "../src/fanout.ts"
+import type { Brief } from "../src/brief.ts"
+import {
+  offeredNames,
+  sandboxFindings,
+  type WriterTask,
+  writerCheck,
+} from "../src/fanout.ts"
 import type { PhotoFile } from "../src/photo-step.ts"
 import {
   createWarmer,
@@ -118,6 +124,21 @@ describe("the writers' lines in the site config", () => {
     // The `fields` map's entry of the same name is not a value line.
     expect(next).toContain('  heroHeading: { kind: "composed" },')
     expect(next.split("\n")).toHaveLength(CONFIG.split("\n").length)
+  })
+
+  it("names each service from the offerings before any writer runs, six at most", () => {
+    const items = ["Deep cleans", "Move-out cleans", "a", "b", "c", "d", "e"]
+    const brief = {
+      snapshot: { facts: [{ key: "business.offerings", value: { items } }] },
+    } as unknown as Brief
+    expect(offeredNames(brief)).toEqual({
+      service1Name: "Deep cleans",
+      service2Name: "Move-out cleans",
+      service3Name: "a",
+      service4Name: "b",
+      service5Name: "c",
+      service6Name: "d",
+    })
   })
 
   it("keeps a reply to the task's own fields and sections, and refuses one with neither", () => {
@@ -292,6 +313,36 @@ describe("write_pages's fan-out", () => {
     expect(lines[1]).toMatch(
       /^- about: failed \(The reply was not JSON.*\)\. Its part is yours: src\/site-config\.ts fields aboutHeading\.$/
     )
+  })
+
+  it("fixes what the check refuses even after a retry, as a third call", async () => {
+    const tasks = [task({ page: "service", fields: ["service1Heading"] })]
+    const refused =
+      'Your sections are not a page document\'s yet, so nothing of them was written:\n- sections.1.blocks.0: Unrecognized key: "body"\nFix them in one more reply, then stop.'
+    let checked = 0
+    const site = memorySite(tasks, CONFIG, () =>
+      checked++ === 0 ? refused : null
+    )
+    const calls: string[] = []
+    let fix = ""
+    const lines = await writePages({
+      tasks,
+      max: 1,
+      staggerMs: 0,
+      sleep: async () => undefined,
+      user: site.user,
+      apply: site.apply,
+      call: async (_, attempt, user) => {
+        calls.push(String(attempt))
+        if (attempt === 3) fix = user
+        return attempt === 1
+          ? ""
+          : reply({ service1Heading: "Deep cleans in Leeds" }, "Filled.")
+      },
+    })
+    expect(calls).toEqual(["1", "2", "3"])
+    expect(fix).toContain('Unrecognized key: "body"')
+    expect(lines[0]).toBe("- service: Filled. Fixed what the copy check found.")
   })
 })
 

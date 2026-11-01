@@ -2,6 +2,7 @@ import { FactValue } from "@workspace/contracts"
 import { brightclean } from "@workspace/db/fixtures"
 import { claimFindings, contentFindings, parsePage } from "@workspace/gates"
 import { cosAgent } from "../apps/api/src/cos/agent.ts"
+import { JARGON } from "../apps/orchestrator/src/heartbeat-write.ts"
 import { MARK, SHAPES } from "./redact.mjs"
 import { deriveContext } from "./replay.mjs"
 
@@ -77,6 +78,12 @@ const GOLDEN_FACTS = [
 
 /** Why each site question case is pending: the eval owner's org has no site to ask about. */
 const SITE_CASE = "a staging recording on an org with a built site"
+
+/** Why each offer case is pending: the address and Google offers are not on staging yet. */
+const OFFER_CASE = "the address and Google offers on staging"
+
+/** The owner's test name, whose setting must already point at staging for the Google case. */
+const EVAL_DOMAIN = "eval.bnwise.tech"
 
 export const CASES = [
   {
@@ -558,6 +565,88 @@ export const CASES = [
     },
   },
   {
+    pending: OFFER_CASE,
+    // The first build starts, and the address is offered on its card while it runs.
+    name: "address-offer-mid-build",
+    turns: [
+      {
+        mode: "act",
+        text: "Change the headline on my homepage to say 'Clean homes, every week'.",
+      },
+      { read: true, wait: 90 },
+    ],
+    check: ([started, read]) => [
+      ...buildStarted(started),
+      ...sells(offered(read, isAddressCard), "address"),
+    ],
+  },
+  {
+    pending: OFFER_CASE,
+    name: "address-not-now",
+    turns: [
+      {
+        mode: "act",
+        text: "Change the headline on my homepage to say 'Fresh homes, every week'.",
+      },
+      { read: true, wait: 90 },
+      { mode: "act", text: "Not now on the web address, thanks." },
+      { mode: "ask", text: "What are our opening hours on weekdays?" },
+    ],
+    check: ([started, read, declined, asked]) => {
+      const problems = [
+        ...buildStarted(started),
+        ...sells(offered(read, isAddressCard), "address"),
+        ...replied(declined),
+        ...noActs(declined),
+        ...noActs(asked),
+        ...statesHours(asked),
+      ]
+      if (!called(declined, "put_off").some((c) => c.input?.kind === "address"))
+        problems.push("it did not put the address off")
+      if (/\?|\bask (?:you )?again\b|\bremind you\b/i.test(text(declined)))
+        problems.push("the reply to not now asks again or promises to")
+      if (ADDRESS.test(text(asked)))
+        problems.push("the next reply offers the address again")
+      return problems
+    },
+  },
+  {
+    pending: `${OFFER_CASE}, with ${EVAL_DOMAIN}'s setting pointed at staging`,
+    // Google learns the owner's own address, so it is offered once that setting is seen.
+    name: "google-after-setting",
+    turns: [
+      {
+        mode: "act",
+        text: `I own ${EVAL_DOMAIN} and nothing is on it yet. Put my website there.`,
+      },
+      { read: true, wait: 180 },
+    ],
+    check: ([connected, read]) => {
+      const problems = sells(offered(read, isGoogleButton), "Google")
+      if (called(connected, "connect_domain").length === 0)
+        problems.push("it did not connect the owner's domain")
+      if (called(connected, "connect_google").length > 0)
+        problems.push("it offered Google before the setting was seen")
+      return problems
+    },
+  },
+  {
+    pending: `${OFFER_CASE}, on an api that cannot take a payment`,
+    name: "no-buy-when-off",
+    turns: [
+      {
+        mode: "act",
+        text: "I don't have a web address of my own yet. Can you get me one?",
+      },
+    ],
+    check: ([turn]) => {
+      const problems = [...noActs(turn), ...sells(text(turn), "address")]
+      if (callsOf(turn).some((c) => /^(?:find|buy)_domain$/.test(c.toolName)))
+        problems.push("it offered to buy a domain")
+      return problems
+    },
+  },
+  {
     pending: SITE_CASE,
     // The build's notes say why the site shows no prices; the answer rests on them.
     name: "ask-why",
@@ -689,6 +778,35 @@ const rangeIn = (reply) => reply.match(RANGE)?.slice(1, 3).join("-")
 
 const WORK_TALK =
   /\b(?:build\w*|site|website|headline|change|draft|pages?|working on)\b/i
+
+const ADDRESS = /\b(?:web address|domain|address of your own)\b/i
+
+const isAddressCard = (p) =>
+  p.type === "data-build_questions" && p.data?.kind === "address"
+
+const isGoogleButton = (p) =>
+  p.type === "data-button" && p.data?.action?.service === "google"
+
+/** The words of the message that carries the part `isCard` finds, or "" when none came. */
+const offered = (parts, isCard) => {
+  const at = parts.findIndex(isCard)
+  return at > 0 && parts[at - 1].type === "text" ? parts[at - 1].text : ""
+}
+
+const JARGON_WORD = new RegExp(`\\b(?:${JARGON.join("|")})s?\\b`, "i")
+
+/** An offer the owner can weigh: why now, what it does for them, in their words. */
+const sells = (said, what) => {
+  if (!said.trim()) return [`no ${what} offer came`]
+  const problems = []
+  if (!/\b(?:so|because|since|means|if|once|the moment)\b/i.test(said))
+    problems.push(`the ${what} offer gives no why`)
+  if (!/\b(?:customers?|people|trust|find|found|quotes?|cards?)\b/i.test(said))
+    problems.push(`the ${what} offer names no benefit`)
+  const jargon = said.match(JARGON_WORD)
+  if (jargon) problems.push(`the ${what} offer says "${jargon[0]}"`)
+  return problems
+}
 
 const buildStarted = (parts) =>
   called(parts, "request_change").some((c) => c.output?.outcome === "started")

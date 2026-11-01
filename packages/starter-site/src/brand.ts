@@ -250,6 +250,20 @@ export function paletteOf(value: string): BrandPalette | undefined {
 }
 
 /**
+ * Design rule 5: no pure white. A paper of exactly #ffffff leans a fifth of the
+ * way to the palette's tint, the reference's near-white in the palette's hue;
+ * every other paper is the palette's own.
+ */
+function leanPaper({ paper, tint }: BrandPalette): string {
+  const [from, to] = [paper, tint].map(parse) as [Rgb, Rgb]
+  return toHex(from) === toHex(WHITE)
+    ? toHex(
+        from.map((v, i) => Math.round(v + ((to[i] as number) - v) * 0.2)) as Rgb
+      )
+    : paper
+}
+
+/**
  * The theme as one CSS rule for the page head, or an empty string: from the
  * palette's six roles when `palette` has them, else derived from the one
  * brand colour. `html:root`, not `:root`: the linked stylesheet comes after
@@ -258,11 +272,12 @@ export function paletteOf(value: string): BrandPalette | undefined {
  */
 export function brandTheme(value: string, palette = ""): string {
   const roles = paletteOf(palette)
+  const chosen = roles ?? paletteFromBrand(value)
+  const p = chosen && { ...chosen, paper: leanPaper(chosen) }
   // A preset's paper reads on its primary (an AA pair), so it is the label.
   const ramp = roles
-    ? { brand: roles.primary, foreground: roles.paper }
+    ? { brand: roles.primary, foreground: p?.paper ?? roles.paper }
     : brandRamp(value)
-  const p = roles ?? paletteFromBrand(value)
   if (!ramp || !p) return ""
   // A palette whose paper is darker than its ink (After dark) is a dark page:
   // the stylesheet reads --ink as the dark surface and --paper as the light

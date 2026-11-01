@@ -36,9 +36,16 @@ export const ROLES = {
   // plan against 38 s and $0.05, but 3 of its 9 plans failed the first
   // attempt, all for the business with a free-text direction note, by naming a
   // direction that is not in the library. High passed 3 of 3 (one per business).
-  plan: { model: "sonnet", effort: "high", maxTokens: 32_000 },
+  // 48k since 2026-11-01: high gives reasoning about 80% of the cap, and on
+  // Haiku the plan reasoned 20,700 to 28,400 tokens before a 5,800 to 6,700
+  // token answer, so 32k cut the answer off and the plan fell back.
+  plan: { model: "sonnet", effort: "high", maxTokens: 48_000 },
   build: { model: "sonnet", effort: "medium", maxTokens: 32_000 },
-  page: { model: "sonnet", effort: "medium", maxTokens: 16_000 },
+  // 32k since 2026-11-01: on Haiku at high a writer's reasoning fills 80% of
+  // the cap, and at 16k the home, about and every service writer spent it all
+  // and replied with no JSON (home 4 of 4 builds; 6 of 11 first attempts in
+  // one); home then took 24,600.
+  page: { model: "sonnet", effort: "medium", maxTokens: 32_000 },
   copy: { model: "haiku", effort: "low", maxTokens: 8_000 },
   critic: { model: "sonnet", effort: "medium", maxTokens: 4_000 },
   critic_recheck: { model: "haiku", effort: "low", maxTokens: 2_000 },
@@ -113,13 +120,15 @@ export function roleOf(
  * The largest cap any role gives each model, keyed by the id OpenRouter is
  * sent. The transport applies it to a call that sets none of its own and
  * whose role did not register its instructions (`withOutputCap`), which is
- * how a page builder gets 16k on the model whose lead gets 32k.
+ * how a page builder gets 16k on the model whose lead gets 32k. The plan is
+ * left out: its one call names its own cap.
  */
 export function outputCaps(
   ...tables: Record<string, ModelRoute>[]
 ): Record<string, number> {
   const caps: Record<string, number> = {}
-  for (const route of tables.flatMap((t) => Object.values(t))) {
+  for (const [role, route] of tables.flatMap((t) => Object.entries(t))) {
+    if (role === "plan") continue
     const id = route.model.replace(/^openrouter\//, "")
     caps[id] = Math.max(caps[id] ?? 0, route.max_output_tokens)
   }

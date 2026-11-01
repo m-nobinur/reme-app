@@ -1,5 +1,10 @@
 import { appendFileSync } from "node:fs"
-import { fidelity, fold, visibleText } from "../rubric/fidelity.mjs"
+import {
+  checkProblems,
+  fidelity,
+  fold,
+  visibleText,
+} from "../rubric/fidelity.mjs"
 
 /**
  * Tier 2, live: the change-request set from the site quality design (§6),
@@ -14,10 +19,24 @@ import { fidelity, fold, visibleText } from "../rubric/fidelity.mjs"
  *
  *   ORCHESTRATOR_URL=... ORCHESTRATOR_TOKEN=... pnpm eval --tier 2
  *
- * Skipped, not failed, without an orchestrator or a published site.
+ * Skipped, not failed, without an orchestrator or a published site. It runs
+ * against any org with a site: FIDELITY_ORG names it (brightclean on staging,
+ * `measure-<business>` for an evals/measure-build.mjs org). A check whose
+ * fact the org does not hold (`site.content`, which the console cannot
+ * create) is skipped, not failed, and one check that throws fails its own row
+ * without losing the table. A judge's undecided (null) check is neither a
+ * pass nor a failure on every row; only a row with no decided check fails.
+ *
+ * Locally there is no router, DNS or published site. Set FIDELITY_LOCAL_STATE
+ * to the orchestrator's state directory (apps/orchestrator/.wrangler/state)
+ * and the run reads built pages from local R2 in place of the published host
+ * and the preview links, makes the org's newest built revision its site when
+ * it has none, and seeds a missing `site.content` fact (left in place after).
+ * Needs DATABASE_URL like measure-build. Staging never sets it, so the
+ * published-host fetches there stay real.
  */
 
-const ORG = "brightclean"
+const ORG = process.env.FIDELITY_ORG ?? "brightclean"
 const SETTLED = new Set([
   "preview_ready",
   "blocked_on_information",
@@ -33,6 +52,11 @@ const PHONE = "+441174960999"
 
 const base = (process.env.ORCHESTRATOR_URL ?? "").replace(/\/$/, "")
 const token = process.env.ORCHESTRATOR_TOKEN ?? ""
+
+class Skipped extends Error {}
+
+/** The local-run helpers, when FIDELITY_LOCAL_STATE is set. */
+let local = null
 
 class Refused extends Error {
   constructor(status, code, path) {
@@ -224,13 +248,29 @@ const CASES = (home) => {
   ].filter(Boolean)
 }
 
-/** Restate a fact, returning what to put back. */
+/**
+ * Restate a fact, returning what to put back. The console restates only facts
+ * the org holds: a missing one is seeded in a local run and skips the check
+ * anywhere else.
+ */
 async function restate(key, value) {
   const { facts } = await call("GET", "/assignments/facts")
-  const was = facts.find((f) => f.key === key)?.value
+  const held = facts.find((f) => f.key === key)
+  if (!held) {
+    if (!local) throw new Skipped(`${ORG} holds no ${key} fact`)
+    await local.seedFact(key, value)
+    return undefined
+  }
   await call("POST", "/assignments/facts", { facts: [{ key, value }] })
-  return was
+  return held.value
 }
+
+/** A row's problem: its own page check and the judge's verdicts, undecided ones counting for nothing. */
+const problemOf = (own, made) =>
+  [own, ...checkProblems(made.checks)].filter(Boolean).join("; ") || null
+
+/** An offering fact's items are plain strings. */
+export const offeringName = (item) => (typeof item === "string" ? item : "")
 
 /** The later-change checks; each returns a problem or null. */
 const LATER = [
@@ -257,9 +297,12 @@ const LATER = [
           const pages = await pagesOf(made.link, ["/about/"])
           return {
             ...made,
-            problem: fold(visibleText(pages["/about/"])).includes(fold(STORY))
-              ? null
-              : "the story is not on the About page word for word",
+            problem: problemOf(
+              fold(visibleText(pages["/about/"])).includes(fold(STORY))
+                ? null
+                : "the story is not on the About page word for word",
+              made
+            ),
           }
         } finally {
           await cancel(made.id)
@@ -272,7 +315,7 @@ const LATER = [
   {
     name: "a new phone reaches every page",
     run: async () => {
-      const was = await restate("business.phone", PHONE)
+      const was = await restate("business.phone", { e164: PHONE })
       try {
         const made = await revise(
           "Update the phone number everywhere",
@@ -296,9 +339,10 @@ const LATER = [
             .map(([route]) => route)
           return {
             ...made,
-            problem: missing.length
-              ? `no new phone on ${missing.join(", ")}`
-              : null,
+            problem: problemOf(
+              missing.length ? `no new phone on ${missing.join(", ")}` : null,
+              made
+            ),
           }
         } finally {
           await cancel(made.id)
@@ -319,9 +363,7 @@ const LATER = [
       const slug = route.split("/")[2]
       const items = offerings?.items ?? []
       const gone = items.find((i) =>
-        fold(i.name ?? "")
-          .replace(/\s+/g, "-")
-          .includes(slug.split("-")[0])
+        fold(offeringName(i)).replace(/\s+/g, "-").includes(slug.split("-")[0])
       )
       if (!gone) return { problem: `no offering matches ${route}` }
       await restate("business.offerings", {
@@ -329,33 +371,29 @@ const LATER = [
         items: items.filter((i) => i !== gone),
       })
       try {
-        const made = await revise(
-          `Remove ${gone.name} from the site`,
-          gone.name,
-          {
-            edit_type: "remove",
-            targets: [{ page: pageOf(route) }, { page: "services" }],
-            acceptance: [
-              `No page links to ${route}`,
-              `The services page no longer lists ${gone.name}`,
-            ],
-          }
-        )
+        const made = await revise(`Remove ${gone} from the site`, gone, {
+          edit_type: "remove",
+          targets: [{ page: pageOf(route) }, { page: "services" }],
+          acceptance: [
+            `No page links to ${route}`,
+            `The services page no longer lists ${gone}`,
+          ],
+        })
         try {
           if (!made.link)
             return { ...made, problem: `settled in ${made.state}` }
           const pages = await pagesOf(made.link, ["/", "/services/"])
           const left = Object.entries(pages)
             .filter(
-              ([, html]) =>
-                html.includes(route) || html.includes(`"${gone.name}"`)
+              ([, html]) => html.includes(route) || html.includes(`"${gone}"`)
             )
             .map(([at]) => at)
           return {
             ...made,
-            problem: left.length
-              ? `${gone.name} still shows on ${left.join(", ")}`
-              : null,
+            problem: problemOf(
+              left.length ? `${gone} still shows on ${left.join(", ")}` : null,
+              made
+            ),
           }
         } finally {
           await cancel(made.id)
@@ -389,6 +427,7 @@ const LATER = [
       try {
         if (!moved.revision)
           return { ...moved, problem: `the move settled in ${moved.state}` }
+        await call("POST", `/assignments/${moved.id}/review`, {})
         const undone = await revise(
           "Undo the last change",
           "your home page",
@@ -413,9 +452,12 @@ const LATER = [
           return {
             ...undone,
             cost: moved.cost + undone.cost,
-            problem: same
-              ? null
-              : "the home page's sections are not in their old order",
+            problem: problemOf(
+              same
+                ? null
+                : "the home page's sections are not in their old order",
+              undone
+            ),
           }
         } finally {
           await cancel(undone.id)
@@ -427,58 +469,31 @@ const LATER = [
   },
 ]
 
-export default async function changeFidelity() {
-  if (!base || !token) {
-    console.log(
-      "      skipped: ORCHESTRATOR_URL and ORCHESTRATOR_TOKEN name no orchestrator"
-    )
-    return
+/** One row run to its end: a throw fails its own row, and a skip is no failure. */
+async function attempt(name, run) {
+  try {
+    return { name, ...(await run()) }
+  } catch (error) {
+    return error instanceof Skipped
+      ? { name, skipped: error.message }
+      : { name, problem: `threw: ${error.message}` }
   }
-  const site = await call("GET", "/assignments/site").catch((error) => {
-    if (error instanceof Refused) return null
-    throw error
-  })
-  if (!site?.host || !site.active) {
-    console.log(`      skipped: ${ORG} has no published site to change`)
-    return
-  }
-  const home = await (await fetch(`https://${site.host}/`)).text()
-  const rows = []
-  let spent = 0
-  for (const c of CASES(home)) {
-    if (spent > SPEND_CAP_USD) break
-    const made = await revise(c.goal, c.label, c.brief)
-    try {
-      const pages = made.link ? await pagesOf(made.link, c.routes) : {}
-      const scored =
-        made.state === "preview_ready"
-          ? fidelity({ ...c, ...made, pages })
-          : { passed: false, problems: [`settled in ${made.state}`] }
-      rows.push({
-        name: c.name,
-        ...made,
-        problem: scored.problems.join("; ") || null,
-      })
-    } finally {
-      await cancel(made.id)
-    }
-    spent += made.cost
-  }
-  for (const check of LATER) {
-    if (spent > SPEND_CAP_USD) {
-      rows.push({ name: "(stopped)", problem: "spend cap" })
-      break
-    }
-    const row = await check.run(home)
-    rows.push({ name: check.name, ...row })
-    spent += row.cost ?? 0
-  }
+}
 
+/** Checks a row's judge decided true, of all it was given, and how many it could not decide. */
+const checksOf = (checks) => {
+  const undecided = checks.filter((c) => typeof c.passed !== "boolean").length
+  return `${checks.filter((c) => c.passed === true).length}/${checks.length}${undecided ? ` (${undecided} undecided)` : ""}`
+}
+
+/** The result table: every row, whatever happened to the rest. */
+export function resultTable(rows, spent) {
   const failed = rows.filter((r) => r.problem)
-  const lines = [
-    "## Tier 2: change fidelity on staging",
+  const skipped = rows.filter((r) => r.skipped)
+  return [
+    "## Tier 2: change fidelity",
     "",
-    `${rows.length - failed.length} of ${rows.length} passed, cost $${spent.toFixed(4)} of a $${SPEND_CAP_USD.toFixed(2)} cap.`,
+    `${rows.length - failed.length - skipped.length} of ${rows.length} passed, ${failed.length} failed, ${skipped.length} skipped, cost $${spent.toFixed(4)} of a $${SPEND_CAP_USD.toFixed(2)} cap.`,
     "",
     "| Request | Settled in | Seconds | Checks passed | Cost | Result |",
     "| --- | --- | --- | --- | --- | --- |",
@@ -488,20 +503,83 @@ export default async function changeFidelity() {
           r.name,
           r.state ?? "",
           r.seconds ?? "",
-          r.checks
-            ? `${r.checks.filter((c) => c.passed).length}/${r.checks.length}`
-            : "",
+          r.checks ? checksOf(r.checks) : "",
           r.cost === undefined ? "" : `$${r.cost.toFixed(4)}`,
-          r.problem ? `FAILED ${r.problem}` : "ok",
+          r.problem
+            ? `FAILED ${r.problem}`
+            : r.skipped
+              ? `skipped: ${r.skipped}`
+              : "ok",
         ].join(" | ")} |`
     ),
     "",
-  ]
-  console.log(lines.join("\n"))
-  if (process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`)
+  ].join("\n")
+}
+
+export default async function changeFidelity() {
+  if (!base || !token) {
+    console.log(
+      "      skipped: ORCHESTRATOR_URL and ORCHESTRATOR_TOKEN name no orchestrator"
+    )
+    return
   }
-  if (failed.length > 0) {
-    throw new Error(failed.map((r) => `${r.name}: ${r.problem}`).join("; "))
+  const state = process.env.FIDELITY_LOCAL_STATE
+  if (state) {
+    const { localSites } = await import("./local-sites.mjs")
+    local = await localSites({ state, slug: ORG, orchestrator: base })
+    await local.activate()
+  }
+  try {
+    const site = await call("GET", "/assignments/site").catch((error) => {
+      if (error instanceof Refused) return null
+      throw error
+    })
+    if (!site?.host || !site.active) {
+      console.log(`      skipped: ${ORG} has no published site to change`)
+      return
+    }
+    local?.serve(site.host, site.active.revision_id)
+    const home = await (await fetch(`https://${site.host}/`)).text()
+    const rows = []
+    let spent = 0
+    for (const c of CASES(home)) {
+      if (spent > SPEND_CAP_USD) break
+      const row = await attempt(c.name, async () => {
+        const made = await revise(c.goal, c.label, c.brief)
+        try {
+          const pages = made.link ? await pagesOf(made.link, c.routes) : {}
+          const scored =
+            made.state === "preview_ready"
+              ? fidelity({ ...c, ...made, pages })
+              : { problems: [`settled in ${made.state}`] }
+          return { ...made, problem: scored.problems.join("; ") || null }
+        } finally {
+          await cancel(made.id)
+        }
+      })
+      rows.push(row)
+      spent += row.cost ?? 0
+    }
+    for (const check of LATER) {
+      if (spent > SPEND_CAP_USD) {
+        rows.push({ name: "(stopped)", problem: "spend cap" })
+        break
+      }
+      const row = await attempt(check.name, () => check.run(home))
+      rows.push(row)
+      spent += row.cost ?? 0
+    }
+
+    const table = resultTable(rows, spent)
+    console.log(table)
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${table}\n`)
+    }
+    const failed = rows.filter((r) => r.problem)
+    if (failed.length > 0) {
+      throw new Error(failed.map((r) => `${r.name}: ${r.problem}`).join("; "))
+    }
+  } finally {
+    await local?.close()
   }
 }

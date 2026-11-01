@@ -185,8 +185,8 @@ const PAIRS = [
   ["sora_manrope", "Sora and Manrope", "Sora", "Manrope"],
   [
     "instrument_worksans",
-    "Instrument Serif and Work Sans",
-    "Instrument Serif",
+    "Bodoni Moda and Work Sans",
+    "Bodoni Moda",
     "Work Sans",
   ],
   ["syne_jakarta", "Syne and Plus Jakarta Sans", "Syne", "Plus Jakarta Sans"],

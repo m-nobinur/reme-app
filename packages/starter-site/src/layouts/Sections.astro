@@ -79,6 +79,10 @@ const offerings = site.offerings
   .map((item) => item.trim())
   .filter((item) => item && !named.has(item.toLowerCase()))
 const talk = site.phone || site.email
+// The services page's comparison table says what each service covers once.
+const tabled = (doc?.sections ?? []).some((section) =>
+  (section.blocks ?? []).some((block) => block.type === "table")
+)
 
 // A section with no variant of its own takes the direction's; a page hero
 // other than home's stays the plain one. Each component types its own
@@ -98,8 +102,9 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
   (doc?.sections ?? []).map((section) => {
     const v = (("variant" in section && section.variant) ||
       OF_DIRECTION[section.kind]) as never
-    const eyebrow = section.eyebrow ?? ""
     const heading = section.heading ?? ""
+    // A heading with no label of its own takes its slot's; no heading needs none.
+    const eyebrow = section.eyebrow || (heading ? undefined : "")
     const intro = section.intro ?? ""
     switch (section.kind) {
       case "hero": {
@@ -155,6 +160,7 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
               only={service?.id}
               eyebrow={eyebrow}
               heading={heading}
+              bodies={!(page === "services" && tabled)}
             />
             {page === "services" && help?.markdown && (
               <Section eyebrow={help.eyebrow ?? ""} heading={help.heading ?? ""}>
@@ -241,7 +247,7 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
         return (
           <CtaBand
             variant={v}
-            eyebrow={eyebrow}
+            eyebrow={section.eyebrow || undefined}
             heading={cta?.heading ?? ""}
             body={cta?.body ?? ""}
             label={cta?.label || site.ctaLabel}
@@ -258,7 +264,10 @@ const OF_DIRECTION: Partial<Record<string, string>> = {
               </div>
             </section>
             {note?.markdown && (
-              <Section eyebrow={note.eyebrow ?? ""} heading={note.heading ?? ""}>
+              <Section
+                eyebrow={(note.heading ? note.eyebrow : eyebrow) ?? ""}
+                heading={note.heading || heading}
+              >
                 <Markdown source={note.markdown} copy="contact_body" />
                 {hasRoute("/quote/") && site.contactFormLink && (
                   <p class="section-more">

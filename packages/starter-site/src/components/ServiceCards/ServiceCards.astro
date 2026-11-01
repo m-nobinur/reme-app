@@ -3,9 +3,15 @@ import Photo from "../../layouts/Photo.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
 import { pageFields } from "../../page-fields"
 import { hasPhoto } from "../../photo-files"
-import { hasRoute, primaryAction, serviceHref } from "../../routes"
+import {
+  hasRoute,
+  hasServicePages,
+  primaryAction,
+  serviceHref,
+} from "../../routes"
 import { site } from "../../site-config"
 import { serviceItems } from "../../structured-data"
+import { typicalNote } from "../../typical-note"
 import ActionLink from "../ActionLink/ActionLink.astro"
 import Icon from "../Icon/Icon.astro"
 
@@ -23,6 +29,8 @@ interface Props {
   eyebrow?: string
   /** The h2 over the cards; empty is the serviceCardsHeading slot's default. */
   heading?: string
+  /** False leaves each service's body out, where the page's table already says it. */
+  bodies?: boolean
 }
 
 const {
@@ -30,11 +38,13 @@ const {
   only,
   eyebrow = pageFields.serviceCardsEyebrow,
   heading = pageFields.serviceCardsHeading,
+  bodies = true,
 } = Astro.props
 const items = serviceItems
   .filter((item) => !only || item.id === only)
   .map((item) => ({
     ...item,
+    body: bodies ? item.body : "",
     photo: item.image.alt && hasPhoto(item.image.src) ? item.image : null,
   }))
 const onServices = Astro.url.pathname === "/services/"
@@ -55,8 +65,10 @@ const variant = only
 // Alternating rows are a service's detail, the place every other pattern
 // links to (its own page, or the services page on a site without them), so
 // they link nowhere. On the services page and a service's own page, the
-// page's hero is the section's head.
+// page's hero is the section's head. Where each service has its own page,
+// rows anywhere else point there with the card's words instead.
 const detail = variant === "alternating"
+const pointer = detail && !only && hasServicePages
 const linked = !detail && hasRoute("/services/")
 const headed = !onServices && !only
 // A name sits one level under its section's h2; with no section head it sits under the page's h1, and so do a service page's fact labels.
@@ -107,7 +119,7 @@ const perRow = items.length === 4 ? 4 : 3
                   )
                 )}
                 {item.name && (
-                  <Name>
+                  <Name data-copy="service_name">
                     {linked ? <a href={serviceHref(item)}>{item.name}</a> : item.name}
                   </Name>
                 )}
@@ -132,14 +144,9 @@ const perRow = items.length === 4 ? 4 : 3
           <ol class:list={["service-rows", linked && "rows-linked"]}>
             {items.map((item) => (
               <li>
-                {variant === "numbered_rows" && (
-                  <span class="card-icon">
-                    <Icon name={item.icon} />
-                  </span>
-                )}
                 <div class="row-text">
                   {item.name && (
-                    <Name>
+                    <Name data-copy="service_name">
                       {linked ? (
                         <a href={serviceHref(item)}>{item.name}</a>
                       ) : (
@@ -155,7 +162,12 @@ const perRow = items.length === 4 ? 4 : 3
           </ol>
         )}
         {detail &&
-          items.map((item) => (
+          items.map((item) => {
+            const note =
+              !pointer && item.includes.length > 0
+                ? typicalNote(Astro.locals)
+                : ""
+            return (
             <article class="service-detail" id={item.id}>
               {item.photo && !only && (
                 <Photo
@@ -166,17 +178,31 @@ const perRow = items.length === 4 ? 4 : 3
                 />
               )}
               <div class="service-detail-main">
-                <Icon name={item.icon} />
+                {only && <Icon name={item.icon} />}
                 {eyebrow && <p class="eyebrow">{eyebrow}</p>}
                 {/* The page's h1 names the service on its own page, and a
                     headed section's h2 sits above its cards: the bare name as
                     an h2 there repeats another page's heading. */}
-                {item.name && !only && <Name>{item.name}</Name>}
-                {(item.detail || item.body) && (
-                  <p class="service-detail-body" data-copy="service_detail">
-                    {item.detail || item.body}
-                  </p>
+                {item.name && !only && (
+                  <Name data-copy="service_name">
+                    {pointer ? (
+                      <a href={serviceHref(item)}>{item.name}</a>
+                    ) : (
+                      item.name
+                    )}
+                  </Name>
                 )}
+                {pointer
+                  ? item.body && (
+                      <p class="service-detail-body" data-copy="service_body">
+                        {item.body}
+                      </p>
+                    )
+                  : (item.detail || item.body) && (
+                      <p class="service-detail-body" data-copy="service_detail">
+                        {item.detail || item.body}
+                      </p>
+                    )}
                 {primaryAction && (
                   <ActionLink
                     href={primaryAction.href}
@@ -185,15 +211,15 @@ const perRow = items.length === 4 ? 4 : 3
                   />
                 )}
               </div>
-              {(item.includes.length > 0 || item.for) && (
+              {!pointer && (item.includes.length > 0 || item.for) && (
                 <div class="service-detail-facts">
                   {item.includes.length > 0 && (
                     <>
                       {site.serviceIncludesLabel && (
-                        <Label class="facts-label">{site.serviceIncludesLabel}</Label>
+                        <Label class="facts-label" data-copy="service_label">{site.serviceIncludesLabel}</Label>
                       )}
-                      {site.typicalNote && (
-                        <p class="typical-note">{site.typicalNote}</p>
+                      {note && (
+                        <p class="typical-note" data-copy="typical_note">{note}</p>
                       )}
                       <ul class="check-list" data-copy="service_includes">
                         {item.includes.map((line) => (
@@ -208,7 +234,7 @@ const perRow = items.length === 4 ? 4 : 3
                   {item.for && (
                     <>
                       {site.serviceForLabel && (
-                        <Label class="facts-label">{site.serviceForLabel}</Label>
+                        <Label class="facts-label" data-copy="service_label">{site.serviceForLabel}</Label>
                       )}
                       <p data-copy="service_for">{item.for}</p>
                     </>
@@ -216,7 +242,8 @@ const perRow = items.length === 4 ? 4 : 3
                 </div>
               )}
             </article>
-          ))}
+            )
+          })}
         {linked && !onServices && site.serviceCardsLink && (
           <p class="section-more">
             <a class="more-link" href="/services/">

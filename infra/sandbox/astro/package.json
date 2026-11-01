@@ -8,11 +8,11 @@
     "check": "astro check"
   },
   "dependencies": {
+    "@fontsource/bodoni-moda": "5.3.0",
     "@fontsource/cormorant-garamond": "5.3.0",
     "@fontsource/dm-sans": "5.3.0",
     "@fontsource/figtree": "5.3.0",
     "@fontsource/fraunces": "5.3.0",
-    "@fontsource/instrument-serif": "5.3.0",
     "@fontsource/inter": "5.3.0",
     "@fontsource/manrope": "5.3.0",
     "@fontsource/newsreader": "5.3.0",

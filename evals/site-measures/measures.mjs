@@ -1,5 +1,4 @@
 import { createRequire } from "node:module"
-import { repeatedSentences } from "@workspace/gates"
 import { hashDistance, pairs, sequenceDistance } from "../variety/measures.mjs"
 
 // shortcut: parse5 is the gates' dependency, not the root's; resolved from
@@ -111,6 +110,61 @@ export function readPage(html) {
       words: wordsOf(r.text.join(" ")).length,
     })),
   }
+}
+
+const CRAWL_BREAKS = new Set(
+  "p li h1 h2 h3 h4 dd dt summary span a figcaption blockquote".split(" ")
+)
+
+/** Words a sentence needs before two pages may not share it (design §1). */
+export const REPEAT_WORDS = 6
+
+/**
+ * A page's text blocks as the baseline crawl (.local/research/baseline-2026-11-01/seo.py)
+ * cuts them, minus the layout's header and footer: the ones outside <main>.
+ */
+export function crawlBlocks(html) {
+  const blocks = []
+  let run = []
+  const flush = () => {
+    const text = run.join("").split(/\s+/).filter(Boolean).join(" ")
+    if (text) blocks.push(text)
+    run = []
+  }
+  const walk = (node, inMain) => {
+    for (const child of childrenOf(node)) {
+      if (child.nodeName === "#text") {
+        run.push(child.value ?? "")
+        continue
+      }
+      const tag = child.tagName
+      if (!tag || SKIPPED.has(tag) || tag === "head") continue
+      const main = inMain || tag === "main"
+      if (!main && (tag === "header" || tag === "footer")) continue
+      const breaks = CRAWL_BREAKS.has(tag)
+      if (breaks) flush()
+      walk(child, main)
+      if (breaks) flush()
+    }
+  }
+  walk(parse(html), false)
+  flush()
+  return blocks
+}
+
+/** Each sentence of `REPEAT_WORDS` words or more on two pages or more, with those pages in site order. */
+export function repeatedSentences(pages) {
+  const seen = new Map()
+  for (const { file, html } of pages) {
+    const sentences = crawlBlocks(html)
+      .flatMap((block) => block.split(/(?<=[.!?])\s+/))
+      .filter((s) => s.split(" ").length >= REPEAT_WORDS)
+    for (const sentence of new Set(sentences))
+      seen.set(sentence, [...(seen.get(sentence) ?? []), file])
+  }
+  return [...seen]
+    .filter(([, files]) => files.length > 1)
+    .map(([sentence, files]) => ({ sentence, files }))
 }
 
 /**
