@@ -149,4 +149,10 @@ describe("the message's limits", () => {
     expect(overLimit("a".repeat(LIMITS.chars + 1))).toBe("chars")
     expect(overLimit("a".repeat(LIMITS.chars))).toBeNull()
   })
+
+  it("does not count a numbered list's markers as sentences", () => {
+    expect(
+      overLimit("Two steps:\n1. Open your DNS settings.\n2. Add the record.")
+    ).toBeNull()
+  })
 })

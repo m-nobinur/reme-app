@@ -108,6 +108,41 @@ function ToolFallbackDuration({
   )
 }
 
+function ToolFallbackLine({
+  toolName,
+  status,
+  step,
+}: {
+  toolName: string
+  status?: ToolCallMessagePartStatus | undefined
+  step?: string | undefined
+}) {
+  const statusType = status?.type ?? "complete"
+  const isCancelled =
+    status?.type === "incomplete" && status.reason === "cancelled"
+
+  return (
+    <ToolStatus
+      announce={false}
+      clockAfter={null}
+      delay={0}
+      tool={toolName}
+      args={{ step }}
+      state={
+        statusType === "running"
+          ? "working"
+          : statusType === "requires-action"
+            ? "waiting"
+            : statusType === "incomplete"
+              ? isCancelled
+                ? "stopped"
+                : "failed"
+              : "done"
+      }
+    />
+  )
+}
+
 function ToolFallbackTrigger({
   toolName,
   status,
@@ -119,10 +154,6 @@ function ToolFallbackTrigger({
   status?: ToolCallMessagePartStatus
   step?: string | undefined
 }) {
-  const statusType = status?.type ?? "complete"
-  const isCancelled =
-    status?.type === "incomplete" && status.reason === "cancelled"
-
   return (
     <CollapsibleTrigger
       data-slot="tool-fallback-trigger"
@@ -133,24 +164,7 @@ function ToolFallbackTrigger({
       )}
       {...props}
     >
-      <ToolStatus
-        announce={false}
-        clockAfter={null}
-        delay={0}
-        tool={toolName}
-        args={{ step }}
-        state={
-          statusType === "running"
-            ? "working"
-            : statusType === "requires-action"
-              ? "waiting"
-              : statusType === "incomplete"
-                ? isCancelled
-                  ? "stopped"
-                  : "failed"
-                : "done"
-        }
-      />
+      <ToolFallbackLine toolName={toolName} status={status} step={step} />
       <ToolFallbackDuration />
       <CaretDownIcon
         data-slot="tool-fallback-trigger-chevron"
@@ -222,72 +236,6 @@ function ToolFallbackArgs({
       >
         {argsText}
       </pre>
-    </div>
-  )
-}
-
-function ToolFallbackResult({
-  result,
-  className,
-  ...props
-}: React.ComponentProps<"div"> & {
-  result?: unknown
-}) {
-  if (result === undefined) return null
-
-  return (
-    <div
-      data-slot="tool-fallback-result"
-      className={cn("aui-tool-fallback-result", className)}
-      {...props}
-    >
-      <p className="aui-tool-fallback-result-header font-medium text-muted-foreground text-xs">
-        Result:
-      </p>
-      <pre
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll region has to take focus to be scrolled from the keyboard.
-        tabIndex={0}
-        className="aui-tool-fallback-result-content wrap-anywhere mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-muted/50 p-2.5 text-foreground/90 text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring"
-      >
-        {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
-      </pre>
-    </div>
-  )
-}
-
-function ToolFallbackError({
-  status,
-  className,
-  ...props
-}: React.ComponentProps<"div"> & {
-  status?: ToolCallMessagePartStatus
-}) {
-  if (status?.type !== "incomplete") return null
-
-  const error = status.error
-  const errorText = error
-    ? typeof error === "string"
-      ? error
-      : JSON.stringify(error)
-    : null
-
-  if (!errorText) return null
-
-  const isCancelled = status.reason === "cancelled"
-  const headerText = isCancelled ? "Cancelled reason:" : "Error:"
-
-  return (
-    <div
-      data-slot="tool-fallback-error"
-      className={cn("aui-tool-fallback-error", className)}
-      {...props}
-    >
-      <p className="aui-tool-fallback-error-header font-semibold text-muted-foreground">
-        {headerText}
-      </p>
-      <p className="aui-tool-fallback-error-reason text-muted-foreground">
-        {errorText}
-      </p>
     </div>
   )
 }
@@ -529,7 +477,6 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   toolName,
   args,
   argsText,
-  result,
   status,
   addResult,
   resume,
@@ -537,11 +484,10 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   approval,
   respondToApproval,
 }) => {
-  const isCancelled =
-    status?.type === "incomplete" && status.reason === "cancelled"
   const isRequiresAction = status?.type === "requires-action"
   const shouldRenderApproval =
     isRequiresAction && offersInterruptAction(status, approval, interrupt)
+  const step = stepOf({ args, argsText })
 
   const [open, setOpen] = useState(isRequiresAction)
   const [prevRequiresAction, setPrevRequiresAction] = useState(isRequiresAction)
@@ -550,19 +496,22 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
     if (isRequiresAction) setOpen(true)
   }
 
+  if (!isRequiresAction) {
+    return (
+      <div
+        data-slot="tool-fallback-line"
+        className="flex w-fit items-center px-1 py-1.5 text-chat-step text-muted-foreground"
+      >
+        <ToolFallbackLine toolName={toolName} status={status} step={step} />
+      </div>
+    )
+  }
+
   return (
     <ToolFallbackRoot open={open} onOpenChange={setOpen}>
-      <ToolFallbackTrigger
-        toolName={toolName}
-        status={status}
-        step={stepOf({ args, argsText })}
-      />
+      <ToolFallbackTrigger toolName={toolName} status={status} step={step} />
       <ToolFallbackContent>
-        <ToolFallbackError status={status} />
-        <ToolFallbackArgs
-          argsText={argsText}
-          className={cn(isCancelled && "opacity-60")}
-        />
+        <ToolFallbackArgs argsText={argsText} />
         {shouldRenderApproval && (
           <ToolFallbackApproval
             addResult={addResult}
@@ -573,17 +522,17 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
             status={status}
           />
         )}
-        {!isCancelled && <ToolFallbackResult result={result} />}
       </ToolFallbackContent>
     </ToolFallbackRoot>
   )
 }
 
 /**
- * Anything the assistant calls that has no UI of its own: the tool name, how
- * long it ran, its arguments, its result, and the allow-or-deny pair when the
- * runtime asks for one. `Approval` takes over for the tools whose target the
- * owner has to see before answering.
+ * Anything the assistant calls that has no UI of its own: its line in the
+ * copy table's words, and nothing to open once it has run or failed, since the
+ * reply carries the substance. Only a step waiting on the owner expands, to
+ * its arguments and the allow-or-deny pair. `Approval` takes over for the
+ * tools whose target the owner has to see before answering.
  */
 const ToolFallback = memo(ToolFallbackImpl) as ToolCallMessagePartComponent
 ToolFallback.displayName = "ToolFallback"

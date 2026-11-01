@@ -351,6 +351,12 @@ describe("the CoS's instructions", () => {
     expect(INSTRUCTIONS).not.toMatch(/such as "It's/)
   })
 
+  it("tell the model how to use the chat's markdown, and not to use headings or tables", () => {
+    expect(INSTRUCTIONS).toMatch(
+      /renders markdown[^\n]*numbered list for steps[^\n]*bold for the one fact[^\n]*inline code for a DNS value[^\n]*a link[^\n]*No headings, no tables[^\n]*never more than one bold phrase/
+    )
+  })
+
   it("tell the model to promise a report back only while something watches, and never to end on a bare promise", () => {
     expect(INSTRUCTIONS).toMatch(
       /tell the owner when something happens only while something is watching for it[^\n]*Never end a reply on "I'll\.\.\." with no tool call/

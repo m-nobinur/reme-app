@@ -488,18 +488,54 @@ export function readDetails(
     : { ok: false, errors }
 }
 
-/** The text fields of the details page, in its order, with their labels. */
+/**
+ * The text fields of the details page, in its order, with their labels and how
+ * many of six columns each takes from a small screen up: pairs share a row,
+ * the street has one to itself.
+ */
 const TEXT_FIELDS = [
-  ["name", "Your full name", { autoComplete: "name" }],
-  ["business_name", "Business name", { autoComplete: "organization" }],
-  ["email", "Email", { autoComplete: "email", type: "email" }],
-  ["phone", "Phone", { autoComplete: "tel", type: "tel" }],
-  ["street", "Street address", { autoComplete: "street-address" }],
-  ["city", "Town or city", { autoComplete: "address-level2" }],
-  ["state", "County (optional)", { autoComplete: "address-level1" }],
-  ["postal_code", "Postcode", { autoComplete: "postal-code" }],
-  ["country_code", "Country code", { autoComplete: "country", maxLength: 2 }],
-] as const satisfies [RegistrantField, string, object][]
+  ["name", "Your full name", "sm:col-span-3", { autoComplete: "name" }],
+  [
+    "business_name",
+    "Business name",
+    "sm:col-span-3",
+    { autoComplete: "organization" },
+  ],
+  ["email", "Email", "sm:col-span-3", { autoComplete: "email", type: "email" }],
+  ["phone", "Phone", "sm:col-span-3", { autoComplete: "tel", type: "tel" }],
+  [
+    "street",
+    "Street address",
+    "sm:col-span-6",
+    { autoComplete: "street-address" },
+  ],
+  ["city", "Town or city", "sm:col-span-3", { autoComplete: "address-level2" }],
+  ["postal_code", "Postcode", "sm:col-span-3", { autoComplete: "postal-code" }],
+  [
+    "state",
+    "County (optional)",
+    "sm:col-span-4",
+    { autoComplete: "address-level1" },
+  ],
+  [
+    "country_code",
+    "Country code",
+    "sm:col-span-2",
+    { autoComplete: "country", maxLength: 2 },
+  ],
+] as const satisfies [RegistrantField, string, string, object][]
+
+/** The field each shares a row with, which takes the whole row when it is not asked. */
+const PARTNER: Partial<Record<RegistrantField, RegistrantField>> = {
+  name: "business_name",
+  business_name: "name",
+  email: "phone",
+  phone: "email",
+  city: "postal_code",
+  postal_code: "city",
+  state: "country_code",
+  country_code: "state",
+}
 
 /** What the prefill holds for a field, as the form's text. */
 function prefilled(prefill: DomainRegistrantPrefill, key: RegistrantField) {
@@ -778,13 +814,13 @@ function DetailsPage({
       ) : (
         <form
           aria-label="Registration details"
-          className="flex flex-col gap-3 px-2 pb-1"
+          className="grid grid-cols-6 gap-3 px-2 pb-1"
           id={`${id}-form`}
           noValidate
           onSubmit={pay}
         >
           {all ? null : (
-            <p className={META}>
+            <p className={cn(META, "col-span-6")}>
               {ask.size === 0
                 ? "We have everything we need to register it in your business's name."
                 : "We filled in what we know. Add the rest to register it in your business's name."}{" "}
@@ -797,13 +833,18 @@ function DetailsPage({
               </button>
             </p>
           )}
-          {TEXT_FIELDS.map(([key, label, extra]) => {
+          {TEXT_FIELDS.map(([key, label, span, extra]) => {
+            const partner = PARTNER[key]
             const value =
               prefill && !("refused" in prefill)
                 ? prefilled(prefill, key)
                 : undefined
             return ask.has(key) ? (
               <Field
+                className={cn(
+                  "col-span-6",
+                  partner && ask.has(partner) ? span : "sm:col-span-6"
+                )}
                 error={errors[key]}
                 id={`${id}-${key}`}
                 key={key}
@@ -824,7 +865,7 @@ function DetailsPage({
             )
           })}
           {needsRegistrantType(name) ? (
-            <fieldset className="flex flex-col gap-2">
+            <fieldset className="col-span-6 flex flex-col gap-2">
               <legend className="mb-2 text-sm">Kind of business</legend>
               <div className="flex flex-wrap gap-2">
                 {(Object.keys(TYPES) as RegistrantType[]).map((each) => (
@@ -853,6 +894,7 @@ function DetailsPage({
           {type === "LTD" || type === "LLP" ? (
             <Field
               autoCapitalize="characters"
+              className="col-span-6"
               error={errors.company_number}
               id={`${id}-company_number`}
               label="Companies House number"
@@ -860,7 +902,7 @@ function DetailsPage({
               name="company_number"
             />
           ) : null}
-          <p className={META}>
+          <p className={cn(META, "col-span-6")}>
             Hidden from public WHOIS where the registry allows. It's yours: you
             can move it away any time after 60 days. By paying you authorise
             Reme to register it in your business's name and accept the{" "}

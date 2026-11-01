@@ -578,7 +578,7 @@ describe("inspecting a name the owner has", () => {
       dns_host: {
         id: "godaddy",
         name: "GoDaddy",
-        settings_url: "https://dcc.godaddy.com/manage/dns",
+        settings_url: `https://dcc.godaddy.com/control/dnsmanagement?domainName=${NAME}`,
       },
       in_use: true,
     })

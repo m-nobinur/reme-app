@@ -360,6 +360,18 @@ it("asks only for the gaps, pays in a dialog, and leaves one line once paid", as
   )
   expect(button(tray, "Pay £8")).toBeTruthy()
 
+  // A field whose row partner is already held takes the whole row.
+  const span = (name: string) =>
+    tray
+      .querySelector(`[name=${name}]`)
+      ?.closest('[data-slot="field"]')
+      ?.className.split(" ")
+  expect(span("street")).toContain("sm:col-span-6")
+  expect(span("country_code")).toContain("sm:col-span-6")
+  expect(span("country_code")).not.toContain("sm:col-span-2")
+  expect(span("city")).toContain("sm:col-span-3")
+  expect(span("postal_code")).toContain("sm:col-span-3")
+
   fill(tray, {
     street: "12 Mill Lane",
     city: "Bristol",

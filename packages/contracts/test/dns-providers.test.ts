@@ -58,6 +58,22 @@ describe("the DNS provider registry", () => {
     )
   })
 
+  it("links GoDaddy, Namecheap, Squarespace and IONOS to the domain's DNS page", () => {
+    const link = (id: string) => dnsProvider(id)?.settingsUrl("bnwise.tech")
+    expect(link("godaddy")).toBe(
+      "https://dcc.godaddy.com/control/dnsmanagement?domainName=bnwise.tech"
+    )
+    expect(link("namecheap")).toBe(
+      "https://ap.www.namecheap.com/domains/domaincontrolpanel/bnwise.tech/advancedns"
+    )
+    expect(link("squarespace")).toBe(
+      "https://account.squarespace.com/domains/managed/bnwise.tech/dns/dns-settings"
+    )
+    expect(link("ionos")).toBe(
+      "https://my.ionos.co.uk/domain-dns-settings/bnwise.tech"
+    )
+  })
+
   it("reads a registrar as RDAP spells it", () => {
     expect(
       registrarIn("Squarespace Domains II LLC", ["Squarespace Domains"])
