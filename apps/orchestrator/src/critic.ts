@@ -1,4 +1,8 @@
-import { Blueprint, SECTION_VARIANTS } from "@workspace/contracts"
+import {
+  Blueprint,
+  type PageDocument,
+  SECTION_VARIANTS,
+} from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
@@ -19,6 +23,7 @@ import { RULES, TELLS } from "@workspace/gates/rubric"
 import manifests from "@workspace/starter-site/manifests.json"
 import { fields } from "@workspace/starter-site/site-config"
 import { creationChoices } from "./brief.ts"
+import { PAGE_FIELDS, slotValue, whereIs } from "./documents.ts"
 import { CROP_WIDTHS, CROPS_MAX, cropKey } from "./shots.ts"
 import type { Ids } from "./state.ts"
 import type { Artifacts } from "./validate.ts"
@@ -186,7 +191,9 @@ const SECTION_LIMITS = Object.entries(SECTION_VARIANTS).map(
   }
 )
 const FIELD_KEYS = [
-  ...new Set(Object.keys(fields).map((k) => k.replace(/\d+/g, "N"))),
+  ...new Set(
+    [...Object.keys(fields), ...PAGE_FIELDS].map((k) => k.replace(/\d+/g, "N"))
+  ),
 ]
 
 /** The critic's prompt: the stable part first, then this build's Blueprint and what was asked before. */
@@ -330,7 +337,8 @@ export function whyNot(fix: Fix): string | null {
     if (!variants) return `there is no section ${head}`
     return variants.includes(tail) ? null : `${head} has no variant ${tail}`
   }
-  if (!(target in fields)) return `there is no field ${target}`
+  if (!(target in fields || PAGE_FIELDS.has(target)))
+    return `there is no field ${target}`
   if (fix.how === "empty" && target.endsWith("Icon"))
     return "an empty icon field is picked from its words, so the icon stays"
   return null
@@ -352,6 +360,39 @@ export const unmakeable = (fixes: readonly Fix[]) =>
 export type Config = {
   values: Record<string, string>
   layout: Record<string, { kind: string; variant?: string }[]>
+}
+
+/** A document's file as the layout key of its page: `service-area.json` is service_area, a service's is service. */
+const pageOfFile = (file: string) =>
+  file.startsWith("services/")
+    ? "service"
+    : file.replace(/\.json$/, "").replace(/-/g, "_")
+
+/**
+ * What a site with documents holds, as the critic reads it: the settings of
+ * its src/site-config.ts, each page slot's words where its document shows
+ * them, and each page's sections from its document.
+ */
+export function readSite(
+  source: string,
+  documents: Readonly<Record<string, PageDocument>>
+): Config {
+  const config = readConfig(source)
+  const values = { ...config.values }
+  for (const slot of PAGE_FIELDS) {
+    const value = slotValue(slot, documents, config.values)
+    if (value !== undefined) values[slot] = value
+  }
+  const layout = { ...config.layout }
+  for (const [file, doc] of Object.entries(documents)) {
+    const page = pageOfFile(file)
+    if (page === "service" && layout.service) continue
+    layout[page] = doc.sections.map((s) => ({
+      kind: s.kind,
+      ...("variant" in s && s.variant ? { variant: s.variant } : {}),
+    }))
+  }
+  return { values, layout }
 }
 
 const LITERAL = String.raw`("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|\`[^\`$]*\`)`
@@ -623,7 +664,12 @@ function stepOf(
 
 /** The message that sends the lead back, once. */
 export const repairMessage = (fixes: readonly Fix[]) =>
-  JSON.stringify({ fixes })
+  JSON.stringify({
+    fixes: fixes.map((f) => {
+      const where = f.target ? whereIs(f.target) : null
+      return where ? { ...f, where } : f
+    }),
+  })
 
 export const base64 = (bytes: Uint8Array) => {
   let out = ""
@@ -679,8 +725,8 @@ export async function critiqueRound(input: {
   revisionId: string
   earlier?: readonly Fix[]
   complete?: Complete
-  /** The build's `src/site-config.ts` as it is now, or null when the sandbox no longer holds it. */
-  readSource?: () => Promise<string | null>
+  /** The build's settings and page documents as they are now, or null when the sandbox no longer holds them. */
+  readSite?: () => Promise<Config | null>
 }): Promise<CritiqueStep> {
   const { env, kit, ids, round, revisionId } = input
   const type = round === 1 ? "design.critiqued" : "design.rechecked"
@@ -729,8 +775,8 @@ export async function critiqueRound(input: {
 
   // The site's config as the build holds it now: round 1 notes what each fix's
   // target holds, round 2 compares it with that.
-  const config = await Promise.resolve(input.readSource?.())
-    .then((source) => (source ? readConfig(source) : null))
+  const config = await Promise.resolve(input.readSite?.())
+    .then((site) => site ?? null)
     .catch(() => null)
   const earlier = round > 1 ? (read.asked ?? input.earlier ?? []) : []
   const decided = earlier.map((f) => verdictOf(f, config))

@@ -17,7 +17,8 @@ import type { PhotoFile } from "./photo-step.ts"
 const ROLES = ["paper", "ink", "primary", "tint", "accent", "line"] as const
 
 /**
- * The Blueprint as the starter's `layout` export (VS4): each planned page's
+ * The Blueprint as each page's sections (VS4), which write_pages writes into
+ * its document: each planned page's
  * sections in order, every variant written out. An inner page's hero needs
  * its variant named, or the starter draws the plain page hero.
  */
@@ -89,7 +90,7 @@ export function blueprintLines(
     "Blueprint, the plan the owner approved. Build exactly this. Where it differs from the owner's choices above on layout, type or colour, the Blueprint wins: it already applies them.",
     `- In src/site-config.ts set direction to "${plan.direction}", font to "${plan.fonts}" and ${colour}.`,
     `- Voice: ${plan.voice}`,
-    "- Set the `layout` export in src/site-config.ts to exactly this, every variant written out even where the direction would supply it, since the Blueprint already chose each one; a page not listed is not built:",
+    "- write_pages writes each listed page's document, src/content/pages/<page>.json, with exactly these sections, every variant written out since the Blueprint already chose each one; a page not listed is not built:",
     JSON.stringify(blueprintLayout(plan)),
     "- The pages are fixed: keep the file in src/pages for every page the layout lists (`service` is src/pages/services/[slug].astro, one page per named service), and delete only starter pages it does not list. Never delete a planned page, whatever the facts; when they are thin, write from the trade's usual practice. The build fails on a planned page it lacks.",
     "- What each section is for:",
@@ -120,20 +121,20 @@ export function blueprintLines(
  * What a section change needs of the plan (QE4's short prompt): the variants
  * each section kind takes, and, when the site was planned, each page's
  * sections in order with what each is for. A site built before planning has
- * only the first list, and the `layout` export in its site-config is the rest.
+ * only the first list, and its pages' documents are the rest.
  * The owner's words never reach the instructions (§28.3), so the target page
  * cannot be picked here: every page's order and every purpose is listed, one
  * short line each, and the model finds its own.
  */
 export function layoutLines(plan: Blueprint | null): string[] {
   return [
-    "Layout. The `layout` export in src/site-config.ts lists each page's sections in order. Reorder, add, drop or change a variant by editing that data, and nothing else. The variants each section kind takes:",
+    "Layout. Each page's document, src/content/pages/<page>.json, lists its sections in order (on a site built before documents, the `layout` export in src/site-config.ts). Reorder, add, drop or change a variant by editing that data, and nothing else. The variants each section kind takes:",
     ...Object.entries(SECTION_VARIANTS).map(
       ([kind, variants]) => `  - ${kind}: ${variants.join(", ")}`
     ),
     ...(plan
       ? [
-          "The site as last planned and approved. The `layout` export may have moved since, so read it before you edit:",
+          "The site as last planned and approved. The pages may have moved since, so read them before you edit:",
           ...plan.pages.map(
             ({ page, sections }) =>
               `  - ${page}: ${sections.map((s) => `${s.kind} (${s.variant})`).join(", ")}`

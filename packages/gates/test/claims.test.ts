@@ -166,6 +166,35 @@ describe("the claims gate", () => {
     expect(verdict("<p>Award-winning cleaners</p>", proof).passed).toBe(false)
   })
 
+  it("lets the owner's site content support itself, never a rating, an award or a review count", () => {
+    const content = [
+      ...PLAIN,
+      fact("site.content", {
+        items: [
+          {
+            id: "our-story",
+            page: "about",
+            title: "Our story",
+            markdown:
+              "Fully insured since 2012, and every job guaranteed. An award-winning team, rated 4.9 by 200 reviews.",
+          },
+        ],
+      }),
+    ]
+    for (const main of [
+      "<p>Fully insured</p>",
+      "<p>Guaranteed work</p>",
+      "<p>Trading since 2012</p>",
+    ])
+      expect(verdict(main, content).passed, main).toBe(true)
+    for (const main of [
+      "<p>Award-winning cleaners</p>",
+      "<p>Rated 4.9 out of 5</p>",
+      "<p>Read our 200 reviews</p>",
+    ])
+      expect(verdict(main, content).passed, main).toBe(false)
+  })
+
   it("holds the About page's rephrased overview and audience to their facts", () => {
     const facts = [
       ...PLAIN,

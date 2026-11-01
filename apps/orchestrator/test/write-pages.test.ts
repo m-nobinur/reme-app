@@ -232,7 +232,7 @@ describe("write_pages's fan-out", () => {
     expect(lines[0]).toBe("- home: Fixed. Fixed what the copy check found.")
     expect(site.text).toContain('ctaHeading: "Questions about the garden"')
     expect(lines[1]).toMatch(
-      /^- about: failed \(The reply was not JSON.*\)\. Its fields are yours: aboutHeading\.$/
+      /^- about: failed \(The reply was not JSON.*\)\. Its fields are yours: aboutHeading \(src\/content\/pages\/about\.json, section hero, heading\)\.$/
     )
   })
 })

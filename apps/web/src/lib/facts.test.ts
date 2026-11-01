@@ -217,6 +217,23 @@ const SHAPES: [FactValue, string, string][] = [
     "Second review",
     '"Spotless." Owen',
   ],
+  [
+    {
+      key: "site.content",
+      value: {
+        items: [
+          {
+            id: "our-story",
+            page: "about",
+            title: "Our story",
+            markdown: "Started in 2019 with one van.",
+          },
+        ],
+      },
+    },
+    "Your words for the site",
+    "Our story",
+  ],
 ]
 
 it("shows the owner's own words or colour, not the word custom", () => {

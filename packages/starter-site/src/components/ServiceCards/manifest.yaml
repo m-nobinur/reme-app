@@ -15,6 +15,15 @@ props:
     required: false
     description: "On a service's own page, the one service it shows by id: its
       detail, under the page's hero."
+  - name: eyebrow
+    type: string
+    required: false
+    description: The short label above the h2 and on each detail row; empty is the
+      serviceCardsEyebrow slot's default.
+  - name: heading
+    type: string
+    required: false
+    description: The h2 over the cards; empty is the serviceCardsHeading slot's default.
 constraints:
   - Reads serviceItems from src/structured-data.ts (service1Name to
     service6For); a service renders only with a name or a body.

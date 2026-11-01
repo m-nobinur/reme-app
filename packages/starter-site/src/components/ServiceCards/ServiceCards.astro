@@ -1,6 +1,7 @@
 ---
 import Photo from "../../layouts/Photo.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
+import { pageFields } from "../../page-fields"
 import { hasPhoto } from "../../photo-files"
 import { hasRoute, primaryAction, serviceHref } from "../../routes"
 import { site } from "../../site-config"
@@ -18,9 +19,18 @@ interface Props {
     | "practice_list"
   /** On a service's own page, the one service it shows by id: its detail, under the page's hero. */
   only?: string
+  /** The short label above the h2 and on each detail row; empty is the serviceCardsEyebrow slot's default. */
+  eyebrow?: string
+  /** The h2 over the cards; empty is the serviceCardsHeading slot's default. */
+  heading?: string
 }
 
-const { variant: asked = "photo_cards", only } = Astro.props
+const {
+  variant: asked = "photo_cards",
+  only,
+  eyebrow = pageFields.serviceCardsEyebrow,
+  heading = pageFields.serviceCardsHeading,
+} = Astro.props
 const items = serviceItems
   .filter((item) => !only || item.id === only)
   .map((item) => ({
@@ -72,8 +82,8 @@ const perRow = items.length === 4 ? 4 : 3
       <div class="wrap">
         {headed && (
           <SectionHead
-            eyebrow={site.serviceCardsEyebrow}
-            heading={site.serviceCardsHeading}
+            eyebrow={eyebrow}
+            heading={heading}
           />
         )}
         {(variant === "photo_cards" || variant === "fleet") && (
@@ -157,9 +167,7 @@ const perRow = items.length === 4 ? 4 : 3
               )}
               <div class="service-detail-main">
                 <Icon name={item.icon} />
-                {site.serviceCardsEyebrow && (
-                  <p class="eyebrow">{site.serviceCardsEyebrow}</p>
-                )}
+                {eyebrow && <p class="eyebrow">{eyebrow}</p>}
                 {/* The page's h1 names the service on its own page, and a
                     headed section's h2 sits above its cards: the bare name as
                     an h2 there repeats another page's heading. */}

@@ -10,6 +10,7 @@ import {
   type BuildLane,
   buildFailure,
   type ChangeKind,
+  PageDocument,
   siteUrl,
   WORKFLOW_ERRORED,
 } from "@workspace/contracts"
@@ -51,6 +52,7 @@ import {
   type Fix,
   LOOKS,
   type Round,
+  readSite,
   repairMessage,
 } from "./critic.ts"
 import {
@@ -59,6 +61,7 @@ import {
   deliveriesBatch,
   redriveDeliveries,
 } from "./deliveries.ts"
+import { DOCUMENTS_DIR } from "./documents.ts"
 import {
   postStatus,
   restoreRoutes,
@@ -893,13 +896,28 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                   revisionId: payload.revision_id,
                   earlier: asked,
                   // The fields and variants each fix names, before and after the lead's round.
-                  readSource: () =>
+                  readSite: () =>
                     whileHeld(this.env, ids, async () => {
-                      const file = await sandboxFor(
-                        this.env,
-                        ids.orgId
-                      ).readFile(`${SITE_ROOT}/src/site-config.ts`)
-                      return file.content
+                      const box = sandboxFor(this.env, ids.orgId)
+                      const read = async (path: string) =>
+                        (await box.readFile(`${SITE_ROOT}/${path}`)).content
+                      const listed = await box.exec(
+                        `cd ${SITE_ROOT} && find ${DOCUMENTS_DIR} -name '*.json' -type f 2>/dev/null | sort`
+                      )
+                      const documents: Record<string, PageDocument> = {}
+                      for (const file of listed.stdout
+                        .split("\n")
+                        .filter(Boolean)) {
+                        const doc = PageDocument.safeParse(
+                          JSON.parse(await read(file))
+                        ).data
+                        if (doc)
+                          documents[file.slice(DOCUMENTS_DIR.length + 1)] = doc
+                      }
+                      return readSite(
+                        await read("src/site-config.ts"),
+                        documents
+                      )
                     }),
                 })
               ),

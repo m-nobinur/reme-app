@@ -2,6 +2,8 @@ import { z } from "zod"
 import { ChoiceStep, DetailsStep, LogoPath } from "./chat.ts"
 import { QuoteFields } from "./onboarding.ts"
 import {
+  CONTENT_FACT_KEYS,
+  type ContentFactKey,
   FactValue,
   type FactValueKey,
   REVIEW_FACT_KEYS,
@@ -21,7 +23,8 @@ import { Text } from "./text.ts"
  * The facts the planner may state from the owner's words. Photos arrive
  * only through `POST /assets`, the quote form only through the owner's
  * confirmation of a proposal, and a review only through `record_review`'s
- * card, so none of them is here. Nor is the assistant's face, which is
+ * card, and the owner's site content only through the assistant, so none
+ * of them is here. Nor is the assistant's face, which is
  * only ever picked on its card.
  */
 export const PLAN_FACT_KEYS = FactValue.options
@@ -31,10 +34,15 @@ export const PLAN_FACT_KEYS = FactValue.options
       key !== "media.uploads" &&
       key !== "quote.form" &&
       key !== "assistant.avatar" &&
-      !(REVIEW_FACT_KEYS as readonly string[]).includes(key)
+      !(REVIEW_FACT_KEYS as readonly string[]).includes(key) &&
+      !(CONTENT_FACT_KEYS as readonly string[]).includes(key)
   ) as Exclude<
   FactValueKey,
-  "media.uploads" | "quote.form" | "assistant.avatar" | ReviewFactKey
+  | "media.uploads"
+  | "quote.form"
+  | "assistant.avatar"
+  | ReviewFactKey
+  | ContentFactKey
 >[]
 export type PlanFactKey = (typeof PLAN_FACT_KEYS)[number]
 

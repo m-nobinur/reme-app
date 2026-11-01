@@ -1,15 +1,16 @@
 ---
-import { plain } from "../accent"
+import { pageDocument } from "../documents"
 import { headerPhoto } from "../header-photo"
 import Base from "../layouts/Base.astro"
 import Sections from "../layouts/Sections.astro"
-import { site } from "../site-config"
 import { localBusiness } from "../structured-data"
+
+const doc = pageDocument("contact")
 ---
 
 <Base
-  title={site.contactTitle || plain(site.contactHeading)}
-  description={site.contactDescription || site.contactIntro}
+  title={doc?.title ?? ""}
+  description={doc?.description ?? ""}
   jsonLd={localBusiness(Astro.site)}
   image={headerPhoto("contact")}
 >

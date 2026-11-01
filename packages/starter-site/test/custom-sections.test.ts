@@ -83,7 +83,7 @@ const BAD: Record<string, [string, string]> = {
 }
 
 describe("a custom section", () => {
-  test.each(["Callout", "Note"])("%s passes every rule", (name) => {
+  test.each(["Callout", "Note", "Banner"])("%s passes every rule", (name) => {
     expect(lintSource(fixture(name))).toEqual([])
   })
 

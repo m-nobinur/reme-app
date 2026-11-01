@@ -11,7 +11,6 @@ import {
   PALETTE_AA_PAIRS,
   PALETTE_SWATCH,
   Palette,
-  SECTION_VARIANTS,
   SectionKind,
   SectionVariant,
 } from "../src/design.ts"
@@ -24,6 +23,7 @@ import {
   TEMPLATES,
   TemplateId,
 } from "../src/index.ts"
+import { SECTION_VARIANTS } from "../src/page.ts"
 import { samples } from "./samples.ts"
 
 const sample = <T>(name: keyof typeof samples) =>

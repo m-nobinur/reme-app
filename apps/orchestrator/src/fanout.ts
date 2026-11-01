@@ -278,15 +278,17 @@ const BUILD_COMMAND =
 export function leadLines(brief: Brief, plan: Blueprint): string[] {
   return [
     "How you build it, in three steps:",
-    "1. The shell, yourself. In src/site-config.ts set direction, font and colour and write the `layout` export exactly as the Blueprint says, then the fields every page shares: businessName, phone, email, logo, the nav labels and ctaLabel. Read what you need in one turn, write the shell in one edit call, then call checkpoint alone.",
+    "1. The shell, yourself. In src/site-config.ts set direction, font and colour, then the fields every page shares: businessName, phone, email, logo, the nav labels and ctaLabel. Read what you need in one turn, write the shell in one edit call, then call checkpoint alone.",
     "2. The pages: call write_pages once, with no other tool call beside it. It writes every page's fields and the SEO and FAQ copy in parallel, each writer's fields already through the copy gate's own check, places the photos as they are made, warms the image cache and commits. It returns one line per writer.",
-    `3. Assembly, yourself. Integrate, do not re-review: the writers' fields are done, so read src/site-config.ts only for a field a line says was left for you or failed, and fill it. Then run \`${BUILD_COMMAND}\` once with bash, fix what it reports, and call report_complete.`,
+    `3. Assembly, yourself. Integrate, do not re-review: the writers' fields are done and each planned page's document is written, so read only what a line says was left for you or failed, and fill it where the line says: a page slot in that page's document, a setting in src/site-config.ts. Then run \`${BUILD_COMMAND}\` once with bash, fix what it reports, and call report_complete.`,
     ...(plan.custom_sections?.length
       ? [
           `- After the pages, and only then, write the Blueprint's custom sections yourself under src/components/custom/, at most two: ${plan.custom_sections
             .slice(0, 2)
             .map((c) => c.name)
-            .join(", ")}.`,
+            .join(
+              ", "
+            )}, each placed with its words in its page's document as the custom section rules say.`,
         ]
       : []),
     '- After a run.interrupted message: read git log, and if there is no "pages" commit, call write_pages again; it replays the writers that already ran.',
@@ -299,7 +301,7 @@ function childPrefix(
   brief: Brief,
   role: string,
   /** The first rule: a page writer gets its lines' notes, the copy writer's fields are all empty. */
-  reading = "Your fields' current lines in src/site-config.ts, each with its note, follow your task."
+  reading = "Your fields' current lines in src/site-config.ts or the slot sheet, src/page-fields.ts, each with its note, follow your task. Code writes the page slots into the page's document."
 ): string[] {
   const { facts } = brief.snapshot
   const pack = packVoice(facts)
@@ -308,7 +310,7 @@ function childPrefix(
     role,
     "",
     "Rules:",
-    `- The lead has written the shell: direction, font, colour and the \`layout\` export in src/site-config.ts. ${reading}`,
+    `- The lead has written the shell: direction, font and colour in src/site-config.ts, and each page's sections are the Blueprint's. ${reading}`,
     '- You have no tools. Reply with JSON only, shaped {"summary": string, "values": {"<field>": string}}, with one entry for every field your task names and no other: the field\'s whole new text, or "" to leave it empty. Code writes each into its own line while other writers fill the other fields.',
     "- You cannot ask anyone anything. A field whose fact is missing stays empty; say so in your summary.",
     "- summary is one sentence of at most 40 words: what you filled, what you left empty and why. Never restate the copy you wrote.",

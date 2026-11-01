@@ -4,6 +4,7 @@ import { Enquiry } from "./enquiry.ts"
 import {
   ANSWER_TEXT_MAX,
   CHOICE_FACT_KEYS,
+  CONTENT_FACT_KEYS,
   FactValueKey,
   GOAL_MAX,
   OwnerAnswerText,
@@ -143,7 +144,11 @@ export const ChangeAskedPart = z.strictObject({
 export const QuestionInput = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("fact"),
-    key: FactValueKey.exclude([...CHOICE_FACT_KEYS, ...REVIEW_FACT_KEYS]),
+    key: FactValueKey.exclude([
+      ...CHOICE_FACT_KEYS,
+      ...REVIEW_FACT_KEYS,
+      ...CONTENT_FACT_KEYS,
+    ]),
   }),
   z.strictObject({
     kind: z.literal("choice"),

@@ -138,6 +138,16 @@ const facts = {
     name: "Tom",
     permission: true,
   },
+  "site.content": {
+    items: [
+      {
+        id: "our-story",
+        page: "about",
+        title: "Our story",
+        markdown: "We started with one car in 2019.",
+      },
+    ],
+  },
 }
 
 describe("AttentionItem", () => {
@@ -494,6 +504,7 @@ describe("the bridge's building blocks", () => {
       "quote.form",
       "testimonials.review_1",
       "testimonials.review_2",
+      "site.content",
     ])
     expect(FactValueKey.safeParse("business.fax").success).toBe(false)
   })

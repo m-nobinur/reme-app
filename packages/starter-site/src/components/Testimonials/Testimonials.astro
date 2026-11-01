@@ -1,13 +1,22 @@
 ---
 import SectionHead from "../../layouts/SectionHead.astro"
+import { pageFields } from "../../page-fields"
 import { site } from "../../site-config"
 
 interface Props {
   /** featured sets the first review larger on a tint, wall sets them evenly. */
   variant?: "featured" | "wall"
+  /** The short label above the h2; empty is the testimonialsEyebrow slot's default. */
+  eyebrow?: string
+  /** The h2; empty is the testimonialsHeading slot's default. */
+  heading?: string
 }
 
-const { variant = "wall" } = Astro.props
+const {
+  variant = "wall",
+  eyebrow = pageFields.testimonialsEyebrow,
+  heading = pageFields.testimonialsHeading,
+} = Astro.props
 // Quote and author are both facts. Nothing here is written: a review the
 // facts do not carry is a review the site does not show.
 const items = [
@@ -20,10 +29,7 @@ const items = [
   items.length > 0 && (
     <section class:list={["band testimonials", `testimonials-${variant}`]}>
       <div class="wrap">
-        <SectionHead
-          eyebrow={site.testimonialsEyebrow}
-          heading={site.testimonialsHeading}
-        />
+        <SectionHead eyebrow={eyebrow} heading={heading} />
         <div class="quote-grid">
           {items.map((item) => (
             <figure class="card">

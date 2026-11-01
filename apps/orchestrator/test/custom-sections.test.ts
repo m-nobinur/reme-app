@@ -33,6 +33,9 @@ describe("the custom section rules the builder is told", () => {
       "iframe",
       "src/site-config.ts",
       "renders nothing",
+      "src/content/pages/<page>.json",
+      '"kind": "custom"',
+      "src/layouts/Blocks.astro",
     ])
       expect(CUSTOM_SECTION_RULES).toContain(word)
     // Each of those is a rule the lint really has.

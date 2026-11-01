@@ -255,7 +255,7 @@ describe("the owner's onboarding choices in the rules", () => {
       )
       expect(rules).toContain("never edit it")
       expect(rules).toContain(
-        "Write quoteHeading, quoteIntro and quoteRequestLegend in src/site-config.ts from the business facts"
+        "Write the quote page's heading and intro (quoteHeading and quoteIntro, the hero of src/content/pages/quote.json) and quoteRequestLegend in src/site-config.ts from the business facts"
       )
     }
   })

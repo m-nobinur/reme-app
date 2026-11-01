@@ -6,7 +6,8 @@
  *   fonts        no font family: `font-family` is `var(--font-…)`, no @font-face
  *   no-script    no <script>, event handler, client: directive or javascript: URL
  *   empty        the markup is one `{ content && (…) }`, so no content renders nothing
- *   site-config  no prose in the file and no import from outside the site
+ *   site-config  no prose in the file: words come from the section's props (its page
+ *                document) or site-config, and nothing is imported from outside the site
  *   count        at most two sections, each a PascalCase .astro file
  *
  * Plain Node and no dependencies: the orchestrator writes this file into the
@@ -85,19 +86,19 @@ function attribute(name, value, report) {
     if (/\p{L}/u.test(value))
       report(
         "site-config",
-        `${name}="${value}" is written in the markup; read it from site-config`
+        `${name}="${value}" is written in the markup; read it from the section's props`
       )
   } else if (n === "href") {
     if (/^\s*javascript:/i.test(value)) report("no-script", "a javascript: URL")
     else if (value && !/^[/#]/.test(value))
       report(
         "site-config",
-        `href="${value}" is written in the markup; read it from site-config`
+        `href="${value}" is written in the markup; read it from the section's props`
       )
   } else if (/^(src|srcset|poster)$/.test(n) && value)
     report(
       "site-config",
-      `${name}="${value}" is written in the markup; read it from site-config`
+      `${name}="${value}" is written in the markup; read it from the section's props`
     )
 }
 
@@ -124,7 +125,7 @@ function markup(src, report) {
     if (/[\p{L}\p{N}]/u.test(t))
       report(
         "site-config",
-        `the text "${t.trim().slice(0, 40)}" is written in the markup; read it from site-config`
+        `the text "${t.trim().slice(0, 40)}" is written in the markup; read it from the section's props`
       )
   }
   // A { … } child: strings in it are text, and markup in it is an element.
@@ -139,7 +140,7 @@ function markup(src, report) {
         if (prose(s))
           report(
             "site-config",
-            `the string "${s.slice(0, 40)}" is written in the markup; read it from site-config`
+            `the string "${s.slice(0, 40)}" is written in the markup; read it from the section's props`
           )
         j = e
       } else if (c === "/" && src[j + 1] === "/" && /[\s{;]/.test(src[j - 1])) {
@@ -284,21 +285,27 @@ export function lintSource(source) {
   const from = [...front.matchAll(/(?:from|import)\s*["']([^"']+)["']/g)].map(
     (m) => m[1]
   )
-  if (!from.some((s) => /(^|\/)site-config(\.ts)?$/.test(s)))
+  if (
+    !/\bAstro\.props\b/.test(front) &&
+    !from.some((s) => /(^|\/)site-config(\.ts)?$/.test(s))
+  )
     report(
       "site-config",
-      "the section imports nothing from site-config, so its content is written in the file"
+      "the section reads neither its props nor site-config, so its content is written in the file"
     )
   for (const s of from)
     if (!/^(\.|astro:)/.test(s))
       report("site-config", `imports ${s}, which is outside the site`)
   if (/\bfetch\s*\(|\bAstro\.glob\b|import\.meta\.glob/.test(front))
-    report("site-config", "reads content from somewhere other than site-config")
+    report(
+      "site-config",
+      "reads content from somewhere other than its props and site-config"
+    )
   for (const [, , s] of front.matchAll(/(["'`])((?:\\.|(?!\1)[^\\\n])*)\1/g))
     if (prose(s))
       report(
         "site-config",
-        `the string "${s.slice(0, 40)}" is written in the file; read it from site-config`
+        `the string "${s.slice(0, 40)}" is written in the file; read it from the section's props`
       )
 
   markup(body, report)

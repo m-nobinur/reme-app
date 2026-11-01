@@ -2,13 +2,13 @@
 import { plain } from "../../accent"
 import { iconFor } from "../../icons"
 import SectionHead from "../../layouts/SectionHead.astro"
-import { site } from "../../site-config"
+import { pageFields } from "../../page-fields"
 import Icon from "../Icon/Icon.astro"
 
 interface Props {
-  /** The short label above the h2, where a page has its own; empty is site.valuePropsEyebrow. */
+  /** The short label above the h2, where a page has its own; empty is the valuePropsEyebrow slot's default. */
   eyebrow?: string
-  /** The h2, where a page has its own; empty is site.valuePropsHeading. */
+  /** The h2, where a page has its own; empty is the valuePropsHeading slot's default. */
   heading?: string
   /** The entries, where a page has its own; empty is the site's valueProp1 to valueProp3. */
   items?: { title: string; body: string; icon: string }[]
@@ -17,12 +17,12 @@ interface Props {
 }
 
 const {
-  eyebrow = site.valuePropsEyebrow,
-  heading = site.valuePropsHeading,
+  eyebrow = pageFields.valuePropsEyebrow,
+  heading = pageFields.valuePropsHeading,
   items = ([1, 2, 3] as const).map((n) => ({
-    title: site[`valueProp${n}Title`],
-    body: site[`valueProp${n}Body`],
-    icon: site[`valueProp${n}Icon`],
+    title: pageFields[`valueProp${n}Title`],
+    body: pageFields[`valueProp${n}Body`],
+    icon: pageFields[`valueProp${n}Icon`],
   })),
   copy,
 } = Astro.props

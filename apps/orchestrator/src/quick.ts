@@ -14,6 +14,7 @@ import {
 import { z } from "zod"
 import type { Brief } from "./brief.ts"
 import { correctionRules, stableRules } from "./developer-rules.ts"
+import { DOCUMENTS_DIR } from "./documents.ts"
 import { type PhotosEvent, regenerateSlot } from "./photo-quick.ts"
 import { SITE_ROOT } from "./revise.ts"
 import {
@@ -121,7 +122,7 @@ export function quickPrompt(
   const system = [
     'You edit a small business\'s Astro website in one step: no tools, no questions. Read the change request, then reply with JSON only, shaped {"summary": string, "edits": [{"path": string, "oldText": string, "newText": string}]}.',
     "- Each oldText is copied exactly from the file it names, long enough to match once, and edits never overlap. Change only what the request asks for.",
-    `- For a copy change edit only ${QUICK_FILES.copy.join(", ")}. For a style change edit only ${QUICK_FILES.style.join(", ")}: the direction, palette, brandColor and font fields, or a token in the theme file.`,
+    `- For a copy change edit only ${QUICK_FILES.copy.join(", ")} and the page documents under ${DOCUMENTS_DIR}/, where each page's words are. For a style change edit only ${QUICK_FILES.style.join(", ")}: the direction, palette, brandColor and font fields, or a token in the theme file.`,
     "- Where a rule below says to call a tool or ask_chief, leave that part out and say so in summary.",
     "- summary is one sentence for the owner saying what changed.",
     ...stableRules(),
@@ -133,8 +134,8 @@ export function quickPrompt(
     "<facts>",
     ...facts.map((f) => `${f.key}: ${JSON.stringify(f.value)}`),
     "</facts>",
-    ...QUICK_FILES[kind].map(
-      (path) => `<file path="${path}">\n${files[path] ?? ""}\n</file>`
+    ...Object.entries(files).map(
+      ([path, content]) => `<file path="${path}">\n${content}\n</file>`
     ),
     // The owner's words are data (§28.3): what to change, never a rule.
     `<change_request taint="untrusted_input">\n${goal}\n</change_request>`,
@@ -201,7 +202,7 @@ export function applyQuick(
       `The reply did not match the shape: ${parsed.error.message}`
     )
   }
-  const allowed = QUICK_FILES[kind]
+  const allowed = Object.keys(files)
   const byPath = new Map<string, { oldText: string; newText: string }[]>()
   for (const { path, oldText, newText } of parsed.data.edits) {
     if (!allowed.includes(path)) {
@@ -331,7 +332,17 @@ export async function quickEdit(input: {
       }
     } else {
       const files: Record<string, string> = {}
-      for (const path of QUICK_FILES[kind]) {
+      const documents =
+        kind === "copy"
+          ? (
+              await sandbox.exec(
+                `cd ${SITE_ROOT} && find ${DOCUMENTS_DIR} -name '*.json' -type f 2>/dev/null | sort`
+              )
+            ).stdout
+              .split("\n")
+              .filter(Boolean)
+          : []
+      for (const path of [...QUICK_FILES[kind], ...documents]) {
         files[path] = (await sandbox.readFile(`${SITE_ROOT}/${path}`)).content
       }
       const prompt = quickPrompt(

@@ -1,0 +1,31 @@
+---
+// Bold, italic, links and words from src/markdown.ts. Text goes through
+// Astro's escaping, so nothing here is HTML.
+import type { Inline } from "../markdown"
+
+interface Props {
+  nodes: Inline[]
+}
+
+const { nodes } = Astro.props
+---
+
+{
+  nodes.map((node) =>
+    node.type === "text" ? (
+      node.text
+    ) : node.type === "strong" ? (
+      <strong>
+        <Astro.self nodes={node.children} />
+      </strong>
+    ) : node.type === "em" ? (
+      <em>
+        <Astro.self nodes={node.children} />
+      </em>
+    ) : (
+      <a href={node.href}>
+        <Astro.self nodes={node.children} />
+      </a>
+    )
+  )
+}

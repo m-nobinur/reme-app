@@ -1,5 +1,5 @@
 ---
-import { plain } from "../../accent"
+import { faqsOf, pageDocument } from "../../documents"
 import { headerPhoto } from "../../header-photo"
 import Base from "../../layouts/Base.astro"
 import Sections from "../../layouts/Sections.astro"
@@ -10,9 +10,8 @@ import {
   services,
 } from "../../structured-data"
 
-// One page per named service, at /services/<slug>/. Its sections and their
-// order are layout.service in site-config, the same for every service; the
-// words are that service's own fields.
+// One page per named service, at /services/<slug>/. Its sections and words
+// are src/content/pages/services/<slug>.json.
 export const getStaticPaths = () =>
   servicePages.map((item) => ({
     params: { slug: item.slug },
@@ -24,12 +23,13 @@ interface Props {
 }
 
 const { service } = Astro.props
+const doc = pageDocument("service", service.slug)
 ---
 
 <Base
-  title={service.title || plain(service.heading || service.name)}
-  description={service.description || service.body}
-  jsonLd={[...services(Astro.site, [service]), ...faqPage(service.faqs)]}
+  title={doc?.title ?? ""}
+  description={doc?.description ?? ""}
+  jsonLd={[...services(Astro.site, [service]), ...faqPage(faqsOf(doc))]}
   image={headerPhoto(`service:${service.id}`)}
 >
   <Sections page="service" service={service} />

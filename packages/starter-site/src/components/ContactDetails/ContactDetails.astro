@@ -1,4 +1,5 @@
 ---
+import { pageFields } from "../../page-fields"
 import { phoneText } from "../../phone"
 import { site } from "../../site-config"
 import Icon from "../Icon/Icon.astro"
@@ -32,7 +33,7 @@ const rows = [
   {
     icon: "mapPin",
     // The nav's short label: the page heading may be a whole sentence.
-    label: site.navServiceArea || site.serviceAreaHeading,
+    label: site.navServiceArea || pageFields.serviceAreaHeading,
     value: site.serviceAreaText || site.serviceArea,
     href: "",
   },

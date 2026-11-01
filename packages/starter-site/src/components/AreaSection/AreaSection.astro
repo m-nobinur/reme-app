@@ -2,6 +2,7 @@
 import { areaDeep, areaTowns, townNotes } from "../../area-map"
 import AreaArt from "../../layouts/AreaArt.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
+import { pageFields } from "../../page-fields"
 import { hasRoute } from "../../routes"
 import { site } from "../../site-config"
 import Icon from "../Icon/Icon.astro"
@@ -9,9 +10,17 @@ import Icon from "../Icon/Icon.astro"
 interface Props {
   /** The h2, off the service area page. */
   heading?: string
+  /** The short label above the h2; empty is the areaEyebrow slot's default. */
+  eyebrow?: string
+  /** The paragraph on working in the area; empty is the areaBody slot's default. */
+  body?: string
 }
 
-const { heading = "" } = Astro.props
+const {
+  heading = "",
+  eyebrow = pageFields.areaEyebrow,
+  body = pageFields.areaBody,
+} = Astro.props
 const towns = areaTowns(site.areaTowns)
 const onPage = Astro.url.pathname === "/service-area/"
 // The area in its own words where no towns stand for it, and always on its page.
@@ -28,7 +37,7 @@ const hours = site.weekdayHours
 ---
 
 {
-  (towns.length > 0 || place || site.areaBody || site.serviceArea) && (
+  (towns.length > 0 || place || body || site.serviceArea) && (
     <section
       class:list={[
         "band area-section",
@@ -38,8 +47,8 @@ const hours = site.weekdayHours
     >
       <div class="wrap area-inner">
         <div class="area-copy">
-          <SectionHead eyebrow={site.areaEyebrow} heading={heading} />
-          {site.areaBody && <p class="area-body">{site.areaBody}</p>}
+          <SectionHead eyebrow={eyebrow} heading={heading} />
+          {body && <p class="area-body">{body}</p>}
           <dl class="area-facts">
             <div class="area-fact">
               <dt>
@@ -89,14 +98,14 @@ const hours = site.weekdayHours
         {onPage ? (
           towns.length > 0 && (
             <div class="area-index">
-              {site.areaEyebrow && (
+              {eyebrow && (
                 <p class="eyebrow" id="area-index-label">
-                  {site.areaEyebrow}
+                  {eyebrow}
                 </p>
               )}
               <ul
                 class="area-index-list"
-                aria-labelledby={site.areaEyebrow ? "area-index-label" : undefined}
+                aria-labelledby={eyebrow ? "area-index-label" : undefined}
               >
                 {towns.map((town) => (
                   <li>

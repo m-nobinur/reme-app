@@ -141,10 +141,10 @@ describe("the copy gate", () => {
       ),
     ])
     expect(found.map((f) => f.detail)).toEqual([
-      "the home hero's subhead (homeIntro) has 10 words; write 25 to 55",
+      "the home hero's subhead (homeIntro; home.json's hero intro) has 10 words; write 25 to 55",
       "a service card (serviceNBody) has 14 words; write 25 to 45",
-      "a process step (stepNBody) has 5 words; write 20 to 35",
-      "an FAQ answer (faqNAnswer, or serviceNFaqMAnswer on a service page) has 20 words; write 40 to 90",
+      "a process step (stepNBody; a steps block in the page's document) has 5 words; write 20 to 35",
+      "an FAQ answer (faqNAnswer, or serviceNFaqMAnswer on a service page; an faq block in the page's document) has 20 words; write 40 to 90",
       "a service page's intro (serviceNDetail) has 30 words; write 60 to 100",
     ])
   })
@@ -783,9 +783,9 @@ describe("the about, services and contact pages' own blocks", () => {
       ),
     ])
     expect(found.map((f) => f.detail)).toEqual([
-      "an about page principle (approachNBody) has 10 words; write 25 to 45",
-      "the about page's record (proofBody) has 8 words; write 30 to 60",
-      "the contact page's note on what to send (contactIncludeBody) has 9 words; write 25 to 60",
+      "an about page principle (approachNBody; about.json's value_props cards) has 10 words; write 25 to 45",
+      "the about page's record (proofBody; about.json's -record block) has 8 words; write 30 to 60",
+      "the contact page's note on what to send (contactIncludeBody; contact.json's contact prose block) has 9 words; write 25 to 60",
     ])
   })
 

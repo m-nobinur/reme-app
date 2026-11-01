@@ -1,5 +1,6 @@
 ---
 import SectionHead from "../../layouts/SectionHead.astro"
+import { pageFields } from "../../page-fields"
 import { hasRoute } from "../../routes"
 import { site } from "../../site-config"
 import { faqItems } from "../../structured-data"
@@ -9,14 +10,20 @@ interface Props {
   variant?: "split" | "stacked"
   /** The questions, where a page has its own; empty is the site's FAQ. */
   items?: { question: string; answer: string }[]
-  /** The h2, where a page has its own; empty is site.faqHeading. */
+  /** The h2, where a page has its own; empty is the faqHeading slot's default. */
   heading?: string
+  /** The short label above the h2; empty is the faqEyebrow slot's default. */
+  eyebrow?: string
+  /** One or two sentences under the h2; empty is the faqIntro slot's default. */
+  intro?: string
 }
 
 const {
   variant = "split",
   items = faqItems,
-  heading = site.faqHeading,
+  heading = pageFields.faqHeading,
+  eyebrow = pageFields.faqEyebrow,
+  intro = pageFields.faqIntro,
 } = Astro.props
 // Off the contact page, a question the list does not answer goes there.
 const more =
@@ -28,8 +35,8 @@ const more =
     <section class:list={["band faq", `faq-${variant}`]}>
       <div class="wrap faq-inner">
         <div class="faq-intro">
-          <SectionHead eyebrow={site.faqEyebrow} heading={heading} />
-          {site.faqIntro && <p class="faq-lede">{site.faqIntro}</p>}
+          <SectionHead eyebrow={eyebrow} heading={heading} />
+          {intro && <p class="faq-lede">{intro}</p>}
           {more && (
             <p class="section-more">
               <a class="more-link" href="/contact/">

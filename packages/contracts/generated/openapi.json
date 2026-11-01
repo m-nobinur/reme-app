@@ -1564,7 +1564,8 @@
                       "media.uploads",
                       "quote.form",
                       "testimonials.review_1",
-                      "testimonials.review_2"
+                      "testimonials.review_2",
+                      "site.content"
                     ]
                   },
                   "value": {
@@ -2861,6 +2862,82 @@
                           "quote",
                           "name",
                           "permission"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "site.content"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "items": {
+                            "minItems": 1,
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "maxLength": 60,
+                                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                                },
+                                "page": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "home",
+                                        "about",
+                                        "services",
+                                        "service",
+                                        "service_area",
+                                        "contact",
+                                        "quote"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "title": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 120,
+                                  "pattern": "\\S"
+                                },
+                                "markdown": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4000,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "page",
+                                "title",
+                                "markdown"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "items"
                         ],
                         "additionalProperties": false
                       }
@@ -5815,6 +5892,82 @@
                     "value"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "site.content"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "minItems": 1,
+                          "maxItems": 40,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "maxLength": 60,
+                                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "page": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "home",
+                                      "about",
+                                      "services",
+                                      "service",
+                                      "service_area",
+                                      "contact",
+                                      "quote"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "title": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120,
+                                "pattern": "\\S"
+                              },
+                              "markdown": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000,
+                                "pattern": "\\S"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "page",
+                              "title",
+                              "markdown"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -7107,6 +7260,82 @@
                             "quote",
                             "name",
                             "permission"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "site.content"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "minItems": 1,
+                              "maxItems": 40,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "maxLength": 60,
+                                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                                  },
+                                  "page": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "home",
+                                          "about",
+                                          "services",
+                                          "service",
+                                          "service_area",
+                                          "contact",
+                                          "quote"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "title": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120,
+                                    "pattern": "\\S"
+                                  },
+                                  "markdown": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4000,
+                                    "pattern": "\\S"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "page",
+                                  "title",
+                                  "markdown"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "items"
                           ],
                           "additionalProperties": false
                         }
@@ -8958,6 +9187,93 @@
               "prefill"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "site.content"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "items": {
+                        "minItems": 1,
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "maxLength": 60,
+                              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                            },
+                            "page": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "home",
+                                    "about",
+                                    "services",
+                                    "service",
+                                    "service_area",
+                                    "contact",
+                                    "quote"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "title": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120,
+                              "pattern": "\\S"
+                            },
+                            "markdown": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4000,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "page",
+                            "title",
+                            "markdown"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "items"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -10225,6 +10541,82 @@
                           "quote",
                           "name",
                           "permission"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "site.content"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "items": {
+                            "minItems": 1,
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "maxLength": 60,
+                                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                                },
+                                "page": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "home",
+                                        "about",
+                                        "services",
+                                        "service",
+                                        "service_area",
+                                        "contact",
+                                        "quote"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "title": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 120,
+                                  "pattern": "\\S"
+                                },
+                                "markdown": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4000,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "page",
+                                "title",
+                                "markdown"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "items"
                         ],
                         "additionalProperties": false
                       }
@@ -16845,6 +17237,82 @@
                                                 "value"
                                               ],
                                               "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
+                                                  "const": "site.content"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "items": {
+                                                      "minItems": 1,
+                                                      "maxItems": 40,
+                                                      "type": "array",
+                                                      "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "id": {
+                                                            "type": "string",
+                                                            "maxLength": 60,
+                                                            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                                                          },
+                                                          "page": {
+                                                            "anyOf": [
+                                                              {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "home",
+                                                                  "about",
+                                                                  "services",
+                                                                  "service",
+                                                                  "service_area",
+                                                                  "contact",
+                                                                  "quote"
+                                                                ]
+                                                              },
+                                                              {
+                                                                "type": "null"
+                                                              }
+                                                            ]
+                                                          },
+                                                          "title": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "maxLength": 120,
+                                                            "pattern": "\\S"
+                                                          },
+                                                          "markdown": {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "maxLength": 4000,
+                                                            "pattern": "\\S"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "id",
+                                                          "page",
+                                                          "title",
+                                                          "markdown"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      }
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "items"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
                                             }
                                           ]
                                         }
@@ -18137,6 +18605,82 @@
                                                       "quote",
                                                       "name",
                                                       "permission"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "site.content"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "items": {
+                                                        "minItems": 1,
+                                                        "maxItems": 40,
+                                                        "type": "array",
+                                                        "items": {
+                                                          "type": "object",
+                                                          "properties": {
+                                                            "id": {
+                                                              "type": "string",
+                                                              "maxLength": 60,
+                                                              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                                                            },
+                                                            "page": {
+                                                              "anyOf": [
+                                                                {
+                                                                  "type": "string",
+                                                                  "enum": [
+                                                                    "home",
+                                                                    "about",
+                                                                    "services",
+                                                                    "service",
+                                                                    "service_area",
+                                                                    "contact",
+                                                                    "quote"
+                                                                  ]
+                                                                },
+                                                                {
+                                                                  "type": "null"
+                                                                }
+                                                              ]
+                                                            },
+                                                            "title": {
+                                                              "type": "string",
+                                                              "minLength": 1,
+                                                              "maxLength": 120,
+                                                              "pattern": "\\S"
+                                                            },
+                                                            "markdown": {
+                                                              "type": "string",
+                                                              "minLength": 1,
+                                                              "maxLength": 4000,
+                                                              "pattern": "\\S"
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "id",
+                                                            "page",
+                                                            "title",
+                                                            "markdown"
+                                                          ],
+                                                          "additionalProperties": false
+                                                        }
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "items"
                                                     ],
                                                     "additionalProperties": false
                                                   }
@@ -21780,6 +22324,82 @@
                     "value"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "site.content"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "minItems": 1,
+                          "maxItems": 40,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "maxLength": 60,
+                                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "page": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "home",
+                                      "about",
+                                      "services",
+                                      "service",
+                                      "service_area",
+                                      "contact",
+                                      "quote"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "title": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120,
+                                "pattern": "\\S"
+                              },
+                              "markdown": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000,
+                                "pattern": "\\S"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "page",
+                              "title",
+                              "markdown"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -22457,7 +23077,8 @@
                         "media.uploads",
                         "quote.form",
                         "testimonials.review_1",
-                        "testimonials.review_2"
+                        "testimonials.review_2",
+                        "site.content"
                       ]
                     }
                   },
@@ -24422,6 +25043,82 @@
                                 "quote",
                                 "name",
                                 "permission"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "site.content"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "items": {
+                                  "minItems": 1,
+                                  "maxItems": 40,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "maxLength": 60,
+                                        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                                      },
+                                      "page": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "enum": [
+                                              "home",
+                                              "about",
+                                              "services",
+                                              "service",
+                                              "service_area",
+                                              "contact",
+                                              "quote"
+                                            ]
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "title": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 120,
+                                        "pattern": "\\S"
+                                      },
+                                      "markdown": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 4000,
+                                        "pattern": "\\S"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "page",
+                                      "title",
+                                      "markdown"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "items"
                               ],
                               "additionalProperties": false
                             }
@@ -33059,7 +33756,8 @@
                 "media.uploads",
                 "quote.form",
                 "testimonials.review_1",
-                "testimonials.review_2"
+                "testimonials.review_2",
+                "site.content"
               ]
             }
           },
@@ -34499,7 +35197,8 @@
                     "media.uploads",
                     "quote.form",
                     "testimonials.review_1",
-                    "testimonials.review_2"
+                    "testimonials.review_2",
+                    "site.content"
                   ]
                 }
               }
@@ -37574,6 +38273,82 @@
                   "quote",
                   "name",
                   "permission"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "site.content"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "minItems": 1,
+                    "maxItems": 40,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 60,
+                          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                        },
+                        "page": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "home",
+                                "about",
+                                "services",
+                                "service",
+                                "service_area",
+                                "contact",
+                                "quote"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        "markdown": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "page",
+                        "title",
+                        "markdown"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "items"
                 ],
                 "additionalProperties": false
               }
@@ -46596,7 +47371,7 @@
         "properties": {
           "facts": {
             "minItems": 1,
-            "maxItems": 31,
+            "maxItems": 32,
             "type": "array",
             "items": {
               "oneOf": [
@@ -47852,6 +48627,82 @@
                         "quote",
                         "name",
                         "permission"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "site.content"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "minItems": 1,
+                          "maxItems": 40,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "maxLength": 60,
+                                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "page": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "home",
+                                      "about",
+                                      "services",
+                                      "service",
+                                      "service_area",
+                                      "contact",
+                                      "quote"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "title": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120,
+                                "pattern": "\\S"
+                              },
+                              "markdown": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000,
+                                "pattern": "\\S"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "page",
+                              "title",
+                              "markdown"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "items"
                       ],
                       "additionalProperties": false
                     }
@@ -52196,7 +53047,8 @@
                 "media.uploads",
                 "quote.form",
                 "testimonials.review_1",
-                "testimonials.review_2"
+                "testimonials.review_2",
+                "site.content"
               ]
             }
           },
@@ -52444,7 +53296,8 @@
                               "media.uploads",
                               "quote.form",
                               "testimonials.review_1",
-                              "testimonials.review_2"
+                              "testimonials.review_2",
+                              "site.content"
                             ]
                           }
                         }

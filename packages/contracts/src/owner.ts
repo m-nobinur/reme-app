@@ -10,6 +10,7 @@ import { Timestamp, TimeZone, Ulid, Uuid } from "./common.ts"
 import { Blueprint, DirectionId, FontPairId } from "./design.ts"
 import { FactRecord } from "./fact.ts"
 import { Asset, AvatarId, choiceFacts } from "./onboarding.ts"
+import { ContentId, DOCUMENT_PAGES } from "./page.ts"
 import { Hostname, SiteLink } from "./site.ts"
 import { Text } from "./text.ts"
 
@@ -172,6 +173,27 @@ export const FactValue = z.discriminatedUnion("key", [
   /** One per review the starter can show; the claims gate quotes nothing else. */
   fact("testimonials.review_1", ReviewValue.shape),
   fact("testimonials.review_2", ReviewValue.shape),
+  /**
+   * What the owner supplies for the site in their own words: a story, an FAQ
+   * answer, a table of what a service covers, as markdown. Kept so every
+   * rebuild keeps it word for word. It supports itself before the claims
+   * gate, except a rating, an award or a review, which still need their own
+   * source. Stored through the assistant, never asked for on a form.
+   */
+  fact("site.content", {
+    items: z
+      .array(
+        z.strictObject({
+          id: ContentId,
+          /** The page it belongs on, or null where the builder places it. */
+          page: z.enum(DOCUMENT_PAGES).nullable(),
+          title: Text(120),
+          markdown: Text(4_000),
+        })
+      )
+      .min(1)
+      .max(40),
+  }),
 ])
 
 export type FactValueKey = FactValue["key"]
@@ -224,10 +246,16 @@ export const OFF_SITE_FACT_KEYS = [
   "owner.priorities",
 ] as const satisfies readonly FactValueKey[]
 
+/** The owner's own site content, kept by the assistant and never asked for on a form. */
+export const CONTENT_FACT_KEYS = [
+  "site.content",
+] as const satisfies readonly FactValueKey[]
+export type ContentFactKey = (typeof CONTENT_FACT_KEYS)[number]
+
 /** The keys an owner types an answer for, which the web gives inputs to. */
 export type AskableFactKey = Exclude<
   FactValueKey,
-  ChoiceFactKey | ReviewFactKey
+  ChoiceFactKey | ReviewFactKey | ContentFactKey
 >
 
 /** The longest text answer an owner can give, in characters. */

@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs"
 import { URL } from "node:url"
 import { RULES, TELLS } from "@workspace/gates/rubric"
-import { layout, site } from "@workspace/starter-site/site-config"
+import { layout } from "@workspace/starter-site/page-fields"
+import { site } from "@workspace/starter-site/site-config"
 import { describe, expect, it, vi } from "vitest"
 import {
   type Complete,
@@ -392,24 +393,34 @@ describe("the site's config as text", () => {
     "utf8"
   )
 
-  it("reads every field value and every section of the starter's own file", () => {
-    const config = readConfig(source)
-    expect(config.values).toEqual(site)
+  const sheet = readFileSync(
+    new URL(
+      "../../../packages/starter-site/src/page-fields.ts",
+      import.meta.url
+    ),
+    "utf8"
+  )
+
+  it("reads every setting of the starter's config and every section of its default layout", () => {
+    expect(readConfig(source).values).toEqual(site)
+    const { layout: read } = readConfig(sheet)
     for (const [page, sections] of Object.entries(layout))
-      expect(config.layout[page]).toEqual(sections)
+      expect(read[page]).toEqual(sections)
   })
 
   it("reads a lead's edits: single quotes, a multi-line string, a variant", () => {
-    const edited = source
-      .replace(/^ {2}homeIntro: .*$/m, "  homeIntro: 'It\\'s plain.',")
-      .replace(/^ {2}ctaBody: .*$/m, '  ctaBody:\n    "Two lines of words",')
+    const edited = `${source
+      .replace(/^ {2}navHome: .*$/m, "  navHome: 'It\\'s plain.',")
       .replace(
-        '{ kind: "faq" },\n    { kind: "cta_band" },\n  ],\n  service:',
-        '{ kind: "faq", variant: "stacked" },\n    { kind: "cta_band" },\n  ],\n  service:'
-      )
+        /^ {2}homeLink: .*$/m,
+        '  homeLink:\n    "Two lines of words",'
+      )}${sheet.replace(
+      '{ kind: "faq" },\n    { kind: "cta_band" },\n  ],\n  service:',
+      '{ kind: "faq", variant: "stacked" },\n    { kind: "cta_band" },\n  ],\n  service:'
+    )}`
     const config = readConfig(edited)
-    expect(config.values.homeIntro).toBe("It's plain.")
-    expect(config.values.ctaBody).toBe("Two lines of words")
+    expect(config.values.navHome).toBe("It's plain.")
+    expect(config.values.homeLink).toBe("Two lines of words")
     const pages: Record<string, Config["layout"][string] | undefined> =
       config.layout
     expect(pages.services?.find((s) => s.kind === "faq")?.variant).toBe(

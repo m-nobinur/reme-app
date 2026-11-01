@@ -50,6 +50,12 @@ import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import { z } from "zod"
 import { type Brief, retryContextSignal } from "../brief.ts"
 import {
+  DOCUMENTS_DIR,
+  documentFiles,
+  SHEET_MARK,
+  SLOT_SHEET,
+} from "../documents.ts"
+import {
   copyInstructions,
   FAN_OUT,
   fansOut,
@@ -57,6 +63,7 @@ import {
   pageInstructions,
   pageOfPrompt,
   serviceCount,
+  siteValues,
   writerTasks,
 } from "../fanout.ts"
 import { placeGenerated } from "../images.ts"
@@ -690,12 +697,26 @@ const writePagesTool = (current: Session) =>
       const started = new Set<string>()
       current.tee.emit("build.progress", { stage: "pages", item: null, total })
 
-      // One change at a time, through the assignment's queue for this file.
+      // The writers read and write src/site-config.ts and the slot sheet as
+      // one text; the site's settings go back to the config, and the page
+      // slots become the planned pages' documents. One change at a time,
+      // through the assignment's queue for the config. A replay starts the
+      // sheet again and gets the same writes.
+      let sheet = SLOT_SHEET
+      await sandbox.exec(`mkdir -p ${SITE_ROOT}/${DOCUMENTS_DIR}/services`)
       const edit = (change: (source: string) => string) =>
         current.mutations(CONFIG, async () => {
           const { content } = await stub.readFile(CONFIG)
-          const next = change(content)
-          if (next !== content) await stub.writeFile(CONFIG, next)
+          const both = `${content}${SHEET_MARK}${sheet}`
+          const next = change(both)
+          if (next === both) return next
+          const [config = content, slots = sheet] = next.split(SHEET_MARK)
+          if (config !== content) await stub.writeFile(CONFIG, config)
+          sheet = slots
+          for (const [path, text] of Object.entries(
+            documentFiles(siteValues(next), plan)
+          ))
+            await stub.writeFile(`${SITE_ROOT}/${DOCUMENTS_DIR}/${path}`, text)
           return next
         })
       // A retry after a provider failure writes on the fallback model too.

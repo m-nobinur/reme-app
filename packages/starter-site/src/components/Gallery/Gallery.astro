@@ -1,8 +1,21 @@
 ---
 import Photo from "../../layouts/Photo.astro"
 import SectionHead from "../../layouts/SectionHead.astro"
+import { pageFields } from "../../page-fields"
 import { hasPhoto } from "../../photo-files"
 import { site } from "../../site-config"
+
+interface Props {
+  /** The short label above the h2; empty is the galleryEyebrow slot's default. */
+  eyebrow?: string
+  /** The h2; empty is the galleryHeading slot's default. */
+  heading?: string
+}
+
+const {
+  eyebrow = pageFields.galleryEyebrow,
+  heading = pageFields.galleryHeading,
+} = Astro.props
 
 // The path names a file a gallery image slot placed and the alt text says what
 // it shows. A photo with no alt text does not render.
@@ -15,7 +28,7 @@ const items = ([1, 2, 3] as const)
   items.length > 0 && (
     <section class="band gallery">
       <div class="wrap">
-      <SectionHead eyebrow={site.galleryEyebrow} heading={site.galleryHeading} />
+      <SectionHead eyebrow={eyebrow} heading={heading} />
       {items.length === 1 ? (
         <figure class="gallery-single">
           <Photo

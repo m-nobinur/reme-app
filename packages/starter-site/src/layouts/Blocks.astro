@@ -1,0 +1,138 @@
+---
+// A section's blocks, each as its own type looks: the body of a `content`
+// section, and what a custom section may render its blocks with. A block's
+// heading is an h3 under the section's h2, and an entry's title one under that.
+import { plain } from "../accent"
+import ActionLink from "../components/ActionLink/ActionLink.astro"
+import Icon from "../components/Icon/Icon.astro"
+import { iconFor } from "../icons"
+import type { Block } from "../page-document"
+import { hasPhoto } from "../photo-files"
+import { primaryAction } from "../routes"
+import { site } from "../site-config"
+import Markdown from "./Markdown.astro"
+import Photo from "./Photo.astro"
+
+interface Props {
+  blocks: Block[]
+}
+
+const { blocks } = Astro.props
+const action = (block: Extract<Block, { type: "cta" }>) => {
+  const href = block.href || primaryAction?.href
+  const label = block.label || site.ctaLabel || primaryAction?.label
+  return href && label ? { href, label } : undefined
+}
+---
+
+{
+  blocks.map((block) => {
+    const Entry = block.heading ? "h4" : "h3"
+    return (
+      <div class:list={["block", `block-${block.type}`]} id={block.id}>
+        {block.eyebrow && <p class="eyebrow">{block.eyebrow}</p>}
+        {block.heading && <h3>{plain(block.heading)}</h3>}
+        {block.type === "prose" && <Markdown source={block.markdown} />}
+        {block.type === "checklist" && (
+          <ul class="check-list">
+            {block.items.filter(Boolean).map((item) => (
+              <li>
+                <Icon name="checkCircle" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {block.type === "table" && (
+          <div class="table-wrap">
+            <table>
+              {block.caption && <caption>{block.caption}</caption>}
+              <thead>
+                <tr>
+                  {block.columns.map((column) => (
+                    <th scope="col">{column}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {block.rows.map((row) => (
+                  <tr>
+                    {row.map((cell, i) =>
+                      i === 0 ? <th scope="row">{cell}</th> : <td>{cell}</td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {block.type === "faq" && (
+          <div class="faq-list">
+            {block.items
+              .filter((item) => item.question && item.answer)
+              .map((item) => (
+                <details>
+                  <summary>{item.question}</summary>
+                  <p>{item.answer}</p>
+                </details>
+              ))}
+          </div>
+        )}
+        {block.type === "steps" && (
+          <ol class="step-list">
+            {block.items.map((item) => (
+              <li>
+                {item.title && <Entry>{plain(item.title)}</Entry>}
+                {item.body && <p>{item.body}</p>}
+              </li>
+            ))}
+          </ol>
+        )}
+        {block.type === "cards" && (
+          <ul class="value-list">
+            {block.items.map((item) => (
+              <li>
+                <span class="card-icon">
+                  <Icon name={iconFor(item.icon ?? "", `${item.title} ${item.body}`)} />
+                </span>
+                <div>
+                  {item.title && <Entry>{plain(item.title)}</Entry>}
+                  {item.body && <p>{item.body}</p>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {block.type === "media" && hasPhoto(block.src) && block.alt && (
+          <figure class="block-figure">
+            <Photo
+              src={block.src}
+              alt={block.alt}
+              sizes="(min-width: 80rem) 48rem, 100vw"
+            />
+            {block.caption && <figcaption>{block.caption}</figcaption>}
+          </figure>
+        )}
+        {block.type === "callout" && block.text && (
+          <p class="callout">{block.text}</p>
+        )}
+        {block.type === "cta" && (
+          <>
+            {block.body && <p>{block.body}</p>}
+            {action(block) && (
+              <p class="actions">
+                <ActionLink {...(action(block) as { href: string; label: string })} />
+              </p>
+            )}
+          </>
+        )}
+        {block.type === "quote" && block.text && (
+          <figure class="block-quote">
+            <blockquote>{block.text}</blockquote>
+            {block.author && <figcaption>{block.author}</figcaption>}
+          </figure>
+        )}
+      </div>
+    )
+  })
+}

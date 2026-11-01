@@ -183,7 +183,20 @@ export const SUPPORTING_FACT_PREFIXES = [
  * Whole keys that support the same words: the owner's own account of what
  * sets the business apart, which may name its insurance, awards or years.
  */
-const SUPPORTING_FACT_KEYS = ["business.proof", "business.disclaimer"] as const
+const SUPPORTING_FACT_KEYS = [
+  "business.proof",
+  "business.disclaimer",
+  "site.content",
+] as const
+
+/**
+ * What the owner's own site content cannot vouch for: a rating, a review
+ * count or an award, which still need a fact of their own. Cut from
+ * `site.content` before it supports anything, so "rated 4.9 by 200 reviews"
+ * in a story does not let the page say so.
+ */
+const OWNER_UNSUPPORTED =
+  /\b\d[\d,]*(?:\.\d+)?\s*(?:\/\s*5\b|out of 5\b|[-\s]?stars?\b|\+?\s*(?:[a-z]+\s+){0,2}(?:reviews?|ratings?)\b)|\brated\s+\d(?:\.\d)?\b|\b(?:five|5)[-\s]stars?\b|\baward[-\s]?winning\b|\bawards?\b/gi
 
 const TESTIMONIAL_PREFIX = "testimonials."
 
@@ -355,7 +368,9 @@ function supportFrom(facts: readonly FactRecord[]): Support {
     )
       continue
     // biome-ignore lint/suspicious/noUnnecessaryConditions: JSON.stringify returns undefined for an undefined value
-    const text = JSON.stringify(fact.value) ?? ""
+    const json = JSON.stringify(fact.value) ?? ""
+    const text =
+      fact.key === "site.content" ? json.replace(OWNER_UNSUPPORTED, " ") : json
     for (const m of text.matchAll(/\d+(?:\.\d+)?/g))
       support.numbers.add(Number(m[0]))
     support.anyWords.push(stems(text))

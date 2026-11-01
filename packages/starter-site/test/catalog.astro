@@ -60,7 +60,7 @@ const heroes = HEROES.flatMap((variant) => [
         <Hero
           variant={variant}
           eyebrow={site.industry}
-          heading={site.heroHeading}
+          heading={(site as Record<string, string>).heroHeading ?? ""}
           lede={site.tagline}
           image={image}
           caption={site.heroCaption}

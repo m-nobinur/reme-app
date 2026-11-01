@@ -1,5 +1,7 @@
+import { faqsOf, pageDocument } from "./documents"
 import { iconFor } from "./icons"
-import { layout, site } from "./site-config"
+import { servicesOf } from "./page-seed"
+import { site } from "./site-config"
 
 /**
  * The JSON-LD the starter emits. Only LocalBusiness, WebSite, Service and
@@ -41,29 +43,8 @@ export function localBusiness(origin: URL | undefined): Thing[] {
   ]
 }
 
-/** The questions the Faq section shows: an entry needs both halves. */
-export const faqItems = ([1, 2, 3, 4, 5, 6, 7, 8] as const)
-  .map((n) => ({
-    question: site[`faq${n}Question`],
-    answer: site[`faq${n}Answer`],
-  }))
-  .filter((item) => item.question && item.answer)
-
-const ownServicesFaqs = ([1, 2, 3, 4] as const)
-  .map((n) => ({
-    question: site[`servicesFaq${n}Question`],
-    answer: site[`servicesFaq${n}Answer`],
-  }))
-  .filter((item) => item.question && item.answer)
-/**
- * The services page's questions: its own, apart from the home page's, or the
- * site's FAQ when the home page shows none, so a Blueprint that moved the
- * FAQ to the services page still shows it.
- */
-export const servicesFaqItems =
-  ownServicesFaqs.length > 0 || layout.home.some((s) => s.kind === "faq")
-    ? ownServicesFaqs
-    : faqItems
+/** The home page's questions, for a Faq given none of its own. */
+export const faqItems = faqsOf(pageDocument("home"))
 
 const lines = (text: string) =>
   text
@@ -71,64 +52,33 @@ const lines = (text: string) =>
     .map((line) => line.trim())
     .filter(Boolean)
 
-/** A service name as its page's path segment: "End of tenancy" is "end-of-tenancy". */
-export const slugOf = (name: string) =>
-  name
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-
 /** The icons the owner's services name, so a picked one is not a repeat. */
 const taken = new Set<string>(
   ([1, 2, 3, 4, 5, 6] as const).map((n) => site[`service${n}Icon`])
 )
 
+const of = (n: number, field: string) =>
+  site[`service${n}${field}` as keyof typeof site]
+
 /**
  * The services the cards, the hero, the services page and each service's
  * own page show, numbered so a card can link to its page. An entry needs a
- * name or a body; its page needs a name, and two names that make one slug
- * keep the first's and number the second's.
+ * name or a body; its page needs a name, and its page's words are in its
+ * document, src/content/pages/services/<slug>.json.
  */
-export const serviceItems = ([1, 2, 3, 4, 5, 6] as const)
-  .map((n) => ({
-    id: `service-${n}`,
-    n,
-    name: site[`service${n}Name`],
-    body: site[`service${n}Body`],
-    detail: site[`service${n}Detail`],
-    heading: site[`service${n}Heading`],
-    title: site[`service${n}Title`],
-    description: site[`service${n}Description`],
-    stepsHeading: site[`service${n}StepsHeading`],
-    steps: ([1, 2, 3, 4] as const)
-      .map((m) => ({
-        title: site[`service${n}Step${m}Title`],
-        body: site[`service${n}Step${m}Body`],
-      }))
-      .filter((item) => item.title || item.body),
-    faqHeading: site[`service${n}FaqHeading`],
-    faqs: ([1, 2, 3, 4] as const)
-      .map((m) => ({
-        question: site[`service${n}Faq${m}Question`],
-        answer: site[`service${n}Faq${m}Answer`],
-      }))
-      .filter((item) => item.question && item.answer),
-    ctaHeading: site[`service${n}CtaHeading`],
-    ctaBody: site[`service${n}CtaBody`],
-    icon: site[`service${n}Icon`],
-    includes: lines(site[`service${n}Includes`]),
-    for: site[`service${n}For`],
-    image: {
-      src: site[`service${n}Image`],
-      alt: site[`service${n}ImageAlt`],
-    },
+export const serviceItems = servicesOf(site)
+  .map((item) => ({
+    ...item,
+    detail: of(item.n, "Detail"),
+    icon: of(item.n, "Icon"),
+    includes: lines(of(item.n, "Includes")),
+    for: of(item.n, "For"),
+    image: { src: of(item.n, "Image"), alt: of(item.n, "ImageAlt") },
     headerImage: {
-      src: site[`service${n}HeaderImage`],
-      alt: site[`service${n}HeaderImageAlt`],
+      src: of(item.n, "HeaderImage"),
+      alt: of(item.n, "HeaderImageAlt"),
     },
   }))
-  .filter((item) => item.name || item.body)
   // An empty or unknown icon takes one from the service's own words, and no
   // service takes one another already shows.
   .map((item) => {
@@ -140,11 +90,6 @@ export const serviceItems = ([1, 2, 3, 4, 5, 6] as const)
     )
     taken.add(icon)
     return { ...item, icon }
-  })
-  .map((item, i, all) => {
-    const base = slugOf(item.name) || item.id
-    const used = all.slice(0, i).some((o) => (slugOf(o.name) || o.id) === base)
-    return { ...item, slug: used ? `${base}-${item.n}` : base }
   })
 
 export type ServiceItem = (typeof serviceItems)[number]
@@ -173,7 +118,7 @@ export function services(
 }
 
 /** The same questions as FAQPage, so the markup and the page cannot differ. */
-export function faqPage(items: typeof faqItems = faqItems): Thing[] {
+export function faqPage(items: typeof faqItems): Thing[] {
   if (items.length === 0) return []
   return [
     {

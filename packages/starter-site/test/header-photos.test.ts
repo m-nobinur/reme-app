@@ -1,6 +1,6 @@
 import sharp from "sharp"
 import { beforeAll, describe, expect, test } from "vitest"
-import { layout } from "../src/site-config"
+import { layout } from "../src/page-fields"
 import { type Built, build, readPages } from "./build"
 import { FILLED } from "./fixture"
 

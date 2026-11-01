@@ -48,6 +48,18 @@
         "type": "string",
         "required": false,
         "description": "The h2, off the service area page."
+      },
+      {
+        "name": "eyebrow",
+        "type": "string",
+        "required": false,
+        "description": "The short label above the h2; empty is the areaEyebrow slot's default."
+      },
+      {
+        "name": "body",
+        "type": "string",
+        "required": false,
+        "description": "The paragraph on working in the area; empty is the areaBody slot's default."
       }
     ],
     "constraints": [
@@ -99,13 +111,25 @@
         "name": "heading",
         "type": "string",
         "required": false,
-        "description": "The h2, the page's own; empty is site.ctaHeading."
+        "description": "The h2, the page's own; empty is the ctaHeading slot's default."
       },
       {
         "name": "body",
         "type": "string",
         "required": false,
-        "description": "The sentence under it, the page's own; empty is site.ctaBody."
+        "description": "The sentence under it, the page's own; empty is the ctaBody slot's default."
+      },
+      {
+        "name": "eyebrow",
+        "type": "string",
+        "required": false,
+        "description": "The short label above the h2; empty is the ctaEyebrow slot's default."
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "required": false,
+        "description": "The button's words; empty is site.ctaLabel, then the page it links to."
       }
     ],
     "constraints": [
@@ -142,11 +166,23 @@
         "name": "heading",
         "type": "string",
         "required": false,
-        "description": "The h2, where a page has its own; empty is site.faqHeading."
+        "description": "The h2, where a page has its own; empty is the faqHeading slot's default."
+      },
+      {
+        "name": "eyebrow",
+        "type": "string",
+        "required": false,
+        "description": "The short label above the h2; empty is the faqEyebrow slot's default."
+      },
+      {
+        "name": "intro",
+        "type": "string",
+        "required": false,
+        "description": "One or two sentences under the h2; empty is the faqIntro slot's default."
       }
     ],
     "constraints": [
-      "Reads faqItems from src/structured-data.ts, which reads faq1Question to faq8Answer; an entry needs both halves to render. Six to eight when the facts answer that many.",
+      "Shows the faq block of its section in the page's document (on a site with no documents yet, faq1Question to faq8Answer); an entry needs both halves to render. Six to eight when the facts answer that many.",
       "A page that shows it passes faqPage() to Base's jsonLd, so the FAQPage data matches the questions on the page.",
       "split sets the heading beside the questions, stacked above them in a narrow column. The eyebrow is site.faqEyebrow; site.faqIntro and a site.faqLink to the contact page sit under the heading."
     ],
@@ -165,7 +201,20 @@
     "component": "Gallery",
     "path": "src/components/Gallery/Gallery.astro",
     "summary": "The gallery's photos, each with its alt text.",
-    "props": [],
+    "props": [
+      {
+        "name": "eyebrow",
+        "type": "string",
+        "required": false,
+        "description": "The short label above the h2; empty is the galleryEyebrow slot's default."
+      },
+      {
+        "name": "heading",
+        "type": "string",
+        "required": false,
+        "description": "The h2; empty is the galleryHeading slot's default."
+      }
+    ],
     "constraints": [
       "Path and alt text are composed fields filled from the gallery image slots; a photo renders only when it has both. The site ships with none.",
       "Two or more photos are cropped tiles in a grid; one photo is a single contained figure, never a full-width image."
@@ -407,6 +456,18 @@
         "type": "string",
         "required": false,
         "description": "On a service's own page, the one service it shows by id: its detail, under the page's hero."
+      },
+      {
+        "name": "eyebrow",
+        "type": "string",
+        "required": false,
+        "description": "The short label above the h2 and on each detail row; empty is the serviceCardsEyebrow slot's default."
+      },
+      {
+        "name": "heading",
+        "type": "string",
+        "required": false,
+        "description": "The h2 over the cards; empty is the serviceCardsHeading slot's default."
       }
     ],
     "constraints": [
@@ -486,13 +547,19 @@
         "name": "heading",
         "type": "string",
         "required": false,
-        "description": "The h2, where a page has its own; empty is site.stepsHeading."
+        "description": "The h2, where a page has its own; empty is the stepsHeading slot's default."
       },
       {
         "name": "items",
         "type": "{ title: string; body: string }[]",
         "required": false,
         "description": "The steps, where a page has its own; empty is the site's step1 to step4."
+      },
+      {
+        "name": "eyebrow",
+        "type": "string",
+        "required": false,
+        "description": "The short label above the h2; empty is the stepsEyebrow slot's default."
       }
     ],
     "constraints": [
@@ -519,6 +586,18 @@
         "type": "\"featured\" | \"wall\"",
         "required": false,
         "description": "featured sets the first review larger on a tint, wall sets them evenly."
+      },
+      {
+        "name": "eyebrow",
+        "type": "string",
+        "required": false,
+        "description": "The short label above the h2; empty is the testimonialsEyebrow slot's default."
+      },
+      {
+        "name": "heading",
+        "type": "string",
+        "required": false,
+        "description": "The h2; empty is the testimonialsHeading slot's default."
       }
     ],
     "constraints": [
@@ -564,13 +643,13 @@
         "name": "eyebrow",
         "type": "string",
         "required": false,
-        "description": "The short label above the h2, where a page has its own; empty is site.valuePropsEyebrow."
+        "description": "The short label above the h2, where a page has its own; empty is the valuePropsEyebrow slot's default."
       },
       {
         "name": "heading",
         "type": "string",
         "required": false,
-        "description": "The h2, where a page has its own; empty is site.valuePropsHeading."
+        "description": "The h2, where a page has its own; empty is the valuePropsHeading slot's default."
       },
       {
         "name": "items",

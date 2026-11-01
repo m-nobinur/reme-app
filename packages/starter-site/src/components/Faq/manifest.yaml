@@ -13,11 +13,19 @@ props:
   - name: heading
     type: string
     required: false
-    description: The h2, where a page has its own; empty is site.faqHeading.
+    description: The h2, where a page has its own; empty is the faqHeading slot's default.
+  - name: eyebrow
+    type: string
+    required: false
+    description: The short label above the h2; empty is the faqEyebrow slot's default.
+  - name: intro
+    type: string
+    required: false
+    description: One or two sentences under the h2; empty is the faqIntro slot's default.
 constraints:
-  - Reads faqItems from src/structured-data.ts, which reads faq1Question to
-    faq8Answer; an entry needs both halves to render. Six to eight when the
-    facts answer that many.
+  - Shows the faq block of its section in the page's document (on a site with no
+    documents yet, faq1Question to faq8Answer); an entry needs both halves to
+    render. Six to eight when the facts answer that many.
   - A page that shows it passes faqPage() to Base's jsonLd, so the FAQPage data
     matches the questions on the page.
   - split sets the heading beside the questions, stacked above them in a narrow

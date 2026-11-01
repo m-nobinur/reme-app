@@ -8,12 +8,13 @@ import {
   SiteFields,
 } from "@workspace/contracts"
 import { beforeAll, describe, expect, test } from "vitest"
+import { layout, pageFields } from "../src/page-fields"
 import {
   QUOTE_CHOICE_TYPES,
   QUOTE_FIELD_TYPES,
   quoteFields,
 } from "../src/quote-form"
-import { fields, layout, site } from "../src/site-config"
+import { fields, site } from "../src/site-config"
 import {
   type Built,
   build,
@@ -48,7 +49,10 @@ import Base from "../layouts/Base.astro"
 // Each value is its own key between markers, so any text left after the
 // markers are removed was written into a template rather than read from here.
 const MARKED = Object.fromEntries(
-  Object.keys(site).map((key) => [key, `«${key}»`])
+  [...Object.keys(site), ...Object.keys(pageFields)].map((key) => [
+    key,
+    `«${key}»`,
+  ])
 )
 // The quote form's own questions are data too, the file the platform writes
 // from the owner's approved list: marked the same way, one question of every
