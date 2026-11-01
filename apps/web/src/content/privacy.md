@@ -1,6 +1,6 @@
 # Reme privacy policy
 
-Last updated: 17 October 2026
+Last updated: 1 November 2026
 
 This policy explains what Reme does with personal data when you use the Reme app at preview.remeai.co.uk, and when someone visits a website Reme publishes for a business at a remeai.co.uk address.
 
@@ -126,7 +126,11 @@ Websites Reme publishes set no cookies and run no analytics. Cloudflare handles 
 
 ## Visitors to a published website
 
-Each business decides what its website says and is responsible for the personal data it publishes there. Published websites have no forms today, so Reme collects nothing from visitors beyond what Cloudflare records to serve the page.
+Each business decides what its website says and is responsible for the personal data it publishes there.
+
+When a visitor sends a website's quote form, Reme passes their name, email address, phone number if given, answers and any photos to that business's Reme workspace, so the business can reply. Photos are re-encoded before they are kept, which removes location and camera details. A request is kept with the business's conversation data, as "How long we keep it" sets out. The visitor's network address is used only to limit how many requests one address can send, and is not stored.
+
+Beyond the quote form, Reme collects nothing from visitors except what Cloudflare records to serve the page.
 
 ## Children
 

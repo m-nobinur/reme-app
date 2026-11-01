@@ -2,10 +2,21 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import {
   QUOTE_FIELD_TYPES as CONTRACT_TYPES,
+  QUOTE_NOT_SENT_PATH,
+  QUOTE_PATH,
+  QUOTE_SENT_PATH,
+  QUOTE_TRAP_FIELD,
   QuoteFields,
 } from "@workspace/contracts"
 import { beforeAll, describe, expect, test } from "vitest"
-import { QUOTE_FIELD_TYPES, quoteFormProblem } from "../src/quote-form"
+import {
+  QUOTE_ACTION,
+  QUOTE_FIELD_TYPES,
+  QUOTE_NOT_SENT_ID,
+  QUOTE_SENT_ID,
+  QUOTE_TRAP,
+  quoteFormProblem,
+} from "../src/quote-form"
 import { type Built, build, type Page, ROOT, readPages } from "./build"
 import { FILLED, LIMOUSINE_FORM } from "./fixture"
 
@@ -62,6 +73,13 @@ const CASES: [string, unknown][] = [
 describe("the quote form checks", () => {
   test("offer the contract's input types", () => {
     expect([...QUOTE_FIELD_TYPES]).toEqual([...CONTRACT_TYPES])
+  })
+
+  test("post where the platform listens, and come back where it sends", () => {
+    expect(QUOTE_ACTION).toBe(QUOTE_PATH)
+    expect(QUOTE_TRAP).toBe(QUOTE_TRAP_FIELD)
+    expect(`/quote/#${QUOTE_SENT_ID}`).toBe(QUOTE_SENT_PATH)
+    expect(`/quote/#${QUOTE_NOT_SENT_ID}`).toBe(QUOTE_NOT_SENT_PATH)
   })
 
   for (const [name, value] of CASES) {
@@ -170,16 +188,19 @@ describe("a site built with the owner's own questions", () => {
     )
   })
 
-  test("asks for photos as links when the form goes by email", () => {
+  test("takes photos as files the platform keeps, with links beside them", () => {
     const { elements, texts } = quotePage(cleaner)
     const form = elements.find((el) => el.tag === "form")
-    expect(form?.attrs.enctype).toBe("text/plain")
-    expect(elements.some((el) => el.attrs.type === "file")).toBe(false)
+    expect(form?.attrs.enctype).toBe("multipart/form-data")
     const photos = elements.find((el) => el.attrs.id === "quote-q-photos")
-    expect(photos?.tag).toBe("textarea")
-    expect(photos?.attrs["aria-describedby"]).toBe(
-      "quote-q-photos-hint quote-q-photos-links"
-    )
+    expect(photos?.attrs).toMatchObject({
+      type: "file",
+      name: "photos",
+      accept: "image/jpeg,image/png,image/webp",
+    })
+    expect("required" in (photos?.attrs ?? {})).toBe(false)
+    const links = elements.find((el) => el.attrs.id === "quote-q-photos-links")
+    expect(links?.attrs.name).toBe("photos_links")
     expect(texts).toContain(FILLED.quotePhotoLinks)
     // A checkbox group lets the visitor tick any of its options.
     const extras = elements.filter((el) => el.attrs.name === "extras")

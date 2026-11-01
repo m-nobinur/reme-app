@@ -5798,7 +5798,7 @@ export interface components {
     }
     CosEvent: {
       /** @enum {string} */
-      source: "staff" | "notice" | "schedule"
+      source: "staff" | "notice" | "schedule" | "enquiry"
       summary: string
       evidence: (
         | {
@@ -13240,6 +13240,19 @@ export interface components {
               field?: string
             }[]
           }
+      enquiry?: {
+        /** Format: uuid */
+        id: string
+        name: string
+        /** Format: email */
+        email: string
+        phone?: string
+        answers: {
+          label: string
+          value: string
+        }[]
+        photos: string[]
+      }
     }
     SetFactsRequest: {
       facts: (

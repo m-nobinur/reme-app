@@ -4,6 +4,7 @@ import {
   envelope,
   formatSiteRevision,
   isPreviewHost,
+  QUOTE_PATH,
   REQUEST_FAILED,
   RedirectPointer,
   SITE_HEADER,
@@ -484,7 +485,16 @@ app.on(["GET", "HEAD"], "/:file{[a-zA-Z0-9-]{8,128}\\.txt}", (c, next) => {
   return c.text(key, 200, NO_STORE)
 })
 
-// The site's own API surface arrives with ingest (Phase 3).
+// A visitor's quote request, for the Core API to file under the org this host
+// names: the request goes on as it came, so its URL names the site. A draft on
+// a preview host takes none.
+app.post(QUOTE_PATH, (c) =>
+  isPreviewHost(new URL(c.req.url).hostname)
+    ? notHere(c)
+    : c.env.API.fetch(c.req.raw)
+)
+
+// The rest of the site's own API surface arrives with ingest (Phase 3).
 app.all("/api/*", (c) =>
   failure(c, 501, {
     class: "resource",

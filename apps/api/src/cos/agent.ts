@@ -858,7 +858,7 @@ export const UNKNOWN_LINE =
 
 /** Added to a turn that something logged away from the chat started, with the owner away. */
 export const WAKE_LINE =
-  "The owner did not write. What was logged since your last reply started this turn, and the owner is away. If any of it is worth their attention now, write them one short message about it in your own words, at most three sentences: the point first, agreeing with what was logged, then the next small step if there is one. Otherwise reply with [quiet] and nothing else, which sends nothing."
+  "The owner did not write. What was logged since your last reply started this turn, and the owner is away. If any of it is worth their attention now, write them one short message about it in your own words, at most three sentences: the point first, agreeing with what was logged, then the next small step if there is one. A quote request from the website is already on their screen as a card: never repeat its details, but offer in one line to draft the reply (the quote-reply procedure). Otherwise reply with [quiet] and nothing else, which sends nothing."
 
 /** Added to a turn a procedure's schedule started. The name is the procedure's, never owner text. */
 export const skillLine = (name: string) =>

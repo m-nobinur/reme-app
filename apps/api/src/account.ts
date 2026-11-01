@@ -54,13 +54,13 @@ export type Objects = {
 
 /**
  * Deletes every R2 object the org owns in the sites bucket: owner uploads,
- * generated photos, built revisions and checkpoints, and the sandbox holder
- * record. Each prefix ends in a slash so no other org's keys can match, and
- * the holder is one exact key. Deleting a missing key is not an error, so a
- * retry after a partial run finishes it.
+ * generated photos, built revisions and checkpoints, website visitors' quote
+ * photos, and the sandbox holder record. Each prefix ends in a slash so no
+ * other org's keys can match, and the holder is one exact key. Deleting a
+ * missing key is not an error, so a retry after a partial run finishes it.
  */
 export async function removeObjects(sites: Objects, orgId: string) {
-  for (const area of ["uploads", "generated", "sites"]) {
+  for (const area of ["uploads", "generated", "sites", "enquiries"]) {
     let cursor: string | undefined
     do {
       // A page holds at most 1,000 keys, which is also delete's limit.

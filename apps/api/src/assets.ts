@@ -84,6 +84,10 @@ export async function stableId(seed: string): Promise<string> {
 export const uploadKey = (orgId: string, assetId: string) =>
   `uploads/${orgId}/${assetId}`
 
+/** Where a photo sent with a website quote request is kept, apart from the site's own. */
+export const enquiryPhotoKey = (orgId: string, photoId: string) =>
+  `enquiries/${orgId}/${photoId}`
+
 /** Room for the form's own framing on top of the files. */
 const FORM_SLACK = 64 * 1024
 
@@ -402,7 +406,8 @@ export async function findGenerated(
   return null
 }
 
-/** A generated picture of the org's, or else one of its uploads. */
+/** A generated picture of the org's, one of its uploads, or a quote request's photo. */
 const findPicture = async (env: Env, orgId: string, assetId: string) =>
   (await findGenerated(env, orgId, assetId)) ??
-  env.SITES.get(uploadKey(orgId, assetId))
+  (await env.SITES.get(uploadKey(orgId, assetId))) ??
+  env.SITES.get(enquiryPhotoKey(orgId, assetId))

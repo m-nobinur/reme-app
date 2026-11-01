@@ -22,6 +22,7 @@ import { DomainPurchaseProvider } from "@workspace/ui/components/assistant/buy-d
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { AlwaysAllowProvider } from "@workspace/ui/components/assistant/decision"
+import { makeEnquiryCardUI } from "@workspace/ui/components/assistant/enquiry-card"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
@@ -61,6 +62,8 @@ import { ChatUpdates } from "./updates"
 import { uploadPhotos } from "./upload"
 
 const frame = getRouteApi("/app")
+
+const EnquiryCardUI = makeEnquiryCardUI(trayServices.imageUrl)
 
 /** The Request changes presses the composer has taken, by their key. */
 const composed = new Set<string>()
@@ -210,6 +213,7 @@ export function ChatPage() {
       <BuildQuestionsUI />
       <MemoryChipUI />
       <PersonaCardUI />
+      <EnquiryCardUI />
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">
         {missing ? (

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import {
   ChangeAskedPart,
   CosEvent,
+  type Enquiry,
   HandoffResult,
   ServerMessage,
   type TaintLabel,
@@ -69,7 +70,7 @@ export async function postAssistantMessage(
     conversationId?: string
   }
 ): Promise<Posted> {
-  const { id, text, button, questions } = ServerMessage.parse({
+  const { id, text, button, questions, enquiry } = ServerMessage.parse({
     ...message,
     id: serverMessageId(key),
   })
@@ -77,6 +78,17 @@ export async function postAssistantMessage(
   const asked = questions
     ? [`On a card I asked: ${questions.questions.map((q) => q.text).join(" ")}`]
     : []
+  // The model reads a notice back as its own words, so one carrying a
+  // visitor's request says only our own line; the request follows as data.
+  const notice: CosEvent = {
+    source: "notice",
+    summary: enquiry
+      ? "I showed the owner a quote request from their website."
+      : [...text, ...asked].join("\n\n").slice(0, 1500),
+    evidence: [],
+    wake: false,
+    message_id: id,
+  }
   return post(kit, {
     orgId,
     id,
@@ -87,16 +99,27 @@ export async function postAssistantMessage(
       ...text.map((words) => ({ type: "text", text: words, state: "done" })),
       ...(button ? [{ type: "data-button", data: button }] : []),
       ...(questions ? [{ type: "data-build_questions", data: questions }] : []),
+      ...(enquiry ? [{ type: "data-enquiry", data: enquiry }] : []),
     ],
-    event: {
-      source: "notice",
-      summary: [...text, ...asked].join("\n\n").slice(0, 1500),
-      evidence: [],
-      wake: false,
-      message_id: id,
-    },
+    // The visitor's words go in as data of their own, never inside the
+    // notice, which the model reads back as its own message.
+    cosEvents: enquiry ? [notice, enquiryEvent(enquiry)] : [notice],
   })
 }
+
+/** A quote request as the CoS reads it, asking for a turn to offer a reply. */
+const enquiryEvent = (enquiry: Enquiry): CosEvent => ({
+  source: "enquiry",
+  summary: [
+    `Quote request ${enquiry.id} from the website: ${enquiry.name}, ${enquiry.email}${enquiry.phone ? `, ${enquiry.phone}` : ""}.`,
+    ...enquiry.answers.map((a) => `${a.label}: ${a.value}`),
+    `${enquiry.photos.length} photo${enquiry.photos.length === 1 ? "" : "s"}.`,
+  ]
+    .join("\n")
+    .slice(0, 1500),
+  evidence: [],
+  wake: true,
+})
 
 /**
  * Where a `cos.event` goes: the conversation the rail's Chat icon opens, or
@@ -359,14 +382,14 @@ async function post(
     conversationId,
     role,
     parts,
-    event,
+    cosEvents = [],
   }: {
     orgId: string
     id: string
     conversationId?: string
     role: "assistant" | "user"
     parts: Record<string, unknown>[]
-    event?: CosEvent
+    cosEvents?: CosEvent[]
   }
 ): Promise<Posted> {
   return kit.withOrg({ orgId }, async (db) => {
@@ -408,7 +431,7 @@ async function post(
     await db.execute(
       sql`update ${conversations} set updated_at = now() where id = ${target.id}`
     )
-    if (event) {
+    for (const event of cosEvents) {
       await appendSessionEvent(db, {
         orgId,
         staffId: null,
@@ -416,10 +439,14 @@ async function post(
         sessionId: target.id,
         type: "cos.event",
         payload: CosEvent.parse(event),
-        // The words may be a model's (`writeUpdate`).
-        taint: ["inferred"],
+        // The words may be a model's (`writeUpdate`), or a website visitor's.
+        taint:
+          event.source === "enquiry"
+            ? ["inferred", "untrusted_input"]
+            : ["inferred"],
       })
     }
+    if (cosEvents.some((event) => event.wake)) await queueWake(db, orgId)
     return "posted"
   })
 }

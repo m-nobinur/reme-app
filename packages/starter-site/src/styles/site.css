@@ -2364,6 +2364,40 @@ picture {
   font-size: var(--text-sm);
 }
 
+/* The line the platform sends the visitor back to: shown only as the page's
+   target, and once a request is sent the form gives way to it. */
+.quote-status {
+  display: none;
+  max-width: 42rem;
+  margin: 0 0 var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--muted);
+  font-size: var(--text-lg);
+}
+
+.quote-status:target {
+  display: block;
+}
+
+.quote-status-failed {
+  border-color: var(--destructive);
+}
+
+#quote-sent:target ~ .quote-form {
+  display: none;
+}
+
+/* Off the page for people, there for a script that fills every field. */
+.quote-trap {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 /* Frequently asked questions. split: the heading beside the questions;
    stacked: the heading centred above a narrow column of them. */
 

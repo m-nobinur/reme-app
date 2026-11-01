@@ -1,18 +1,13 @@
 ---
-import { type QuoteField, quoteFields } from "../../quote-form"
+import {
+  QUOTE_ACTION,
+  QUOTE_NOT_SENT_ID,
+  QUOTE_SENT_ID,
+  QUOTE_TRAP,
+  type QuoteField,
+  quoteFields,
+} from "../../quote-form"
 import { site } from "../../site-config"
-
-// A request goes to site.quoteFormAction once the platform has an endpoint
-// for it; that is where the endpoint plugs in. Until then it goes by email:
-// a mailto action with text/plain opens the visitor's mail app with each
-// field on its own line. With neither there is nowhere to send it, so the
-// form is left out rather than posting to itself.
-const byEmail = !site.quoteFormAction
-const action =
-  site.quoteFormAction ||
-  (site.email
-    ? `mailto:${site.email}?subject=${encodeURIComponent(site.quoteEmailSubject)}`
-    : "")
 
 /** Longest answer per input type; date and number take no maxlength. */
 const MAX: Record<string, number> = { text: 200, email: 254, tel: 40 }
@@ -71,150 +66,141 @@ const groups = [
   { legend: site.quoteRequestLegend, fields: questions },
 ].filter((group) => group.fields.length > 0)
 
-// Files need an endpoint: a mail link carries none, so by email a photo
-// question takes links alone.
-const files = !byEmail && questions.some((field) => field.type === "photos")
-const enctype = byEmail
-  ? "text/plain"
-  : files
-    ? "multipart/form-data"
-    : undefined
+const enctype = questions.some((field) => field.type === "photos")
+  ? "multipart/form-data"
+  : undefined
 /** The browser's input type, where it differs from the question's. */
 type InputType = astroHTML.JSX.HTMLInputTypeAttribute
 const INPUT: Record<string, InputType> = { datetime: "datetime-local" }
 ---
 
-{
-  action && (
-    <form
-      class="quote-form"
-      action={action}
-      method="post"
-      enctype={enctype}
-    >
-      {groups.map((group) => (
-        <fieldset>
-          {group.legend && <legend>{group.legend}</legend>}
-          {group.fields.map((field) => {
-            const hint = field.hint ? `${field.id}-hint` : undefined
-            const common = {
-              id: field.id,
-              name: field.name,
-              required: field.required,
-              autocomplete: field.autocomplete,
-              "aria-describedby": hint,
-            }
-            const optional = !field.required && site.quoteOptional && (
-              <span class="quote-optional">{site.quoteOptional}</span>
-            )
-            const hintLine = field.hint && (
-              <p class="quote-hint" id={hint}>
-                {field.hint}
-              </p>
-            )
-            if (field.type === "radio" || field.type === "checkbox") {
-              // shortcut: a checkbox group cannot be required without
-              // script, so only a radio group is; check it on the endpoint.
-              return (
-                <fieldset class="quote-field" aria-describedby={hint}>
-                  <legend>
-                    {field.label}
-                    {optional}
-                  </legend>
-                  {hintLine}
-                  <div class="quote-options">
-                    {field.options.map((option, i) => (
-                      <label class="quote-option" for={`${field.id}-${i}`}>
-                        <input
-                          id={`${field.id}-${i}`}
-                          name={field.name}
-                          type={field.type === "radio" ? "radio" : "checkbox"}
-                          value={option}
-                          required={field.type === "radio" && field.required}
-                        />
-                        <span>{option}</span>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-              )
-            }
-            return (
-              <div class="quote-field">
-                <label for={field.id}>
-                  {field.label}
-                  {optional}
-                </label>
-                {hintLine}
-                {field.type === "photos" && files ? (
-                  <>
-                    <div class="quote-drop">
-                      {/* Links answer it as well, so the files are never required. */}
-                      <input
-                        {...{ ...common, required: false }}
-                        type="file"
-                        accept="image/*"
-                        multiple
-                      />
-                      <span class="quote-drop-label" aria-hidden="true">
-                        {site.quotePhotoDrop}
-                      </span>
-                    </div>
-                    <label class="quote-sublabel" for={`${field.id}-links`}>
-                      {site.quotePhotoLinks}
-                    </label>
-                    <textarea
-                      id={`${field.id}-links`}
-                      name={`${field.name}_links`}
-                      rows="2"
-                      maxlength="2000"
+{/* A request goes to the business the site names; with none it has nowhere to go. */}
+{site.businessName && (
+<>
+{/* Shown by `:target` when the platform sends the visitor back, so no script runs. */}
+<p class="quote-status" id={QUOTE_SENT_ID} role="status" tabindex="-1">
+  {site.quoteSent}
+</p>
+<p
+  class="quote-status quote-status-failed"
+  id={QUOTE_NOT_SENT_ID}
+  role="alert"
+  tabindex="-1"
+>
+  {site.quoteNotSent}
+</p>
+<form class="quote-form" action={QUOTE_ACTION} method="post" enctype={enctype}>
+  {groups.map((group) => (
+    <fieldset>
+      {group.legend && <legend>{group.legend}</legend>}
+      {group.fields.map((field) => {
+        const hint = field.hint ? `${field.id}-hint` : undefined
+        const common = {
+          id: field.id,
+          name: field.name,
+          required: field.required,
+          autocomplete: field.autocomplete,
+          "aria-describedby": hint,
+        }
+        const optional = !field.required && site.quoteOptional && (
+          <span class="quote-optional">{site.quoteOptional}</span>
+        )
+        const hintLine = field.hint && (
+          <p class="quote-hint" id={hint}>
+            {field.hint}
+          </p>
+        )
+        if (field.type === "radio" || field.type === "checkbox") {
+          // shortcut: a checkbox group cannot be required without
+          // script, so only a radio group is; check it on the endpoint.
+          return (
+            <fieldset class="quote-field" aria-describedby={hint}>
+              <legend>
+                {field.label}
+                {optional}
+              </legend>
+              {hintLine}
+              <div class="quote-options">
+                {field.options.map((option, i) => (
+                  <label class="quote-option" for={`${field.id}-${i}`}>
+                    <input
+                      id={`${field.id}-${i}`}
+                      name={field.name}
+                      type={field.type === "radio" ? "radio" : "checkbox"}
+                      value={option}
+                      required={field.type === "radio" && field.required}
                     />
-                  </>
-                ) : field.type === "photos" ? (
-                  <>
-                    <p class="quote-hint" id={`${field.id}-links`}>
-                      {site.quotePhotoLinks}
-                    </p>
-                    <textarea
-                      {...{
-                        ...common,
-                        "aria-describedby": [hint, `${field.id}-links`]
-                          .filter(Boolean)
-                          .join(" "),
-                      }}
-                      rows="3"
-                      maxlength="2000"
-                    />
-                  </>
-                ) : field.type === "textarea" ? (
-                  <textarea {...common} rows="5" maxlength="2000" />
-                ) : field.type === "select" ? (
-                  <select {...common}>
-                    <option value="">{site.quoteChoose}</option>
-                    {field.options.map((option) => (
-                      <option>{option}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    {...common}
-                    type={INPUT[field.type] ?? (field.type as InputType)}
-                    maxlength={MAX[field.type]}
-                    min={field.type === "number" ? "0" : undefined}
-                  />
-                )}
+                    <span>{option}</span>
+                  </label>
+                ))}
               </div>
-            )
-          })}
-        </fieldset>
-      ))}
-      <div class="quote-submit">
-        <button class="action action-primary" type="submit">
-          {site.quoteSubmit}
-        </button>
-        {site.quoteNextSteps && <p>{site.quoteNextSteps}</p>}
-        {site.quotePrivacy && <p>{site.quotePrivacy}</p>}
-      </div>
-    </form>
-  )
-}
+            </fieldset>
+          )
+        }
+        return (
+          <div class="quote-field">
+            <label for={field.id}>
+              {field.label}
+              {optional}
+            </label>
+            {hintLine}
+            {field.type === "photos" ? (
+              <>
+                <div class="quote-drop">
+                  {/* Links answer it as well, so the files are never required. */}
+                  <input
+                    {...{ ...common, required: false }}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                  />
+                  <span class="quote-drop-label" aria-hidden="true">
+                    {site.quotePhotoDrop}
+                  </span>
+                </div>
+                <label class="quote-sublabel" for={`${field.id}-links`}>
+                  {site.quotePhotoLinks}
+                </label>
+                <textarea
+                  id={`${field.id}-links`}
+                  name={`${field.name}_links`}
+                  rows="2"
+                  maxlength="2000"
+                />
+              </>
+            ) : field.type === "textarea" ? (
+              <textarea {...common} rows="5" maxlength="2000" />
+            ) : field.type === "select" ? (
+              <select {...common}>
+                <option value="">{site.quoteChoose}</option>
+                {field.options.map((option) => (
+                  <option>{option}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                {...common}
+                type={INPUT[field.type] ?? (field.type as InputType)}
+                maxlength={MAX[field.type]}
+                min={field.type === "number" ? "0" : undefined}
+              />
+            )}
+          </div>
+        )
+      })}
+    </fieldset>
+  ))}
+  {/* A field a person never sees or reaches; a script that fills it is thanked and ignored. */}
+  <div class="quote-trap" aria-hidden="true">
+    <input name={QUOTE_TRAP} tabindex="-1" autocomplete="off" />
+  </div>
+  <div class="quote-submit">
+    <button class="action action-primary" type="submit">
+      {site.quoteSubmit}
+    </button>
+    {site.quoteNextSteps && <p>{site.quoteNextSteps}</p>}
+    {site.quotePrivacy && <p>{site.quotePrivacy}</p>}
+  </div>
+</form>
+</>
+)}

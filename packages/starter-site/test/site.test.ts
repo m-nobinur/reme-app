@@ -1,6 +1,12 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { SiteFields } from "@workspace/contracts"
+import {
+  QUOTE_NOT_SENT_PATH,
+  QUOTE_PATH,
+  QUOTE_SENT_PATH,
+  QUOTE_TRAP_FIELD,
+  SiteFields,
+} from "@workspace/contracts"
 import { beforeAll, describe, expect, test } from "vitest"
 import {
   QUOTE_CHOICE_TYPES,
@@ -527,12 +533,23 @@ describe("the quote form", () => {
     expect(texts).toContain(FILLED.quoteRequestLegend)
   })
 
-  test("sends by email until there is an endpoint", () => {
-    const form = page().elements.find((el) => el.tag === "form")
-    expect(form?.attrs.action).toBe(
-      "mailto:hello@brightclean.invalid?subject=Quote%20request"
-    )
-    expect(form?.attrs.enctype).toBe("text/plain")
+  test("posts to the platform on the site's own host, with a trap and both lines to come back to", () => {
+    const { elements, texts } = page()
+    const form = elements.find((el) => el.tag === "form")
+    expect(form?.attrs.action).toBe(QUOTE_PATH)
+    expect(form?.attrs.method).toBe("post")
+    // The shipped questions ask for no photos, so the form posts plain fields.
+    expect(form?.attrs.enctype).toBeUndefined()
+    expect(
+      elements.some((el) => /^(mailto):/.test(el.attrs.action ?? ""))
+    ).toBe(false)
+    const trap = elements.find((el) => el.attrs.name === QUOTE_TRAP_FIELD)
+    expect(trap?.attrs.tabindex).toBe("-1")
+    for (const path of [QUOTE_SENT_PATH, QUOTE_NOT_SENT_PATH]) {
+      const id = path.split("#")[1]
+      expect(elements.find((el) => el.attrs.id === id)?.tag, id).toBe("p")
+    }
+    expect(texts).toContain(site.quoteSent)
   })
 
   test("is the primary action in the header, the hero and the closing band", () => {

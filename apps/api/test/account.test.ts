@@ -97,6 +97,7 @@ const owned = (org: string) => [
   `sites/${org}/rev1/manifest.json`,
   `sites/${org}/rev2/dist/index.html`,
   `sites/${org}/checkpoints/asg.tar.zst`,
+  `enquiries/${org}/0b7a5d5e-2222-4000-8000-000000000001`,
   `sandboxes/${org}`,
 ]
 
