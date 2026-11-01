@@ -82,7 +82,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     ),
     helpUrl: "https://www.123-reg.co.uk/support/domains/",
     apex: "forward",
-    mark: null,
+    mark: "123-reg",
   },
   {
     id: "ionos",
@@ -169,7 +169,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     settingsUrl: page("https://admin.fasthosts.co.uk/"),
     helpUrl: "https://help.fasthosts.co.uk/",
     apex: "forward",
-    mark: null,
+    mark: "fasthosts",
   },
   {
     id: "gandi",
@@ -308,7 +308,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     helpUrl: "https://www.siteground.com/kb/",
     labels: { name: "Name", value: "Resolves to" },
     apex: "forward",
-    mark: null,
+    mark: "siteground",
   },
   {
     id: "dreamhost",
@@ -332,7 +332,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     settingsUrl: page("https://www.one.com/admin/"),
     helpUrl: "https://help.one.com/hc/en-us",
     apex: "forward",
-    mark: null,
+    mark: "one-com",
   },
   {
     id: "dynadot",
@@ -342,7 +342,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     settingsUrl: page("https://www.dynadot.com/account/domain/name/list.html"),
     helpUrl: "https://www.dynadot.com/help",
     apex: "forward",
-    mark: null,
+    mark: "dynadot",
   },
   {
     id: "krystal",
@@ -352,7 +352,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     settingsUrl: page("https://krystal.io/"),
     helpUrl: "https://help.krystal.io/",
     apex: "forward",
-    mark: null,
+    mark: "krystal",
   },
   {
     id: "digitalocean",
@@ -376,7 +376,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     settingsUrl: page("https://my.bluehost.com/hosting/app"),
     helpUrl: "https://www.bluehost.com/help",
     apex: "forward",
-    mark: null,
+    mark: "bluehost",
   },
   {
     id: "hostgator",
@@ -398,7 +398,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
       `https://www.name.com/account/domain/details/${domain}#dns`,
     helpUrl: "https://www.name.com/support",
     apex: "forward",
-    mark: null,
+    mark: "name-com",
   },
   {
     id: "hover",
@@ -410,7 +410,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
       `https://www.hover.com/control_panel/domain/${domain}/dns`,
     helpUrl: "https://help.hover.com/",
     apex: "forward",
-    mark: null,
+    mark: "hover",
   },
   {
     id: "heart-internet",
@@ -420,7 +420,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     settingsUrl: page("https://customer.heartinternet.uk/"),
     helpUrl: "https://www.heartinternet.uk/support/",
     apex: "forward",
-    mark: null,
+    mark: "heart-internet",
   },
   {
     id: "34sp",
@@ -430,7 +430,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     settingsUrl: page("https://account.34sp.com/"),
     helpUrl: "https://www.34sp.com/kb",
     apex: "forward",
-    mark: null,
+    mark: "34sp",
   },
   {
     id: "lcn",
@@ -440,7 +440,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     settingsUrl: page("https://www.lcn.com/"),
     helpUrl: "https://www.lcn.com/support/",
     apex: "forward",
-    mark: null,
+    mark: "lcn",
   },
   {
     id: "names-co-uk",
@@ -450,7 +450,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     settingsUrl: page("https://admin.names.co.uk/"),
     helpUrl: "https://www.names.co.uk/support/",
     apex: "forward",
-    mark: null,
+    mark: "names-co-uk",
   },
   // Suffixes from here were seen with a live NS lookup on 2026-11-01.
   {
@@ -464,7 +464,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     helpUrl:
       "https://www.networksolutions.com/help/article/manage-dns-adns-records",
     apex: "forward",
-    mark: null,
+    mark: "network-solutions",
   },
   {
     // Register.com and Domain.com sign in through Network Solutions.
@@ -478,7 +478,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     helpUrl:
       "https://www.networksolutions.com/help/article/manage-dns-adns-records",
     apex: "forward",
-    mark: null,
+    mark: "network-solutions",
   },
   {
     id: "domain-com",
@@ -504,7 +504,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     ),
     helpUrl: "https://www.123-reg.co.uk/support/domains/",
     apex: "forward",
-    mark: null,
+    mark: "123-reg",
   },
   {
     id: "transip",
@@ -514,7 +514,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     settingsUrl: page("https://www.transip.eu/cp/domain-hosting/"),
     helpUrl: "https://www.transip.eu/knowledgebase/407-setting-a-cname-record/",
     apex: "forward",
-    mark: null,
+    mark: "transip",
   },
   {
     id: "infomaniak",
@@ -524,7 +524,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     settingsUrl: page("https://manager.infomaniak.com/v3/ng/products/domain"),
     helpUrl: "https://www.infomaniak.com/en/support/faq/2033",
     apex: "forward",
-    mark: null,
+    mark: "infomaniak",
   },
   {
     id: "shopify",
@@ -535,7 +535,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     helpUrl:
       "https://help.shopify.com/en/manual/domains/managing-domains/edit-dns-settings",
     apex: "forward",
-    mark: null,
+    mark: "shopify",
   },
 ]
 
