@@ -19,6 +19,7 @@ import {
   type StepCode,
   writeSession,
 } from "./session"
+import { enabledProviders } from "./social"
 import { throttle } from "./throttle"
 import { sessionOptions, workos } from "./workos"
 
@@ -43,6 +44,11 @@ type PendingSummary = {
   email: string
   organizations: Array<{ id: string; name: string }>
 }
+
+/** The social sign-in buttons this environment shows: see `enabledProviders`. */
+export const getSocialProviders = createServerFn({ method: "GET" }).handler(
+  async (): Promise<string[]> => enabledProviders(process.env.SOCIAL_SIGN_IN)
+)
 
 export const getPendingAuth = createServerFn({ method: "GET" }).handler(
   async (): Promise<PendingSummary | null> => {

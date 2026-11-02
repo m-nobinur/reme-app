@@ -1,4 +1,8 @@
-import { EnvelopeSimpleIcon, PaperPlaneTiltIcon } from "@phosphor-icons/react"
+import {
+  EnvelopeSimpleIcon,
+  GoogleLogoIcon,
+  PaperPlaneTiltIcon,
+} from "@phosphor-icons/react"
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
@@ -7,7 +11,7 @@ import { Field } from "@workspace/ui/components/field"
 import { Logo } from "@workspace/ui/components/logo"
 import { PasswordField } from "@workspace/ui/components/password-field"
 import { SubmitButton } from "@workspace/ui/components/submit-button"
-import { signIn } from "@/lib/auth/actions"
+import { getSocialProviders, signIn } from "@/lib/auth/actions"
 import { safeReturnTo } from "@/lib/auth/redirect-target"
 import { leaveIfSignedIn } from "@/lib/auth/signed-in"
 import { useSubmit } from "@/lib/auth/use-submit"
@@ -43,13 +47,26 @@ export const Route = createFileRoute("/sign-in")({
       ? (search.error as CallbackError)
       : undefined,
   }),
-  loader: leaveIfSignedIn,
+  loader: async () => {
+    await leaveIfSignedIn()
+    return { providers: await getSocialProviders() }
+  },
   head: () => ({ meta: [{ title: "Sign in · Reme" }] }),
   component: SignIn,
 })
 
+/** The buttons a provider can have; the loader says which are on (`SOCIAL_SIGN_IN`). */
+const SOCIAL = [
+  {
+    provider: "GoogleOAuth",
+    label: "Continue with Google",
+    icon: GoogleLogoIcon,
+  },
+] as const
+
 function SignIn() {
   const { returnTo = "/app", error } = Route.useSearch()
+  const { providers } = Route.useLoaderData()
   const router = useRouter()
   const { run, pending, result } = useSubmit(signIn)
 
@@ -143,6 +160,25 @@ function SignIn() {
       </div>
 
       <div className="flex flex-col gap-3">
+        {SOCIAL.filter((option) => providers.includes(option.provider)).map(
+          (option) => (
+            <a
+              className={buttonVariants({
+                variant: "outline",
+                size: "lg",
+                className: "h-11 w-full rounded-xl",
+              })}
+              // A plain link, not a fetch: the provider redirect has to be a
+              // top-level navigation, and the state cookie is set on this
+              // response by the route that answers it.
+              href={`/api/auth/social?provider=${option.provider}&returnTo=${encodeURIComponent(returnTo)}`}
+              key={option.provider}
+            >
+              <option.icon aria-hidden />
+              {option.label}
+            </a>
+          )
+        )}
         <Link
           className={buttonVariants({
             variant: "outline",
