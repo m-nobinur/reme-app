@@ -27,7 +27,9 @@
   // vite plugin carries the field through to dist/server/wrangler.json, which
   // is the config a web deploy actually uploads; verified, not assumed. Load
   // bearing now that `workers_dev` is off: the default follows it.
-  "preview_urls": true,
+  // Off while staging is invite-only: a preview alias is public and runs an
+  // unreviewed branch on staging's secrets. The PR preview workflow is disabled.
+  "preview_urls": false,
   // Staging's hostname (ADR-030), a custom domain like production's below.
   "workers_dev": false,
   // The zone route keeps staging off the production site router: see
