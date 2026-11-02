@@ -1,11 +1,12 @@
-// The bare domain's holding page: static files only, no Worker code. The
-// production router hands both names back to Cloudflare (SERVICE_HOSTS), so
+// The bare domain's holding page: static files only, no Worker code. It serves
+// the maintenance app's page, so the two hostnames always show the same thing.
+// The production router hands both names back to Cloudflare (SERVICE_HOSTS), so
 // these custom domains serve them.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "reme-landing",
   "compatibility_date": "2026-08-26",
-  "assets": { "directory": "./public" },
+  "assets": { "directory": "../maintenance/public" },
   "routes": [
     { "pattern": "remeai.co.uk", "custom_domain": true },
     { "pattern": "www.remeai.co.uk", "custom_domain": true }
