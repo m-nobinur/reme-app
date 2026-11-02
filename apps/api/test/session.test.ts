@@ -101,6 +101,32 @@ describe("what a session carries besides the person", () => {
   })
 })
 
+describe("the access list", () => {
+  const read = async (allowed: string | undefined) =>
+    readSession(new Request("http://api.invalid/", { headers: undefined }), {
+      ...env(NOWHERE),
+      ALLOWED_EMAILS: allowed,
+    })
+  const withCookie = async (allowed: string | undefined) =>
+    readSession(
+      new Request("http://api.invalid/", {
+        headers: await cookieHeader(OWNER),
+      }),
+      { ...env(NOWHERE), ALLOWED_EMAILS: allowed }
+    )
+
+  it("lets a listed address in, and everyone in when there is no list", async () => {
+    expect(await withCookie("*@fixture.invalid")).not.toBeNull()
+    expect(await withCookie(undefined)).not.toBeNull()
+  })
+
+  it("signs out an address that is not listed, cookie and all", async () => {
+    expect(await withCookie("someone@example.com")).toBeNull()
+    expect(await withCookie("not an email")).toBeNull()
+    expect(await read("*@fixture.invalid")).toBeNull()
+  })
+})
+
 describe("a malformed cookie", () => {
   it("is no session, not a server fault", async () => {
     const response = await call("/org", {

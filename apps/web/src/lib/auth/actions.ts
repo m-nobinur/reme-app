@@ -5,6 +5,7 @@ import {
   getAuthkit,
 } from "@workos/authkit-tanstack-react-start"
 import { forwardedSession } from "@/lib/api/transport"
+import { refuseUnlisted } from "./access"
 import { codeOf } from "./diagnose"
 import { type AuthFailure, toFailure } from "./failure"
 import { digits, record, secret, text } from "./input"
@@ -64,6 +65,10 @@ export const signIn = createServerFn({ method: "POST" })
     }
   })
   .handler(async ({ data }): Promise<AuthOutcome> => {
+    const unlisted = refuseUnlisted(data.email)
+    if (unlisted) {
+      return { status: "failed", failure: unlisted }
+    }
     // Before the password reaches WorkOS, so a run of guesses costs us nothing
     // and tells the guesser nothing about whether the address exists.
     const limited = await throttle(env.SIGN_IN_LIMIT, "sign-in", data.email)
@@ -98,6 +103,10 @@ export const signUp = createServerFn({ method: "POST" })
     }
   })
   .handler(async ({ data }): Promise<AuthOutcome> => {
+    const unlisted = refuseUnlisted(data.email)
+    if (unlisted) {
+      return { status: "failed", failure: unlisted }
+    }
     const limited = await throttle(env.SIGN_IN_LIMIT, "sign-up", data.email)
     if (limited) {
       return { status: "failed", failure: limited }
@@ -137,6 +146,10 @@ export const sendSignInCode = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ email: text(record(input).email) }))
   .handler(
     async ({ data }): Promise<{ sent: true } | { failure: AuthFailure }> => {
+      const unlisted = refuseUnlisted(data.email)
+      if (unlisted) {
+        return { failure: unlisted }
+      }
       // Counted whether or not the address has an account, as for reset.
       const limited = await throttle(
         env.SIGN_IN_LIMIT,
@@ -172,6 +185,10 @@ export const signInWithCode = createServerFn({ method: "POST" })
     }
   })
   .handler(async ({ data }): Promise<AuthOutcome> => {
+    const unlisted = refuseUnlisted(data.email)
+    if (unlisted) {
+      return { status: "failed", failure: unlisted }
+    }
     // The password's bucket: six digits and a password are guessed at the same
     // account, so they share one count.
     const limited = await throttle(env.SIGN_IN_LIMIT, "sign-in", data.email)
@@ -244,6 +261,10 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ email: text(record(input).email) }))
   .handler(
     async ({ data }): Promise<{ sent: true } | { failure: AuthFailure }> => {
+      const unlisted = refuseUnlisted(data.email)
+      if (unlisted) {
+        return { failure: unlisted }
+      }
       // Counted whether or not the address has an account, so the refusal
       // says nothing the swallowed 404 below does not.
       const limited = await throttle(
