@@ -11,7 +11,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   "placement": { "region": "aws:eu-central-1" },
-  "preview_urls": true,
+  // Off while staging is invite-only: a preview alias is public and runs an
+  // unreviewed branch on staging's secrets. The PR preview workflow is disabled.
+  "preview_urls": false,
   "workers_dev": false,
   // The zone route keeps this hostname off the production site router's
   // `*/*`: see apps/api/wrangler.jsonc.

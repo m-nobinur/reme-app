@@ -43,7 +43,9 @@
   // `wrangler versions upload --preview-alias`, so a wrangler upgrade that
   // moved this default again would take every preview URL down with it. Load
   // bearing now that `workers_dev` is off: the default follows it.
-  "preview_urls": true,
+  // Off while staging is invite-only: a preview alias is public and runs an
+  // unreviewed branch on staging's secrets. The PR preview workflow is disabled.
+  "preview_urls": false,
   // The hostname is ADR-030's. `custom_domain: true` makes wrangler create and
   // own the DNS record and the certificate. `workers_dev` is off so the Worker
   // answers in one place; measured 2026-09-14 that preview aliases survive it.

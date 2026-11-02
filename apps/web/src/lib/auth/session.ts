@@ -1,5 +1,6 @@
 import { getAuthkit } from "@workos/authkit-tanstack-react-start"
 import type { AuthenticationResponse } from "@workos-inc/node"
+import { refuseUnlisted } from "./access"
 import { type AuthFailure, asRecord, toFailure } from "./failure"
 import { createOrgForSession } from "./org"
 import { recordOrgIntent } from "./org-intent"
@@ -151,6 +152,12 @@ export async function authenticate(
       // Only reachable if `sessionOptions()` was left off the call, which is a
       // programming error rather than a state a person can be in.
       throw new Error("WorkOS returned no sealed session.")
+    }
+    // The one place every sign-in becomes a session, Google's callback included,
+    // so an address that slipped past the form still gets no cookie.
+    const unlisted = refuseUnlisted(response.user.email)
+    if (unlisted) {
+      return { status: "failed", failure: unlisted }
     }
     const orgName = options.orgName ?? pending?.orgName
     await writeSession(await provisionOrg(response, orgName))

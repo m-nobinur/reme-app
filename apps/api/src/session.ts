@@ -1,4 +1,5 @@
 import { WorkOS } from "@workos-inc/node"
+import { emailAllowed, parseAccessList } from "@workspace/contracts"
 
 /**
  * Who a request is, read from the sealed session cookie.
@@ -135,6 +136,10 @@ export async function readSession(
   }
   if (!result.authenticated) return null
   const { user, organizationId, sessionId, impersonator } = result
+  // Every handler that spends money or reads a tenant starts here, so an
+  // address off `ALLOWED_EMAILS` is signed out here even with a valid cookie.
+  if (!emailAllowed(user.email, parseAccessList(env.ALLOWED_EMAILS)))
+    return null
   return {
     workosUserId: user.id,
     workosOrganizationId: organizationId,

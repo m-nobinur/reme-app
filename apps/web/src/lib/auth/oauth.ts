@@ -3,6 +3,7 @@ import {
   getCookie,
   setCookie,
 } from "@tanstack/react-start/server"
+import { enabledProviders } from "./social"
 import { redirectUri } from "./workos"
 
 /**
@@ -21,13 +22,6 @@ import { redirectUri } from "./workos"
  * which is a random `state` echoed back and compared against a cookie only this
  * origin can read.
  */
-
-/**
- * Google is the one social provider, by the owner's choice on 2026-09-30. A
- * provider that is not on this list never reaches WorkOS, whatever the WorkOS
- * environment has enabled.
- */
-const PROVIDERS = new Set(["GoogleOAuth"])
 
 /**
  * Where a flow keeps its state: the cookie, the path it is scoped to, the
@@ -62,8 +56,17 @@ export function seeOther(location: string): Response {
   return new Response(null, { status: 302, headers: { location } })
 }
 
+/**
+ * Google is the one social provider, by the owner's choice on 2026-09-30, and
+ * `SOCIAL_SIGN_IN` turns it on (see `enabledProviders`). A provider that is not
+ * on that list never reaches WorkOS, whatever the WorkOS environment has
+ * enabled. The Search Console connection is a separate flow.
+ */
 export function isSupportedProvider(value: unknown): value is string {
-  return typeof value === "string" && PROVIDERS.has(value)
+  return (
+    typeof value === "string" &&
+    enabledProviders(process.env.SOCIAL_SIGN_IN).includes(value)
+  )
 }
 
 export function beginOAuth(

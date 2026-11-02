@@ -21,6 +21,12 @@ interface Env {
    */
   REPLY_TOKEN_KEY: string
   /**
+   * Who may use the app: comma-separated `name@domain` and `*@domain` entries
+   * (`@workspace/contracts` access-list). Unset, everyone may. Set on staging;
+   * the web Worker holds the same value.
+   */
+  ALLOWED_EMAILS?: string
+  /**
    * The VAPID public key a browser subscribes to push with (`GET /push/config`).
    * The orchestrator holds the private half. Unset, push is not offered.
    */
