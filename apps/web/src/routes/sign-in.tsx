@@ -1,8 +1,4 @@
-import {
-  EnvelopeSimpleIcon,
-  GoogleLogoIcon,
-  PaperPlaneTiltIcon,
-} from "@phosphor-icons/react"
+import { EnvelopeSimpleIcon, PaperPlaneTiltIcon } from "@phosphor-icons/react"
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
@@ -51,15 +47,6 @@ export const Route = createFileRoute("/sign-in")({
   head: () => ({ meta: [{ title: "Sign in · Reme" }] }),
   component: SignIn,
 })
-
-/** The social providers WorkOS has enabled; see `PROVIDERS` in oauth.ts. */
-const SOCIAL = [
-  {
-    provider: "GoogleOAuth",
-    label: "Continue with Google",
-    icon: GoogleLogoIcon,
-  },
-] as const
 
 function SignIn() {
   const { returnTo = "/app", error } = Route.useSearch()
@@ -156,23 +143,6 @@ function SignIn() {
       </div>
 
       <div className="flex flex-col gap-3">
-        {SOCIAL.map((option) => (
-          <a
-            className={buttonVariants({
-              variant: "outline",
-              size: "lg",
-              className: "h-11 w-full rounded-xl",
-            })}
-            // A plain link, not a fetch: the provider redirect has to be a
-            // top-level navigation, and the state cookie is set on this
-            // response by the route that answers it.
-            href={`/api/auth/social?provider=${option.provider}&returnTo=${encodeURIComponent(returnTo)}`}
-            key={option.provider}
-          >
-            <option.icon aria-hidden />
-            {option.label}
-          </a>
-        ))}
         <Link
           className={buttonVariants({
             variant: "outline",

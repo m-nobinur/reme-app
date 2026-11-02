@@ -23,11 +23,13 @@ import { redirectUri } from "./workos"
  */
 
 /**
- * Google is the one social provider, by the owner's choice on 2026-09-30. A
- * provider that is not on this list never reaches WorkOS, whatever the WorkOS
- * environment has enabled.
+ * Social sign-in is off while the app is invite-only (2026-11-02), so no
+ * provider reaches WorkOS from `/api/auth/social`, whatever the WorkOS
+ * environment has enabled. Google was the one, by the owner's choice on
+ * 2026-09-30: add "GoogleOAuth" back here and restore its button on /sign-in.
+ * The Search Console connection is a separate flow and is not affected.
  */
-const PROVIDERS = new Set(["GoogleOAuth"])
+const PROVIDERS = new Set<string>()
 
 /**
  * Where a flow keeps its state: the cookie, the path it is scoped to, the
