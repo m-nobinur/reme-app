@@ -219,8 +219,9 @@
         // What the hourly uptime check fetches (src/uptime.ts). Not the
         // orchestrator's own hostname: a Worker fetching itself through its
         // custom domain gets 522 (measured 2026-09-29), and the check running
-        // at all is the orchestrator's proof of life.
-        "HEALTH_URLS": "https://api.remeai.co.uk/health https://preview.remeai.co.uk/"
+        // at all is the orchestrator's proof of life. Add https://preview.remeai.co.uk/
+        // back when production is unlocked: until then it answers 503 on purpose.
+        "HEALTH_URLS": "https://api.remeai.co.uk/health"
       },
       // The sweep and the uptime check, one firing an hour so the database
       // wakes once (UPTIME_CRON). Staging has no HEALTH_URLS, so it sweeps only.
