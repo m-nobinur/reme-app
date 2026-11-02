@@ -126,6 +126,12 @@ importers:
         specifier: 4.155.0
         version: 4.155.0
 
+  apps/maintenance:
+    devDependencies:
+      wrangler:
+        specifier: 4.155.0
+        version: 4.155.0
+
   apps/orchestrator:
     dependencies:
       '@cloudflare/sandbox':

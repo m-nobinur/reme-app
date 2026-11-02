@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="light" />
+    <title>Reme · Back soon</title>
+    <style>
+      @font-face {
+        font-family: "Geist";
+        src: url("/geist.woff2") format("woff2");
+        font-weight: 100 900;
+        font-display: swap;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        overflow-x: hidden;
+        background: #fff;
+        color: #3a3a3a;
+        font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 1.75rem 1rem 0;
+        font-size: 1.125rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .brand svg {
+        width: 1.75rem;
+        height: 1.75rem;
+      }
+      main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 2rem 0;
+      }
+      .words {
+        padding: 0 1.5rem;
+        text-align: center;
+      }
+      h1 {
+        max-width: 14em;
+        margin: 0 auto;
+        font-size: clamp(2rem, 5vw, 3.25rem);
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+      p {
+        margin: 1.5rem 0 0;
+        color: #5f5f5f;
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+      .stage {
+        overflow: hidden;
+      }
+      .plugs {
+        display: block;
+        width: max(100%, 46rem);
+        margin: clamp(2rem, 8vh, 5rem) 0 0 50%;
+        transform: translateX(-50%);
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#62c7a9" />
+        <g transform="translate(4 4)" fill="#06120e" stroke="#06120e">
+          <path d="M7.5 18.5V11A4.5 4.5 0 0 1 12 6.5h2.5" fill="none" stroke-width="3.4" stroke-linecap="round" />
+          <circle cx="16.4" cy="16.6" r="2.3" stroke="none" />
+        </g>
+      </svg>
+      Reme
+    </div>
+    <main>
+      <div class="words">
+        <h1>Reme is currently down for maintenance</h1>
+        <p>We apologise for the inconvenience.<br />We will be back soon.</p>
+      </div>
+      <div class="stage"><svg class="plugs" viewBox="0 0 1600 300" role="img" aria-label="A blue plug and a green plug, unplugged" fill="none">
+        <defs>
+          <g id="plug">
+            <path d="M0 80H470a30 30 0 0 1 30 30V120a30 30 0 0 0 30 30H600" stroke="var(--cable)" stroke-width="26" />
+            <rect x="580" y="100" width="60" height="50" fill="var(--c1)" />
+            <rect x="640" y="100" width="60" height="50" fill="var(--c2)" />
+            <rect x="580" y="150" width="60" height="50" fill="var(--c2)" />
+            <rect x="640" y="150" width="60" height="50" fill="var(--c3)" />
+            <rect x="700" y="80" width="36" height="140" fill="var(--c4)" />
+            <rect x="736" y="110" width="42" height="26" fill="var(--c2)" />
+            <rect x="736" y="164" width="42" height="26" fill="var(--c1)" />
+            <path d="M784 48A16 16 0 0 0 800 64V48Z" fill="var(--c2)" />
+            <path d="M784 252A16 16 0 0 1 800 236V252Z" fill="var(--c2)" />
+          </g>
+        </defs>
+        <use href="#plug" style="--cable:#bfe3fa;--c1:#2a5aa8;--c2:#4aa3ec;--c3:#a7d3f5;--c4:#cfe9fb" />
+        <use href="#plug" transform="translate(1600 0) scale(-1 1)" style="--cable:#6df06a;--c1:#2f7d2b;--c2:#5fd35a;--c3:#7ff079;--c4:#6df06a" />
+      </svg></div>
+    </main>
+  </body>
+</html>
