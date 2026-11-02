@@ -1,0 +1,16 @@
+// Answers every request on a production hostname with the maintenance page.
+// `node scripts/maintenance.mjs on` moves preview.remeai.co.uk here and `off`
+// gives it back to reme-web-production.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "reme-maintenance",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-26",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "workers_dev": false,
+  "preview_urls": false
+}
