@@ -164,8 +164,11 @@ describe("scheduler enums match the contract", () => {
     expect(jobOutcome.enumValues).toEqual(JobRun.shape.outcome.options)
   })
 
-  it("grant kinds", () => {
-    expect(grantKind.enumValues).toEqual(GrantKind.options)
+  it("grant kinds, plus the retired connect_domain Postgres cannot drop", () => {
+    expect(grantKind.enumValues).toEqual([
+      ...GrantKind.options,
+      "connect_domain",
+    ])
   })
 
   it("delivery channels and states", () => {
