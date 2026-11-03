@@ -1381,12 +1381,40 @@ export function segmentStatus(
     return "Restarted after a hiccup, picking up where it stopped"
   if (segment.usual_seconds === undefined || elapsedSeconds === undefined)
     return null
-  // An api older than the late time: the high end is half again.
-  const late = segment.late_seconds ?? segment.usual_seconds * 1.5
-  if (elapsedSeconds > late) return "Taking longer than usual, I'm on it"
-  const left = Math.ceil((late - elapsedSeconds) / 60)
+  const left = minutesLeft(segment, elapsedSeconds)
+  if (left === null) return "Taking longer than usual, I'm on it"
   return left <= 1 ? "About a minute left" : `About ${left} min left`
 }
+
+/**
+ * The whole minutes a build at work has left before its lane's late time,
+ * at least one; null once it is late, after a restart, or unmeasured.
+ */
+export function minutesLeft(
+  segment: ActivitySegment,
+  elapsedSeconds?: number
+): number | null {
+  if (
+    segment.state !== "now" ||
+    segment.restarted ||
+    segment.usual_seconds === undefined ||
+    elapsedSeconds === undefined
+  )
+    return null
+  // An api older than the late time: the high end is half again.
+  const late = segment.late_seconds ?? segment.usual_seconds * 1.5
+  if (elapsedSeconds > late) return null
+  return Math.max(1, Math.ceil((late - elapsedSeconds) / 60))
+}
+
+/** The design tray's logo round, under "Your logo": drawing, or drawn and waiting on a pick. */
+export const logoLine = ({
+  status,
+  options,
+}: NonNullable<ActivitySegment["logo"]>) =>
+  status === "drawing"
+    ? `Designing ${options} ${options === 1 ? "option" : "options"}`
+    : "Waiting for your pick"
 
 /**
  * The record the owner adds, at their provider by name: as many as the
