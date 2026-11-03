@@ -20,7 +20,6 @@ import {
   askedSoFar,
   buildMissing,
   DEFAULT_ONBOARDING_MODEL,
-  opensNoted,
   PLANNER,
   plannerModel,
   planParts,
@@ -42,6 +41,7 @@ import {
   SKIPPER,
   SKIPS_EVERYTHING,
 } from "../onboarding-personas.mjs"
+import { PATTERNS, styleContext, styleHits } from "./planner-style.mjs"
 
 /**
  * Tier 2 (§16.3), live: the onboarding planner against the real model, over
@@ -61,15 +61,16 @@ import {
  * checklist allowed it, the quote form asks business-specific questions and
  * never the contact details, and it took at most `MAX_TURNS` owner turns.
  * The twelve conversations (`ONBOARDING_EVAL_PERSONAS=conversations`) also
- * hold four assertions each: no fact asked twice, no `voiceProblems` hit in
- * any line the owner reads, no question about a fact already held, and the
+ * hold four assertions each: no fact asked twice, no hard `voiceProblems`
+ * hit in any line the owner reads, no question about a fact already held, and the
  * build starts within one turn of the design tray's last answer. Every
  * question the planner can ask is answered: the design tray (picked or
  * skipped), an open question (stated or skipped), a fact, details, a choice,
  * the photo upload (skipped) and the quote form (accepted).
  * It prints every transcript so a person can read the tone, and a table per
  * model: owners passed, fallbacks, first plans refused, cost per onboarding
- * and call latency.
+ * and call latency, then the share of planner replies holding each style
+ * pattern the checks no longer refuse (`planner-style.mjs`).
  *
  *   node --env-file=.env.local --import ./evals/json-imports.mjs \
  *     --experimental-transform-types evals/tier-2/onboarding-planner.eval.mjs
@@ -264,12 +265,6 @@ async function onboard(persona, spec) {
     input,
     rows: sim.rows.slice(-PLANNER.rows),
     asked: askedNow(),
-    // As `chat.ts` reads it: every reply in the conversation, not the newest rows.
-    notedBefore: sim.rows.some(
-      (r) =>
-        r.role === "assistant" &&
-        r.parts.some((p) => p.type === "text" && opensNoted(p.text))
-    ),
   })
   const put = (facts) => {
     for (const fact of facts) {
@@ -281,6 +276,7 @@ async function onboard(persona, spec) {
   const plans = []
   const problems = []
   const says = []
+  const styled = []
   let fallbacks = 0
   let refusedFirst = 0
   const refusals = []
@@ -321,8 +317,8 @@ async function onboard(persona, spec) {
     for (const part of parts) {
       if (part.type !== "text") continue
       heard.push({ text: part.text, named: assistantNamed })
-      const { hard, soft } = voiceProblems(part.text, { assistantNamed })
-      for (const problem of [...hard, ...soft]) flag(`say: ${problem}`)
+      const { hard } = voiceProblems(part.text, { assistantNamed })
+      for (const problem of hard) flag(`say: ${problem}`)
     }
   }
   const heard = []
@@ -387,6 +383,7 @@ async function onboard(persona, spec) {
     const parts = planParts(checked, s, newId)
     put([...checked.stated, ...checked.chosen])
     says.push(checked.plan.say)
+    styled.push(styleHits(checked.plan.say, styleContext(checked.plan, s)))
     plans.push(checked.plan)
     for (const problem of sayProblems(
       checked.plan.say,
@@ -658,6 +655,7 @@ async function onboard(persona, spec) {
     fallbacks,
     refusedFirst,
     refusals,
+    styled,
     turns,
     transcript: lines(),
     heard,
@@ -911,6 +909,25 @@ export default async function run() {
         mine.map((r) => r.turns),
         50
       )} |`
+    )
+  }
+  table.push(
+    "",
+    "Planner replies holding each style pattern the checks no longer refuse:",
+    "",
+    `| Model | Replies | ${PATTERNS.join(" | ")} |`,
+    `| --- | --- |${" --- |".repeat(PATTERNS.length)}`
+  )
+  for (const modelId of ids) {
+    const replies = results
+      .filter((r) => r.modelId === modelId)
+      .flatMap((r) => r.styled)
+    const share = (name) => {
+      const n = replies.filter((hits) => hits.includes(name)).length
+      return `${n} (${Math.round((100 * n) / Math.max(1, replies.length))}%)`
+    }
+    table.push(
+      `| ${modelId} | ${replies.length} | ${PATTERNS.map(share).join(" | ")} |`
     )
   }
   table.push(

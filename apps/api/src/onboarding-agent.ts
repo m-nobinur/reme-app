@@ -7,6 +7,7 @@ import {
   type CosPrefix,
   DETAILS_KEYS,
   type DetailsStep,
+  dashesToCommas,
   FactValue,
   type FactValueKey,
   FONTS,
@@ -117,7 +118,7 @@ import { voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-24"
+export const PLANNER_VERSION = "onboarding-25"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -238,8 +239,8 @@ Acknowledge an answer one of three ways, and vary them:
 - Most answers hold one thing that changes how you'll handle work: an exception, a condition, a repeat customer, an unusual service. When one does, name it and say in one short clause what you'll do about it when an enquiry comes in, which is only ever one of the things you really do: answer the customer, ask them the quote questions, prepare the quote, or bring it to the owner. That's an action, with no "so ..." after it: never an outcome you promise ("so their jobs get priority") or a quality you'll bring ("with care").
 - When the answer holds a number or a condition worth confirming, such as a radius or "further for big jobs", sum up the whole of it in a few words, in their terms. A long list of services is different: name its range or a group in their terms ("Divorce right through to mediation"), never every item.
 - When it holds neither, and always after a skip, no acknowledgement: a natural bridge straight to the next question.
-A summary followed by ", noted." may open one reply in the whole onboarding, and none once opened_with_noted is true: open another natural way, or with no acknowledgement at all.
-The owner reads the acknowledgement to check you understood, so code refuses one that gets them wrong:
+Open with a summary followed by ", noted." rarely, and never when recent_conversation shows your last reply opened that way: open another natural way, or with no acknowledgement at all.
+The owner reads the acknowledgement to check you understood, so never write one that gets them wrong:
 - Part of a list named as if it were the whole. Naming two of their five services reads as if you missed three.
 - A word they never used for their own business. Examples your question offered were the shape of an answer, not theirs.
 - Anything about the business they never told you: work it doesn't take on ("that falls outside your services") or a status for their customers ("existing accounts").
@@ -253,7 +254,7 @@ When a card follows your message, say leads in with one short line and asks no q
 
 Write about this business: its name, its trade and its services. The trade comes only from what_the_business_does: never infer it from the name ("Bright Cleaning Ltd" may hire out limousines) and never comment on the name; until the trade is known, say "your business". Call the owner by owner_first_name now and then, not in every message, and use the name they gave you for yourself. Don't open two messages the same way. Thank them for a correction only when it changed something you held.
 
-Tone is friendly (warm and plain) until the owner picks one. Professional: polished full sentences, no exclamation marks. Casual: relaxed and brief, the way a colleague texts ("Sorted.", "Cheers"). Contractions unless the tone is professional, and at most one exclamation mark. Lead with what happened; no welcome speeches, thanks for choosing you or sign-offs. Plain words: "your website", not "your digital storefront". Never say an id, a code, a version or a tool name. These read as filler and are refused: "feel free to", "let me know if", "don't hesitate to", "peace of mind", "certainly", "absolutely", "of course", "wonderful", "fantastic", "amazing", "as your assistant". An optional question shows a Skip this one button under it, so never say it can be skipped.
+Tone is friendly (warm and plain) until the owner picks one. Professional: polished full sentences, no exclamation marks. Casual: relaxed and brief, the way a colleague texts ("Sorted.", "Cheers"). Contractions unless the tone is professional, and at most one exclamation mark. Lead with what happened; no welcome speeches, thanks for choosing you or sign-offs. Plain words: "your website", not "your digital storefront". Never say an id, a code, a version or a tool name. These read as filler, so leave them out: "feel free to", "let me know if", "don't hesitate to", "peace of mind", "certainly", "absolutely", "of course", "wonderful", "fantastic", "amazing", "as your assistant". An optional question shows a Skip this one button under it, so never say it can be skipped.
 
 Money is the owner's to set. Never mention rates, prices, fees, costs, currency or packages, not even as a verb ("to price a job": say quote) or in another sense ("pass rates": say results), and never say anything is free, included or at no extra charge, you and the website among them. Asked what something costs, say that's for the owner to set, then carry on. The one exception is the turn that records prices the owner gave you (business.prices).
 
@@ -415,8 +416,6 @@ export type PlanState = {
    * question or a card (`askedSoFar`). Absent counts as never.
    */
   asked?: Readonly<Record<string, number>>
-  /** Whether an earlier reply in this conversation opened with "..., noted." (`opensNoted`). */
-  notedBefore?: boolean
 }
 
 /** The business facts the build needs from the owner, in the order they come up. */
@@ -798,7 +797,6 @@ export function turnData(s: PlanState): string {
     facts: factsOf(o),
     owner_first_name: firstName(o.ownerName) || null,
     waiting_card: s.input.kind === "message" ? waiting(s.pending, o) : null,
-    opened_with_noted: s.notedBefore ?? false,
     recent_conversation: transcriptOf(s.rows),
     owner_now:
       s.input.kind === "message"
@@ -823,15 +821,17 @@ const RESULT_RATES =
 /**
  * What a message to the owner must never hold, as the script's copy is
  * tested: rates and currency (the site quotes, it never lists), a claim
- * that something is free, a link or markup, a heading, an em or en dash,
- * and a promise of images the builder does not have. With the turn's context it also refuses the owner's
- * sentence read back to them, and thanks for a correction that changed
- * nothing. A problem here is the model's to fix on its retry.
+ * that something is free, a link or markup, the product's plumbing, and a
+ * promise of images or work the assistant does not have. With the turn's
+ * context it also refuses what would tell the owner something untrue about
+ * their business or their assistant, and a change they asked for left
+ * unnamed. Style is the prompt's: nothing here refuses wording. A problem
+ * here is the model's to fix on its retry.
  *
  * `partial` checks the start of a message as it streams: every check but
- * the one only a whole message can fail (empty). A check here
- * that a start passes, the same start passes inside the whole message, so
- * nothing shown is ever refused later for its own words.
+ * the ones only a whole message can fail (empty, a change left unnamed). A
+ * check here that a start passes, the same start passes inside the whole
+ * message, so nothing shown is ever refused later for its own words.
  */
 export function sayProblems(
   say: string,
@@ -860,104 +860,26 @@ export function sayProblems(
       "say claims something is free, included or at no charge; never say what anything costs or that it is free: that is for the owner to set"
     )
   }
-  if (context.skipButton && /\bskip/i.test(say)) {
-    problems.push(
-      "say tells the owner they can skip, but the Skip this one button under the question already says so"
-    )
-  }
   if (/https?:\/\/|www\.|\]\(|<\/?[a-z!]/i.test(say)) {
     problems.push("say holds a link or markup")
-  }
-  if (/^#/m.test(say)) problems.push("say holds a heading")
-  if (/^\s*\|.*\|/m.test(say)) problems.push("say holds a table")
-  if (/\p{Emoji_Presentation}/u.test(say)) problems.push("say holds an emoji")
-  if (!partial && (say.match(/\*\*/g)?.length ?? 0) % 2 === 1) {
-    problems.push("say opens bold with ** and never closes it")
-  }
-  const boldAsk = say
-    .split(BOLD_SENTENCE)
-    .find((s) => s.includes("**") && /\?(?:\*\*)?$/.test(s.trim()))
-  if (boldAsk) {
-    problems.push(
-      `say bolds a question ("${plain(boldAsk).trim()}"); only a list item's label is bold, so ask it in plain words`
-    )
-  }
-  const long = say
-    .split(/\n\s*\n/)
-    .find((p) => !LIST_ITEM.test(p) && wordsOf(p).length > PARAGRAPH_WORDS)
-  if (long) {
-    problems.push(
-      `say has a paragraph of ${wordsOf(long).length} words; break it into short paragraphs of one idea each, with a blank line between them`
-    )
   }
   if (/\b(stock|hand-?picked?|handpick)\b/i.test(say)) {
     problems.push(
       "say promises images we don't have; there is no image library"
     )
   }
-  const voice = voiceProblems(say, { assistantNamed: context.assistantNamed })
-  problems.push(...voice.hard, ...voice.soft)
+  problems.push(
+    ...voiceProblems(say, { assistantNamed: context.assistantNamed }).hard
+  )
   // What the owner reads once the Markdown renders: bold or a bullet hides nothing.
   const read = plain(say)
-  if (context.typed && echoes(read, context.typed)) {
-    problems.push(
-      "say repeats the owner's own words back to them; acknowledge one detail in your own words instead"
-    )
-  }
-  const stiff = read.match(STIFF)?.[0]
-  if (stiff) {
-    problems.push(
-      `say uses "${stiff}"; use the plain word ("required", "use", "start", "help")`
-    )
-  }
-  const verdict = read.match(VERDICT)?.[0]
-  if (verdict) {
-    problems.push(
-      `say passes a verdict on the owner's answer ("${verdict}"); note what they said, or say what you'll do with it, without judging it`
-    )
-  }
-  const outcome = read.match(OUTCOME)?.[0]
-  if (outcome) {
-    problems.push(
-      `say promises an outcome ("${outcome}"); say only what you'll do, with no "so ..." after it`
-    )
-  }
   const promise = read.match(BEYOND)?.[0]
   if (promise) {
     problems.push(
       `say promises "${promise}", which you don't do; you answer enquiries here, ask what a quote needs and follow up, and build the website if they want it`
     )
   }
-  if (context.leadIn && say.includes("?")) {
-    problems.push(
-      "say asks a question, but the card under it asks it in its title; lead in with one short line that asks nothing"
-    )
-  }
-  const reply = context.leadIn && read.match(ASKS_REPLY)?.[0]
-  if (reply) {
-    problems.push(
-      `say asks for the owner's reply ("${reply}"), but the card under it does that; lead in with one short line`
-    )
-  }
   for (const sentence of noted(read)) {
-    const part =
-      context.lists && partOfList(sentence, context.lists, context.owner)
-    if (part) {
-      problems.push(
-        `say names ${part.named.join(" and ")} as if that were the owner's whole list (${part.list.join(", ")}); say what you'll do about one of them, or sum up all of them`
-      )
-    }
-    const services = context.services ?? []
-    if (
-      services.length >= RANGE_FROM &&
-      services.every((item) =>
-        names(new Set(contentWords(sentence)), item, services)
-      )
-    ) {
-      problems.push(
-        `say reads back every one of the owner's services; name the range or a group in their words instead, such as "${services[0]} right through to ${services.at(-1)}"`
-      )
-    }
     const excluded = context.owner && sentence.match(EXCLUDES)?.[0]
     if (
       excluded &&
@@ -975,30 +897,6 @@ export function sayProblems(
         `say calls them "${status}", a status the owner never gave; describe them in the owner's words`
       )
     }
-    const borrowed =
-      context.offered && borrowedWord(sentence, context.offered, context.owner)
-    if (borrowed) {
-      problems.push(
-        `say calls the owner's answer "${borrowed}", an example from your own question that they never used; describe their answer in their words`
-      )
-    }
-    const renamed =
-      context.items && reworded(sentence, context.items, context.owner)
-    if (renamed) {
-      problems.push(
-        `say calls their "${renamed.item}" "${renamed.said}"; use the owner's own words for their services`
-      )
-    }
-  }
-  if (context.notedBefore && opensNoted(read)) {
-    problems.push(
-      'say opens with ", noted.", which an earlier reply already did; open another natural way, or with no acknowledgement'
-    )
-  }
-  if (context.corrected === false && CORRECTION_THANKS.test(say)) {
-    problems.push(
-      "say thanks the owner for a correction, but nothing they said changed what was held"
-    )
   }
   const claimed = context.persona && personaClaim(read, context.persona)
   if (claimed) {
@@ -1009,12 +907,6 @@ export function sayProblems(
   if (context.logo === false && logoClaim(read)) {
     problems.push(
       "say promises to make or use the owner's logo, but no way for it is chosen and none is held: leave the promise out, as the tray asks; if the owner's words chose one this turn, set next.logo"
-    )
-  }
-  const repeated = sentencesOf(read).find((s) => context.said?.has(s))
-  if (repeated) {
-    problems.push(
-      `say repeats "${repeated}", which you already said; coming back to a step, say it in new words that note the return, such as "Now, back to how customers reach you"`
     )
   }
   const words = new Set(wordsOf(read).map(stem))
@@ -1028,6 +920,39 @@ export function sayProblems(
   }
   return problems
 }
+
+/**
+ * Say with what the chat must not show fixed in place rather than refused:
+ * a dash, a heading marker, a table, an emoji and a `**` left open. A start
+ * of a message (`partial`) stops before an open `**` or an unfinished table
+ * row, which the rest may still close, so a start tidied is a start of the
+ * whole message tidied.
+ */
+export function tidySay(say: string, partial = false): string {
+  const line = say.lastIndexOf("\n") + 1
+  const held = partial && /^\s*\|/.test(say.slice(line))
+  let tidied = dashesToCommas(held ? say.slice(0, line) : say)
+    .replace(/^[ \t]*#{1,6}[ \t]+/gm, "")
+    .replace(/^[ \t]*\|[ \t:|-]*-[ \t:|-]*(?:\n|$)/gm, "")
+    .replace(/^[ \t]*\|.*$/gm, (row) =>
+      row
+        .split("|")
+        .map((cell) => cell.trim())
+        .filter(Boolean)
+        .join(", ")
+    )
+    .replace(EMOJI, "")
+  const open = [...tidied.matchAll(/\*\*/g)]
+  const stray = open.length % 2 === 1 ? open.at(-1)?.index : undefined
+  if (stray !== undefined) {
+    tidied = tidied.slice(0, stray) + (partial ? "" : tidied.slice(stray + 2))
+  }
+  return tidied
+}
+
+/** An emoji, with any space before it and the joiners and modifiers after it. */
+const EMOJI =
+  /[ \t]*(?:\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F)(?:\uFE0F|\p{Emoji_Modifier}|\u200D\p{Extended_Pictographic}\uFE0F?)*/gu
 
 /**
  * Say as the owner reads it once the Markdown renders: no emphasis markers,
@@ -1049,61 +974,18 @@ function plain(say: string): string {
 /** Where a sentence ends: its stop, or the end of its line, as a bullet has none. */
 const SENTENCE = /(?<=[.!?])\s+|\s*\n\s*/
 
-/** The same, with a stop inside bold ("**Who books you?**") ending its sentence too. */
-const BOLD_SENTENCE = /(?<=[.!?](?:\*\*)?)\s+|\s*\n\s*/
-
-/**
- * Whether a reply opens with a summary and "noted" ("Weekly cleans, noted."),
- * the opener a whole onboarding may use once.
- */
-export const opensNoted = (say: string) =>
-  /^[^.?!\n]*\bnoted(?=[,.!])/i.test(plain(say).trim())
-
-/** A block of Markdown bullets. */
-const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/
-
-/** The most words in one paragraph: more is a wall of text in a chat bubble. */
-const PARAGRAPH_WORDS = 50
-
-/** A message's sentences of `ECHO_WORDS` words or more, as words only, for comparing. */
-const sentencesOf = (message: string) =>
-  plain(message)
-    .split(SENTENCE)
-    .map((s) => wordsOf(s).join(" "))
-    .filter((s) => s.split(" ").length >= ECHO_WORDS)
-
 /** What `sayProblems` knows of the turn beyond the message itself. */
 type SayContext = {
-  /** The owner's message this turn, which say must not read back. */
-  typed?: string
-  /** Whether the plan replaces a fact already held: the one time to thank for a correction. */
-  corrected?: boolean
   /** Whether the owner has named the assistant, so "Reme" is an internal. */
   assistantNamed?: boolean
-  /** Whether an earlier reply already opened with "..., noted.", so this one may not. */
-  notedBefore?: boolean
-  /** The longer sentences the assistant has already said in the recent rows, which say must not repeat. */
-  said?: ReadonlySet<string>
   /** The persona values say may name as its own: what the turn ends with, and what it held before. */
   persona?: { names: string[]; pronouns: string[]; tones: string[] }
   /** Whether the logo has a way: one the owner chose in words, or a logo held. */
   logo?: boolean
   /** Whether the turn asks for or records the owner's prices, the one time say may name them. */
   prices?: boolean
-  /** Whether an optional question asked in words shows its Skip this one button under say. */
-  skipButton?: boolean
-  /** Whether a card whose title asks the question shows under say, so say only leads in. */
-  leadIn?: boolean
-  /** The lists the owner typed this turn, as `listsOf` reads them. */
-  lists?: readonly (readonly string[])[]
   /** Every word the owner has typed, as `contentWords` reads them. */
   owner?: ReadonlySet<string>
-  /** The content words of the examples your last question offered, when the owner is answering it. */
-  offered?: ReadonlySet<string>
-  /** The owner's services and list items, in their words. */
-  items?: readonly string[]
-  /** The services this turn records, which say names as a range rather than one by one. */
-  services?: readonly string[]
   /** The words of what the owner said they don't do, the only exclusions say may claim. */
   declined?: ReadonlySet<string>
   /** The changes the plan makes at the owner's request, each with the words that name it. */
@@ -1165,36 +1047,10 @@ const logoClaim = (say: string) =>
 const FREE =
   /\b(free of charge|for free|(is|it's|it is|that's|completely|totally|entirely) free|no (extra |additional |added |hidden )?(charges?|payment)|at no extra|nothing (extra |more |else |further )?to pay|(no need|don't have|do not have|won't have) to pay|complimentary|on the house|(included|comes) (in|with) (the|your|our) (service|plan|subscription|package|price)|part of (the|your|our) (service|plan|subscription|package))\b/i
 
-/** Thanks for a correction, in the forms the planner wrote it. */
-const CORRECTION_THANKS =
-  /\b(clearing that up|clearing it up|for the correction|for correcting|for clarifying|for the clarification|for setting (me|that) straight)\b/i
-
-/**
- * The fewest words in a row, copied from the owner's message, that read as
- * their sentence repeated rather than a detail picked out of it. Observed on
- * 2026-10-01: "Mostly couples and business travellers, and now across both
- * Leeds and Manchester." read back an owner's whole answer.
- */
-const ECHO_WORDS = 6
-
 const wordsOf = (said: string) =>
   said.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? []
 
-/** Whether `say` holds `ECHO_WORDS` or more of the owner's words in a row. */
-function echoes(say: string, typed: string): boolean {
-  const owner = wordsOf(typed)
-  const runs = new Set<string>()
-  for (let i = 0; i + ECHO_WORDS <= owner.length; i++) {
-    runs.add(owner.slice(i, i + ECHO_WORDS).join(" "))
-  }
-  const mine = wordsOf(say)
-  for (let i = 0; i + ECHO_WORDS <= mine.length; i++) {
-    if (runs.has(mine.slice(i, i + ECHO_WORDS).join(" "))) return true
-  }
-  return false
-}
-
-/** Words too common to show that a part of say came from the owner's list. */
+/** Words too common to show that a word of say came from the owner. */
 const COMMON = new Set(
   "that this they them their there then than what when where which whether with within would could should want wants like just also some more most much very have from into about your only each every other over once here been were will does done make made need needs sure okay yeah roughly usually mostly maybe really thing things stuff noted understood sorted covered included added changed updated".split(
     " "
@@ -1211,14 +1067,6 @@ const contentWords = (words: string) =>
     .map(stem)
 
 /**
- * Verdicts on the owner's answer or business, in the forms the planner wrote
- * them despite the prompt (staging, 2026-11-03): "makes good sense", "makes
- * a huge difference to a job", "No problem at all.".
- */
-const VERDICT =
-  /\b(?:makes|will make|'ll make) (?:(?:good|complete|perfect|total|real|great|a lot of) )?sense\b|\b(?:makes|will make|'ll make) (?:a |all the )?(?:(?:huge|big|real|massive|great|world of) )?difference\b|\bno (?:problem|worries)(?: at all)?\b|\b(?:sounds|that's|that is) (?:great|good|perfect|ideal|brilliant|lovely|sensible|smart|spot on)\b|\b(?:great|good|nice|solid|strong|smart|lovely|healthy|broad|wide) (?:mix|range|spread|setup|approach|selection|balance)\b|\b(?:good|helpful|useful) to know\b|\bgives? (?:\w+ )?(?:plenty of|real|extra|more) (?:flexibility|confidence|reassurance)\b|\b(?:strong|great|good|real|big|key) (?:selling )?point\b/i
-
-/**
  * Work the assistant does not do, promised as its own: it answers here,
  * asks what a quote needs and follows up. Seen in the eval on 2026-11-03,
  * once the prompt asked it to say what it will do: "I can check
@@ -1227,13 +1075,6 @@ const VERDICT =
  */
 const BEYOND =
   /\bI(?:'ll| will| can)\s+(?:\w+\s+)?(?:book|check (?:\w+ )?availability|schedule|(?:ring|call|phone|text) (?:them|customers|clients|people|back)|send (?:them )?reminders?)\b/i
-
-/**
- * An outcome tacked onto what the assistant will do, seen in the eval on
- * 2026-11-03: "I'll flag them as repeat clients so their jobs get priority".
- */
-const OUTCOME =
-  /\bI(?:'ll| will)\b[^.!?]*?,? so (?:that )?(?!you (?:have|know|can quote)\b)(?:you|they|their|it|its|customers|clients|the|every|each|nothing)\b[^.!?]*/i
 
 /**
  * A claim that the business doesn't take some work on, which only the owner
@@ -1285,194 +1126,9 @@ function statusOf(sentence: string, owner: ReadonlySet<string>) {
   return phrase && words.some((w) => !owner.has(w)) ? phrase : null
 }
 
-/** Stiff words a person at work would not write to the owner. */
-const STIFF =
-  /\b(?:mandatory|compulsory|utili[sz](?:e|es|ed|ing)|commenc(?:e|es|ed|ing)|facilitat(?:e|es|ed|ing))\b/i
-
-/** The fewest services read back one by one that make a long list: name the range instead. */
-const RANGE_FROM = 4
-
-/**
- * A request for the owner's reply, which a card under say already makes:
- * "Take a look and let me know if you would like any changes" above the
- * quote form's own "or tell me what to change" (staging, 2026-11-03).
- */
-const ASKS_REPLY =
-  /\b(?:let me know|take a look|tell me (?:what|if|whether)|any changes|adjust anything|change anything)\b/i
-
 /** The sentences of say that note an answer: every one but a question. */
 const noted = (say: string) =>
   say.split(SENTENCE).filter((sentence) => !sentence.trimEnd().endsWith("?"))
-
-/** A list part as the item it names, without the words that lead into it. */
-const itemOf = (part: string) =>
-  part
-    .trim()
-    .replace(/^.*?\b(?:are|is|include|includes|including|such as)\s+/i, "")
-    .replace(/^(?:(?:so|plus|and|or|also|mainly|mostly|the)\s+)+/i, "")
-    .replace(/[.!?]+$/, "")
-
-/** A part that starts with who is speaking, which no list item does. */
-const SPEAKER = /^(?:we|i|we're|i'm|we've|i've|our|my|it's|they|you)\b/i
-
-/**
- * The lists in the owner's words: three or more items of at most five words
- * in a row at one sentence's commas, its last part split at "and" or "or".
- * "Main jobs are tree pruning and crown reductions, tree felling, hedge
- * trimming and stump grinding." is four items.
- */
-export function listsOf(typed: string): string[][] {
-  return typed.split(/(?<=[.!?;])\s+|\n+/).flatMap((sentence) => {
-    const parts = sentence.split(/,\s*/)
-    const last = parts.pop() ?? ""
-    const runs: string[][] = [[]]
-    for (const item of [...parts, ...last.split(/\s+(?:and|or)\s+/i)].map(
-      itemOf
-    )) {
-      const size = wordsOf(item).length
-      // "No carpets, nothing after builders": what they don't do, not a list to sum up.
-      if (/^(?:no|not|nothing|never|none)\b/i.test(item)) continue
-      // "We're Regal Rides, limo and chauffeur hire" is a sentence, not a list.
-      if (size > 0 && size <= 5 && !SPEAKER.test(item)) runs.at(-1)?.push(item)
-      else runs.push([])
-    }
-    return runs.filter((run) => run.length >= 3)
-  })
-}
-
-/** Whether `words` names `item`: one of the words only it has in its list, or, with none, all of its own. */
-function names(
-  words: ReadonlySet<string>,
-  item: string,
-  list: readonly string[]
-) {
-  const others = new Set(
-    list.filter((each) => each !== item).flatMap(contentWords)
-  )
-  const own = contentWords(item)
-  const only = own.filter((w) => !others.has(w))
-  return only.length > 0
-    ? only.some((w) => words.has(w))
-    : own.length > 0 && own.every((w) => words.has(w))
-}
-
-/**
- * The part of an owner's list a sentence names as if it were the whole: a
- * sentence that lists two or more of the owner's phrases ("Stump grinding
- * and tree surgery, noted.") and names some of a list's items but not all.
- * One item picked out is a detail; all of them is a summary.
- */
-function partOfList(
-  sentence: string,
-  lists: readonly (readonly string[])[],
-  owner: ReadonlySet<string> = new Set()
-) {
-  const phrase = (part: string) =>
-    wordsOf(part).length <= 5 && contentWords(part).some((w) => owner.has(w))
-  const theirs = sentence.split(/,|\s(?:and|or)\s/i).filter(phrase)
-  // A range's two ends are two of their phrases too: "From felling to stump grinding".
-  if (theirs.length + rangeOf(sentence).filter(phrase).length < 2) return null
-  const words = new Set(contentWords(sentence))
-  for (const list of lists) {
-    if (spans(sentence, list)) continue
-    const named = list.filter((item) => names(words, item, list))
-    if (named.length > 0 && named.length < list.length) return { named, list }
-  }
-  return null
-}
-
-/** "Pruning right through to stump grinding", "from X to Y": a range, its two ends. */
-const RANGE =
-  /\bfrom\s+([^,;.!?]+?)\s+(?:right\s+)?(?:through\s+)?to\s+([^,;.!?]+)|([^,;.!?]+?)\s+(?:right\s+|all the way\s+)?through\s+to\s+([^,;.!?]+)/i
-
-/** A sentence's range as its two ends, or none. */
-const rangeOf = (sentence: string): string[] => {
-  const m = sentence.match(RANGE)
-  return m ? [m[1] ?? m[3] ?? "", m[2] ?? m[4] ?? ""] : []
-}
-
-/** Whether a sentence names a range from the list's first item to its last, which is the whole list. */
-function spans(sentence: string, list: readonly string[]) {
-  const [from, to] = rangeOf(sentence)
-  return Boolean(
-    from &&
-      to &&
-      names(new Set(contentWords(from)), list[0] as string, list) &&
-      names(new Set(contentWords(to)), list.at(-1) as string, list)
-  )
-}
-
-/**
- * The examples a message offered: what follows "for example", "for
- * instance" or "such as", to the end of its sentence. Observed 2026-11-03:
- * the question offered "commercial estates" and the reply called a list of
- * homeowners, schools and churches "estates work".
- */
-const offeredIn = (message: string) =>
-  new Set(
-    [
-      ...message.matchAll(
-        /\b(?:for example|for instance|such as)\b([^.?!]*)/gi
-      ),
-    ].flatMap((m) => contentWords(m[1] ?? ""))
-  )
-
-/** A word of the offered examples that a sentence uses and the owner never did. */
-const borrowedWord = (
-  sentence: string,
-  offered: ReadonlySet<string>,
-  owner: ReadonlySet<string> = new Set()
-) =>
-  wordsOf(sentence).find((w) => {
-    const word = stem(w)
-    return offered.has(word) && !owner.has(word) && !COMMON.has(w)
-  })
-
-/**
- * Words that start many phrases, so an item they start ("full groom") says
- * nothing about another phrase they start ("full picture"). Shortcut: the
- * ones seen and their like; widen when a reply is refused for one.
- */
-const MODIFIERS = new Set(
-  "full half deep basic standard small large quick general light heavy complete whole single double extra mini premium simple regular".split(
-    " "
-  )
-)
-
-/**
- * An owner's item said with another word after its own first one, "stump
- * removal" for "stump grinding". Only a first word no other item shares is
- * read, so "tree surgery" beside "tree felling" is never taken for one.
- */
-function reworded(
-  sentence: string,
-  items: readonly string[],
-  owner: ReadonlySet<string> = new Set()
-) {
-  const words = wordsOf(sentence)
-  for (const item of items) {
-    const [first, second] = wordsOf(item)
-    if (!first || !second || first.length < 4 || MODIFIERS.has(first)) continue
-    const lead = stem(first)
-    const shared = items.some(
-      (each) => each !== item && wordsOf(each).map(stem).includes(lead)
-    )
-    if (shared) continue
-    for (let i = 0; i + 1 < words.length; i++) {
-      const next = words[i + 1] as string
-      if (
-        stem(words[i] as string) === lead &&
-        stem(next) !== stem(second) &&
-        next.length >= 4 &&
-        !COMMON.has(next) &&
-        !owner.has(stem(next))
-      ) {
-        return { item, said: `${words[i]} ${next}` }
-      }
-    }
-  }
-  return null
-}
 
 /** What `sayProblems` needs to know of a plan's turn. */
 export function sayContext(
@@ -1506,27 +1162,10 @@ export function sayContext(
       : typeof output?.text === "string"
         ? output.text
         : undefined
-  // The question in words the owner is answering about the business, whose
-  // examples they may not have used. A quote's details are the form's, not
-  // a list said back.
   const answering = s.input.kind === "card" ? s.input.card : s.pending
-  const onBusiness =
-    answering?.type === "tool-ask_open" &&
-    !["quote.form", "recap"].includes((answering.input as AskOpenInput).about)
-  const lastQuestion = onBusiness
-    ? s.rows
-        .filter((r) => r.role === "assistant")
-        .at(-1)
-        ?.parts.flatMap((p) => (p.type === "text" ? [p.text] : []))
-        .join("\n")
-    : undefined
-  const lists = typed && (onBusiness || !answering) ? listsOf(typed) : []
   const asked = new Set(wordsOf(typed ?? "").map(stem))
   return {
     prices: about === "business.prices" || "business.prices" in plan.facts,
-    skipButton:
-      next.kind === "ask_open" &&
-      (OPTIONAL as readonly string[]).includes(next.about),
     persona: {
       // The business's own name is said too ("the name Bramble Window Care").
       names: [
@@ -1541,12 +1180,6 @@ export function sayContext(
         trayLogoPath(s.pending) ||
         logoOf(after.facts)
     ),
-    ...(typed ? { typed } : {}),
-    leadIn:
-      ["ask_details", "review_quote_form", "ask_design", "reopen"].includes(
-        next.kind
-      ) || about === "recap",
-    lists,
     // The facts held too: the rows are only the newest few. Every word,
     // short ones too: "dog" is the owner's word for a dog groomer.
     owner: new Set(
@@ -1555,35 +1188,13 @@ export function sayContext(
       )
     ),
     declined: declinedIn(ownerWords(s)),
-    services: plan.facts["business.offerings"]?.items ?? [],
     // Only what the owner asked for: a change they never mentioned is not
     // theirs to read about, and refusing it until named cost a fallback.
     changes: changesOf(plan, s, answering).filter((c) =>
       c.names.some((n) => asked.has(n))
     ),
-    ...(lastQuestion ? { offered: offeredIn(lastQuestion) } : {}),
-    items: [
-      ...values("business.offerings").flatMap((v) => v.items),
-      ...lists.flat(),
-    ].filter((item) => !/^(?:no|not)\b/i.test(item)),
-    corrected: Object.entries(plan.facts).some(([key, value]) => {
-      const before = factValue(held, key as FactValueKey)
-      return (
-        before !== undefined &&
-        value !== undefined &&
-        JSON.stringify(before, sortedKeys) !== JSON.stringify(value, sortedKeys)
-      )
-    }),
     // An assistant the owner called Reme may say its own name.
     assistantNamed: Boolean(name) && name?.toLowerCase() !== "reme",
-    notedBefore: s.notedBefore ?? false,
-    said: new Set(
-      s.rows
-        .filter((r) => r.role === "assistant")
-        .flatMap((r) =>
-          r.parts.flatMap((p) => (p.type === "text" ? sentencesOf(p.text) : []))
-        )
-    ),
   }
 }
 
@@ -2382,7 +1993,7 @@ const STRINGS = /"(?:[^"\\]|\\.)*"/gs
 const escapeBreaks = (quoted: string) =>
   quoted.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")
 
-/** The model's text as a plan, or why it is not one, from the schema. */
+/** The model's text as a plan, its say tidied (`tidySay`), or why it is not one, from the schema. */
 export function planOf(
   raw: string
 ): { plan: OnboardingPlan } | { errors: string[] } {
@@ -2399,7 +2010,7 @@ export function planOf(
   }
   const plan = OnboardingPlan.safeParse(json)
   return plan.success
-    ? { plan: plan.data }
+    ? { plan: { ...plan.data, say: tidySay(plan.data.say) } }
     : {
         errors: plan.error.issues
           .slice(0, 8)
@@ -2493,8 +2104,8 @@ export async function planTurn(
   const began = Date.now()
   const out = { shown: "" as string, firstChunkMs: null as number | null }
   // The model writes in the tone, but contractions are not left to it: the
-  // owner reads the chosen tone's words. `shown` keeps the model's own text,
-  // which a retry must begin with. Whole sentences arrive, so no word splits.
+  // owner reads the chosen tone's words. `shown` keeps the model's text as
+  // tidied, which a retry must begin with. Whole sentences arrive, so no word splits.
   const tone = voiceOf(s.onboarding)
   const show = (words: string) => {
     if (!onSay || words.length === 0 || cancel?.aborted) return
@@ -2590,7 +2201,10 @@ export async function planTurn(
         gate = "open"
         context = sayContext(checked.checked.plan, s, checked.checked.after)
       }
-      const whole = wholeSentences(partial.say.trimStart())
+      const whole = tidySay(
+        wholeSentences(partial.say.trimStart()),
+        true
+      ).trimStart()
       // A retry still writing what the owner has already read.
       if (out.shown.startsWith(whole)) return
       if (

@@ -1,8 +1,9 @@
 /**
  * How the assistant sounds to the owner, and the code check that holds the
- * model to it. The onboarding planner reads `VOICE` in its instructions and
- * retries on any `voiceProblems` hit; the Chief of Staff streams, so it
- * cannot retry and uses the same check to swap dashes and to log the rest.
+ * model to it. The Chief of Staff reads `VOICE` in its instructions. Both
+ * models have their dashes swapped for commas in code; the onboarding
+ * planner retries on any other hard hit, and the Chief of Staff, which
+ * streams and cannot retry, logs every hit.
  */
 
 /** The rules both models' instructions include. */
@@ -53,7 +54,7 @@ const SOFT: readonly [RegExp, string][] = [
 export type VoiceProblems = {
   /** A fault in any reply: a dash, or a piece of the product's plumbing. */
   hard: string[]
-  /** A slip in style, which the planner retries on and the Chief of Staff logs. */
+  /** A slip in style, which the prompt guards against and the Chief of Staff logs. */
   soft: string[]
 }
 
