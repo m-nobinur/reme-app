@@ -309,12 +309,12 @@ ${ask}`,
   },
   // Phase 4: the last questions; their answer starts the build.
   design: (v) => [
-    `Last, the look of ${v.business}: the colours, lettering, your logo, the layout, photos and pages, all in the questions below.
+    `Last step before I build: how it should look.
 
-Leave any to me except the logo, which you can upload or have me create. Then I'll start building.`,
-    `Now the look of ${v.business}, the last step before I build. The questions below cover colours, lettering, your logo, layout, photos and pages.
+A few quick questions, starting with your logo. Leave any of them to me if you'd rather.`,
+    `One last step before I build: the look of ${v.business}.
 
-Upload a logo or let me create one, and leave the rest to me if you'd rather.`,
+A few quick questions, your logo first. You can leave any of them to me.`,
   ],
   template: (v) => [
     `Let's design it together. First, the layout. Which of these feels most like ${v.business}?`,
