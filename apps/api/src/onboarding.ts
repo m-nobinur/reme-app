@@ -50,6 +50,7 @@ import {
 import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { phoneText } from "@workspace/starter-site/phone"
 import type { Part, ToolPart } from "./chat.ts"
+import { type DesignStart, tableStart } from "./design-start.ts"
 import type { JevDecision } from "./jev.ts"
 import {
   back,
@@ -166,6 +167,8 @@ export type Onboarding = Progress & {
   asked?: Readonly<Record<string, number>>
   /** Business-specific lines written in the background, once they are ready. */
   prepared?: Prepared | null
+  /** The design's start chosen for the business in the background, once it is ready (`design-start.ts`). */
+  designStart?: DesignStart | null
   /**
    * This turn's quote form the owner asked to change, as they left it. Only
    * a model can redraft it, so without one the script shows it again rather
@@ -182,6 +185,8 @@ export type Prepared = {
   services_phrase: string
   /** Up to three names that suit this business's assistant, offered on its card. */
   assistant_names?: string[]
+  /** How its logo could look, from its trade and services: the logo brief's first words. */
+  logo_look?: string
 }
 
 /**
@@ -754,14 +759,15 @@ export function designCard(
   const palettes = [
     ...new Set([...shown, ...calm, ...suited, ...PaletteId.options]),
   ]
-  const pairs = firstOf(
-    o,
-    "lettering",
-    FONT_PAIRS.filter((pair) => directions.some((d) => d.fonts === pair.id)),
-    (pair) => pair.id,
-    // Two pairs with the same title font read as one choice offered twice.
-    (pair) => pair.display.family
-  )
+  // Chosen for the business in the background, else the industry's table.
+  const start =
+    o.designStart ??
+    tableStart(factValue(o.facts, "business.industry")?.category)
+  // The four fitted pairs first, from four moods, then the rest for More styles.
+  const pairs = [
+    ...start.fonts.flatMap((id) => FONT_PAIRS.filter((p) => p.id === id)),
+    ...FONT_PAIRS.filter((pair) => !start.fonts.includes(pair.id)),
+  ]
   const layouts = firstOf(
     o,
     "arrangement",
@@ -842,14 +848,18 @@ export function designCard(
           id: "logo",
           question: "Do you have a logo?",
           visual: "logo",
-          card: pageCard(
-            "Yes, I have my logo",
-            "No, create one for me",
-            logo !== undefined
-          ),
+          // Two quick answers: nothing opens picked.
+          card: {
+            ...pageCard("Yes, I have my logo", "No, create one for me", false),
+            preselected: [],
+          },
           upload: dropZone(1),
           ...(logo ? { held: [logo] } : {}),
           ...(path ? { path } : {}),
+          start: {
+            directions: start.directions,
+            description: o.prepared?.logo_look ?? "",
+          },
         },
         {
           id: "palette",
@@ -870,13 +880,17 @@ export function designCard(
           id: "lettering",
           question: "Which lettering do you prefer?",
           visual: "font_pair",
-          card: card(
-            "font",
-            pairOptions,
-            font?.id,
-            "Describe the lettering you like",
-            font?.id === "custom" ? font.custom : undefined
-          ),
+          card: {
+            ...card(
+              "font",
+              pairOptions,
+              font?.id,
+              "Describe the lettering you like",
+              font?.id === "custom" ? font.custom : undefined
+            ),
+            initial: start.fonts,
+          },
+          suggested: start.fonts[0],
         },
         {
           id: "arrangement",
