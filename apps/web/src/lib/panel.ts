@@ -125,7 +125,7 @@ export type Panel = {
   /** The review the going-live segment holds while its first step waits. */
   review: Approval | null
   upNext: UpNext | null
-  /** Reminders, renewals and the next check-in, soonest first. */
+  /** Reminders and renewals, soonest first. */
   upcoming: Timed[]
   /** What finished, newest first. */
   done: Timed[]
@@ -532,8 +532,8 @@ export function panelFor(input: PanelInput): Panel | null {
       return text ? [{ id: segment.id, text, at: segment.at }] : []
     })
   // Times wait for the reader's zone, so the server's HTML and the first
-  // browser render agree. The reminders page lists its own reminders.
-  // A check-in means nothing to an owner still answering setup questions.
+  // browser render agree. The reminders page lists its own reminders. The
+  // owner meets a check-in only once it has run.
   const settingUp = journey.some(
     (segment) => segment.kind === "onboarding" && segment.state !== "done"
   )
@@ -542,9 +542,8 @@ export function panelFor(input: PanelInput): Panel | null {
         activity.upcoming.filter(
           (segment) =>
             !notStarted(segment) &&
-            (segment.kind === "reminder"
-              ? page !== "reminders"
-              : segment.kind !== "checkin" || !settingUp)
+            segment.kind !== "checkin" &&
+            (segment.kind !== "reminder" || page !== "reminders")
         )
       )
     : []

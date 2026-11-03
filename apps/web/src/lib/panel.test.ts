@@ -895,38 +895,15 @@ describe("coming up and done today", () => {
       })
     )
 
-  it("lists every reminder ahead, by its own title, with renewals and the next check-in", () => {
+  it("lists every reminder ahead, by its own title, with renewals and no check-in", () => {
     expect(at(ROUTES.home)?.upcoming.map((item) => item.text)).toEqual([
       "Call the supplier",
       "Order cloths for next week",
-      "Reme's next check-in",
       "fixture.example.invalid is due for renewal",
     ])
     // The reminders page lists its own.
     expect(at(ROUTES.reminders)?.upcoming.map((item) => item.text)).toEqual([
-      "Reme's next check-in",
       "fixture.example.invalid is due for renewal",
-    ])
-  })
-
-  it("keeps the next check-in out until onboarding is done", () => {
-    const withJourney = (journey: ActivitySegment[]) =>
-      panelFor(
-        input({
-          route: ROUTES.home,
-          zone: ZONE,
-          workspace: live({
-            assistantName: "Reme",
-            activity: activity({
-              journey,
-              upcoming: feed.upcoming.slice(2, 3),
-            }),
-          }),
-        })
-      )?.upcoming
-    expect(withJourney([onboarding(2)])).toEqual([])
-    expect(withJourney([onboarding(9, "done")])?.map((i) => i.text)).toEqual([
-      "Reme's next check-in",
     ])
   })
 
@@ -970,7 +947,7 @@ describe("coming up and done today", () => {
       expect.stringMatching(/check/)
     )
     expect(panel?.upcoming.map((item) => item.text)).not.toContain(
-      "Reme's next check-in"
+      expect.stringMatching(/check/)
     )
     expect(panel?.checkIn).toBeNull()
   })

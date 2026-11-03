@@ -1777,9 +1777,6 @@ export function rowLine(
     case "reminder":
       return title?.trim() ? reminderTitle(tidy(title)) : "A reminder"
     case "checkin": {
-      if (segment.state === "upcoming") {
-        return assistant ? `${assistant}'s next check-in` : "Next check-in"
-      }
       const who = assistant ?? "Your assistant"
       return wroteToOwner(segment)
         ? `${who} checked in and left you a message`
