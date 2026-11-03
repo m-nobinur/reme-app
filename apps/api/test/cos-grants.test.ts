@@ -199,6 +199,14 @@ const TABLE: Row[] = [
   ],
   ["a connect Jev is unsure of", "connect_domain", DOMAIN, said(), [], "card"],
   [
+    "a connect for a name the owner typed, with no grant",
+    "connect_domain",
+    DOMAIN,
+    said(NAMED),
+    [],
+    "run",
+  ],
+  [
     "a connect Jev is unsure of, granted",
     "connect_domain",
     DOMAIN,

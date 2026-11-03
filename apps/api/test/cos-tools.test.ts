@@ -2911,18 +2911,20 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           ...base.env,
           STRIPE_SECRET_KEY: "sk_fixture",
           STRIPE_WEBHOOK_SECRET: "whsec_fix",
+          DOMAIN_BUY: "on",
         },
       }
     }
-    it("find_domain relays the orchestrator's offers, with or without the Stripe keys", async () => {
+    it("find_domain relays the orchestrator's offers, with our price and buy_here only while buying is on", async () => {
+      const row = (com: object) => ({
+        stem: "sparkleclean",
+        why: "matches your business name",
+        endings: { com, co: { state: "taken" } },
+      })
       const found = {
         outcome: "found",
         rows: [
-          {
-            stem: "sparkleclean",
-            why: "matches your business name",
-            endings: { com: { state: "free", price_gbp_year: 12 } },
-          },
+          row({ state: "free", price_gbp_year: 12, registrar_usd: 10.46 }),
         ],
       }
       const stub = stubOrchestrator(() => Response.json(found))
@@ -2931,7 +2933,13 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           "find_domain",
           await findDomain(context(me, stub), { query: "sparkle" })
         )
-      ).toEqual(found)
+      ).toEqual({
+        outcome: "found",
+        rows: [row({ state: "free", registrar_usd: 10.46 })],
+      })
+      expect(
+        kept("find_domain", await findDomain(paying(me, stub), {}))
+      ).toEqual({ ...found, buy_here: true })
       const [call] = stub.calls
       expect(new URL(call?.request.url ?? "").pathname).toBe(
         "/assignments/domains/find"

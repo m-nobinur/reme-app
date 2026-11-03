@@ -39,6 +39,7 @@ const CUSTOMER = `cus_fixture${crypto.randomUUID().slice(0, 8)}`
 const STRIPE = {
   STRIPE_SECRET_KEY: "sk_fixture",
   STRIPE_WEBHOOK_SECRET: "whsec_fix",
+  DOMAIN_BUY: "on",
 }
 
 const details = {

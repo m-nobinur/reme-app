@@ -56,6 +56,14 @@ import { StripeFailed, stripe, verifyStripeSignature } from "./stripe.ts"
 export const buyConfigured = (env: Env) =>
   Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET)
 
+/**
+ * Whether buying a domain in the app is offered: `DOMAIN_BUY` on, and the
+ * keys set. Off, the owner buys from a provider and connects it; the webhook
+ * still settles a purchase already paid.
+ */
+export const buyOffered = (env: Env) =>
+  env.DOMAIN_BUY === "on" && buyConfigured(env)
+
 export const buyUnavailable = () => failure(409, BUY_REFUSALS.buy_unavailable)
 
 /** Whether the session's person is the org's owner, as account deletion checks it. */
@@ -329,7 +337,7 @@ export async function checkout(
   if (!key) return keyMissing()
   const details = DomainCheckoutRequest.safeParse(await readBody(request))
   if (!details.success) return invalid(details.error.issues)
-  if (!buyConfigured(env)) return buyUnavailable()
+  if (!buyOffered(env)) return buyUnavailable()
   if (!(await isOrgOwner(kit, owner))) return notOwner("buy")
   // Opens the purchase, or refreshes the one waiting with these details and
   // today's price, so Pay works first time and again after an expiry.
