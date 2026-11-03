@@ -1984,7 +1984,7 @@ export async function findDomain(
   if (found.outcome !== "found" || !("rows" in found)) return found
   if (buyOffered(env)) return { ...found, buy_here: true }
   return {
-    outcome: "found",
+    ...found,
     rows: found.rows.map((row) => ({
       ...row,
       endings: Object.fromEntries(

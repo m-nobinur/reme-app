@@ -12,7 +12,7 @@ import {
   offerLine,
   riskOf,
 } from "../src/cos/agent.ts"
-import { grantOf } from "../src/cos/grants.ts"
+import { grantedKinds, grantOf } from "../src/cos/grants.ts"
 
 /** An owner who wrote `messages`, with each read the rules make answered as given. */
 const said = (
@@ -215,19 +215,11 @@ const TABLE: Row[] = [
     "card",
   ],
   [
-    "a connect Jev is unsure of, granted",
-    "connect_domain",
-    DOMAIN,
-    said(NAMED),
-    ["connect_domain"],
-    "run",
-  ],
-  [
-    "a connect Jev failed on, granted",
+    "a connect Jev failed on",
     "connect_domain",
     DOMAIN,
     said(NAMED, { putOn: new Error("jev") }),
-    ["connect_domain"],
+    [],
     "run",
   ],
   [
@@ -239,43 +231,43 @@ const TABLE: Row[] = [
     "card",
   ],
   [
-    "a connect whose name's parts are spread over messages, granted",
+    "a connect whose name's parts are spread over messages",
     "connect_domain",
     DOMAIN,
     said(["Sparkleclean is the brand", "we are a co in the uk"]),
-    ["connect_domain"],
+    [],
     "card",
   ],
   [
-    "a connect for a longer name holding the owner's, granted",
+    "a connect for a longer name holding the owner's",
     "connect_domain",
     DOMAIN,
     said(["Put the site on sparkleclean.co.uk.evil.example"]),
-    ["connect_domain"],
+    [],
     "card",
   ],
   [
-    "a connect for a name the owner never typed, granted",
+    "a connect for a name the owner never typed",
     "connect_domain",
     DOMAIN,
     said(["Connect the one from that page"]),
-    ["connect_domain"],
+    [],
     "card",
   ],
   [
-    "a live or retried connect, granted",
+    "a live or retried connect",
     "connect_domain",
     DOMAIN,
     said([], { pinned: true }),
-    ["connect_domain"],
+    [],
     "card",
   ],
   [
-    "a connect whose live check fails, granted",
+    "a connect whose live check fails",
     "connect_domain",
     DOMAIN,
     said([], { pinned: new Error("db") }),
-    ["connect_domain"],
+    [],
     "card",
   ],
   ["a removal, all granted", "remove_domain", DOMAIN, said(), ALL, "card"],
@@ -389,5 +381,11 @@ describe("a grant", () => {
     expect(grants).toMatch(
       /if \(on\) await saveGrant\(db, owner\.orgId, kind, null\)/
     )
+  })
+
+  it("ignores a row of the retired connect_domain kind", async () => {
+    const rows = [{ kind: "connect_domain" }, { kind: "record_review" }]
+    const db = { select: () => ({ from: async () => rows }) }
+    expect(await grantedKinds(db as never)).toEqual(["record_review"])
   })
 })

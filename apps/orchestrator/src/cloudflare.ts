@@ -101,6 +101,7 @@ import {
   writePointer,
 } from "./publish.ts"
 import { quickEdit } from "./quick.ts"
+import { refreshRate } from "./rates.ts"
 import { askOwner, earlySteers, heldSteers, relayQuestion } from "./relay.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
 import {
@@ -2063,6 +2064,7 @@ export default {
       } catch {
         // Already created for this hour.
       }
+      await refreshRate(env, new Date(controller.scheduledTime))
       // A staging deploy that skipped its restore step heals within the hour.
       // Caught, so the uptime check on this same firing still runs.
       await restoreRoutes(env).catch((error) =>

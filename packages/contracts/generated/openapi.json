@@ -3314,8 +3314,7 @@
             "type": "string",
             "enum": [
               "create_reminder",
-              "record_review",
-              "connect_domain"
+              "record_review"
             ]
           },
           "on": {
@@ -3333,7 +3332,7 @@
         "type": "object",
         "properties": {
           "grants": {
-            "maxItems": 3,
+            "maxItems": 2,
             "type": "array",
             "items": {
               "type": "object",
@@ -3342,8 +3341,7 @@
                   "type": "string",
                   "enum": [
                     "create_reminder",
-                    "record_review",
-                    "connect_domain"
+                    "record_review"
                   ]
                 },
                 "on": {
@@ -30992,6 +30990,10 @@
                           "buy_here": {
                             "type": "boolean",
                             "const": true
+                          },
+                          "usd_gbp": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
                           }
                         },
                         "required": [
@@ -32653,8 +32655,7 @@
                         "type": "string",
                         "enum": [
                           "create_reminder",
-                          "record_review",
-                          "connect_domain"
+                          "record_review"
                         ]
                       }
                     },
@@ -48582,6 +48583,10 @@
                   "buy_here": {
                     "type": "boolean",
                     "const": true
+                  },
+                  "usd_gbp": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
                   }
                 },
                 "required": [
@@ -51433,8 +51438,7 @@
             "type": "string",
             "enum": [
               "create_reminder",
-              "record_review",
-              "connect_domain"
+              "record_review"
             ]
           }
         },
@@ -51457,8 +51461,7 @@
                 "type": "string",
                 "enum": [
                   "create_reminder",
-                  "record_review",
-                  "connect_domain"
+                  "record_review"
                 ]
               }
             },

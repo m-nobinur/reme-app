@@ -1702,6 +1702,7 @@ const PRUNING_ROWS = {
       endings: { "co.uk": CF_UK, uk: CF_UK, com: CF_COM, co: FREE },
     },
   ],
+  usd_gbp: 0.7457,
 } as const
 
 const CONNECT_STEPS_PAUSED: ThreadMessageLike[] = [

@@ -2926,6 +2926,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         rows: [
           row({ state: "free", price_gbp_year: 12, registrar_usd: 10.46 }),
         ],
+        usd_gbp: 0.7457,
       }
       const stub = stubOrchestrator(() => Response.json(found))
       expect(
@@ -2936,6 +2937,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       ).toEqual({
         outcome: "found",
         rows: [row({ state: "free", registrar_usd: 10.46 })],
+        usd_gbp: 0.7457,
       })
       expect(
         kept("find_domain", await findDomain(paying(me, stub), {}))

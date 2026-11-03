@@ -1822,7 +1822,10 @@ export const taskFollowups = pgTable(
   ]
 )
 
-/** `GrantKind`. */
+/**
+ * `GrantKind` and `connect_domain`, retired from it: Postgres cannot drop an
+ * enum value, and the API ignores a row of that kind when it reads grants.
+ */
 export const grantKind = pgEnum("grant_kind", [
   "create_reminder",
   "record_review",

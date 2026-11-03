@@ -2727,7 +2727,6 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         grants: [
           { kind: "create_reminder", on: false, granted_at: null },
           { kind: "record_review", on: false, granted_at: null },
-          { kind: "connect_domain", on: false, granted_at: null },
         ],
       })
       const on = await flip({ kind: "record_review", on: true })
