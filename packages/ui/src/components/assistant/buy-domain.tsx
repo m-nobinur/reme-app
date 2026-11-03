@@ -1141,7 +1141,7 @@ export function BuyTray({
         </section>
       )
     case "not_now":
-      return <Line text="You said not now." />
+      return <Line text="You skipped this for now." />
   }
   if (!last) {
     const offered = (rows ?? []).flatMap((r) =>

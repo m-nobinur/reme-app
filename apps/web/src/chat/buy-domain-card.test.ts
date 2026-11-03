@@ -711,7 +711,7 @@ it("connects a name bought elsewhere once the registry shows it", async () => {
 it("leaves one line on Skip for now, and none of the tray once the chat moves on", async () => {
   const { chat, tray } = await found()
   await press(tray, "Skip for now")
-  expect(chat.textContent).toBe("Found 2 namesYou said not now.")
+  expect(chat.textContent).toBe("Found 2 namesYou skipped this for now.")
   expect(tray.textContent).toBe("")
 
   sessionStorage.clear()
