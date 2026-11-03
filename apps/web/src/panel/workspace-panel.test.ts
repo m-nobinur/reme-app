@@ -11,6 +11,7 @@ import {
   useAnnouncement,
   usePanel,
   WorkspacePanel,
+  WorkspacePanelLine,
 } from "./workspace-panel"
 
 /**
@@ -388,6 +389,129 @@ it("shows a part that finishes on screen ticked in Now, then moves it to Complet
   } finally {
     vi.useRealTimers()
   }
+})
+
+/** Setting up at the design tray, with the logo round the api read, if any. */
+const atTheTray = (logo?: {
+  status: "drawing" | "ready"
+  options: number
+}) => ({
+  ...EMPTY_WORKSPACE,
+  activity: {
+    journey: [
+      {
+        id: "onboarding",
+        kind: "onboarding" as const,
+        state: "waiting" as const,
+        steps: [
+          "work",
+          "area",
+          "customers",
+          "proof",
+          "quote_form",
+          "contact",
+          "assistant",
+          "website",
+        ]
+          .map((id) => ({ id, state: "done" as const }))
+          .concat([{ id: "look", state: "waiting" }] as never[]),
+        at: new Date().toISOString(),
+        ...(logo ? { logo } : {}),
+      },
+    ],
+    now: [],
+    waiting: [],
+    upcoming: [],
+    done: [],
+  },
+})
+
+const glowing = () =>
+  [
+    ...container.querySelectorAll<HTMLElement>(
+      '[data-slot="panel-segment"][data-fresh]'
+    ),
+  ].map((row) => row.querySelector("h3")?.textContent)
+
+it("glows a row that opens while the panel is up, once, and none that was there", async () => {
+  live.workspace = atTheTray()
+  await render()
+  expect(glowing()).toEqual([])
+  live.workspace = atTheTray({ status: "drawing", options: 3 })
+  await act(async () => root.render(createElement(Frame)))
+  expect(glowing()).toEqual(["Your logo · Designing 3 options"])
+  const row = container.querySelector('[data-fresh="true"]')
+  expect(row?.className).toContain("motion-safe:before:animate-row-glow")
+  // The next read moves the same row on: no second row glows, and the one
+  // that did keeps its class, so the animation does not start again.
+  live.workspace = atTheTray({ status: "ready", options: 3 })
+  await act(async () => root.render(createElement(Frame)))
+  expect(glowing()).toEqual(["Your logo · Waiting for your pick"])
+  expect(container.querySelector('[data-fresh="true"]')).toBe(row)
+})
+
+it("glows no row with less motion", async () => {
+  const media = vi.spyOn(window, "matchMedia").mockImplementation(
+    (query: string) =>
+      ({
+        matches: query.includes("reduce"),
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList
+  )
+  try {
+    live.workspace = atTheTray()
+    await render()
+    live.workspace = atTheTray({ status: "drawing", options: 3 })
+    await act(async () => root.render(createElement(Frame)))
+    expect(section("Now")?.textContent).toContain("Your logo")
+    expect(glowing()).toEqual([])
+  } finally {
+    media.mockRestore()
+  }
+})
+
+it("gives the phone's panel button its status in place of the halo, and the desktop none", async () => {
+  const line = {
+    tone: "working" as const,
+    lead: "Reme is building your website",
+  }
+  const shown = async (
+    badge: Parameters<typeof WorkspacePanelLine>[0]["panel"]
+  ) => {
+    root = createRoot(container)
+    await act(async () =>
+      root.render(
+        createElement(WorkspacePanelLine, { panel: badge, avatar: null })
+      )
+    )
+    const chip = container.querySelector('[data-slot="live-line-badge"]')
+    const text = chip?.textContent ?? null
+    const phoneOnly = chip?.className.includes("md:hidden") ?? null
+    await act(async () => root.unmount())
+    return { text, phoneOnly }
+  }
+  const panel = (badge: unknown) =>
+    ({ line, badge }) as Parameters<typeof WorkspacePanelLine>[0]["panel"]
+  expect(await shown(panel({ kind: "working", minutes: 6 }))).toEqual({
+    text: "6 min left",
+    phoneOnly: true,
+  })
+  expect(await shown(panel({ kind: "answer", count: 1 }))).toEqual({
+    text: "1 waiting on you",
+    phoneOnly: true,
+  })
+  expect(await shown(panel(null))).toEqual({ text: null, phoneOnly: null })
+  root = createRoot(container)
+  await act(async () =>
+    root.render(
+      createElement(WorkspacePanelLine, { panel: panel(null), avatar: null })
+    )
+  )
+  // The halo is the desktop's alone.
+  expect(
+    container.querySelector('[data-slot="live-line-halo"]')?.className
+  ).toContain("max-md:hidden")
 })
 
 const note = (id: string, title: string, due_at: string | null): Reminder => ({

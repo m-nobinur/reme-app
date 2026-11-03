@@ -1,11 +1,17 @@
-import type { ActivitySegment } from "@workspace/contracts"
+import {
+  type ActivitySegment,
+  LOGO_VARIANTS,
+  LogoRounds,
+} from "@workspace/contracts"
 import type { OrgScopedDb, Tenancy } from "@workspace/db"
 import { conversationMessages, conversations, sql } from "@workspace/db"
 import { withOnboarding } from "./activity.ts"
+import type { Owner } from "./changes.ts"
 import { readScript, waitingCard } from "./chat.ts"
-import { type Held, stepOf } from "./onboarding.ts"
+import { readLogos } from "./logo.ts"
+import { type Held, logoOf, stepOf } from "./onboarding.ts"
 import { onboardingSegment } from "./onboarding-progress.ts"
-import { etag, type SiteConfig, statusWithFacts } from "./workspace.ts"
+import { etag, statusWithFacts } from "./workspace.ts"
 
 // Apart from workspace.ts because it reads conversation_messages, which
 // nothing under cos/ may reach (ADR-034), and cos/tools.ts reads workspace.ts.
@@ -18,16 +24,17 @@ import { etag, type SiteConfig, statusWithFacts } from "./workspace.ts"
  */
 export async function readTaggedWorkspace(
   kit: Tenancy,
-  orgId: string,
-  config: SiteConfig
+  owner: Owner,
+  env: Env
 ): Promise<{ body: string; etag: string }> {
+  const { orgId } = owner
   return kit.withOrg({ orgId }, async (db) => {
     const [{ status, facts }, tail, open] = await Promise.all([
-      statusWithFacts(db, config, new Date()),
+      statusWithFacts(db, env, new Date()),
       newestMessage(db),
       openOnboarding(db),
     ])
-    const onboarding = open && (await onboardingOf(db, orgId, open, facts))
+    const onboarding = open && (await onboardingOf(db, owner, env, open, facts))
     const body = JSON.stringify(
       status.activity
         ? {
@@ -101,12 +108,19 @@ async function openOnboarding(db: OrgScopedDb): Promise<Open | null> {
  */
 async function onboardingOf(
   db: OrgScopedDb,
-  orgId: string,
+  owner: Owner,
+  env: Env,
   open: Open,
   facts: readonly Held[]
 ): Promise<ActivitySegment> {
   const progress = await readScript(db, open.id)
-  const o = { ...progress, orgId, facts, orgName: open.org_name, ownerName: "" }
+  const o = {
+    ...progress,
+    orgId: owner.orgId,
+    facts,
+    orgName: open.org_name,
+    ownerName: "",
+  }
   const card = waitingCard(open.tail && { content: open.tail })
   const asking =
     card?.type === "tool-ask_open"
@@ -118,9 +132,42 @@ async function onboardingOf(
     Boolean(card),
     asking ?? undefined
   )
-  return segment.state === "done"
-    ? { ...segment, at: await finishedAt(db, open) }
-    : segment
+  if (segment.state === "done") {
+    return { ...segment, at: await finishedAt(db, open) }
+  }
+  const logo =
+    card?.type === "tool-ask_design" &&
+    (await logoRound(env, owner, card.toolCallId, facts))
+  return logo ? { ...segment, logo } : segment
+}
+
+/**
+ * The design tray's newest logo round, read as the tray reads it, while it
+ * draws or waits on a pick. None once it failed or a logo it drew is kept.
+ */
+export async function logoRound(
+  env: Env,
+  owner: Owner,
+  toolCallId: string,
+  facts: readonly Held[]
+): Promise<ActivitySegment["logo"]> {
+  const url = new URL("https://api.invalid/logos")
+  url.searchParams.set("tool_call_id", toolCallId)
+  const response = await readLogos(new Request(url), env, owner)
+  // A round the panel cannot read never breaks the poll: it shows no row.
+  if (!response.ok) return undefined
+  const read = LogoRounds.safeParse(await response.json())
+  if (!read.success) return undefined
+  const { rounds } = read.data
+  const last = rounds.at(-1)
+  if (last?.status === "drawing") {
+    return { status: "drawing", options: LOGO_VARIANTS }
+  }
+  const kept = logoOf(facts)?.id
+  const picked = rounds.some((r) => r.variants.some((v) => v.id === kept))
+  return last?.status === "ready" && last.variants.length > 0 && !picked
+    ? { status: "ready", options: last.variants.length }
+    : undefined
 }
 
 /**

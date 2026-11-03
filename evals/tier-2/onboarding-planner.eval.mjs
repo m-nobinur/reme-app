@@ -20,6 +20,7 @@ import {
   askedSoFar,
   buildMissing,
   DEFAULT_ONBOARDING_MODEL,
+  opensNoted,
   PLANNER,
   plannerModel,
   planParts,
@@ -263,6 +264,12 @@ async function onboard(persona, spec) {
     input,
     rows: sim.rows.slice(-PLANNER.rows),
     asked: askedNow(),
+    // As `chat.ts` reads it: every reply in the conversation, not the newest rows.
+    notedBefore: sim.rows.some(
+      (r) =>
+        r.role === "assistant" &&
+        r.parts.some((p) => p.type === "text" && opensNoted(p.text))
+    ),
   })
   const put = (facts) => {
     for (const fact of facts) {

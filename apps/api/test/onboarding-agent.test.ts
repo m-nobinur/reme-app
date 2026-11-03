@@ -29,6 +29,7 @@ import {
   DEFAULT_ONBOARDING_MODEL,
   doingLine,
   listsOf,
+  opensNoted,
   type PlanState,
   plannerInstructions,
   plannerModel,
@@ -616,10 +617,10 @@ describe("the plan's checks", () => {
       key: "assistant.avatar",
       value: { id: "he_1" },
     })
-    // The card holds no name, so none of the assistant's is the card's to refuse.
+    // The card's name is its first idea, written for she/her.
     expect(
-      left({ ...man, "assistant.name": { name: "Reme" } }, chosen)
-    ).toEqual([])
+      left({ ...man, "assistant.name": { name: "Reme" } }, chosen)[0]
+    ).toMatch(/does not fit the pronouns/)
     // Listed as its own choice, the refusal says a value they asked for is theirs.
     expect(left(man, all).join()).toMatch(
       /assistant.pronouns is not what the card holds.*leave it out of chosen_for_owner/
@@ -2686,6 +2687,43 @@ describe("the owner's words in say", () => {
     expect(
       sayProblems(`${wall.slice(0, 120)}.\n\n${wall.slice(0, 120)}.`)
     ).toEqual([])
+  })
+
+  it("keeps bold to a list's labels: a question stays plain", () => {
+    for (const say of [
+      "Bristol and 15 miles out.\n\n**Who usually books you?**",
+      "Got that. **Where do you work?** A town and a radius is plenty.",
+      "Who usually books you, **homeowners** or agents?",
+    ]) {
+      expect(sayProblems(say), say).toContainEqual(
+        expect.stringMatching(/^say bolds a question/)
+      )
+    }
+    // Streamed whole sentence by sentence, the start is refused too.
+    expect(sayProblems("**Who usually books you?", {}, true)).toContainEqual(
+      expect.stringMatching(/^say bolds a question/)
+    )
+    expect(
+      sayProblems(
+        "Done:\n\n- **Moving date:** removed\n- **Photos:** now required\n\nAnything else to change?"
+      )
+    ).toEqual([])
+  })
+
+  it('lets one reply in an onboarding open with ", noted."', () => {
+    const opener =
+      "Divorce right through to mediation, noted.\n\nWhere are your clients based?"
+    expect(opensNoted(opener)).toBe(true)
+    expect(opensNoted("**Weekly cleans**, noted. Who books you?")).toBe(true)
+    expect(opensNoted("Noted. Who books you?")).toBe(true)
+    expect(opensNoted("Here's what I've noted for **Pruning Co**:")).toBe(false)
+    expect(opensNoted("Where do you work? I've noted the services.")).toBe(
+      false
+    )
+    expect(sayProblems(opener)).toEqual([])
+    expect(sayProblems(opener, { notedBefore: true })).toContain(
+      'say opens with ", noted.", which an earlier reply already did; open another natural way, or with no acknowledgement'
+    )
   })
 
   it("names every change made to the quote form or the recap", () => {

@@ -3,6 +3,8 @@ import {
   CaretDownIcon,
   CaretLeftIcon,
   CaretRightIcon,
+  CircleHalfIcon,
+  CircleIcon,
   GlobeIcon,
   ImageIcon,
   PaintBrushIcon,
@@ -505,6 +507,7 @@ function PanelSegment({
   quiet = false,
   steps,
   children,
+  fresh = false,
 }: {
   icon: StatusKind
   state: "upcoming" | "now" | "waiting" | "done" | "failed"
@@ -520,6 +523,8 @@ function PanelSegment({
   steps: readonly SegmentStep[]
   /** What the owner can do in the segment: a review's buttons, Stop. */
   children?: ReactNode
+  /** Opened since the panel first showed: it glows once as it appears. */
+  fresh?: boolean
 }) {
   const id = useId()
   const done = state === "done"
@@ -547,7 +552,12 @@ function PanelSegment({
   return (
     <section
       aria-labelledby={`${id}-title`}
-      className="fade-in flex animate-in flex-col duration-enter motion-reduce:animate-none"
+      className={cn(
+        "fade-in flex animate-in flex-col duration-enter motion-reduce:animate-none",
+        fresh &&
+          "relative before:pointer-events-none before:absolute before:-inset-x-2 before:-inset-y-1 before:rounded-lg before:bg-primary/10 before:opacity-0 motion-safe:before:animate-row-glow"
+      )}
+      data-fresh={fresh || undefined}
       data-slot="panel-segment"
       data-state={folded ? "folded" : state}
     >
@@ -1882,12 +1892,15 @@ function LiveLine({
   lead,
   detail = null,
   avatar = null,
+  badge = null,
 }: {
   tone: "working" | "live" | "idle"
   lead: string
   detail?: string | null
   /** The assistant's face, Reme's own when null. */
   avatar?: AvatarId | null
+  /** On a phone, in place of the halo: what waits on the owner, else the time a build has left. */
+  badge?: LineBadge | null
 }) {
   return (
     <span
@@ -1899,7 +1912,7 @@ function LiveLine({
         {tone === "idle" ? null : (
           <span
             className={cn(
-              "absolute -inset-1 rounded-full bg-primary/30",
+              "absolute -inset-1 rounded-full bg-primary/30 max-md:hidden",
               tone === "working" && "animate-pulse motion-reduce:animate-none"
             )}
             data-slot="live-line-halo"
@@ -1913,9 +1926,40 @@ function LiveLine({
           <span className="text-muted-foreground"> {detail}</span>
         ) : null}
       </span>
+      {badge ? (
+        <span
+          className="flex shrink-0 items-center gap-1 text-muted-foreground text-xs tabular-nums md:hidden"
+          data-slot="live-line-badge"
+        >
+          {badge.kind === "answer" ? (
+            <>
+              <CircleIcon
+                aria-hidden
+                className="size-2 text-primary"
+                weight="fill"
+              />
+              {badge.count}
+              <span className="sr-only"> waiting on you</span>
+            </>
+          ) : (
+            <>
+              <CircleHalfIcon aria-hidden className="size-3.5" />
+              {badge.minutes === null ? null : `${badge.minutes} min`}
+              <span className="sr-only">
+                {badge.minutes === null ? " under way" : " left"}
+              </span>
+            </>
+          )}
+        </span>
+      ) : null}
     </span>
   )
 }
+
+/** The phone's word on the panel: answers waiting on the owner, else a build at work and its minutes left. */
+type LineBadge =
+  | { kind: "answer"; count: number }
+  | { kind: "working"; minutes: number | null }
 
 /**
  * No web address of the owner's own yet: a row that says so, with the way
@@ -1959,7 +2003,7 @@ function NextSteps({ children }: { children?: ReactNode }) {
   )
 }
 
-export type { Preview, SegmentStep, Thumbnail, VersionPictures }
+export type { LineBadge, Preview, SegmentStep, Thumbnail, VersionPictures }
 export {
   AnswerInputs,
   ApprovalItem,

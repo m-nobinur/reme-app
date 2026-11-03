@@ -117,7 +117,7 @@ import { voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-23"
+export const PLANNER_VERSION = "onboarding-24"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -191,7 +191,7 @@ The checklist in the data says which phase is "now"; work only on that one. due_
 3. The phone number and email customers should use, on the ask_details contact card; if the owner has already given both in words, skip the card.
 4. The recap (ask_open about "recap"), once the contact details are held. Code reads the business back from the facts under your say, so say is one short line on this turn's answer and never sums up the business itself. The owner replies "${RECAP_REPLY}" (or any yes): pending_card "answered", nothing recorded. Or they correct something: "answered" too; record every fact it changes, and name each change before leading in to the next step. Only if a correction is unclear, ask about it with pending_card "unanswered" and answer_only, which shows the recap again.
 5. You: your name, pronouns and tone, on the ask_details assistant card.
-6. The website: say it turns visitors into enquiries through its Request a quote page, ask whether to build it (ask_choice build_for_me), and say they can skip if they already have one. If they skip, record site.build_mode "manual" and close with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is then over. Never offer a website builder.
+6. The website: say it turns visitors into enquiries through its Request a quote page, ask whether to build it (ask_choice build_for_me), and that they can say no if they already have one. If they skip, record site.build_mode "manual" and close with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is then over. Never offer a website builder.
 7. The design, in one tray of six questions (ask_design): the logo, the colours, the lettering, the page arrangement, the photos and the pages. The owner answers on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. If their words answer only some of it, record what they answered, set pending_card "answered" and show the tray again (ask_design) for the rest; a bare yes, no or skip answers only the first question the tray still asks, so record nothing for the others. When their words choose the logo's way ("make one for me", "I'll upload mine"), set next.logo to create or upload; a bare yes, no, ok or skip chooses none. Say you'll make or use their logo only when next.logo is set or they have one. There is no image library: never promise stock or hand-picked images.
 8. Start the build (start_build) when the owner settled the design in words: every question answered, or the rest left to you ("you pick the rest"). It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
 Never ask for their prices, opening hours, how enquiries reach them or what to take off their plate: you ask for those later, when your work needs them. Record any they volunteer (business.prices, business.enquiries, hours.weekday, owner.priorities).
@@ -203,8 +203,8 @@ Never ask for their prices, opening hours, how enquiries reach them or what to t
 - The industry: category is the closest item of the list, or null when none is close; name is their trade in their words.
 - Choices have cards: the industry, whether you build the website, the layout, the colours, the lettering and the pages. Record one only when the owner typed over that choice's own card; otherwise leave it out and its card asks it in turn. The industry is the exception: record it as soon as their words say what the business does.
 - Who you are can change at any step. When the owner changes it in words ("make it male", "call her Maya", "friendlier please"), record every field it changes: the pronouns, the tone, and the name, the one they give or one you choose to fit new pronouns (list it in chosen_for_owner). Your face follows the pronouns on its own. Say only what you recorded, then carry on with the step you were on (a waiting card: pending_card "unanswered" and answer_only, which shows it again); never reopen the assistant card for a change you recorded.
-- If they leave a card's choice to you ("you pick"), keep what the card holds, its prefill in waiting_card, as Pick for me does, for every field their words say nothing about. A field their words settle, even in the same breath ("you choose, but make it a man": he/him), is their answer: record it, leave it out of chosen_for_owner, and choose the rest to fit it. List what you chose in chosen_for_owner, and tell them what you chose and that they can change it. Contact details and what the business does are never yours to choose.
-- A card used "with Pick for me" is the owner asking you to choose. The card holds your choice already, so record nothing for it: say what you went with as your decision, in one sentence ("I've gone with Reme, she/her, with a professional manner."). For the design tray, say you'll choose the rest as you build. Never say they picked it, and never name an avatar.
+- If they leave a card's choice to you ("you pick"), keep what the card holds, its prefill in waiting_card and for your name the first of its ideas, as Pick for me does, for every field their words say nothing about. A field their words settle, even in the same breath ("you choose, but make it a man": he/him), is their answer: record it, leave it out of chosen_for_owner, and choose the rest to fit it. List what you chose in chosen_for_owner, and tell them what you chose and that they can change it. Contact details and what the business does are never yours to choose.
+- A card used "with Pick for me" is the owner asking you to choose. The card holds your choice already, so record nothing for it: say what you went with as your decision, in one sentence with the name the card holds ("I've gone with Ava, she/her, with a professional manner." when Ava is its name). For the design tray, say you'll choose the rest as you build. Never say they picked it, and never name an avatar.
 - Record owner.preferred_name only when they say what they want to be called; a name in a greeting ("I'm Sophie") is not that. Never ask for it: the owner is called by owner_first_name.
 - If their words answer only part of a card, record that part, set pending_card "answered", and ask the same card again for the rest.
 - "${SKIP_REPLY}" is the owner tapping Skip on an optional question: set pending_card "declined", record nothing for it and go straight to the next question.
@@ -231,13 +231,14 @@ The owner should feel they're talking to a sharp new hire on day one: someone wh
 The chat renders Markdown. Format say so the owner can scan it, while it still reads like a person talking, not a document:
 - Short paragraphs, one idea each, with a blank line between them. A one-line acknowledgement stays one plain line.
 - A bulleted list ("- ") when there are three or more things to scan, such as the changes you made; never for one or two.
-- Bold (**like this**) for the few words their eye should land on, such as a label or the one thing you ask, and sparingly.
+- Bold (**like this**) only for the label that leads a list item ("**Moving date:** removed"). A question stays plain: never bold it, or any word in it.
 - No headings, tables, links or emoji.
 
 Acknowledge an answer one of three ways, and vary them:
 - Most answers hold one thing that changes how you'll handle work: an exception, a condition, a repeat customer, an unusual service. When one does, name it and say in one short clause what you'll do about it when an enquiry comes in, which is only ever one of the things you really do: answer the customer, ask them the quote questions, prepare the quote, or bring it to the owner. That's an action, with no "so ..." after it: never an outcome you promise ("so their jobs get priority") or a quality you'll bring ("with care").
 - When the answer holds a number or a condition worth confirming, such as a radius or "further for big jobs", sum up the whole of it in a few words, in their terms. A long list of services is different: name its range or a group in their terms ("Divorce right through to mediation"), never every item.
 - When it holds neither, and always after a skip, no acknowledgement: a natural bridge straight to the next question.
+A summary followed by ", noted." may open one reply in the whole onboarding, and none once opened_with_noted is true: open another natural way, or with no acknowledgement at all.
 The owner reads the acknowledgement to check you understood, so code refuses one that gets them wrong:
 - Part of a list named as if it were the whole. Naming two of their five services reads as if you missed three.
 - A word they never used for their own business. Examples your question offered were the shape of an answer, not theirs.
@@ -262,7 +263,7 @@ Each is one turn from a different trade, showing the move and say. They show the
 <example>
 A window cleaner answers the area question: "Mostly Harrogate and the villages round it. Nothing above two storeys though, no ladders that high."
 next: ask_open business.audience
-say: "Nothing above two storeys, noted. If someone asks about a three-storey house, I'll tell them it isn't one for you. Who usually books you?"
+say: "So nothing above two storeys. If someone asks about a three-storey house, I'll tell them it isn't one for you.\n\nWho usually books you?"
 </example>
 
 <example>
@@ -280,7 +281,7 @@ say: "Divorce right through to mediation, noted.\n\nWhere are your clients based
 <example>
 A cleaner answers who their customers are: "Families mostly, and two letting agents who send me end of tenancy cleans every month."
 next: ask_open business.proof
-say: "Two letting agents with monthly end of tenancy cleans, noted. When they get in touch, I'll ask which property it's for.\n\nWhat helps new customers trust you, such as years trading, insurance or vetted cleaners?"
+say: "When one of the letting agents gets in touch for an end of tenancy clean, I'll ask which property it's for.\n\nWhat helps new customers trust you, such as years trading, insurance or vetted cleaners?"
 </example>
 
 <example>
@@ -414,6 +415,8 @@ export type PlanState = {
    * question or a card (`askedSoFar`). Absent counts as never.
    */
   asked?: Readonly<Record<string, number>>
+  /** Whether an earlier reply in this conversation opened with "..., noted." (`opensNoted`). */
+  notedBefore?: boolean
 }
 
 /** The business facts the build needs from the owner, in the order they come up. */
@@ -745,7 +748,14 @@ function waiting(part: ToolPart | null, o: Onboarding) {
     return { card: "ask_open", about: input.about }
   }
   if (part.type === "tool-ask_details") {
-    return { card: "ask_details", step: input.step, prefill: input.prefill }
+    return {
+      card: "ask_details",
+      step: input.step,
+      prefill: input.prefill,
+      ...((input as AskDetailsInput).ideas?.length
+        ? { ideas: (input as AskDetailsInput).ideas }
+        : {}),
+    }
   }
   if (part.type === "tool-review_quote_form") {
     return { card: "review_quote_form", fields: input.fields }
@@ -788,6 +798,7 @@ export function turnData(s: PlanState): string {
     facts: factsOf(o),
     owner_first_name: firstName(o.ownerName) || null,
     waiting_card: s.input.kind === "message" ? waiting(s.pending, o) : null,
+    opened_with_noted: s.notedBefore ?? false,
     recent_conversation: transcriptOf(s.rows),
     owner_now:
       s.input.kind === "message"
@@ -862,6 +873,14 @@ export function sayProblems(
   if (/\p{Emoji_Presentation}/u.test(say)) problems.push("say holds an emoji")
   if (!partial && (say.match(/\*\*/g)?.length ?? 0) % 2 === 1) {
     problems.push("say opens bold with ** and never closes it")
+  }
+  const boldAsk = say
+    .split(BOLD_SENTENCE)
+    .find((s) => s.includes("**") && /\?(?:\*\*)?$/.test(s.trim()))
+  if (boldAsk) {
+    problems.push(
+      `say bolds a question ("${plain(boldAsk).trim()}"); only a list item's label is bold, so ask it in plain words`
+    )
   }
   const long = say
     .split(/\n\s*\n/)
@@ -971,6 +990,11 @@ export function sayProblems(
       )
     }
   }
+  if (context.notedBefore && opensNoted(read)) {
+    problems.push(
+      'say opens with ", noted.", which an earlier reply already did; open another natural way, or with no acknowledgement'
+    )
+  }
   if (context.corrected === false && CORRECTION_THANKS.test(say)) {
     problems.push(
       "say thanks the owner for a correction, but nothing they said changed what was held"
@@ -1025,6 +1049,16 @@ function plain(say: string): string {
 /** Where a sentence ends: its stop, or the end of its line, as a bullet has none. */
 const SENTENCE = /(?<=[.!?])\s+|\s*\n\s*/
 
+/** The same, with a stop inside bold ("**Who books you?**") ending its sentence too. */
+const BOLD_SENTENCE = /(?<=[.!?](?:\*\*)?)\s+|\s*\n\s*/
+
+/**
+ * Whether a reply opens with a summary and "noted" ("Weekly cleans, noted."),
+ * the opener a whole onboarding may use once.
+ */
+export const opensNoted = (say: string) =>
+  /^[^.?!\n]*\bnoted(?=[,.!])/i.test(plain(say).trim())
+
 /** A block of Markdown bullets. */
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/
 
@@ -1046,6 +1080,8 @@ type SayContext = {
   corrected?: boolean
   /** Whether the owner has named the assistant, so "Reme" is an internal. */
   assistantNamed?: boolean
+  /** Whether an earlier reply already opened with "..., noted.", so this one may not. */
+  notedBefore?: boolean
   /** The longer sentences the assistant has already said in the recent rows, which say must not repeat. */
   said?: ReadonlySet<string>
   /** The persona values say may name as its own: what the turn ends with, and what it held before. */
@@ -1540,6 +1576,7 @@ export function sayContext(
     }),
     // An assistant the owner called Reme may say its own name.
     assistantNamed: Boolean(name) && name?.toLowerCase() !== "reme",
+    notedBefore: s.notedBefore ?? false,
     said: new Set(
       s.rows
         .filter((r) => r.role === "assistant")
@@ -1847,7 +1884,14 @@ export function checkPlan(
       : pending?.type === "tool-ask_details"
         ? (pending.input as AskDetailsInput).prefill
         : []
-  const opened = (key: string) => prefill.find((p) => p.key === key)?.value
+  // A name the card leaves empty opens on its first idea, as Pick for me fills it.
+  const idea =
+    pending?.type === "tool-ask_details"
+      ? (pending.input as AskDetailsInput).ideas?.[0]
+      : undefined
+  const opened = (key: string) =>
+    prefill.find((p) => p.key === key)?.value ??
+    (key === "assistant.name" && idea ? { name: idea } : undefined)
   // The persona before the owner's words: the card's, or the one held.
   const was = (key: FactValueKey) => opened(key) ?? factValue(o.facts, key)
   const repronounced = facts.some(

@@ -1645,6 +1645,11 @@ describe("the onboarding copy", () => {
       // tables or emoji.
       expect(text, name).not.toMatch(/^#|^\s*\||\p{Emoji_Presentation}/mu)
       expect((text.match(/\*\*/g)?.length ?? 0) % 2, name).toBe(0)
+      // Only the opener's question is bold; every other question stays plain.
+      if (name !== "opener")
+        expect(text, name).not.toMatch(
+          /\*\*[^*]*\?\s*\*\*|\*\*[^*\n]*\*\*[^.!?\n]*\?/
+        )
       for (const paragraph of text.split(/\n\s*\n/))
         expect(paragraph.split(/\s+/).length, name).toBeLessThanOrEqual(50)
       expect(voiceProblems(text, { assistantNamed: true }), name).toEqual({

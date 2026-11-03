@@ -183,6 +183,28 @@
                   "type": "boolean",
                   "const": true
                 },
+                "logo": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "drawing",
+                        "ready"
+                      ]
+                    },
+                    "options": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "options"
+                  ],
+                  "additionalProperties": false
+                },
                 "synced_at": {
                   "type": "string",
                   "format": "date-time",
@@ -389,6 +411,28 @@
                 "restarted": {
                   "type": "boolean",
                   "const": true
+                },
+                "logo": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "drawing",
+                        "ready"
+                      ]
+                    },
+                    "options": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "options"
+                  ],
+                  "additionalProperties": false
                 },
                 "synced_at": {
                   "type": "string",
@@ -597,6 +641,28 @@
                   "type": "boolean",
                   "const": true
                 },
+                "logo": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "drawing",
+                        "ready"
+                      ]
+                    },
+                    "options": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "options"
+                  ],
+                  "additionalProperties": false
+                },
                 "synced_at": {
                   "type": "string",
                   "format": "date-time",
@@ -803,6 +869,28 @@
                 "restarted": {
                   "type": "boolean",
                   "const": true
+                },
+                "logo": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "drawing",
+                        "ready"
+                      ]
+                    },
+                    "options": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "options"
+                  ],
+                  "additionalProperties": false
                 },
                 "synced_at": {
                   "type": "string",
@@ -1011,6 +1099,28 @@
                   "type": "boolean",
                   "const": true
                 },
+                "logo": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "drawing",
+                        "ready"
+                      ]
+                    },
+                    "options": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "options"
+                  ],
+                  "additionalProperties": false
+                },
                 "synced_at": {
                   "type": "string",
                   "format": "date-time",
@@ -1217,6 +1327,28 @@
                 "restarted": {
                   "type": "boolean",
                   "const": true
+                },
+                "logo": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "drawing",
+                        "ready"
+                      ]
+                    },
+                    "options": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "options"
+                  ],
+                  "additionalProperties": false
                 },
                 "synced_at": {
                   "type": "string",
@@ -64298,6 +64430,28 @@
                       "type": "boolean",
                       "const": true
                     },
+                    "logo": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "drawing",
+                            "ready"
+                          ]
+                        },
+                        "options": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 3
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "options"
+                      ],
+                      "additionalProperties": false
+                    },
                     "synced_at": {
                       "type": "string",
                       "format": "date-time",
@@ -64504,6 +64658,28 @@
                     "restarted": {
                       "type": "boolean",
                       "const": true
+                    },
+                    "logo": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "drawing",
+                            "ready"
+                          ]
+                        },
+                        "options": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 3
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "options"
+                      ],
+                      "additionalProperties": false
                     },
                     "synced_at": {
                       "type": "string",
@@ -64712,6 +64888,28 @@
                       "type": "boolean",
                       "const": true
                     },
+                    "logo": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "drawing",
+                            "ready"
+                          ]
+                        },
+                        "options": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 3
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "options"
+                      ],
+                      "additionalProperties": false
+                    },
                     "synced_at": {
                       "type": "string",
                       "format": "date-time",
@@ -64918,6 +65116,28 @@
                     "restarted": {
                       "type": "boolean",
                       "const": true
+                    },
+                    "logo": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "drawing",
+                            "ready"
+                          ]
+                        },
+                        "options": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 3
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "options"
+                      ],
+                      "additionalProperties": false
                     },
                     "synced_at": {
                       "type": "string",
@@ -65126,6 +65346,28 @@
                       "type": "boolean",
                       "const": true
                     },
+                    "logo": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "drawing",
+                            "ready"
+                          ]
+                        },
+                        "options": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 3
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "options"
+                      ],
+                      "additionalProperties": false
+                    },
                     "synced_at": {
                       "type": "string",
                       "format": "date-time",
@@ -65332,6 +65574,28 @@
                     "restarted": {
                       "type": "boolean",
                       "const": true
+                    },
+                    "logo": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "drawing",
+                            "ready"
+                          ]
+                        },
+                        "options": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 3
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "options"
+                      ],
+                      "additionalProperties": false
                     },
                     "synced_at": {
                       "type": "string",

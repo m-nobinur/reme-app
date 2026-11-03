@@ -5,10 +5,13 @@ import type {
   BuildSummary,
   Conversation,
 } from "@workspace/contracts"
+import type { LineBadge } from "@workspace/ui/components/live-panel"
 import {
   type CopyContext,
   completedBrief,
   domainStep,
+  logoLine,
+  minutesLeft,
   needsLine,
   notStarted,
   pageAction,
@@ -110,6 +113,8 @@ export type UpNext = { id: string; text: string; label: string; href: string }
 export type Panel = {
   /** The collapsed pill, and the panel's header: what waits on the owner first, else the work. */
   line: Line
+  /** The phone's panel button: what waits on the owner, else a build's minutes left; null when idle. */
+  badge: LineBadge | null
   /** The first run's segment under way; what finished is in `done`. */
   journey: SegmentView[]
   /**
@@ -402,11 +407,12 @@ export function panelFor(input: PanelInput): Panel | null {
   }
 
   /** A segment in the owner's words, with its times in the reader's zone once known. */
+  const elapsedOf = (segment: ActivitySegment) =>
+    zone && segment.state === "now"
+      ? Math.max(0, (now.getTime() - Date.parse(segment.at)) / 1000)
+      : undefined
   const view = (segment: ActivitySegment): SegmentView => {
-    const elapsedSeconds =
-      zone && segment.state === "now"
-        ? Math.max(0, (now.getTime() - Date.parse(segment.at)) / 1000)
-        : undefined
+    const elapsedSeconds = elapsedOf(segment)
     const until =
       zone && segment.deadline ? timeOf(segment.deadline, zone, now) : undefined
     // The first run builds the newest build; a change is named for its
@@ -647,6 +653,16 @@ export function panelFor(input: PanelInput): Panel | null {
     })
   }
   const needed = forOwner.length > 0
+  const answers = approvals.length + questions.length + owed.length
+  const working = [current, ...activity.now].find(
+    (segment) => segment?.state === "now" && segment.kind !== "onboarding"
+  )
+  const badge: LineBadge | null =
+    answers > 0
+      ? { kind: "answer", count: answers }
+      : working
+        ? { kind: "working", minutes: minutesLeft(working, elapsedOf(working)) }
+        : null
   const [first] = [
     ...forOwner,
     ...[current, ...activity.now, ...blocked].flatMap(said),
@@ -691,12 +707,31 @@ export function panelFor(input: PanelInput): Panel | null {
     return { ...each, quiet: needed && each.state === "now" }
   }
   const parts = current?.kind === "onboarding" ? setupViews(current) : []
+  // The design tray's logo round, as its own row under setting up.
+  const logo: SegmentView[] = current?.logo
+    ? [
+        {
+          id: "logo",
+          kind: "onboarding",
+          state: current.logo.status === "drawing" ? "now" : "waiting",
+          icon: current.logo.status === "drawing" ? "polishing" : "waiting",
+          title: "Your logo",
+          working: "Your logo",
+          line: logoLine(current.logo),
+          status: null,
+          quiet: true,
+          steps: [],
+          build: null,
+        },
+      ]
+    : []
   const before = at === -1 ? journey : journey.slice(0, at)
   return {
     line,
+    badge,
     journey: current
       ? current.kind === "onboarding"
-        ? parts.filter((part) => part.state !== "done")
+        ? [...parts.filter((part) => part.state !== "done"), ...logo]
         : [shownView(current)]
       : [],
     finished: [

@@ -49,7 +49,12 @@ import {
   ReasoningGroup as DefaultReasoningGroup,
   Reasoning,
 } from "@workspace/ui/components/assistant/reasoning"
-import { ReplyPill } from "@workspace/ui/components/assistant/reply-pill"
+import {
+  pillsIn,
+  ReplyPill,
+  ReplyPills,
+  useWordsIn,
+} from "@workspace/ui/components/assistant/reply-pill"
 import { ThreadHistorySkeleton } from "@workspace/ui/components/assistant/thread-pending"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { ToolGroup as DefaultToolGroup } from "@workspace/ui/components/assistant/tool-group"
@@ -472,8 +477,9 @@ const KeepTurnAnchor: FC = () => {
 }
 
 /**
- * Keeps the owner's message at the top until their next send, and the end of
- * the thread in view. assistant-ui follows the bottom by itself only when the
+ * Keeps the reply's first line at the top until the owner's next send (the
+ * viewport scrolls their own message just out of view), and the end of the
+ * thread in view. assistant-ui follows the bottom by itself only when the
  * viewport is not anchored to a turn.
  *
  * - The space assistant-ui holds below a pinned reply is measured here as
@@ -483,12 +489,15 @@ const KeepTurnAnchor: FC = () => {
  *   assistant-ui measured again a frame later: the owner's message dropped by
  *   the tray's height, and the drop stayed.
  * - A footer that appears or grows (the tray) under a reply that already
- *   fills the view covers its last lines, so a reader at its end stays there.
+ *   fills the view covers its last lines: a reader at its end stays there,
+ *   and one still at its first line stays there too.
  * - The after slot sits in the message group ahead of that space, so a card
  *   landing in it fills the space rather than landing below it.
  * - Between turns, what lands with no turn of the owner's (a message the
  *   assistant posted on its own, or a card in the slot) is followed: a reader
  *   at the bottom glides to it, and one who scrolled up is told instead.
+ * - A reply that starts while the owner scrolled up to read moves nothing:
+ *   they are told, as above.
  */
 const FollowBottom: FC<{
   footer: HTMLElement | null
@@ -499,6 +508,19 @@ const FollowBottom: FC<{
   const store = useThreadViewportStore()
   const aui = useAui()
   const follow = useRef<() => void>(() => undefined)
+  const replied = useRef<() => void>(() => undefined)
+  // The reply's first words in a turn: before them it is only a placeholder.
+  const replying = useAuiState((s) => {
+    const last = s.thread.messages.at(-1)
+    return (
+      s.thread.isRunning &&
+      last?.role === "assistant" &&
+      last.parts.some((part) => part.type !== "text" || part.text !== "")
+    )
+  })
+  useEffect(() => {
+    if (replying) replied.current()
+  }, [replying])
   // A message added to the open thread: never the history loading in, nor
   // another thread opening.
   const count = useAuiState((s) => s.thread.messages.length)
@@ -552,6 +574,9 @@ const FollowBottom: FC<{
       last = { top, height }
       if (pinned) onUnseen(false)
       below()
+    }
+    replied.current = () => {
+      if (!pinned) onUnseen(true)
     }
     // A frame on, once the space below the reply is measured again.
     follow.current = () => {
@@ -624,6 +649,7 @@ const FollowBottom: FC<{
       const held = hold()
       const shrank = footer.offsetHeight < height
       const grew = footer.offsetHeight > height
+      const growth = footer.offsetHeight - height
       height = footer.offsetHeight
       const next = `${viewport.clientWidth}x${viewport.clientHeight}`
       const resized = next !== size
@@ -643,7 +669,15 @@ const FollowBottom: FC<{
       // A tray growing over that space leaves the message where it is; one
       // docking under a reply that already filled the view keeps the reader
       // at its end.
-      if (grew && !held && pinned) {
+      // Only a reader already at the end: one still at a long reply's first
+      // line stays there, the tray over its last lines.
+      const wasAtEnd =
+        viewport.scrollHeight -
+          growth -
+          viewport.clientHeight -
+          viewport.scrollTop <=
+        1
+      if (grew && !held && pinned && wasAtEnd) {
         viewport.scrollTo({ top: viewport.scrollHeight, behavior: "instant" })
       }
       // assistant-ui reads `isAtBottom` on a scroll, or on a resize that
@@ -692,6 +726,7 @@ const FollowBottom: FC<{
       viewport.removeEventListener("scroll", onScroll)
       footer.removeEventListener("input", resume)
       follow.current = () => undefined
+      replied.current = () => undefined
     }
   }, [footer, after, store, aui, onUnseen, onBelow])
   return null
@@ -725,6 +760,9 @@ const ThreadRoot: FC<{
         }}
       >
         <ThreadPrimitive.Viewport
+          // The owner's message scrolls just out of view, so the reply's
+          // first line sits at the top.
+          topAnchorMessageClamp={{ tallerThan: "0px", visibleHeight: "0px" }}
           turnAnchor="top"
           data-slot="aui_thread-viewport"
           // Clear of the workspace's floating panel, where there is one; the
@@ -1031,11 +1069,19 @@ const SkipThisOne: FC = () => {
     (s) => !s.thread.isRunning && waitsToSkip(s.thread.messages.at(-1)?.parts)
   )
   if (!waiting || !sendable) return null
+  return <SkipPill onSkip={() => aui.thread().append(SKIP_REPLY)} />
+}
+
+/** Fades in with the words above it, and leaves the focus where it is: the answer is typed. */
+const SkipPill: FC<{ onSkip: () => void }> = ({ onSkip }) => {
+  const ref = useRef<HTMLButtonElement>(null)
+  const words = useWordsIn(ref)
   return (
     <ReplyPill
-      className="self-start"
+      className={cn("self-start", pillsIn(words))}
       data-slot="skip-this-one"
-      onClick={() => aui.thread().append(SKIP_REPLY)}
+      onClick={onSkip}
+      ref={ref}
     >
       {SKIP_REPLY}
     </ReplyPill>
@@ -1056,7 +1102,7 @@ const RecapReplies: FC = () => {
   )
   if (!waiting || !sendable) return null
   return (
-    <div className="flex flex-wrap gap-2" data-slot="recap-replies">
+    <ReplyPills label="Have I got that right?">
       <ReplyPill onClick={() => aui.thread().append(RECAP_REPLY)}>
         {RECAP_REPLY}
       </ReplyPill>
@@ -1071,7 +1117,7 @@ const RecapReplies: FC = () => {
       >
         Change something
       </ReplyPill>
-    </div>
+    </ReplyPills>
   )
 }
 
