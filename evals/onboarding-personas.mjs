@@ -527,9 +527,11 @@ export const CORRECTS_TWICE = {
 }
 
 /**
- * The staging live test of 2026-11-03 replayed: the owner's first seven
- * messages word for word, so the replies before and after a prompt change
- * read side by side. The contact details are swapped for fake ones.
+ * The staging live test of 2026-11-03 replayed: the owner's messages word
+ * for word, each typed when the question it answered is asked (`answers`,
+ * by the open question's subject), so the replies before and after a prompt
+ * change read side by side whatever order the planner asks in. The contact
+ * details are swapped for fake ones.
  */
 export const PRUNING_CO = {
   id: "pruning-co",
@@ -544,12 +546,15 @@ export const PRUNING_CO = {
   },
   turns: {
     1: "We're a tree surgery and garden care company in Leeds. Main jobs are tree pruning and crown reductions, tree felling, hedge trimming and stump grinding.",
-    2: "Leeds and about 20 miles out, so Bradford, Wakefield, Harrogate and Wetherby. We'll go further for big felling jobs.",
-    3: "Mostly homeowners. A few letting agents and landlords who send repeat work, and the odd school or church.",
-    4: SKIP_REPLY,
-    5: "Address and postcode, what needs doing, roughly how big the tree or hedge is, and a couple of photos. Also whether we can get a chipper down the side or it all has to come through the house, and if it's near power lines or a road.",
-    6: 'Let people tick more than one job, felling and stump grinding usually go together. Add a "Not sure" option to garden access, and make photos required.',
-    7: "good",
+  },
+  answers: {
+    "service_area.text":
+      "Leeds and about 20 miles out, so Bradford, Wakefield, Harrogate and Wetherby. We'll go further for big felling jobs.",
+    "business.audience":
+      "Mostly homeowners. A few letting agents and landlords who send repeat work, and the odd school or church.",
+    "business.proof": SKIP_REPLY,
+    "quote.form":
+      "Address and postcode, what needs doing, roughly how big the tree or hedge is, and a couple of photos. Also whether we can get a chipper down the side or it all has to come through the house, and if it's near power lines or a road.",
   },
   cards: {
     pronouns: "she_her",
@@ -557,7 +562,11 @@ export const PRUNING_CO = {
     build_for_me: "yes",
     upload: "skip",
   },
-  quote: "confirm",
+  // Typed over the proposal, then over the revised one.
+  quote: [
+    'type:Let people tick more than one job, felling and stump grinding usually go together. Add a "Not sure" option to garden access, and make photos required.',
+    "type:good",
+  ],
   quoteExpect: [/address|postcode/i, /chipper|access/i, /photo/i],
 }
 
