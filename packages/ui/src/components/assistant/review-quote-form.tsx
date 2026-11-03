@@ -17,6 +17,7 @@ import {
   TrayNote,
   useTabDraft,
 } from "@workspace/ui/components/assistant/question-tray"
+import { QuoteFormPreview } from "@workspace/ui/components/assistant/quote-form-preview"
 import { Button } from "@workspace/ui/components/button"
 import {
   Popover,
@@ -47,7 +48,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
  * icon, then a star when the question is required or "optional" when it is
  * not. A click on either switches it, and a pill's remove button shows on
  * hover or focus. A choice question's label opens its options and hint, and
- * a label cut short shows whole in a tooltip. Anything else is said in the chat: words typed while the
+ * a label cut short shows whole in a tooltip. "Preview form" opens the form as
+ * customers see it, with "Looks good" in its footer. Anything else is said in the chat: words typed while the
  * pills wait answer them (`quoteChanges` carries the pills as the owner left
  * them), and "Looks good" confirms. Answered, it draws nothing: the reply
  * says what was saved, or the next proposal shows what changed.
@@ -280,12 +282,15 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
             />
           ))}
       </ul>
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
-        <span className="inline-flex items-center gap-1">
-          <Mark required /> Required
-        </span>
-        <span>Name, email and phone are always asked.</span>
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
+          <span className="inline-flex items-center gap-1">
+            <Mark required /> Required
+          </span>
+          <span>Name, email and phone are always asked.</span>
+        </p>
+        <QuoteFormPreview fields={keptFields(draft)} onConfirm={confirm} />
+      </div>
       {invalid ? (
         <p className="text-[0.8125rem] text-destructive" role="alert">
           {invalid}
