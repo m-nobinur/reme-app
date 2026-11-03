@@ -743,7 +743,7 @@ it("sends a panel action into the stored conversation once its history is in, on
   await vi.waitFor(() =>
     expect(transcript(container)).toEqual([
       "Help me connect my web address",
-      "What number should customers ring?Phone numberSubmit",
+      "What number should customers ring?Phone numberDone",
     ])
   )
   // A re-render with the same press sends nothing more.
