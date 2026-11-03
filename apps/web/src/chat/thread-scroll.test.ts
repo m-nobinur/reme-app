@@ -646,6 +646,44 @@ it("a tray docking under a reply that fills the view keeps its first line at the
   expect(ownerMessageTop()).toBe(TOP)
 })
 
+it("a reply that starts while the owner reads further up moves nothing and says New message", async () => {
+  await sendAndReply("u1")
+  const viewport = chat.querySelector<HTMLElement>(
+    '[data-slot="aui_thread-viewport"]'
+  )
+  if (!viewport) throw new Error("no viewport")
+  const reply = (text: string, running = true): ThreadMessageLike => ({
+    ...said("u2-reply", "assistant", text),
+    ...(running ? { status: { type: "running" } } : {}),
+  })
+  await setState({
+    messages: [
+      ...state.messages,
+      said("u2", "user", "Something else"),
+      { ...reply(""), content: [] },
+    ],
+    isRunning: true,
+  })
+  await frames()
+  viewport.scrollTop -= 150
+  await frames()
+  const reading = ownerMessageTop()
+  const button = () =>
+    chat.querySelector(".aui-thread-scroll-to-bottom")?.textContent
+  expect(button()).not.toContain("New message")
+  layout.rows.set("u2-reply", 600)
+  await setState({ messages: [...state.messages.slice(0, -1), reply("Here")] })
+  await frames()
+  expect(ownerMessageTop()).toBe(reading)
+  expect(button()).toContain("New message")
+  await setState({
+    messages: [...state.messages.slice(0, -1), reply("Here it is.", false)],
+    isRunning: false,
+  })
+  await frames()
+  expect(ownerMessageTop()).toBe(reading)
+})
+
 it("the persona card waits for the words above it to finish typing in", async () => {
   const intro =
     "Here's how I'll introduce myself from now on: I'm Reme, she/her, and I'll keep things friendly and clear."

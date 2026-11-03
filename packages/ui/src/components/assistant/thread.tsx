@@ -491,6 +491,8 @@ const KeepTurnAnchor: FC = () => {
  * - Between turns, what lands with no turn of the owner's (a message the
  *   assistant posted on its own, or a card in the slot) is followed: a reader
  *   at the bottom glides to it, and one who scrolled up is told instead.
+ * - A reply that starts while the owner scrolled up to read moves nothing:
+ *   they are told, as above.
  */
 const FollowBottom: FC<{
   footer: HTMLElement | null
@@ -501,6 +503,19 @@ const FollowBottom: FC<{
   const store = useThreadViewportStore()
   const aui = useAui()
   const follow = useRef<() => void>(() => undefined)
+  const replied = useRef<() => void>(() => undefined)
+  // The reply's first words in a turn: before them it is only a placeholder.
+  const replying = useAuiState((s) => {
+    const last = s.thread.messages.at(-1)
+    return (
+      s.thread.isRunning &&
+      last?.role === "assistant" &&
+      last.parts.some((part) => part.type !== "text" || part.text !== "")
+    )
+  })
+  useEffect(() => {
+    if (replying) replied.current()
+  }, [replying])
   // A message added to the open thread: never the history loading in, nor
   // another thread opening.
   const count = useAuiState((s) => s.thread.messages.length)
@@ -554,6 +569,9 @@ const FollowBottom: FC<{
       last = { top, height }
       if (pinned) onUnseen(false)
       below()
+    }
+    replied.current = () => {
+      if (!pinned) onUnseen(true)
     }
     // A frame on, once the space below the reply is measured again.
     follow.current = () => {
@@ -703,6 +721,7 @@ const FollowBottom: FC<{
       viewport.removeEventListener("scroll", onScroll)
       footer.removeEventListener("input", resume)
       follow.current = () => undefined
+      replied.current = () => undefined
     }
   }, [footer, after, store, aui, onUnseen, onBelow])
   return null
