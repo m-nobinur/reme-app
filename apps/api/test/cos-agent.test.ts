@@ -2440,7 +2440,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await s.state(asking, "cancelled")
   })
 
-  it("waits for the owner's yes before connect_domain and remove_domain, and reads check_domain without asking", async () => {
+  it("waits for the owner's yes before remove_domain, and runs check_domain and connect_domain without asking", async () => {
     const id = await conversation(me)
     const stub = stubOrchestrator()
     const done = await turn(
@@ -2470,17 +2470,14 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       stub
     )
     expect(done.response.status, done.text).toBe(200)
-    // The check ran (this org holds no such domain, so it was refused here);
-    // the connect and the removal wait on their cards and nothing reached
-    // the orchestrator.
+    // The check and the connect ran without a card; only the removal waits
+    // on the owner's yes.
     expect(waiting(await tailOf(me, id)).map((p) => p.type)).toEqual([
-      "tool-connect_domain",
       "tool-remove_domain",
     ])
     expect(
       done.chunks.filter((c) => c.type === "tool-approval-request")
-    ).toHaveLength(2)
-    expect(stub.calls).toHaveLength(0)
+    ).toHaveLength(1)
   })
 
   it("runs buy_domain without a card and opens the details page from the name alone, with nothing sent to the orchestrator", async () => {
@@ -2499,7 +2496,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
           said("Fill in the rest there.")
         ).model,
       },
-      stub
+      stub,
+      { DOMAIN_BUY: "on" }
     )
     expect(done.response.status, done.text).toBe(200)
     expect(
@@ -4693,12 +4691,12 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
 
     it("leaves every other card to the cancelling rule", async () => {
       const id = await conversation(me)
-      await turn(me, typed(id, "Put the site on sparkleclean.co.uk."), {
+      await turn(me, typed(id, "Take old.example off the site."), {
         model: scripted(
           calls({
-            id: "call_connect",
-            tool: "connect_domain",
-            input: { name: "sparkleclean.co.uk" },
+            id: "call_remove",
+            tool: "remove_domain",
+            input: { name: "old.example" },
           })
         ).model,
       })
@@ -4712,7 +4710,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       )
       expect(approval).not.toHaveBeenCalled()
       expect(stub.calls).toHaveLength(0)
-      expect((await cardState(id, "call_connect")).state).toBe("output-error")
+      expect((await cardState(id, "call_remove")).state).toBe("output-error")
     })
 
     it("answers only when the tail holds exactly one open card", async () => {
