@@ -279,3 +279,30 @@ test("a new chat's updates are a deck of three that steps with its arrows", asyn
   await expect(deck.getByText("3/3")).toBeVisible()
   await expect(deck.getByText("Call the window supplier")).toBeVisible()
 })
+
+test("a choice pill opens its options and hint, and a cut label shows whole on hover", async ({
+  page,
+}) => {
+  await open(page, "ReviewQuoteForm")
+  await page
+    .getByRole("button", { name: "Vehicle, one choice: show the options" })
+    .first()
+    .click()
+  const options = page.getByRole("dialog", { name: "Vehicle" })
+  await expect(options).toContainText("The minibus seats up to 16")
+  await expect(options.getByRole("listitem")).toHaveText([
+    "Saloon",
+    "Stretch limousine",
+    "Minibus",
+  ])
+  await expect(options).toContainText("Customers pick one.")
+  await page.keyboard.press("Escape")
+  await expect(options).toHaveCount(0)
+  await page
+    .getByText("Anything else we should know before we quote", { exact: true })
+    .first()
+    .hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+    "Anything else we should know before we quote"
+  )
+})

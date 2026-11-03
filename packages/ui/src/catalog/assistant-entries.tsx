@@ -964,13 +964,21 @@ const LIMOUSINE_QUESTIONS = [
   quoteField("journey_date", "Date and time of the journey", "datetime"),
   quoteField("passengers", "Passengers", "number"),
   quoteField("vehicle", "Vehicle", "radio", {
+    hint: "The minibus seats up to 16",
     options: ["Saloon", "Stretch limousine", "Minibus"],
   }),
   quoteField("occasion", "Occasion", "select", {
     required: false,
     options: ["Wedding", "Airport transfer", "Night out", "Business"],
   }),
-  quoteField("notes", "Anything else", "textarea", { required: false }),
+  quoteField(
+    "notes",
+    "Anything else we should know before we quote",
+    "textarea",
+    {
+      required: false,
+    }
+  ),
 ]
 
 /** A `review_quote_form` call in one of its states. */
@@ -2732,8 +2740,18 @@ const assistantCatalog = [
       </div>
     ),
   },
-  {
-    name: "ReviewQuoteForm",
+  // The popover is the choice pill's options and hint.
+  ...(
+    [
+      "ReviewQuoteForm",
+      "Popover",
+      "PopoverTrigger",
+      "PopoverContent",
+      "PopoverTitle",
+      "PopoverDescription",
+    ] as const
+  ).map((name) => ({
+    name,
     render: () => (
       <TrayStates
         height="h-[44rem]"
@@ -2741,7 +2759,7 @@ const assistantCatalog = [
         settled={REVIEW_QUOTE_STATES}
       />
     ),
-  },
+  })),
   // The upload card and the provider that gives it the app's upload.
   ...(["AskUpload", "UploadPhotosProvider"] as const).map((name) => ({
     name,
@@ -3062,20 +3080,23 @@ const assistantCatalog = [
       </FixtureThread>
     ),
   },
-  {
-    name: "BuildQuestionsAddress",
-    render: () => (
-      <AnswerBuildQuestionProvider value={answerSlowly}>
-        <OwnerThread
-          height="h-[32rem]"
-          messages={ADDRESS_QUESTIONS}
-          stored="00000000-0000-4000-8000-0000000000a2"
-        >
-          <BuildQuestionsUI />
-        </OwnerThread>
-      </AnswerBuildQuestionProvider>
-    ),
-  },
+  // Quick replies, as the web address question asks them.
+  ...(["BuildQuestionsAddress", "ReplyPill", "ReplyPills"] as const).map(
+    (name) => ({
+      name,
+      render: () => (
+        <AnswerBuildQuestionProvider value={answerSlowly}>
+          <OwnerThread
+            height="h-[32rem]"
+            messages={ADDRESS_QUESTIONS}
+            stored="00000000-0000-4000-8000-0000000000a2"
+          >
+            <BuildQuestionsUI />
+          </OwnerThread>
+        </AnswerBuildQuestionProvider>
+      ),
+    })
+  ),
   // The question stack and the provider that gives it the app's answer call.
   ...(["BuildQuestionsUI", "AnswerBuildQuestionProvider"] as const).map(
     (name) => ({
