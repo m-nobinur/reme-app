@@ -861,6 +861,12 @@ export function sayProblems(
       `say passes a verdict on the owner's answer ("${verdict}"); note what they said, or say what you'll do with it, without judging it`
     )
   }
+  const promise = say.match(BEYOND)?.[0]
+  if (promise) {
+    problems.push(
+      `say promises "${promise}", which you don't do; you answer enquiries here, ask what a quote needs and follow up, and build the website if they want it`
+    )
+  }
   if (context.leadIn && say.includes("?")) {
     problems.push(
       "say asks a question, but the card under it asks it in its title; lead in with one short line that asks nothing"
@@ -1060,7 +1066,17 @@ const contentWords = (words: string) =>
  * a huge difference to a job", "No problem at all.".
  */
 const VERDICT =
-  /\b(?:makes|will make|'ll make) (?:(?:good|complete|perfect|total|real|great|a lot of) )?sense\b|\b(?:makes|will make|'ll make) (?:a |all the )?(?:(?:huge|big|real|massive|great|world of) )?difference\b|\bno (?:problem|worries)(?: at all)?\b|\b(?:sounds|that's|that is) (?:great|good|perfect|ideal|brilliant|lovely|sensible|smart|spot on)\b|\b(?:great|good|nice|solid|strong|smart|lovely|healthy|broad|wide) (?:mix|range|spread|setup|approach|selection|balance)\b|\b(?:good|helpful|useful) to know\b|\bgives? (?:\w+ )?(?:plenty of|real|extra|more) (?:flexibility|confidence|reassurance)\b/i
+  /\b(?:makes|will make|'ll make) (?:(?:good|complete|perfect|total|real|great|a lot of) )?sense\b|\b(?:makes|will make|'ll make) (?:a |all the )?(?:(?:huge|big|real|massive|great|world of) )?difference\b|\bno (?:problem|worries)(?: at all)?\b|\b(?:sounds|that's|that is) (?:great|good|perfect|ideal|brilliant|lovely|sensible|smart|spot on)\b|\b(?:great|good|nice|solid|strong|smart|lovely|healthy|broad|wide) (?:mix|range|spread|setup|approach|selection|balance)\b|\b(?:good|helpful|useful) to know\b|\bgives? (?:\w+ )?(?:plenty of|real|extra|more) (?:flexibility|confidence|reassurance)\b|\b(?:strong|great|good|real|big|key) (?:selling )?point\b/i
+
+/**
+ * Work the assistant does not do, promised as its own: it answers here,
+ * asks what a quote needs and follows up. Seen in the eval on 2026-11-03,
+ * once the prompt asked it to say what it will do: "I can check
+ * availability across the fleet", "booking consultations". Shortcut: only
+ * these verbs are read; widen when a reply promises another way.
+ */
+const BEYOND =
+  /\bI(?:'ll| will| can)\s+(?:\w+\s+)?(?:book|check (?:\w+ )?availability|schedule|(?:ring|call|phone|text) (?:them|customers|clients|people|back)|send (?:them )?reminders?)\b/i
 
 /**
  * A request for the owner's reply, which a card under say already makes:

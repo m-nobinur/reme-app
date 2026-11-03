@@ -2461,6 +2461,7 @@ describe("the owner's words in say", () => {
       // Seen in the eval after the rewrite, 2026-11-03.
       "Covering Leeds and Bradford in person gives clients plenty of flexibility.",
       "Offering mediation is helpful to know.",
+      "Having every chauffeur DBS checked is a strong selling point.",
     ]) {
       expect(
         sayProblems(say).some((p) => p.startsWith("say passes a verdict")),
@@ -2468,6 +2469,25 @@ describe("the owner's words in say", () => {
       ).toBe(true)
     }
     expect(sayProblems("Does that make sense for your jobs?")).toEqual([])
+  })
+
+  it("refuses a promise of work it does not do", () => {
+    // Seen in the eval on 2026-11-03.
+    for (const say of [
+      "Knowing the vehicle up front means I can check availability across the fleet before quoting.",
+      "I'll book them in for a consultation.",
+    ]) {
+      expect(
+        sayProblems(say).some((p) => p.startsWith("say promises")),
+        say
+      ).toBe(true)
+    }
+    for (const say of [
+      "When an airport run comes in, I'll ask for the flight number.",
+      "I'll call myself Reme.",
+    ]) {
+      expect(sayProblems(say), say).toEqual([])
+    }
   })
 
   it("refuses a word from its own question's examples that the owner never used", () => {
