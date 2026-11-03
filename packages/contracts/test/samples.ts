@@ -1333,7 +1333,6 @@ export const samples: Record<ContractName, unknown> = {
     grants: [
       { kind: "create_reminder", on: false, granted_at: null },
       { kind: "record_review", on: true, granted_at: NOW },
-      { kind: "connect_domain", on: false, granted_at: null },
     ],
   },
   ApprovalGrantSwitch: { kind: "record_review", on: false },

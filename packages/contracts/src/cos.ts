@@ -810,11 +810,7 @@ export const PutOffOutput = z.discriminatedUnion("outcome", [
  * named by the tool that does each. Paying money and a new phone or email on
  * the website are never one of them.
  */
-export const GrantKind = z.enum([
-  "create_reminder",
-  "record_review",
-  "connect_domain",
-])
+export const GrantKind = z.enum(["create_reminder", "record_review"])
 
 /** `offer_grant`'s input: the kind the owner may let run with no card from now on. */
 export const OfferGrantInput = z.strictObject({ kind: GrantKind })

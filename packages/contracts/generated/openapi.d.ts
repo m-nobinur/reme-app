@@ -961,13 +961,13 @@ export interface components {
     }
     ApprovalGrantSwitch: {
       /** @enum {string} */
-      kind: "create_reminder" | "record_review" | "connect_domain"
+      kind: "create_reminder" | "record_review"
       on: boolean
     }
     ApprovalGrants: {
       grants: {
         /** @enum {string} */
-        kind: "create_reminder" | "record_review" | "connect_domain"
+        kind: "create_reminder" | "record_review"
         on: boolean
         granted_at: string | null
       }[]
@@ -9280,7 +9280,7 @@ export interface components {
                 /** @constant */
                 outcome: "granted"
                 /** @enum {string} */
-                kind: "create_reminder" | "record_review" | "connect_domain"
+                kind: "create_reminder" | "record_review"
               }
             | {
                 /** @constant */
@@ -14107,14 +14107,14 @@ export interface components {
     }
     OfferGrantInput: {
       /** @enum {string} */
-      kind: "create_reminder" | "record_review" | "connect_domain"
+      kind: "create_reminder" | "record_review"
     }
     OfferGrantOutput:
       | {
           /** @constant */
           outcome: "granted"
           /** @enum {string} */
-          kind: "create_reminder" | "record_review" | "connect_domain"
+          kind: "create_reminder" | "record_review"
         }
       | {
           /** @constant */
