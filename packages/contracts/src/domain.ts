@@ -597,6 +597,7 @@ export type ConnectMethod = z.infer<typeof ConnectMethod>
 export type DomainTld = z.infer<typeof DomainTld>
 export type DomainPrice = z.infer<typeof DomainPrice>
 export type DomainStemOffer = z.infer<typeof DomainStemOffer>
+export type RowEnding = z.infer<typeof RowEnding>
 export type RegistrantType = z.infer<typeof RegistrantType>
 export type Registrant = z.infer<typeof Registrant>
 export type RegistrantDetails = z.infer<typeof RegistrantDetails>
