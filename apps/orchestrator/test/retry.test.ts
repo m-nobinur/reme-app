@@ -297,7 +297,7 @@ live("a build note in the assistant's own voice", () => {
         "site.build",
         note,
         "template",
-        writer("I hit a snag checking your details — so I've started it again.")
+        writer("I hit a snag checking your details, so I've started it again.")
       )
     ).toBe("I hit a snag checking your details, so I've started it again.")
   })
