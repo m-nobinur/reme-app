@@ -16,7 +16,8 @@ import { SKIP_REPLY } from "@workspace/contracts"
  * `design` answers the design tray: `pick` (default, one option per question)
  * or `skip` (Skip all). `open` answers an open question: `state` (default, the
  * simulator's words from the sheet) or `skip`. `skipAll` skips every skippable
- * card and question.
+ * card and question. `recap` types a correction under the recap instead of
+ * confirming it, and `areaAfter` is what the area must hold after it.
  */
 export const PERSONAS = [
   {
@@ -300,6 +301,8 @@ export const PERSONAS = [
     turns: {
       1: "plumber. derby. boilers leaks bathrooms emergencies. 07700900188",
     },
+    recap: "Change the area, I do Nottingham too.",
+    areaAfter: /nottingham/i,
     cards: {
       pronouns: "he_him",
       tone: "professional",

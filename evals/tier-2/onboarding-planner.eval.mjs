@@ -1,6 +1,6 @@
 import { appendFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { DETAILS_KEYS } from "@workspace/contracts"
+import { DETAILS_KEYS, RECAP_REPLY } from "@workspace/contracts"
 import { priceOf } from "../../apps/api/src/cos/agent.ts"
 import {
   again,
@@ -554,6 +554,9 @@ async function onboard(persona, spec) {
       `no build after ${turns} owner turns; missing ${buildMissing(end).join(", ")}`
     )
   }
+  const area = factOf(sim.facts, "service_area.text")?.text ?? ""
+  if (persona.areaAfter && !persona.areaAfter.test(area))
+    problems.push(`the recap's correction was not kept: ${area}`)
   const missing = REQUIRED.filter((k) => !sim.facts.some((f) => f.key === k))
   if (missing.length > 0)
     problems.push(`required facts missing: ${missing.join(", ")}`)
@@ -725,6 +728,9 @@ function cardAction(persona, card, { quoteChanged }) {
     return { kind: "answer", output: { answers, skip_all: false } }
   }
   if (card.type === "tool-ask_open") {
+    // The recap's confirm pill sends its words; an owner may type a correction.
+    if (input.about === "recap")
+      return { kind: "type", text: persona.recap ?? RECAP_REPLY }
     return input.skippable && (persona.cards.open === "skip" || persona.skipAll)
       ? { kind: "answer", output: { answer: "skipped" } }
       : { kind: "open" }
