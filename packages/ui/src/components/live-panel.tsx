@@ -3,8 +3,6 @@ import {
   CaretDownIcon,
   CaretLeftIcon,
   CaretRightIcon,
-  CircleHalfIcon,
-  CircleIcon,
   GlobeIcon,
   ImageIcon,
   PaintBrushIcon,
@@ -1933,17 +1931,13 @@ function LiveLine({
         >
           {badge.kind === "answer" ? (
             <>
-              <CircleIcon
-                aria-hidden
-                className="size-2 text-primary"
-                weight="fill"
-              />
+              <StateIcon className="size-3.5" state="waiting" />
               {badge.count}
               <span className="sr-only"> waiting on you</span>
             </>
           ) : (
             <>
-              <CircleHalfIcon aria-hidden className="size-3.5" />
+              <StateIcon className="size-3.5" state="working" />
               {badge.minutes === null ? null : `${badge.minutes} min`}
               <span className="sr-only">
                 {badge.minutes === null ? " under way" : " left"}
