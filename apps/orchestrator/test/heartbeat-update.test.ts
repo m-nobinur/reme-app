@@ -512,15 +512,15 @@ describe("a model-written update", () => {
     )
   })
 
-  it("hands the model the moment's brief and keeps the house style in what it returns", async () => {
+  it("hands the model the moment's brief and returns what it wrote", async () => {
     const { kit } = kitFor()
     const brief = "Say why it matters to the business."
     const write = writer(
-      "www.brightclean.co.uk took 3 days — I've let it go for now."
+      "www.brightclean.co.uk took 3 days. I've let it go for now."
     )
     expect(
       await writeUpdate(env, kit, "org", { ...UPDATE, brief }, write)
-    ).toBe("www.brightclean.co.uk took 3 days, I've let it go for now.")
+    ).toBe("www.brightclean.co.uk took 3 days. I've let it go for now.")
     expect(write).toHaveBeenCalledWith(
       "test-key",
       expect.stringMatching(/never point at the screen/),

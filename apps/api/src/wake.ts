@@ -1,4 +1,4 @@
-import { dashesToCommas, type ServerMessage } from "@workspace/contracts"
+import type { ServerMessage } from "@workspace/contracts"
 import {
   chiefStaffId,
   conversationMessages,
@@ -305,8 +305,7 @@ export async function wakeTurn(
       kept = true
       return record(db, "no_change", "quiet")
     }
-    const text = dashesToCommas(reply)
-    if (!vouched(text, trusted))
+    if (!vouched(reply, trusted))
       return record(db, "failed", "unsourced_contact")
     if (heartbeat) {
       const took = await db
@@ -329,7 +328,7 @@ export async function wakeTurn(
         conversationId,
         channel: "in_app",
         message: {
-          text: [text],
+          text: [reply],
           ...(beat?.chip && {
             button: {
               label: beat.chip,
@@ -352,7 +351,7 @@ export async function wakeTurn(
               subject: persona.name
                 ? `An update from ${persona.name}`
                 : "An update on your business",
-              text,
+              text: reply,
             },
           ]
         : []),

@@ -201,7 +201,7 @@ describe("the plan's checks", () => {
     })
   })
 
-  it("keeps every message free of rates, currency, links, markup, dashes and stock images", () => {
+  it("keeps every message free of rates, currency, links, markup and stock images", () => {
     for (const bad of [
       "Our prices start low.",
       "It is £40 an hour.",
@@ -209,7 +209,6 @@ describe("the plan's checks", () => {
       "Pricing tiers are coming.",
       "See https://example.com",
       "See <b>this</b>.",
-      "One thing — then another.",
       "I will handpick stock photos for you.",
       // The replies to "how much does it cost?" on 2026-10-26.
       "Building the website is included as part of our service, so there is no extra charge.",
@@ -1615,8 +1614,7 @@ describe("the plan's parts", () => {
     expect(planParts(checked.checked, s, counter()).slice(0, 2)).toEqual([
       {
         type: "text",
-        // The professional tone it settles drops the model's contraction.
-        text: "I have gone with Reme, she/her, with a professional manner.",
+        text: "I've gone with Reme, she/her, with a professional manner.",
         state: "done",
       },
       {
@@ -2889,29 +2887,6 @@ describe("a streamed turn", () => {
     expect(await plannerInstructions()).toContain(
       "These read as filler, so leave them out"
     )
-  })
-
-  it("fixes a dash, a heading, a table, an emoji and an open ** in code, streamed and whole", async () => {
-    const say =
-      "## Your form\n\nAll set 🎉 — the **area is done.\n\n| Question | Type |\n| --- | --- |\n| Date | date |\n\nWho books you?"
-    const fixed =
-      "Your form\n\nAll set, the area is done.\n\nQuestion, Type\nDate, date\n\nWho books you?"
-    const { out, said } = await streamed([plan({ say })], typed("hello"))
-    expect(out.ok).toBe(true)
-    expect(out.calls).toHaveLength(1)
-    expect(said.join("")).toBe(fixed)
-    if (out.ok) expect(out.checked.plan.say).toBe(fixed)
-    const whole = await planTurn(
-      planner([plan({ say })]).model,
-      PRICE,
-      typed("hello")
-    )
-    expect(whole.calls).toHaveLength(1)
-    if (whole.ok) expect(whole.checked.plan.say).toBe(fixed)
-    // A ** the rest closes streams once it closes.
-    const bold = "Done.\n\n- **Moving\ndate:** removed"
-    const closed = await streamed([plan({ say: bold })], typed("hello"))
-    expect(closed.said.join("")).toBe(bold)
   })
 
   it("offers no photo move: the photos are a tray question", async () => {

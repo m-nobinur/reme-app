@@ -7,7 +7,6 @@ import {
   type CosPrefix,
   DETAILS_KEYS,
   type DetailsStep,
-  dashesToCommas,
   FactValue,
   type FactValueKey,
   FONTS,
@@ -82,12 +81,7 @@ import {
   trayLogoPath,
   voiceOf,
 } from "./onboarding.ts"
-import {
-  firstName,
-  say as inTone,
-  isAsked,
-  question,
-} from "./onboarding-copy.ts"
+import { firstName, isAsked, question } from "./onboarding-copy.ts"
 import {
   DESIGN,
   OPTIONAL_ASKS,
@@ -118,7 +112,7 @@ import { voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "openai/gpt-6.1-terra"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-25"
+export const PLANNER_VERSION = "onboarding-26"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -920,39 +914,6 @@ export function sayProblems(
   }
   return problems
 }
-
-/**
- * Say with what the chat must not show fixed in place rather than refused:
- * a dash, a heading marker, a table, an emoji and a `**` left open. A start
- * of a message (`partial`) stops before an open `**` or an unfinished table
- * row, which the rest may still close, so a start tidied is a start of the
- * whole message tidied.
- */
-export function tidySay(say: string, partial = false): string {
-  const line = say.lastIndexOf("\n") + 1
-  const held = partial && /^\s*\|/.test(say.slice(line))
-  let tidied = dashesToCommas(held ? say.slice(0, line) : say)
-    .replace(/^[ \t]*#{1,6}[ \t]+/gm, "")
-    .replace(/^[ \t]*\|[ \t:|-]*-[ \t:|-]*(?:\n|$)/gm, "")
-    .replace(/^[ \t]*\|.*$/gm, (row) =>
-      row
-        .split("|")
-        .map((cell) => cell.trim())
-        .filter(Boolean)
-        .join(", ")
-    )
-    .replace(EMOJI, "")
-  const open = [...tidied.matchAll(/\*\*/g)]
-  const stray = open.length % 2 === 1 ? open.at(-1)?.index : undefined
-  if (stray !== undefined) {
-    tidied = tidied.slice(0, stray) + (partial ? "" : tidied.slice(stray + 2))
-  }
-  return tidied
-}
-
-/** An emoji, with any space before it and the joiners and modifiers after it. */
-const EMOJI =
-  /[ \t]*(?:\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F)(?:\uFE0F|\p{Emoji_Modifier}|\u200D\p{Extended_Pictographic}\uFE0F?)*/gu
 
 /**
  * Say as the owner reads it once the Markdown renders: no emphasis markers,
@@ -1993,7 +1954,7 @@ const STRINGS = /"(?:[^"\\]|\\.)*"/gs
 const escapeBreaks = (quoted: string) =>
   quoted.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")
 
-/** The model's text as a plan, its say tidied (`tidySay`), or why it is not one, from the schema. */
+/** The model's text as a plan, or why it is not one, from the schema. */
 export function planOf(
   raw: string
 ): { plan: OnboardingPlan } | { errors: string[] } {
@@ -2010,7 +1971,7 @@ export function planOf(
   }
   const plan = OnboardingPlan.safeParse(json)
   return plan.success
-    ? { plan: { ...plan.data, say: tidySay(plan.data.say) } }
+    ? { plan: plan.data }
     : {
         errors: plan.error.issues
           .slice(0, 8)
@@ -2103,15 +2064,13 @@ export async function planTurn(
   const calls: PlanCall[] = []
   const began = Date.now()
   const out = { shown: "" as string, firstChunkMs: null as number | null }
-  // The model writes in the tone, but contractions are not left to it: the
-  // owner reads the chosen tone's words. `shown` keeps the model's text as
-  // tidied, which a retry must begin with. Whole sentences arrive, so no word splits.
-  const tone = voiceOf(s.onboarding)
+  // `shown` keeps the model's own text, which a retry must begin with.
+  // Whole sentences arrive, so no word splits.
   const show = (words: string) => {
     if (!onSay || words.length === 0 || cancel?.aborted) return
     out.firstChunkMs ??= Date.now() - began
     out.shown += words
-    onSay(inTone(tone, words))
+    onSay(words)
   }
   // A build's message waits for its outcome; a settled persona's card sits
   // inside the message. The parts carry either, paced.
@@ -2201,10 +2160,7 @@ export async function planTurn(
         gate = "open"
         context = sayContext(checked.checked.plan, s, checked.checked.after)
       }
-      const whole = tidySay(
-        wholeSentences(partial.say.trimStart()),
-        true
-      ).trimStart()
+      const whole = wholeSentences(partial.say.trimStart())
       // A retry still writing what the owner has already read.
       if (out.shown.startsWith(whole)) return
       if (
@@ -2480,8 +2436,7 @@ export function planParts(
   // The reply's first paragraph introduces the persona, which sits under it
   // and above the rest, the next question.
   const persona = personaOf(s, after)
-  // In the tone's words, as the stream showed them.
-  const said = inTone(voiceOf(s.onboarding), plan.say.trim())
+  const said = plan.say.trim()
   const [intro = "", ...rest] = said.split(/\n\s*\n/)
   const lead = [
     text(persona.length > 0 ? intro : said),

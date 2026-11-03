@@ -1,4 +1,3 @@
-import { dashesToCommas } from "@workspace/contracts"
 import type { TextStreamPart, ToolSet } from "ai"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { INSTRUCTIONS } from "../src/cos/agent.ts"
@@ -31,47 +30,9 @@ const read = async (deltas: string[]) => (await readDeltas(deltas)).join("")
 describe("voiced", () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it("swaps a dash for a comma however the deltas are cut", async () => {
-    const text = "Done — your page is up. It took 9–5 minutes — nearly."
-    for (const cut of [1, 3, 7, text.length]) {
-      const deltas = text.match(new RegExp(`.{1,${cut}}`, "gs")) ?? []
-      expect(await read(deltas)).toBe(
-        "Done, your page is up. It took 9 to 5 minutes, nearly."
-      )
-    }
-  })
-
-  it("reads a range with a currency sign or unit on either side as to", async () => {
-    expect(dashesToCommas("£80–£150")).toBe("£80 to £150")
-    expect(dashesToCommas("£80 – £150 a job")).toBe("£80 to £150 a job")
-    expect(dashesToCommas("10%–20%")).toBe("10% to 20%")
-    expect(dashesToCommas("9am–5pm")).toBe("9am to 5pm")
-    expect(dashesToCommas("£5k—£10k")).toBe("£5k to £10k")
-    expect(dashesToCommas("$40–60")).toBe("$40 to 60")
-    expect(dashesToCommas("Mon–Fri")).toBe("Mon, Fri")
-    const text = "I'd use £80–£150, excluding parts — a rough guide."
-    for (const cut of [1, 2, 3, 5, text.length]) {
-      const deltas = text.match(new RegExp(`.{1,${cut}}`, "gs")) ?? []
-      expect(await read(deltas)).toBe(
-        "I'd use £80 to £150, excluding parts, a rough guide."
-      )
-    }
-  })
-
-  it("passes text through at once, holding back only a trailing space or dash", async () => {
-    expect(await readDeltas(["Your website", " is live", ". Have"])).toEqual([
-      "Your website",
-      " is live",
-      ". Have",
-    ])
-    expect(await readDeltas(["Done ", "— ", "now"])).toEqual(["Done", ", now"])
-  })
-
-  it("keeps a reply without dashes as it was", async () => {
-    expect(await read(["Your website is live. ", "Have a look."])).toBe(
-      "Your website is live. Have a look."
-    )
-    expect(dashesToCommas("a-b")).toBe("a-b")
+  it("passes every delta through as the model wrote it", async () => {
+    const deltas = ["Open Mon–Fri", ", 9am–5pm", " — ", "have a look."]
+    expect(await readDeltas(deltas)).toEqual(deltas)
   })
 
   it("logs a soft hit by kind with the turn id, and never the words", async () => {
