@@ -477,10 +477,9 @@ const KeepTurnAnchor: FC = () => {
 }
 
 /**
- * Keeps the reply's first line at the top until the owner's next send (the
- * viewport scrolls their own message just out of view), and the end of the
- * thread in view. assistant-ui follows the bottom by itself only when the
- * viewport is not anchored to a turn.
+ * Keeps the owner's message at the top with the reply below it until their
+ * next send, and the end of the thread in view. assistant-ui follows the
+ * bottom by itself only when the viewport is not anchored to a turn.
  *
  * - The space assistant-ui holds below a pinned reply is measured here as
  *   well, the moment anything under the owner's message resizes. The footer
@@ -490,7 +489,7 @@ const KeepTurnAnchor: FC = () => {
  *   the tray's height, and the drop stayed.
  * - A footer that appears or grows (the tray) under a reply that already
  *   fills the view covers its last lines: a reader at its end stays there,
- *   and one still at its first line stays there too.
+ *   and one still at the start of the reply stays there too.
  * - The after slot sits in the message group ahead of that space, so a card
  *   landing in it fills the space rather than landing below it.
  * - Between turns, what lands with no turn of the owner's (a message the
@@ -760,9 +759,6 @@ const ThreadRoot: FC<{
         }}
       >
         <ThreadPrimitive.Viewport
-          // The owner's message scrolls just out of view, so the reply's
-          // first line sits at the top.
-          topAnchorMessageClamp={{ tallerThan: "0px", visibleHeight: "0px" }}
           turnAnchor="top"
           data-slot="aui_thread-viewport"
           // Clear of the workspace's floating panel, where there is one; the
