@@ -2737,7 +2737,7 @@ describe("the owner's words in say", () => {
     )
     expect(round1).toContainEqual(
       expect.stringMatching(
-        /^say names 2 of the 3 changes you made and leaves out Garden access/
+        /^say names 2 of the 3 changes the plan makes and leaves out Garden access/
       )
     )
     expect(round1).toContainEqual(
@@ -2748,6 +2748,57 @@ describe("the owner's words in say", () => {
         "Done, the form now has these changes:\n\n- **What needs doing:** customers can tick more than one\n- **Garden access:** added *Not sure*\n- **Photos:** now required"
       )
     ).toEqual([])
+
+    // A new key on a question the owner can't see changed is no change; a
+    // rewritten label they didn't ask for is (eval, 2026-11-03).
+    const limo = call(
+      "tool-review_quote_form",
+      { fields: FIELDS, note: null },
+      counter()
+    )
+    const car = {
+      key: "vehicle",
+      label: "Which car",
+      type: "radio" as const,
+      required: true,
+      hint: null,
+      options: ["Stretch limo", "Executive saloon"],
+    }
+    const rekeyed = (fields: typeof FIELDS, say: string) =>
+      errorsOf(
+        plan({
+          pending_card: "declined",
+          next: {
+            kind: "review_quote_form",
+            fields: [...fields, car],
+            note: null,
+          },
+          say,
+        }),
+        typed(
+          "Can you add which car they want? The stretch or the saloon.",
+          onboarding(EVERYTHING),
+          limo
+        )
+      )
+    const renamed = FIELDS.map((f) => ({ ...f, key: `${f.key}_info` }))
+    expect(
+      rekeyed(renamed, "Added a question on which car they want.")
+    ).toEqual([])
+    expect(
+      rekeyed(
+        renamed.map((f) =>
+          f.key === "passengers_info"
+            ? { ...f, label: "Number of passengers" }
+            : f
+        ),
+        "Added a question on which car they want."
+      )
+    ).toContainEqual(
+      expect.stringMatching(
+        /^say names 1 of the 3 changes the plan makes and leaves out Number of passengers, Passengers; change only what the owner asked for/
+      )
+    )
 
     const recap = call("tool-ask_open", { about: "recap" }, counter())
     const corrected = typed(
@@ -2774,7 +2825,7 @@ describe("the owner's words in say", () => {
       )
     ).toContainEqual(
       expect.stringMatching(
-        /^say names 1 of the 2 changes you made and leaves out business\.email/
+        /^say names 1 of the 2 changes the plan makes and leaves out business\.email/
       )
     )
     expect(

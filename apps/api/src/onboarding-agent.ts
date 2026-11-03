@@ -999,7 +999,7 @@ export function sayProblems(
     : (context.changes ?? []).filter((c) => !c.names.some((n) => words.has(n)))
   if (unnamed.length > 0) {
     problems.push(
-      `say names ${(context.changes?.length ?? 0) - unnamed.length} of the ${context.changes?.length} changes you made and leaves out ${unnamed.map((c) => c.what).join(", ")}; name every change, in a bulleted list when there are three or more`
+      `say names ${(context.changes?.length ?? 0) - unnamed.length} of the ${context.changes?.length} changes the plan makes and leaves out ${[...new Set(unnamed.map((c) => c.what))].join(", ")}; change only what the owner asked for, keeping the rest exactly as it was, and name each change you make, in a bulleted list when there are three or more`
     )
   }
   return problems
@@ -1554,6 +1554,19 @@ const FACT_NAMES: Partial<Record<FactValueKey, string>> = {
   "business.name": "name",
 }
 
+/** Three-letter words that name nothing. */
+const SHORT = new Set(
+  "the and for you any are how its our was who why can has had not but all one per out off use own new old".split(
+    " "
+  )
+)
+
+/** A question label's naming words: "Which car" is named by "car". */
+const labelWords = (label: string) =>
+  wordsOf(label)
+    .filter((w) => w.length >= 3 && !COMMON.has(w) && !SHORT.has(w))
+    .map(stem)
+
 /** A value's words, as list items compare. */
 const valueWords = (value: unknown) =>
   new Set(contentWords(JSON.stringify(value ?? "")))
@@ -1576,11 +1589,22 @@ function changesOf(
     next.kind === "review_quote_form"
   ) {
     const before = (answering.input as ReviewQuoteFormInput).fields
-    const keys = [...new Set([...before, ...next.fields].map((f) => f.key))]
-    return keys.flatMap((key) => {
-      const was = before.find((f) => f.key === key)
-      const now = next.fields.find((f) => f.key === key)
-      if (JSON.stringify(was) === JSON.stringify(now)) return []
+    // A question is the same one under a new key if its label is: the owner never sees keys.
+    const label = (f: { label: string }) => wordsOf(f.label).join(" ")
+    const pairs = next.fields.map((now) => ({
+      now,
+      was:
+        before.find((f) => f.key === now.key) ??
+        before.find((f) => label(f) === label(now)),
+    }))
+    const removed = before
+      .filter((f) => !pairs.some((p) => p.was === f))
+      .map((was) => ({ was, now: undefined }))
+    const shown = (f?: (typeof before)[number]) =>
+      f && JSON.stringify([f.label, f.type, f.required, f.hint, f.options])
+    return [...pairs, ...removed].flatMap(({ was, now }) => {
+      if (shown(was) === shown(now)) return []
+      const key = now?.key ?? was?.key ?? ""
       const own = [...valueWords(was), ...valueWords(now)]
       const moved = own.filter(
         (w) => !valueWords(was).has(w) || !valueWords(now).has(w)
@@ -1591,7 +1615,7 @@ function changesOf(
         {
           what: now?.label ?? was?.label ?? key,
           names: [
-            ...contentWords(`${was?.label ?? ""} ${now?.label ?? ""}`),
+            ...labelWords(`${was?.label ?? ""} ${now?.label ?? ""}`),
             ...key.split("_").map(stem),
             ...moved,
             ...(ticks ? ["tick", "multiple", "several"] : []),

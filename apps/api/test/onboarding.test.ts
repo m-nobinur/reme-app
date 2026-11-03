@@ -1613,12 +1613,12 @@ describe("the onboarding copy", () => {
       recap(voice({ business: "Sparkle_Clean" }), {
         services: ["*Deep* cleans", "Ovens"],
         area: null,
-        customers: null,
+        customers: "Mostly families — and two letting agents",
         phone: null,
         email: "first_last@sparkle.invalid",
       })
     ).toBe(
-      "Here's what I've noted for **Sparkle\\_Clean**:\n\n- **Services:** \\*Deep\\* cleans and ovens\n- **Contact:** first\\_last@sparkle.invalid\n\nHave I got that right?"
+      "Here's what I've noted for **Sparkle\\_Clean**:\n\n- **Services:** \\*Deep\\* cleans and ovens\n- **Customers:** mostly families, and two letting agents\n- **Contact:** first\\_last@sparkle.invalid\n\nHave I got that right?"
     )
   })
 
