@@ -19,7 +19,7 @@ test("a choice is a native group, with Other opening the owner's own words", asy
   await expect(pending(page)).toHaveCount(6)
   const industry = pending(page).nth(0)
   await expect(industry.getByRole("radio")).toHaveCount(7)
-  await industry.getByRole("button", { name: "Submit" }).click()
+  await industry.getByRole("button", { name: "Done" }).click()
   await expect(industry.getByRole("alert")).toHaveText("Pick one first.")
   // Arrow keys move the choice, as in any radio group.
   await industry.getByRole("radio").first().focus()
@@ -31,7 +31,7 @@ test("a choice is a native group, with Other opening the owner's own words", asy
   await industry.getByText("Something else").click()
   const words = industry.getByRole("textbox", { name: "Something else" })
   await expect(words).toHaveAttribute("placeholder", "Your industry")
-  await industry.getByRole("button", { name: "Submit" }).click()
+  await industry.getByRole("button", { name: "Done" }).click()
   await expect(industry.getByRole("alert")).toHaveText(
     "Write your answer first."
   )
@@ -67,7 +67,7 @@ const shownIds = (card: ReturnType<typeof pending>) =>
 test("a choice of two answers on one tap, with no Submit", async ({ page }) => {
   await open(page, "AskChoice")
   const build = pending(page).nth(5)
-  await expect(build.getByRole("button", { name: "Submit" })).toHaveCount(0)
+  await expect(build.getByRole("button", { name: "Done" })).toHaveCount(0)
   await expect(build.getByRole("radio")).toHaveCount(0)
   await expect(
     build.getByRole("button", { name: "Yes, build it for me" })
@@ -110,7 +110,7 @@ test("a colour card shows four, brings in four others, and takes a picked colour
   await expect(field).toHaveValue(dark)
   await expect(card.getByText(/reads well/)).toBeVisible()
   await field.fill("#12")
-  await card.getByRole("button", { name: "Submit" }).click()
+  await card.getByRole("button", { name: "Done" }).click()
   await expect(card.getByRole("alert")).toHaveText(
     "A colour code is # and six digits or letters from a to f."
   )

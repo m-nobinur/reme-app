@@ -404,14 +404,10 @@ function DetailsTray({
       collapsed={collapsed}
       onBack={page > 0 ? back : undefined}
       onCollapsedChange={setCollapsed}
-      onForward={last ? undefined : forward}
       page={{ index: page, total: keys.length }}
       pick={input.step === "assistant" ? { onPick: pickForMe } : undefined}
       question={askOf(key)}
-      submit={{
-        label: last ? "Looks good" : "Next",
-        form: `${id}-form`,
-      }}
+      submit={{ form: `${id}-form` }}
     >
       <form
         id={`${id}-form`}

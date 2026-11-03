@@ -256,9 +256,6 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
         collapsed={collapsed}
         onBack={index > 0 ? () => go(index - 1) : undefined}
         onCollapsedChange={setCollapsed}
-        onForward={
-          index < questions.length - 1 ? () => go(index + 1) : undefined
-        }
         page={{ index, total: questions.length }}
         question={question.text}
         skip={
@@ -273,7 +270,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
         submit={
           open
             ? {
-                label: sending ? "Sending" : "Send",
+                label: sending ? "Sending" : undefined,
                 form: `${id}-${index}`,
                 disabled: sending,
               }

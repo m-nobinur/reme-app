@@ -69,9 +69,9 @@ import { createPortal } from "react-dom"
  * the composer at its width and radius, with a gap between the two. The
  * call sits in the transcript like any card and draws itself in the slot the
  * thread keeps there (`Docked`), so it stays put while the owner scrolls or
- * types. One page shows at a time: a header with the question and a
- * collapse toggle, the body, and a footer with back and forward, Skip and
- * the primary button. Collapsed it is one row, the question and "2 of 4".
+ * types. One page shows at a time: the question as its title with a
+ * collapse toggle, the body, and a footer with back, Skip and the primary
+ * button. Collapsed it is one row, the question and "2 of 4".
  * The tray never touches the composer, so a message typed while it is open
  * is an ordinary turn. On a phone it stays in the flow above the composer,
  * at most 60svh with its own scroll, so the composer stays reachable.
@@ -1019,20 +1019,20 @@ type TrayFrameProps = {
   page?: { index: number; total: number } | undefined
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
-  /** Back and forward; without one its arrow is disabled. */
+  /** Back a page; without it the arrow is disabled. Forward is the primary button. */
   onBack?: (() => void) | undefined
-  onForward?: (() => void) | undefined
   skip?: { label: string; onSkip: () => void; disabled?: boolean } | undefined
   /** Pick for me: the tray finishes at once, on its defaults for what is left. Another label makes it any second action. */
   pick?: { onPick: () => void; disabled?: boolean; label?: string } | undefined
   /**
    * The primary button. With `form` it submits that form, so Enter in a
-   * field submits too; without, Enter in a field presses it. A step that
-   * acts differently passes its own label and action here.
+   * field submits too; without, Enter in a field presses it. It reads Next
+   * on each page and Done on the last; a step that acts differently, such
+   * as an upload, passes its own label.
    */
   submit?:
     | {
-        label: ReactNode
+        label?: ReactNode
         onSubmit?: () => void
         form?: string
         disabled?: boolean
@@ -1045,7 +1045,11 @@ type TrayFrameProps = {
   children: ReactNode
 }
 
-/** The tray's frame: header, scrolling body and footer, or the one collapsed row. */
+/**
+ * Every card's frame, so they cannot drift apart: one surface with the
+ * question as its title, the scrolling body, and a footer under a thin rule.
+ * Or the one collapsed row.
+ */
 function TrayFrame({
   question,
   hint,
@@ -1053,7 +1057,6 @@ function TrayFrame({
   collapsed,
   onCollapsedChange,
   onBack,
-  onForward,
   skip,
   pick,
   submit,
@@ -1072,6 +1075,7 @@ function TrayFrame({
   const focusComposer = useFocusComposer()
   const paged = page !== undefined && page.total > 1
   const count = paged ? `${page.index + 1} of ${page.total}` : null
+  const forward = paged && page.index < page.total - 1 ? "Next" : "Done"
   // A one-tap question has nothing under its options: no empty footer band,
   // and the body takes the card's own corners.
   const footed = paged || status != null || skip || pick || submit
@@ -1203,7 +1207,7 @@ function TrayFrame({
         </button>
       ) : (
         <>
-          <div className="flex items-center gap-2 border-border border-b py-3 pr-4 pl-5">
+          <div className="flex items-center gap-2 pt-3 pr-4 pl-5">
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <h2 className="font-medium text-base" id={`${id}-question`}>
                 {question}
@@ -1235,7 +1239,7 @@ function TrayFrame({
               <CaretDownIcon aria-hidden />
             </Button>
           </div>
-          <div className="relative flex min-h-0 flex-col [--body:var(--muted)] dark:[--body:var(--background)]">
+          <div className="relative flex min-h-0 flex-col [--body:var(--card)]">
             {/* relative: the visually hidden radios inside are placed against
                 this scroller, so it clips them. Placed against the frame
                 instead, the ones in a folded section stretched the thread
@@ -1249,7 +1253,7 @@ function TrayFrame({
               onScroll={measure}
               ref={bodyRef}
             >
-              <div className="flex flex-col gap-3 p-3" ref={contentRef}>
+              <div className="flex flex-col gap-3 px-5 py-3" ref={contentRef}>
                 {children}
               </div>
             </div>
@@ -1265,32 +1269,19 @@ function TrayFrame({
             ) : null}
           </div>
           {footed ? (
-            <div className="flex flex-wrap items-center gap-1 p-4">
+            <div className="flex flex-wrap items-center gap-1 border-border border-t px-4 py-3">
               {paged ? (
-                <>
-                  <Button
-                    aria-label="Previous question"
-                    className={ACCENT_RING}
-                    disabled={!onBack}
-                    onClick={onBack}
-                    size="icon"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <CaretLeftIcon aria-hidden />
-                  </Button>
-                  <Button
-                    aria-label="Next question"
-                    className={ACCENT_RING}
-                    disabled={!onForward}
-                    onClick={onForward}
-                    size="icon"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <CaretRightIcon aria-hidden />
-                  </Button>
-                </>
+                <Button
+                  aria-label="Previous question"
+                  className={ACCENT_RING}
+                  disabled={!onBack}
+                  onClick={onBack}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                >
+                  <CaretLeftIcon aria-hidden />
+                </Button>
               ) : null}
               <span
                 className="min-w-0 flex-1 px-1 text-muted-foreground text-xs"
@@ -1332,7 +1323,7 @@ function TrayFrame({
                   onClick={submit.form ? undefined : submit.onSubmit}
                   type={submit.form ? "submit" : "button"}
                 >
-                  {submit.label}
+                  {submit.label ?? forward}
                 </Button>
               ) : null}
             </div>
@@ -1361,7 +1352,7 @@ type QuestionTrayProps = {
   toolCallId: string
   /** An answer, as the owner leaves its question. Store it; a reload resumes after it. */
   onAnswer?: (id: string, answer: Answer) => void
-  /** Looks good or Pick for me. */
+  /** Done or Pick for me. */
   onFinish: (output: AskDesignOutput) => void
   start?: Start
   /** The business's name, which the lettering previews are set in. */
@@ -1373,10 +1364,10 @@ type QuestionTrayProps = {
  * The design questions of a build, one page each, and two for the logo:
  * whether they have one, then the upload or the designs. A page shows the
  * options as a native radio group, or checkboxes on a question that takes
- * several, Write your own, and Next, which reads Looks good on the last.
+ * several, Write your own, and Next, which reads Done on the last.
  * Answers are code's:
  * `onAnswer` gets each one as the owner leaves its question, `onFinish` the
- * `AskDesignOutput` on Looks good or Pick for me.
+ * `AskDesignOutput` on Done or Pick for me.
  */
 function QuestionTray({
   input,
@@ -1607,17 +1598,12 @@ function QuestionTray({
       hint={multiple ? "Pick any that fit" : null}
       onBack={index === 0 ? undefined : () => go(index - 1, false)}
       onCollapsedChange={setCollapsed}
-      onForward={
-        designsSubmit
-          ? designsSubmit.disabled
-            ? undefined
-            : designsSubmit.onSubmit
-          : last || !ready
-            ? undefined
-            : () => go(index + 1, true)
-      }
       page={{ index, total }}
-      pick={{ onPick: () => finish(true), disabled: finishing && !ready }}
+      pick={
+        answer === undefined
+          ? { onPick: () => finish(true), disabled: finishing && !ready }
+          : undefined
+      }
       question={
         logo && !choice ? "Your logo" : (question.question ?? "Choose one")
       }
@@ -1630,7 +1616,7 @@ function QuestionTray({
       }
       submit={
         designsSubmit || {
-          label: last || finishing ? "Looks good" : "Next",
+          label: finishing ? "Done" : undefined,
           onSubmit: next,
           disabled: !ready,
         }

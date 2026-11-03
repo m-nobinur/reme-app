@@ -102,7 +102,7 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
               }
             : undefined
         }
-        submit={{ label: "Submit", form: `${id}-form` }}
+        submit={{ form: `${id}-form` }}
       >
         <form
           className="flex flex-col gap-2"

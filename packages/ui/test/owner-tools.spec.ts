@@ -43,7 +43,7 @@ test("a question refuses a wrong answer in place, before anything is sent", asyn
     .first()
   const form = tray.locator("form")
   await form.getByLabel("Email address").fill("")
-  await tray.getByRole("button", { name: "Submit" }).click()
+  await tray.getByRole("button", { name: "Done" }).click()
   await expect(form.getByRole("alert")).toHaveText(
     "Enter a valid email address."
   )

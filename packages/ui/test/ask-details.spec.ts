@@ -3,7 +3,7 @@ import { axe, open } from "./helpers"
 
 /**
  * The details tray: one field per page, each checked as the owner leaves it,
- * the picks as native radio groups, and Looks good on the last page. Answered
+ * the picks as native radio groups, and Done on the last page. Answered
  * and skipped asks give way to the owner's reply. Each open ask is docked in
  * a thread of its own.
  */
@@ -52,7 +52,7 @@ test("the contact tray checks the phone, then starts the email from the sign-in"
     )
   ).toBeVisible()
   await contact.getByRole("textbox", { name: "Email address" }).fill("nope")
-  await contact.getByRole("button", { name: "Looks good" }).click()
+  await contact.getByRole("button", { name: "Done" }).click()
   await expect(contact.getByRole("alert")).toHaveText([
     "Enter a valid email address.",
   ])
@@ -91,9 +91,7 @@ test("the assistant tray asks for a name, pronouns, a look and a tone, a page ea
   await expect(
     assistant.getByRole("group", { name: "Tone" }).getByRole("radio")
   ).toHaveCount(3)
-  await expect(
-    assistant.getByRole("button", { name: "Looks good" })
-  ).toBeVisible()
+  await expect(assistant.getByRole("button", { name: "Done" })).toBeVisible()
 })
 
 test("a filled assistant tray opens on its first page, a pick stays editable a page away", async ({
@@ -106,7 +104,7 @@ test("a filled assistant tray opens on its first page, a pick stays editable a p
     assistant.getByRole("textbox", { name: "Assistant's name" })
   ).toHaveValue("Reme")
   // Every pick stays editable a page away.
-  await assistant.getByRole("button", { name: "Next question" }).click()
+  await assistant.getByRole("button", { name: "Next", exact: true }).click()
   await expect(
     assistant.getByRole("radio", { name: "they/them" })
   ).toBeChecked()

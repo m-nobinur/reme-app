@@ -275,33 +275,34 @@ it("draws a changed brief before moving on, then moves on from the new round", a
   })
   await vi.waitFor(() => expect(tray.control("Redesign my logo")).toBeDefined())
 
-  await tray.press("Next question")
+  await tray.press("Redesign my logo")
   expect(fake.drawn).toHaveLength(1)
   expect(tray.header()).toBe("Your logo")
   await vi.waitFor(() => expect(fake.kept).toEqual([uuid(20)]))
   await vi.waitFor(() => expect(tray.control("Next")).toBeDefined())
   expect(tray.control("Redesign my logo")).toBeUndefined()
 
-  await tray.press("Next question")
+  await tray.press("Next")
   expect(tray.header()).toBe("Which lettering suits you?")
   expect(fake.drawn).toHaveLength(1)
 })
 
-it("Pick for me keeps the pick on the page, unsaved, and the logo held", async () => {
+it("Pick for me shows only while the page is empty, and keeps the logo held", async () => {
   const fake = fakes()
   const tray = await render(fake.services, {
     start: { index: 2, answers: { logo: { logo: logo(uuid(10)) } } },
   })
-  await tray.press("Serif")
   await tray.press("Pick for me")
   expect(tray.onFinish).toHaveBeenCalledWith({
-    answers: { logo: { logo: logo(uuid(10)) }, lettering: { choice: "serif" } },
+    answers: { logo: { logo: logo(uuid(10)) } },
     skip_all: true,
   })
   expect(fake.drawn).toHaveLength(0)
+  await tray.press("Serif")
+  expect(tray.control("Pick for me")).toBeUndefined()
 })
 
-it("Pick for me draws a changed logo brief first and finishes on its first design", async () => {
+it("Pick for me leaves a logo page that holds a logo", async () => {
   const fake = fakes([OLD])
   const tray = await render(fake.services, {
     start: {
@@ -311,13 +312,7 @@ it("Pick for me draws a changed logo brief first and finishes on its first desig
     },
   })
   await vi.waitFor(() => expect(tray.control("Redesign my logo")).toBeDefined())
-  await tray.press("Pick for me")
-  await vi.waitFor(() => expect(tray.onFinish).toHaveBeenCalledOnce())
-  expect(fake.drawn).toHaveLength(1)
-  expect(tray.onFinish.mock.calls[0]?.[0]).toEqual({
-    answers: { logo: { logo: logo(uuid(20)) } },
-    skip_all: true,
-  })
+  expect(tray.control("Pick for me")).toBeUndefined()
 })
 
 it("Pick for me with nothing picked takes the first design drawn", async () => {

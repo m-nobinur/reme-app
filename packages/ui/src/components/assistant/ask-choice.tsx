@@ -661,9 +661,7 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
               }
             : undefined
         }
-        submit={
-          oneTapOf(input) ? undefined : { label: "Submit", form: `${id}-form` }
-        }
+        submit={oneTapOf(input) ? undefined : { form: `${id}-form` }}
       >
         <ChoiceForm
           draftId={props.toolCallId}
