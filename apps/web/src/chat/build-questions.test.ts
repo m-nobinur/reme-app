@@ -100,9 +100,7 @@ it("says the address answer as the owner's message, and nothing for Not now", ()
   expect(said(ADDRESS_ASK.yes, { kind: "value", value: "sparkle.co.uk" })).toBe(
     "Yes, it's sparkle.co.uk"
   )
-  expect(said(ADDRESS_ASK.yes, { kind: "skipped" })).toBe(
-    "Yes, I have a web address"
-  )
+  expect(said(ADDRESS_ASK.yes, { kind: "skipped" })).toBe(ADDRESS_ASK.yes)
   expect(said(ADDRESS_ASK.no, { kind: "closed" })).toBe(ADDRESS_ASK.no)
   expect(said(ADDRESS_ASK.later, { kind: "closed" })).toBeNull()
 })

@@ -1731,6 +1731,8 @@ export interface components {
       )[]
       skippable: boolean
       ideas?: string[]
+      /** Format: email */
+      sign_in_email?: string
     }
     AskDetailsOutput:
       | {

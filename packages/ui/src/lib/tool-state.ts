@@ -432,28 +432,29 @@ export const SKIPPED = "Skipped"
 /** The tray button that leaves the rest to the assistant, and the owner's reply when pressed. */
 export const PICK_FOR_ME = "Pick for me"
 
+type DesignQuestion = AskDesignInput["questions"][number]
+type DesignAnswer = AskDesignOutput["answers"][string]
+
 /**
- * A finished design tray as the owner's words: what they picked on each
- * question, in the tray's order and the words it showed, "Ocean · Outfit and
- * Figtree · Text left, photo right", their own words as typed. A question
- * skipped or never opened is left out; with nothing picked it reads Skipped.
- * Pick for me reads as itself: the owner asked the assistant to choose.
+ * Each question a finished design tray answered, in the tray's order, with
+ * the words the owner reads for it: "Ocean", "Outfit and Figtree", "Text
+ * left, photo right", their own words as typed. A question skipped or never
+ * opened is left out.
  */
-export function designText(
+export function designAnswers(
   input: AskDesignInput | null,
   output: AskDesignOutput
-): string {
-  if (output.skip_all) return PICK_FOR_ME
-  const picked = (input?.questions ?? []).flatMap((each) => {
-    const answer = output.answers[each.id]
+): { question: DesignQuestion; answer: DesignAnswer; text: string }[] {
+  return (input?.questions ?? []).flatMap((question) => {
+    const answer = output.answers[question.id]
     if (!answer || "skipped" in answer) return []
     const label = (id: string) => {
-      const option = each.card.options.find((o) => o.id === id)
+      const option = question.card.options.find((o) => o.id === id)
       return option ? (layoutLook(option)?.hero ?? option.label) : id
     }
     const photos = (count: number) =>
       count === 1 ? "1 photo" : `${count} photos`
-    return [
+    const text =
       "own" in answer
         ? answer.own
         : "choices" in answer
@@ -468,9 +469,23 @@ export function designText(
                   : answer.create
                     ? `${photos(answer.photos.length)}, the rest made for me`
                     : photos(answer.photos.length)
-                : label(answer.choice),
-    ]
+                : label(answer.choice)
+    return [{ question, answer, text }]
   })
+}
+
+/**
+ * A finished design tray as the owner's words: each of `designAnswers`,
+ * "Ocean · Outfit and Figtree · Text left, photo right". With nothing picked
+ * it reads Skipped. Pick for me reads as itself: the owner asked the
+ * assistant to choose.
+ */
+export function designText(
+  input: AskDesignInput | null,
+  output: AskDesignOutput
+): string {
+  if (output.skip_all) return PICK_FOR_ME
+  const picked = designAnswers(input, output).map((each) => each.text)
   return picked.length > 0 ? picked.join(" · ") : SKIPPED
 }
 

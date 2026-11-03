@@ -6,6 +6,7 @@ import {
 } from "@assistant-ui/react"
 import { CopyIcon } from "@phosphor-icons/react"
 import {
+  ADDRESS_ASK,
   type AskChoiceInput,
   type DomainPurchaseStatus,
   FONTS,
@@ -54,6 +55,7 @@ import {
   ThreadPending,
 } from "@workspace/ui/components/assistant/thread-pending"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
+import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
 import {
   UpdateDeck,
   UpdateKindIcon,
@@ -75,10 +77,14 @@ import {
 } from "@workspace/ui/components/tooltip"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
-import { BROKEN } from "@workspace/ui/lib/tool-state"
+import { BROKEN, designText } from "@workspace/ui/lib/tool-state"
 import { type ReactNode, useState } from "react"
 import { ICON } from "./panel-entries"
-import { INPUT as ASK_DESIGN_INPUT } from "./tray-entries"
+import {
+  INPUT as ASK_DESIGN_INPUT,
+  DESIGN_ANSWERS,
+  TRAY_SERVICES,
+} from "./tray-entries"
 
 /**
  * The chat surface's catalog entries. They live apart from the rest because
@@ -261,10 +267,11 @@ const SUGGESTIONS: ThreadSuggestion[] = [
   { prompt: "What is on my website now?" },
 ]
 
-/** A thread with the owner app's composer settings. */
+/** A thread as the app mounts it for the owner: its composer settings, and thumbs on every reply with words. */
 function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
   return (
     <FixtureThread
+      rates
       {...props}
       settings={{
         assistant: "Reme",
@@ -550,6 +557,7 @@ const askDetails = (
     skippable?: boolean
     prefill?: unknown[]
     ideas?: string[]
+    sign_in_email?: string
   } = {}
 ) => ({
   args: {
@@ -557,6 +565,7 @@ const askDetails = (
     prefill: (extra.prefill ?? []) as [],
     skippable: extra.skippable ?? false,
     ...(extra.ideas ? { ideas: extra.ideas } : {}),
+    ...(extra.sign_in_email ? { sign_in_email: extra.sign_in_email } : {}),
   },
   isError: extra.isError,
   result: extra.result,
@@ -609,10 +618,10 @@ const ASK_DETAILS_STATES: ThreadMessageLike[] = [
 const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
   {
     content: [
-      question(
-        "How can customers reach Brightclean? I have filled in the email you signed up with."
-      ),
-      askDetails("contact", { prefill: [SIGN_IN_EMAIL] }),
+      question("How can customers reach Brightclean?"),
+      askDetails("contact", {
+        sign_in_email: SIGN_IN_EMAIL.value.address,
+      }),
     ],
     role: "assistant",
     status: WAITING,
@@ -622,7 +631,7 @@ const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
       question("Last thing: what should your assistant be called?"),
       askDetails("assistant", {
         skippable: true,
-        ideas: ["Marcus", "Priya"],
+        ideas: ["Poppy", "Hannah", "Rosa"],
       }),
     ],
     role: "assistant",
@@ -646,11 +655,21 @@ const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
       question("Here's your assistant as it comes. Change anything you like."),
       askDetails("assistant", {
         prefill: [
-          { key: "assistant.name", value: { name: "Reme" } },
           { key: "assistant.pronouns", value: { id: "they_them" } },
           { key: "assistant.avatar", value: { id: "reme" } },
           { key: "assistant.tone", value: { id: "friendly" } },
         ],
+      }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("And the email?"),
+      askDetails("contact", {
+        prefill: [{ key: "business.phone", value: { e164: "+447700900123" } }],
+        sign_in_email: SIGN_IN_EMAIL.value.address,
       }),
     ],
     role: "assistant",
@@ -844,8 +863,8 @@ const ASK_CHOICE_OPEN: ThreadMessageLike[] = [
         "Your website turns visitors into enquiries. Shall I build it for you?"
       ),
       askChoice("build_for_me", [
-        { id: "yes", label: "Yes, build it for me" },
-        { id: "skip", label: "Skip" },
+        { id: "yes", label: "Yes, build my website" },
+        { id: "skip", label: "No, I already have one" },
       ]),
     ],
     role: "assistant",
@@ -951,13 +970,21 @@ const LIMOUSINE_QUESTIONS = [
   quoteField("journey_date", "Date and time of the journey", "datetime"),
   quoteField("passengers", "Passengers", "number"),
   quoteField("vehicle", "Vehicle", "radio", {
+    hint: "The minibus seats up to 16",
     options: ["Saloon", "Stretch limousine", "Minibus"],
   }),
   quoteField("occasion", "Occasion", "select", {
     required: false,
     options: ["Wedding", "Airport transfer", "Night out", "Business"],
   }),
-  quoteField("notes", "Anything else", "textarea", { required: false }),
+  quoteField(
+    "notes",
+    "Anything else we should know before we quote",
+    "textarea",
+    {
+      required: false,
+    }
+  ),
 ]
 
 /** A `review_quote_form` call in one of its states. */
@@ -1930,6 +1957,44 @@ const BUILD_QUESTIONS: ThreadMessageLike[] = [
   },
 ]
 
+/** The web address stack: a quick choice, then the name after Yes. */
+const ADDRESS_QUESTIONS: ThreadMessageLike[] = [
+  {
+    content: [
+      {
+        text: "While I build the site in the background, let's sort out your web address.",
+        type: "text",
+      },
+      {
+        type: "data",
+        name: "build_questions",
+        data: {
+          kind: "address",
+          questions: [
+            {
+              id: "00000000-0000-4000-8000-0000000000d1",
+              text: ADDRESS_ASK.have,
+              input: {
+                kind: "choice",
+                options: [ADDRESS_ASK.yes, ADDRESS_ASK.no, ADDRESS_ASK.later],
+              },
+              skippable: false,
+            },
+            {
+              id: "00000000-0000-4000-8000-0000000000d2",
+              text: ADDRESS_ASK.name,
+              input: { kind: "text", maxLength: 253, email: false },
+              skippable: true,
+            },
+          ],
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
 /** Stores every answer after a moment, so the tick and the move on show. */
 const answerSlowly = () =>
   new Promise<null>((done) => setTimeout(() => done(null), 400))
@@ -2681,8 +2746,18 @@ const assistantCatalog = [
       </div>
     ),
   },
-  {
-    name: "ReviewQuoteForm",
+  // The popover is the choice pill's options and hint.
+  ...(
+    [
+      "ReviewQuoteForm",
+      "Popover",
+      "PopoverTrigger",
+      "PopoverContent",
+      "PopoverTitle",
+      "PopoverDescription",
+    ] as const
+  ).map((name) => ({
+    name,
     render: () => (
       <TrayStates
         height="h-[44rem]"
@@ -2690,7 +2765,7 @@ const assistantCatalog = [
         settled={REVIEW_QUOTE_STATES}
       />
     ),
-  },
+  })),
   // The upload card and the provider that gives it the app's upload.
   ...(["AskUpload", "UploadPhotosProvider"] as const).map((name) => ({
     name,
@@ -2736,6 +2811,34 @@ const assistantCatalog = [
       </SaveDesignAnswerProvider>
     ),
   })),
+  {
+    // The owner's reply to a finished design tray, as chips.
+    name: "DesignReply",
+    render: () => (
+      <TrayServicesProvider value={TRAY_SERVICES}>
+        <FixtureThread
+          height="h-[22rem]"
+          messages={[
+            {
+              content: [
+                question("Let's choose how your website looks."),
+                {
+                  args: ASK_DESIGN_INPUT,
+                  result: DESIGN_ANSWERS,
+                  toolCallId: "design_done",
+                  toolName: "ask_design",
+                  type: "tool-call" as const,
+                },
+              ],
+              role: "assistant",
+              status: DONE,
+            },
+            reply(designText(ASK_DESIGN_INPUT, DESIGN_ANSWERS)),
+          ]}
+        />
+      </TrayServicesProvider>
+    ),
+  },
   {
     name: "SitePictures",
     render: () => (
@@ -3011,6 +3114,23 @@ const assistantCatalog = [
       </FixtureThread>
     ),
   },
+  // Quick replies, as the web address question asks them.
+  ...(["BuildQuestionsAddress", "ReplyPill", "ReplyPills"] as const).map(
+    (name) => ({
+      name,
+      render: () => (
+        <AnswerBuildQuestionProvider value={answerSlowly}>
+          <OwnerThread
+            height="h-[32rem]"
+            messages={ADDRESS_QUESTIONS}
+            stored="00000000-0000-4000-8000-0000000000a2"
+          >
+            <BuildQuestionsUI />
+          </OwnerThread>
+        </AnswerBuildQuestionProvider>
+      ),
+    })
+  ),
   // The question stack and the provider that gives it the app's answer call.
   ...(["BuildQuestionsUI", "AnswerBuildQuestionProvider"] as const).map(
     (name) => ({

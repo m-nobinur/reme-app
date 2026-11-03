@@ -454,8 +454,9 @@ export const DETAILS_KEYS = {
 
 /**
  * `ask_details`'s input: one card for a few related facts, such as the phone
- * and email together. `prefill` holds the values to start from, such as the
- * sign-in email, only for the step's own keys. The copy, the inputs and the
+ * and email together. `prefill` holds the values to start from, only for the
+ * step's own keys. The sign-in email is never one: `sign_in_email` offers it
+ * as a chip under the business email field. The copy, the inputs and the
  * pronoun and tone options are the web's, by key, as for `ask_fact`.
  */
 export const AskDetailsInput = z
@@ -465,6 +466,8 @@ export const AskDetailsInput = z
     skippable: z.boolean(),
     /** Names written for this business's assistant, offered after Reme. The assistant step only. */
     ideas: z.array(z.string().trim().min(1).max(40)).max(3).optional(),
+    /** The owner's sign-in email, offered for the business email. The contact step only. */
+    sign_in_email: z.email().max(254).optional(),
   })
   .refine(
     (card) =>

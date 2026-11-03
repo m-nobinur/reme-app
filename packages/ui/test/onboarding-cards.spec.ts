@@ -16,10 +16,10 @@ test("a choice is a native group, with Other opening the owner's own words", asy
   page,
 }) => {
   await open(page, "AskChoice")
-  await expect(pending(page)).toHaveCount(6)
+  await expect(pending(page)).toHaveCount(5)
   const industry = pending(page).nth(0)
   await expect(industry.getByRole("radio")).toHaveCount(7)
-  await industry.getByRole("button", { name: "Submit" }).click()
+  await industry.getByRole("button", { name: "Done" }).click()
   await expect(industry.getByRole("alert")).toHaveText("Pick one first.")
   // Arrow keys move the choice, as in any radio group.
   await industry.getByRole("radio").first().focus()
@@ -31,7 +31,7 @@ test("a choice is a native group, with Other opening the owner's own words", asy
   await industry.getByText("Something else").click()
   const words = industry.getByRole("textbox", { name: "Something else" })
   await expect(words).toHaveAttribute("placeholder", "Your industry")
-  await industry.getByRole("button", { name: "Submit" }).click()
+  await industry.getByRole("button", { name: "Done" }).click()
   await expect(industry.getByRole("alert")).toHaveText(
     "Write your answer first."
   )
@@ -64,18 +64,22 @@ const shownIds = (card: ReturnType<typeof pending>) =>
         .filter((value) => value !== "__other__")
     )
 
-test("a choice of two answers on one tap, with no Submit", async ({ page }) => {
+test("a choice of two short answers is quick replies above the composer", async ({
+  page,
+}) => {
   await open(page, "AskChoice")
-  const build = pending(page).nth(5)
-  await expect(build.getByRole("button", { name: "Submit" })).toHaveCount(0)
-  await expect(build.getByRole("radio")).toHaveCount(0)
+  const build = page
+    .locator('[data-slot="ask-choice"]')
+    .getByRole("group", { name: "Would you like me to build your website?" })
+  await expect(build.getByRole("button")).toHaveText([
+    "Yes, build my website",
+    "No, I already have one",
+  ])
   await expect(
-    build.getByRole("button", { name: "Yes, build it for me" })
-  ).toBeVisible()
-  // The card's frame is the region the question names.
-  await expect(build.getByRole("region")).toHaveAccessibleName(
-    "You'll see it before it goes live"
-  )
+    page.locator('[data-slot="ask-choice"]').getByRole("region", {
+      name: "Would you like me to build your website?",
+    })
+  ).toHaveCount(0)
 })
 
 test("a colour card shows four, brings in four others, and takes a picked colour", async ({
@@ -110,7 +114,7 @@ test("a colour card shows four, brings in four others, and takes a picked colour
   await expect(field).toHaveValue(dark)
   await expect(card.getByText(/reads well/)).toBeVisible()
   await field.fill("#12")
-  await card.getByRole("button", { name: "Submit" }).click()
+  await card.getByRole("button", { name: "Done" }).click()
   await expect(card.getByRole("alert")).toHaveText(
     "A colour code is # and six digits or letters from a to f."
   )
@@ -134,7 +138,7 @@ test("an answered choice reads back as the owner's reply", async ({ page }) => {
   ])
   const done = page
     .locator('[data-slot="ask-choice"]')
-    .filter({ hasNot: page.locator("form") })
+    .filter({ hasNot: page.locator("form, [data-slot=reply-pills]") })
   // One overtaken by a typed message leaves nothing; a broken one says so.
   await expect(done).toHaveCount(1)
   await expect(done.nth(0)).toContainText("did not come through")
@@ -274,4 +278,51 @@ test("a new chat's updates are a deck of three that steps with its arrows", asyn
   await deck.getByRole("button", { name: "Previous update" }).click()
   await expect(deck.getByText("3/3")).toBeVisible()
   await expect(deck.getByText("Call the window supplier")).toBeVisible()
+})
+
+test("a choice pill opens its options and hint, and a cut label shows whole on hover", async ({
+  page,
+}) => {
+  await open(page, "ReviewQuoteForm")
+  await page
+    .getByRole("button", { name: "Vehicle, one choice: show the options" })
+    .first()
+    .click()
+  const options = page.getByRole("dialog", { name: "Vehicle" })
+  await expect(options).toContainText("The minibus seats up to 16")
+  await expect(options.getByRole("listitem")).toHaveText([
+    "Saloon",
+    "Stretch limousine",
+    "Minibus",
+  ])
+  await expect(options).toContainText("Customers pick one.")
+  await page.keyboard.press("Escape")
+  await expect(options).toHaveCount(0)
+  await page
+    .getByText("Anything else we should know before we quote", { exact: true })
+    .first()
+    .hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+    "Anything else we should know before we quote"
+  )
+})
+
+test("a finished design tray reads back as chips: the logo, colours, a pair in its own face", async ({
+  page,
+}) => {
+  await open(page, "DesignReply")
+  const bubble = page.locator('[data-slot="aui_user-message-root"]')
+  await expect(bubble.locator("img")).toHaveCount(1)
+  await expect(bubble.getByText("Outfit and Figtree")).toHaveCSS(
+    "font-family",
+    /^"?Outfit"?,/
+  )
+  for (const words of [
+    "Logo",
+    "Text left, photo in an arch",
+    "Photos made for me",
+    "Services, About",
+  ]) {
+    await expect(bubble.getByText(words, { exact: true })).toBeVisible()
+  }
 })

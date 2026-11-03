@@ -75,7 +75,7 @@ export const FACT_INPUTS = {
         label: "Phone number",
         type: "tel",
         autoComplete: "tel",
-        placeholder: "+44 161 496 0000",
+        placeholder: "07700 900123",
         invalid: "Enter a valid number customers can ring.",
         check: (value) => typeof value === "string" && dialable(value),
         // What cannot be read stays as typed, for the check to name.
@@ -184,7 +184,6 @@ export const FACT_INPUTS = {
         label: "Assistant's name",
         type: "text",
         maxLength: 40,
-        placeholder: "Reme",
       },
     ],
   },

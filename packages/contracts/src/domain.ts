@@ -151,24 +151,24 @@ export function ownDomain(email: string): string | null {
 /**
  * The tray question "Do you already have a web address?" (`kind: "address"`)
  * and its answers: one place for the sender, the answer handler and the card.
- * A Yes is followed by a text page for the name, which No and Not now close.
+ * A Yes is followed by a text page for the name, which No and Skip for now close.
  */
 export const ADDRESS_ASK = {
   have: "Do you already have a web address?",
   name: "What is it?",
-  yes: "Yes",
+  yes: "Yes, I have one",
   no: "No, help me get one",
-  later: "Not now",
+  later: "Skip for now",
 } as const
 
 /**
  * The owner's words for a settled address stack, sent as their next message
  * so a normal turn acts on them: the name they typed, or that they have one.
- * Null for Not now, which needs no reply.
+ * Null for Skip for now, which needs no reply.
  */
 export function addressReply(choice: string, name?: string): string | null {
   if (choice === ADDRESS_ASK.yes)
-    return name ? `Yes, it's ${name}` : "Yes, I have a web address"
+    return name ? `Yes, it's ${name}` : ADDRESS_ASK.yes
   return choice === ADDRESS_ASK.no ? ADDRESS_ASK.no : null
 }
 

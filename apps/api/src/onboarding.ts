@@ -23,6 +23,7 @@ import {
   FONTS,
   INDUSTRIES,
   type LogoPath,
+  NAME_IDEAS,
   ONBOARDING_GOAL,
   PAGES,
   PALETTES,
@@ -351,8 +352,8 @@ const CHOICES: Record<
   }),
   build_for_me: () => ({
     options: plain([
-      { id: "yes", label: "Yes, build it for me" },
-      { id: "skip", label: "Skip" },
+      { id: "yes", label: "Yes, build my website" },
+      { id: "skip", label: "No, I already have one" },
     ]),
     multiple: false,
     preselected: [],
@@ -458,12 +459,12 @@ export const factCard = (
 }
 
 /**
- * The assistant as it comes, for the picks the org does not hold yet, so
- * the card opens filled and one Looks good keeps them all. The face is the
- * first one drawn for she/her.
+ * The assistant as it comes, for the picks the org does not hold yet: the
+ * pronouns, face and tone the card opens on, which one Looks good keeps. The
+ * face is the first one drawn for she/her. The name is never prefilled: the
+ * card offers `nameIdeas` and Pick for me takes the first.
  */
-const PERSONA: [FactValue, FactValue, FactValue, FactValue] = [
-  { key: "assistant.name", value: { name: "Reme" } },
+const PERSONA: [FactValue, FactValue, FactValue] = [
   { key: "assistant.pronouns", value: { id: "she_her" } },
   {
     key: "assistant.avatar",
@@ -472,24 +473,34 @@ const PERSONA: [FactValue, FactValue, FactValue, FactValue] = [
   { key: "assistant.tone", value: { id: "professional" } },
 ]
 
+/** The names the assistant card offers: those written for this business, else the house ones. */
+const nameIdeas = (o: Onboarding): readonly string[] =>
+  o.prepared?.assistant_names?.length ? o.prepared.assistant_names : NAME_IDEAS
+
+/** The assistant as Pick for me sets it: the first name idea and `PERSONA`. */
+const pickedPersona = (o: Onboarding): FactValue[] => [
+  { key: "assistant.name", value: { name: nameIdeas(o)[0] ?? "Reme" } },
+  ...PERSONA,
+]
+
 /** Pick for me left every assistant field as it comes, rather than keeping some the owner set. */
-const asCome = (card: PersonaCard) => {
+const asCome = (card: PersonaCard, o: Onboarding) => {
   const held: Record<string, unknown> = {
     "assistant.name": { name: card.name },
     "assistant.pronouns": { id: card.pronouns },
     "assistant.avatar": { id: card.avatar },
     "assistant.tone": { id: card.tone },
   }
-  return PERSONA.every(
+  return pickedPersona(o).every(
     ({ key, value }) => JSON.stringify(held[key]) === JSON.stringify(value)
   )
 }
 
 /**
  * What a details card opens on: the step's facts, each one the org holds
- * filled in, the sign-in email offered as the business's until one is held,
- * and the assistant as it comes where nothing is held. Pick for me sends
- * exactly this, tapped or typed.
+ * filled in, and the assistant's pronouns, face and tone as they come where
+ * nothing is held. The sign-in email is offered beside the card, never put
+ * in it. Pick for me sends this with a name, tapped or typed.
  */
 const prefillOf = (step: DetailsStep, o: Onboarding): FactValue[] => {
   const held = DETAILS_KEYS[step].flatMap((key) => {
@@ -497,16 +508,20 @@ const prefillOf = (step: DetailsStep, o: Onboarding): FactValue[] => {
     // A held key's own value: the pairing the compiler cannot follow through a loop.
     return value === undefined ? [] : [{ key, value } as FactValue]
   })
+  const unheld = (fact: FactValue) => !has(o, fact.key)
+  return step === "contact" ? held : [...held, ...PERSONA.filter(unheld)]
+}
+
+/** The sign-in email, while the business has none, for the contact card to offer. */
+const signInEmail = (o: Onboarding) => {
+  if (has(o, "business.email")) return undefined
   const email = FactValue.safeParse({
     key: "business.email",
     value: { address: o.ownerEmail ?? "" },
   })
-  const unheld = (fact: FactValue) => !has(o, fact.key)
-  return step === "contact"
-    ? !has(o, "business.email") && email.success
-      ? [...held, email.data]
-      : held
-    : [...held, ...PERSONA.filter(unheld)]
+  return email.success && email.data.key === "business.email"
+    ? email.data.value.address
+    : undefined
 }
 
 /** A details card, opened on what `prefillOf` gives. */
@@ -516,15 +531,15 @@ export const detailsCard = (
   newId: () => string
 ) => {
   const prefill = prefillOf(step, o)
-  // Names written for this business, when the background call has them.
-  const ideas = step === "assistant" ? o.prepared?.assistant_names : undefined
+  const email = step === "contact" ? signInEmail(o) : undefined
   return call(
     "tool-ask_details",
     AskDetailsInput.parse({
       step,
       prefill,
       skippable: false,
-      ...(ideas?.length ? { ideas } : {}),
+      ...(step === "assistant" && { ideas: [...nameIdeas(o)] }),
+      ...(email && { sign_in_email: email }),
     }),
     newId
   )
@@ -1912,7 +1927,14 @@ function pickFor(part: ToolPart, o: Onboarding): Answer | null {
   const step = stepOf(part)
   // The assistant's card answers as its Pick for me button does: the owner's own kept, the rest as the card opens.
   if (step === "assistant") {
-    return { kind: "facts", facts: prefillOf(step, o), persona: "picked" }
+    return {
+      kind: "facts",
+      facts: [
+        ...prefillOf(step, o),
+        ...(has(o, "assistant.name") ? [] : pickedPersona(o).slice(0, 1)),
+      ],
+      persona: "picked",
+    }
   }
   const palette = firstPalettes(o.orgId)[0] as PaletteId
   const font = FONTS[0]?.id
@@ -2039,7 +2061,7 @@ export function withChoice(
         persona.data,
         answer?.kind !== "facts" || answer.persona !== "picked"
           ? "stated"
-          : asCome(persona.data)
+          : asCome(persona.data, o)
             ? "picked"
             : "kept"
       )

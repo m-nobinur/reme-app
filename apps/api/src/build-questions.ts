@@ -1,5 +1,4 @@
 import {
-  ADDRESS_ASK,
   BuildQuestions,
   ErrorEnvelope,
   FactValue,
@@ -235,7 +234,7 @@ const ADDRESS_LATER_DAYS = 7
  * The owner's answer to "Do you already have a web address?" on the address
  * task. A Yes changes nothing here: the card's reply carries the name into a
  * normal turn, which connects it. A No means finding out is over and a name
- * is next; Not now puts the task off. Both close the page that asks for the
+ * is next; Skip for now puts the task off. Both close the page that asks for the
  * name, which the owner will not see. The stack as stored.
  */
 async function answerAddress(
@@ -246,9 +245,12 @@ async function answerAddress(
   value: unknown
 ): Promise<BuildQuestions> {
   const [ask, name] = held.stack.questions
-  if (question.id !== ask?.id || value === ADDRESS_ASK.yes) return held.stack
+  // By place, so a stack stored under older labels reads the same way.
+  const way =
+    ask?.input.kind === "choice" ? ask.input.options.indexOf(String(value)) : -1
+  if (question.id !== ask?.id || way === 0) return held.stack
   const task = await openTask(db, orgId, "address")
-  if (value === ADDRESS_ASK.no) {
+  if (way === 1) {
     await setStep(db, task, "find_out", { state: "done" })
     await setStep(db, task, "choose", {
       state: "blocked",
