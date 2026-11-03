@@ -55,9 +55,62 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
       className="aui-md"
       components={markdownComponents}
       disallowedElements={["img"]}
+      preprocess={settled}
       defer
     />
   )
+}
+
+const MARKER = /^\s*(?:[-*+]|\d+[.)])\s+/
+
+/**
+ * Text as it streams in, without the Markdown its last line has opened and
+ * not closed: a bullet with no words yet, which reads as an empty item or
+ * turns the line above into a heading, and bold or italics still open, which
+ * show as raw asterisks until the closing ones arrive. Earlier lines are
+ * whole. Literal stars ("5 * 3", "asterisk*") are left as they are.
+ * Shortcut: asterisks only, as the replies use; `_` emphasis is not closed.
+ */
+export function settled(text: string): string {
+  const cut = text.lastIndexOf("\n") + 1
+  const line = text.slice(cut)
+  const marker = line.match(MARKER)?.[0] ?? ""
+  let body = line.slice(marker.length)
+  if (/^\s*(?:[-*+]|\d+[.)]?)?\s*$/.test(line)) return text.slice(0, cut)
+  const open: string[] = []
+  let close = ""
+  for (const run of body.matchAll(/\*+/g)) {
+    const at = run.index
+    const after = body[at + run[0].length] ?? ""
+    const closes = at > 0 && !/\s/.test(body[at - 1] as string)
+    const opens = after !== "" && !/\s/.test(after)
+    // An opener with nothing after it yet.
+    if (!closes && after === "") {
+      body = body.slice(0, at)
+      break
+    }
+    let n = run[0].length
+    while (n > 0) {
+      const top = open.at(-1)
+      if (closes && top && n >= top.length) {
+        open.pop()
+        n -= top.length
+      } else if (closes && top && after === "") {
+        // Half of a closing pair: "**Area:*".
+        open.pop()
+        close = "*".repeat(top.length - n)
+        n = 0
+      } else if (opens) {
+        const each = n >= 2 ? "**" : "*"
+        open.push(each)
+        n -= each.length
+      } else break
+    }
+  }
+  if (marker && !body.trim()) return text.slice(0, cut)
+  // A closer after a space closes nothing: "**What **".
+  const closers = `${close}${open.reverse().join("")}`
+  return `${text.slice(0, cut)}${marker}${closers ? body.trimEnd() : body}${closers}`
 }
 
 /** The part of a hast node this file reads and writes. */

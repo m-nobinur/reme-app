@@ -879,7 +879,7 @@ export default async function run() {
           console.log(`${line.from}: ${line.text}`)
         if (r.form)
           console.log(
-            `Quote form: ${r.form.map((f) => `${f.label} [${f.type}${f.required ? "*" : ""}]`).join("; ")}`
+            `Quote form: ${r.form.map((f) => `${f.label} [${f.type}${f.required ? "*" : ""}${f.options ? `: ${f.options.join(" / ")}` : ""}]`).join("; ")}`
           )
         for (const problem of r.problems) console.log(`  problem: ${problem}`)
       }

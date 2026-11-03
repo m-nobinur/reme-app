@@ -40,7 +40,7 @@ const SOFT: readonly [RegExp, string][] = [
     "a chatbot opener",
   ],
   [
-    /\b(let me know if you (need|have|want)|feel free to|don't hesitate to|i hope this helps)\b/i,
+    /\b(let me know (if|whether)|feel free to|don't hesitate to|i hope this helps)\b/i,
     "a sign-off",
   ],
   [/\bas your (business )?assistant\b/i, '"as your assistant"'],

@@ -390,13 +390,13 @@ describe("the onboarding steps", () => {
     const [said, card, ...rest] = onboardingStep(start({ facts }), counter())
     expect(rest).toEqual([])
     expect((said as { text: string }).text).toBe(
-      "Here's what I've noted: end of tenancy cleans, oven cleaning and MOT tests. You cover Bristol and Bath. Your customers are mostly families. They reach you on 01632 960001 or hello@brightclean.invalid.\n\nHave I got that right?"
+      `Here's what I've noted for **${BUSINESS}**:\n\n- **Services:** end of tenancy cleans, oven cleaning and MOT tests\n- **Area:** Bristol and Bath\n- **Customers:** mostly families\n- **Contact:** 01632 960001, hello@brightclean.invalid\n\nHave I got that right?`
     )
     expect(card).toMatchObject({
       type: "tool-ask_open",
       input: { about: "recap" },
     })
-    // Without the customers, the contact line names who it means.
+    // A fact not held has no row.
     const plain = onboardingStep(
       start({
         facts: facts.filter((f) => f.key !== "business.audience"),
@@ -404,9 +404,7 @@ describe("the onboarding steps", () => {
       }),
       counter()
     )
-    expect((plain[0] as { text: string }).text).toContain(
-      "Customers reach you on"
-    )
+    expect((plain[0] as { text: string }).text).not.toContain("Customers")
     // A yes settles it; without a model a correction cannot be read.
     const asked = card as ToolPart
     expect(typedAnswer(asked, RECAP_REPLY)).toEqual({
@@ -1577,6 +1575,12 @@ describe("the onboarding copy", () => {
       expect(text, name).not.toMatch(/\bReme\b/)
       if (NAMED.includes(name)) expect(text, name).toContain(BUSINESS)
       if (tone === "professional") expect(text, name).not.toContain("!")
+      // Easy to scan: short paragraphs, bold that closes, no headings,
+      // tables or emoji.
+      expect(text, name).not.toMatch(/^#|^\s*\||\p{Emoji_Presentation}/mu)
+      expect((text.match(/\*\*/g)?.length ?? 0) % 2, name).toBe(0)
+      for (const paragraph of text.split(/\n\s*\n/))
+        expect(paragraph.split(/\s+/).length, name).toBeLessThanOrEqual(50)
       expect(voiceProblems(text, { assistantNamed: true }), name).toEqual({
         hard: [],
         soft: [],
@@ -1602,6 +1606,20 @@ describe("the onboarding copy", () => {
       )
       expect(seen.size, name).toBeGreaterThanOrEqual(2)
     }
+  })
+
+  it("reads the business back as labelled bullets, the owner's own asterisks kept as characters", () => {
+    expect(
+      recap(voice({ business: "Sparkle_Clean" }), {
+        services: ["*Deep* cleans", "Ovens"],
+        area: null,
+        customers: "Mostly families — and two letting agents",
+        phone: null,
+        email: "first_last@sparkle.invalid",
+      })
+    ).toBe(
+      "Here's what I've noted for **Sparkle\\_Clean**:\n\n- **Services:** \\*Deep\\* cleans and ovens\n- **Customers:** mostly families, and two letting agents\n- **Contact:** first\\_last@sparkle.invalid\n\nHave I got that right?"
+    )
   })
 
   it("asks the quote question with a short example answer", () => {
@@ -1691,7 +1709,9 @@ describe("the onboarding copy", () => {
       expect(text).toMatch(/anything you don't take on/)
       expect(text).toMatch(/the better I can answer/)
       expect(text).not.toMatch(/[—–]|\bReme\b/)
-      expect(text.split("\n\n").length).toBeLessThanOrEqual(2)
+      // Short paragraphs, one idea each, the one thing asked in bold.
+      expect(text.split("\n\n").length).toBeLessThanOrEqual(3)
+      expect(text).toContain(`**What does ${BUSINESS} do?**`)
       seen.add(text)
       // No name from the sign-in: no stray comma or space before it.
       const nameless = (

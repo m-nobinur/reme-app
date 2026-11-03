@@ -64,6 +64,12 @@ const lower = (text: string) =>
 
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
+/** The owner's words as Markdown shows them: their own asterisks and underscores stay characters. */
+const md = (text: string) => text.replace(/[\\`*_]/g, "\\$&")
+
+/** The few words the owner's eye should land on. */
+const bold = (text: string) => `**${md(text)}**`
+
 /** ", Sam" when the owner's name is known. */
 const comma = (name: string) => (name ? `, ${name}` : "")
 
@@ -147,10 +153,14 @@ export function opener(v: Voice): string {
     pick(v, "opener", [
       `${hi} I'll be looking after enquiries and quotes for ${b} from now on, and I can build you a website too if you need one.
 
-First I'd like to get to know the business. What does ${b} do? Tell me the way you'd explain it to a new customer: the main jobs, and anything you don't take on. The more detail you give me, the better I can answer your customers.`,
+First I'd like to get to know the business. ${bold(`What does ${b} do?`)} Tell me the way you'd explain it to a new customer: the main jobs, and anything you don't take on.
+
+The more detail you give me, the better I can answer your customers.`,
       `${hi} From now on I'll handle enquiries and quotes for ${b}, and if you need a website, I can build that too.
 
-To start, I'd like to get to know the business. What does ${b} do? Describe it the way you would to a new customer: the main jobs, and anything you don't take on. The more you tell me, the better I can answer for you.`,
+To start, I'd like to get to know the business. ${bold(`What does ${b} do?`)} Describe it the way you would to a new customer: the main jobs, and anything you don't take on.
+
+The more you tell me, the better I can answer for you.`,
     ])
   )
 }
@@ -177,8 +187,8 @@ const bare = (text: string) =>
 
 /**
  * The business read back before the assistant's own setup, from the facts
- * exactly as held, so the owner sees what was recorded and can correct it.
- * A fact not held is left out.
+ * exactly as held, one labelled bullet each, so the owner sees what was
+ * recorded and can correct it. A fact not held is left out.
  */
 export function recap(
   v: Voice,
@@ -190,16 +200,19 @@ export function recap(
     email: string | null
   }
 ): string {
-  const contact = [held.phone, held.email].filter(Boolean).join(" or ")
-  const lines = [
-    held.services.length > 0 &&
-      `Here's what I've noted: ${listed(held.services.map(lower))}.`,
-    held.area && `You cover ${bare(held.area)}.`,
-    held.customers && `Your customers are ${lower(bare(held.customers))}.`,
-    contact &&
-      `${held.customers ? "They" : "Customers"} reach you on ${contact}.`,
-  ].filter(Boolean)
-  return say(v, `${lines.join(" ")}\n\nHave I got that right?`)
+  const rows = [
+    ["Services", listed(held.services.map(lower))],
+    ["Area", held.area && bare(held.area)],
+    ["Customers", held.customers && lower(bare(held.customers))],
+    ["Contact", [held.phone, held.email].filter(Boolean).join(", ")],
+  ].flatMap(([label, value]) =>
+    // The owner's own dash would read as ours: a comma instead.
+    value ? [`- **${label}:** ${md(value).replace(/\s*[—–]\s*/g, ", ")}`] : []
+  )
+  return say(
+    v,
+    `Here's what I've noted for ${bold(v.business)}:\n\n${rows.join("\n")}\n\nHave I got that right?`
+  )
 }
 
 type Asked = Exclude<StepId, "upload" | "build" | "manual_builder" | "recap">
@@ -280,7 +293,7 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   ],
   // Phase 2 to 3: the new identity, then the website and the quote page.
   build_for_me: (v) => {
-    const ask = `Would you like me to build a website for ${v.business}?`
+    const ask = bold(`Would you like me to build a website for ${v.business}?`)
     const thanks = (line: string) => (v.picked ? "" : `${line}\n\n`)
     return [
       `${thanks(`Thanks${comma(v.owner)}.`)}I can also build ${v.business} a website, with a Request a quote page that sends each enquiry straight to me with the details you need to reply. If you already have a site, choose Skip for now.
@@ -296,8 +309,12 @@ ${ask}`,
   },
   // Phase 4: the last questions; their answer starts the build.
   design: (v) => [
-    `Last, the look of ${v.business}: the colours, lettering, your logo, the layout, photos and pages, all in the questions below. Leave any to me except the logo, which you can upload or have me create. Then I'll start building.`,
-    `Now the look of ${v.business}, the last step before I build. The questions below cover colours, lettering, your logo, layout, photos and pages. Upload a logo or let me create one, and leave the rest to me if you'd rather.`,
+    `Last, the look of ${v.business}: the colours, lettering, your logo, the layout, photos and pages, all in the questions below.
+
+Leave any to me except the logo, which you can upload or have me create. Then I'll start building.`,
+    `Now the look of ${v.business}, the last step before I build. The questions below cover colours, lettering, your logo, layout, photos and pages.
+
+Upload a logo or let me create one, and leave the rest to me if you'd rather.`,
   ],
   template: (v) => [
     `Let's design it together. First, the layout. Which of these feels most like ${v.business}?`,
@@ -404,10 +421,14 @@ export function started(v: Voice, uploaded: boolean): string {
   return say(
     v,
     pick(v, "started", [
-      `${v.picked ? "" : `That's everything I need: ${services(v)}, your style${uploaded ? " and your photos" : ""}.\n\n`}I've started building the website for ${v.business} in the background. You'll see progress in the activity panel, and there's no need to wait: keep chatting or ask me anything while it runs. I'll let you know as soon as the first draft is ready.`,
+      `${v.picked ? "" : `That's everything I need: ${services(v)}, your style${uploaded ? " and your photos" : ""}.\n\n`}I've started building the website for ${v.business} in the background.
+
+You'll see progress in the activity panel, and there's no need to wait: keep chatting or ask me anything while it runs. I'll let you know as soon as the first draft is ready.`,
       `${v.picked ? "" : `That's everything, thank you${comma(v.owner)}. `}I'm starting on the website for ${v.business} now.
 
-It builds in the background, and you can follow along in the activity panel. There's no need to sit and watch. Ask me anything in the meantime, and I'll tell you the moment the first draft is ready.`,
+It builds in the background, and you can follow along in the activity panel.
+
+There's no need to sit and watch. Ask me anything in the meantime, and I'll tell you the moment the first draft is ready.`,
       `All set. The build for ${v.business} is under way.
 
 It takes a little while, so keep chatting with me if you like. Progress shows in the activity panel, and I'll let you know here as soon as there's a draft to look at.`,
@@ -431,8 +452,12 @@ export function manualEnd(v: Voice): string {
   return say(
     v,
     pick(v, "manual_end", [
-      `No problem${comma(v.owner)}. If you already have a website, connecting it to me is coming soon, so stay tuned. Until then I'm here for enquiries, quotes and follow-ups, and if you'd like me to build ${v.business} a site after all, just ask.`,
-      `That's fine${comma(v.owner)}. Connecting a website you already have is on its way, so stay tuned. In the meantime I can help with enquiries, quotes and anything else ${v.business} needs, and I can build a site whenever you want one.`,
+      `No problem${comma(v.owner)}. If you already have a website, connecting it to me is coming soon, so stay tuned.
+
+Until then I'm here for enquiries, quotes and follow-ups, and if you'd like me to build ${v.business} a site after all, just ask.`,
+      `That's fine${comma(v.owner)}. Connecting a website you already have is on its way, so stay tuned.
+
+In the meantime I can help with enquiries, quotes and anything else ${v.business} needs, and I can build a site whenever you want one.`,
     ])
   )
 }
