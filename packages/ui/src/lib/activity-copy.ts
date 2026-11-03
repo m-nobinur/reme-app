@@ -462,6 +462,7 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
   inspect_domain: {
     kind: "domain",
     working: [
+      onDomain((d) => `Checking ${d}`),
       onDomain((d) => `Looking up ${d}`),
       onDomain((d) => `Finding out about ${d}`),
       "Looking up your domain",
@@ -513,6 +514,7 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     working: [
       withArg("query", (q) => `Searching for ${q}`),
       withArg("query", (q) => `Looking for names like ${q}`),
+      "Looking for names",
       "Searching for a domain",
       "Looking for a free name",
     ],

@@ -115,7 +115,9 @@ describe("tool lines", () => {
       toolLine("find_domain", "working", {
         query: "0f8f8431-aaaa-bbbb-cccc-1234567890ab",
       })
-    ).toMatch(/^(Searching for a domain|Looking for a free name)$/)
+    ).toMatch(
+      /^(Looking for names|Searching for a domain|Looking for a free name)$/
+    )
     // A stored call still carries the step the model once wrote.
     const stored = {
       step: "Adding the new photos to the home page",
