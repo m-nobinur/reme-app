@@ -42,7 +42,7 @@ import {
  * score of 4 or more on 90% of samples.
  *
  *   node --import ./evals/json-imports.mjs --experimental-transform-types \
- *     evals/voice.mjs [--onboarding path] [--cos path] [--judge]
+ *     evals/voice.mjs [--onboarding path] [--cos path] [--only source] [--judge]
  *
  * `evals/rubric/score.mjs` grades a build's HTML against the design rubric,
  * so it cannot grade chat text; the judge here is a small prompt of its own.
@@ -296,12 +296,13 @@ export default async function run() {
     arg("--onboarding", here("./voice/onboarding-says.json"))
   )
   const cos = cosSamples(arg("--cos", here("./voice/cos-replies.json")))
+  const only = arg("--only", null)
   const samples = [
     ...onboarding,
     ...scriptSamples(),
     ...noticeSamples(),
     ...cos,
-  ]
+  ].filter((s) => !only || s.source === only)
   const checked = check(samples)
   for (const source of ["onboarding", "script", "notice", "cos"]) {
     const mine = checked.filter((c) => c.source === source)
