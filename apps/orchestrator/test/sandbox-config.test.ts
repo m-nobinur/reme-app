@@ -46,7 +46,11 @@ describe("the sandbox credential rule", () => {
     // And what it sets is literal paths, none of them a secret.
     const env =
       /const EXEC_ENV = \{([^}]*)\}/.exec(read("src/container.ts"))?.[1] ?? ""
-    const entries = env.trim().split(/,\s*/).filter(Boolean)
+    const entries = env
+      .replace(/\/\/[^\n]*/g, "")
+      .trim()
+      .split(/,\s*/)
+      .filter(Boolean)
     expect(entries.length).toBeGreaterThan(0)
     for (const entry of entries) {
       expect(entry).toMatch(/^[A-Z_]+: ("[^"]*"|CA)$/)

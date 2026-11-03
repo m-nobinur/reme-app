@@ -106,6 +106,7 @@ vi.mock("@workspace/db", () => ({
   facts: {},
   eq: () => ({}),
   listOrgIds: async () => [...orgList],
+  logFailure: () => undefined,
   // What each look finds: the question the build waits on and whether it is
   // answered. With nothing scripted, the round's question, answered.
   waitedOn: async () => {
