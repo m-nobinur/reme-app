@@ -245,3 +245,66 @@ it("the app lets images load only from itself, data and blob URLs and any remeai
     "img-src 'self' data: blob: https://*.remeai.co.uk"
   )
 })
+
+it("a reply streaming in never shows a raw asterisk, an empty bullet or a heading", async () => {
+  const reply =
+    "Done, the form now has these changes:\n- **What work is needed:** customers can tick more than one\n- **Garden access:** added *Not sure*\n- **Photos:** now required\n\nHere's what I've noted for **Pruning Co**:"
+  // Every start the reveal passes through, each shown whole: no reveal in between.
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("reduce"),
+    media: query,
+    onchange: null,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    dispatchEvent: () => false,
+  }))
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  unmount = async () => {
+    await act(async () => root.unmount())
+    container.remove()
+  }
+  for (let end = 1; end <= reply.length; end++) {
+    const shown = reply.slice(0, end)
+    await act(async () =>
+      root.render(
+        createElement(
+          TextMessagePartProvider,
+          { text: shown },
+          createElement(MarkdownText)
+        )
+      )
+    )
+    const md = container.querySelector(".aui-md") as HTMLElement
+    expect(md.textContent?.replace(/\s+/g, ""), shown).toBe(
+      shown.replace(/[*\s-]/g, "").replace(/:$/, ":")
+    )
+    expect(md.textContent, shown).not.toContain("*")
+    expect(md.querySelector("h1, h2, h3, h4, h5, h6, hr"), shown).toBeNull()
+    expect(
+      [...md.querySelectorAll("li")].every((li) => li.textContent?.trim()),
+      shown
+    ).toBe(true)
+  }
+  const md = container.querySelector(".aui-md") as HTMLElement
+  expect(md.querySelectorAll("li")).toHaveLength(3)
+  expect([...md.querySelectorAll("strong")].map((b) => b.textContent)).toEqual([
+    "What work is needed:",
+    "Garden access:",
+    "Photos:",
+    "Pruning Co",
+  ])
+  expect(md.querySelector("em")?.textContent).toBe("Not sure")
+})
+
+it("leaves a finished reply's literal asterisks as they are", async () => {
+  for (const text of ["Three * four is twelve.", "Note the asterisk*"]) {
+    const md = (await renderText(text)).querySelector(".aui-md")
+    expect(md?.textContent, text).toBe(`Done. ${text}`)
+    await unmount?.()
+    unmount = undefined
+  }
+})
