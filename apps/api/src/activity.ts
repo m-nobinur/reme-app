@@ -55,8 +55,6 @@ export type SearchRow = {
 }
 
 export type HeartbeatRow = {
-  /** Null while the job is paused. */
-  next: string | null
   /** The newest run in the last day. */
   last: { at: string; outcome: JobOutcome } | null
 }
@@ -111,7 +109,6 @@ export async function readActivityRows(
         from search_daily
         where date > (select max(date) from search_daily) - 28) as search,
       (select json_build_object(
-        'next', case when j.paused_at is null then j.next_run_at end,
         'last', (select json_build_object('at', r.run_at, 'outcome', r.outcome)
           from job_runs r where r.job_id = j.id and r.run_at > ${dayBefore(now)}
           order by r.run_at desc limit 1))
@@ -623,7 +620,8 @@ export function activityOf(input: ActivityInput, now: Date): Activity {
       })
   }
 
-  // Coming up: the next reminders at any distance, the next check-in, renewals.
+  // Coming up: the next reminders at any distance and renewals. The next
+  // check-in is not one: the owner meets check-ins only once they have run.
   const upcoming: Segment[] = [
     ...input.notes
       .filter((n) => n.due_at && Date.parse(n.due_at) > now.getTime())
@@ -641,14 +639,6 @@ export function activityOf(input: ActivityInput, now: Date): Activity {
     ...tasks.filter((t) => t.state === "upcoming"),
   ]
   const beat = input.rows.heartbeat
-  if (beat?.next)
-    upcoming.push({
-      id: "checkin:next",
-      kind: "checkin",
-      state: "upcoming",
-      steps: [],
-      at: iso(beat.next),
-    })
 
   // Done today also holds reminders that came due and the last check-in,
   // quiet or not; `message` says whether it wrote to the owner. A failed

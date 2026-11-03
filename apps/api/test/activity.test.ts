@@ -574,7 +574,7 @@ describe("standing", () => {
 })
 
 describe("reminders and check-ins", () => {
-  it("lists the next three reminders at any distance and the next check-in", () => {
+  it("lists the next three reminders at any distance and no next check-in", () => {
     const note = (n: number, due: string | null) =>
       ({
         id: ID(n),
@@ -590,11 +590,10 @@ describe("reminders and check-ins", () => {
         note(5, ago(-60 * 24 * 42)),
         note(6, null),
       ],
-      rows: rows({ heartbeat: { next: ago(-120), last: null } }),
+      rows: rows({ heartbeat: { last: null } }),
     })
     expect(upcoming.map((s) => s.id)).toEqual([
       `reminder:${ID(2)}`,
-      "checkin:next",
       `reminder:${ID(3)}`,
       `reminder:${ID(4)}`,
     ])
@@ -603,7 +602,7 @@ describe("reminders and check-ins", () => {
   it("lists a quiet check-in as done with nothing sent", () => {
     const { done } = view({
       rows: rows({
-        heartbeat: { next: null, last: { at: ago(60), outcome: "no_change" } },
+        heartbeat: { last: { at: ago(60), outcome: "no_change" } },
       }),
     })
     expect(done).toEqual([
@@ -618,7 +617,7 @@ describe("reminders and check-ins", () => {
   it("leaves out a check-in that failed", () => {
     const { done } = view({
       rows: rows({
-        heartbeat: { next: null, last: { at: ago(60), outcome: "failed" } },
+        heartbeat: { last: { at: ago(60), outcome: "failed" } },
       }),
     })
     expect(done).toEqual([])

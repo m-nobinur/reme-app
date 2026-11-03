@@ -109,6 +109,26 @@ describe("onboardingSteps", () => {
     })
   })
 
+  it("dates a done step by its newest fact, and an open or skipped one not at all", () => {
+    const dated = (fact: FactValue, valid_from: string) => ({
+      ...fact,
+      valid_from,
+    })
+    const [industry, offerings] = WORK
+    const steps = onboardingSteps(
+      at([
+        dated(industry, "2026-11-03T16:05:00Z"),
+        dated(offerings, "2026-11-03T16:09:00Z"),
+        dated(AREA, "2026-11-03T16:14:00Z"),
+      ]) as Onboarding
+    )
+    expect(steps[0]?.at).toBe("2026-11-03T16:09:00.000Z")
+    expect(steps[1]?.at).toBe("2026-11-03T16:14:00.000Z")
+    expect(steps[2]).not.toHaveProperty("at")
+    // Facts read without a time leave the step undated.
+    expect(onboardingSteps(at(WORK))[0]).not.toHaveProperty("at")
+  })
+
   it("leaves an optional detail skipped once it was asked or the owner moved on", () => {
     const early = at([...WORK, AREA])
     expect(states(early).customers).toBe("now")

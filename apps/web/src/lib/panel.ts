@@ -8,19 +8,24 @@ import type {
 import {
   type CopyContext,
   completedBrief,
+  domainStep,
+  needsLine,
   notStarted,
   pageAction,
   pillLine,
   proofOf,
   rowLine,
+  type SetupPart,
   type StatusKind,
   segmentKind,
   segmentLine,
+  segmentStatus,
   segmentTitle,
   setupTitle,
   stepKind,
-  stepLabel,
   stepName,
+  WAITING_HINT,
+  wroteToOwner,
 } from "@workspace/ui/lib/activity-copy"
 import { dayOf } from "@workspace/ui/lib/format"
 import type { AttentionItem, Workspace } from "./api/types"
@@ -69,11 +74,11 @@ export type Line = {
 export type StepView = {
   id: string
   label: string
-  /** The label without its count, when it has one: what a screen reader hears once per step. */
-  said?: string
   state: ActivityStep["state"]
   /** The icon the step moves while it is at work. */
   kind: StatusKind
+  /** Beside the label: what the step waiting on the owner wants. */
+  hint?: string
 }
 
 /** One segment as the panel draws it: a header and its fixed steps. */
@@ -88,6 +93,10 @@ export type SegmentView = {
   working: string
   /** The muted line under the title, or null. */
   line: string | null
+  /** How a build at work is going for time, or null. */
+  status: string | null
+  /** Folded to one line while something else waits on the owner. */
+  quiet: boolean
   steps: StepView[]
   /** The build behind a website or change segment: its plan, photos and Stop. */
   build: BuildSummary | null
@@ -95,23 +104,19 @@ export type SegmentView = {
 
 type Approval = Extract<AttentionItem, { kind: "approval" }>
 
-/** The next task not started, and the one button that starts it in the chat. */
-/** The next task to start: a line the owner sends, or Google's own sign-in. */
-export type UpNext = { id: string; text: string; label: string } & (
-  | { ask: string }
-  | { href: string }
-)
+/** The next task to start, and Google's own sign-in, which starts it. */
+export type UpNext = { id: string; text: string; label: string; href: string }
 
 export type Panel = {
-  /** The collapsed pill, and the panel's header. */
+  /** The collapsed pill, and the panel's header: what waits on the owner first, else the work. */
   line: Line
-  /**
-   * Every job at work or waiting, then a version or question for the owner,
-   * when there are two or more: the header gives each a turn. Else `[line]`.
-   */
-  lines: Line[]
   /** The first run's segment under way; what finished is in `done`. */
   journey: SegmentView[]
+  /**
+   * Finished work as it looked in Now, by the ids `done` lists it under: a
+   * piece that finishes on screen shows its tick here for a moment first.
+   */
+  finished: SegmentView[]
   now: SegmentView[]
   /** Jobs waiting on the owner (a DNS change, a payment, a sign-in), as segments. */
   blocked: SegmentView[]
@@ -120,10 +125,14 @@ export type Panel = {
   /** The review the going-live segment holds while its first step waits. */
   review: Approval | null
   upNext: UpNext | null
-  /** Reminders, renewals and the next check-in, soonest first. */
+  /** Reminders and renewals, soonest first. */
   upcoming: Timed[]
   /** What finished, newest first. */
   done: Timed[]
+  /** The last all-clear check-in, once setting up is done: "Last check-in 4:00 PM, all clear". */
+  checkIn: string | null
+  /** No web address of the owner's own, and none being set up: offer to connect one. */
+  connect: boolean
   /** The top segment's next action, and the site once live. */
   suggestions: Suggestion[]
 }
@@ -271,8 +280,26 @@ export function completedOf(
   ].filter(
     (segment, i, all) =>
       segment.state === "done" &&
+      segment.kind !== "onboarding" &&
       all.findIndex((other) => sameWork(other, segment)) === i
   )
+  // Setting up finishes a part at a time, each at its own time and in the
+  // words its row had in Now.
+  const setup = activity.journey
+    .filter((segment) => segment.kind === "onboarding")
+    .flatMap(setupParts)
+    .flatMap((part): Completed[] =>
+      part.state === "done"
+        ? [
+            {
+              id: part.id,
+              text: setupTitle(part.part, part.steps, true, ctx),
+              at: part.at,
+              brief: null,
+            },
+          ]
+        : []
+    )
   const done = finished.flatMap((segment): Completed[] => {
     const text = rowLine(segment, ctx, rowTitle(workspace, segment))
     return text
@@ -299,19 +326,18 @@ export function completedOf(
         ]
       : []
   })
-  return [...done, ...proved].sort(
+  return [...setup, ...done, ...proved].sort(
     (a, b) => Date.parse(b.at) - Date.parse(a.at)
   )
 }
 
 /** The setting-up steps that are the assistant's and the website's own; the rest are the business's. */
-const SETUP_PARTS: readonly {
-  part: "assistant" | "website"
-  steps: readonly string[]
-}[] = [
-  { part: "assistant", steps: ["assistant"] },
-  { part: "website", steps: ["website", "photos", "look"] },
-]
+const SETUP_STEPS: Readonly<Record<string, SetupPart>> = {
+  assistant: "assistant",
+  website: "website",
+  photos: "website",
+  look: "website",
+}
 
 /** Where a part of setting up stands from its steps; null before any is reached. */
 function partState(
@@ -323,6 +349,37 @@ function partState(
   return steps.every((s) => s.state === "done" || s.state === "skipped")
     ? "done"
     : "now"
+}
+
+type Part = {
+  part: SetupPart
+  /** The business's is the segment's own id, so the row keeps it as before. */
+  id: string
+  state: ActivitySegment["state"]
+  steps: ActivityStep[]
+  /** When it finished: its last step's settling, else the segment's time. */
+  at: string
+}
+
+/** Setting up as the owner meets it: the business, the assistant, the website, each once one of its steps is reached. */
+export function setupParts(segment: ActivitySegment): Part[] {
+  return (["business", "assistant", "website"] as const).flatMap((part) => {
+    const steps = segment.steps.filter(
+      (step) => (SETUP_STEPS[step.id] ?? "business") === part
+    )
+    const state = partState(steps)
+    if (!state) return []
+    const settled = steps.flatMap((step) => step.at ?? []).sort()
+    return [
+      {
+        part,
+        id: part === "business" ? segment.id : `${segment.id}:${part}`,
+        state,
+        steps,
+        at: settled.at(-1) ?? segment.at,
+      },
+    ]
+  })
 }
 
 const running = (segment: ActivitySegment | undefined) =>
@@ -363,6 +420,14 @@ export function panelFor(input: PanelInput): Panel | null {
             ) ?? null)
           : null
     const doing = build?.activity?.find((row) => row.now)?.label
+    // A domain shows one step: what the owner does now, or what is being done for it.
+    const domain = segment.kind === "address" || segment.kind === "domain"
+    const current = domain
+      ? segment.steps
+          .filter((s) => s.state === "now" || s.state === "waiting")
+          .at(-1)
+      : undefined
+    const said = domain ? domainStep(segment, ctx) : null
     return {
       id: segment.id,
       kind: segment.kind,
@@ -371,72 +436,59 @@ export function panelFor(input: PanelInput): Panel | null {
       title: segmentTitle(segment, ctx) ?? "",
       working: segmentTitle({ ...segment, state: "now" }, ctx) ?? "",
       line: segmentLine(segment, ctx, {
-        ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }),
         ...(until ? { until } : {}),
         ...(doing ? { doing } : {}),
       }),
-      steps: segment.steps.flatMap((step) => {
-        // A step that never applied (buying, for a domain the owner has)
-        // is not listed; a question the owner skipped in onboarding is.
-        if (step.state === "skipped" && segment.kind !== "onboarding") return []
-        const label = stepLabel(
-          segment,
-          step,
-          build?.activity?.find((row) => row.id === step.id)?.items
-        )
-        const { count: _count, ...plain } = step
-        const said = stepLabel(segment, plain)
-        // Uncounted, a build step at work says the title's words again.
-        const shown =
-          segment.kind === "website" && label === said
-            ? (stepName(segment, step) ?? label)
-            : label
-        return shown
+      status: segmentStatus(segment, elapsedSeconds),
+      quiet: false,
+      steps:
+        current && said
           ? [
               {
-                id: step.id,
-                label: shown,
-                ...(said && said !== shown ? { said } : {}),
-                state: step.state,
-                kind: stepKind(segment, step),
+                id: current.id,
+                label: said,
+                state: current.state,
+                kind: stepKind(segment, current),
               },
             ]
-          : []
-      }),
+          : domain
+            ? []
+            : segment.steps.flatMap((step) => {
+                // A step that never applied (buying, for a domain the owner
+                // has) is not listed; a question the owner skipped in
+                // onboarding is.
+                if (step.state === "skipped" && segment.kind !== "onboarding")
+                  return []
+                const label = stepName(segment, step)
+                return label
+                  ? [
+                      {
+                        id: step.id,
+                        label,
+                        state: step.state,
+                        kind: stepKind(segment, step),
+                        ...(step.state === "waiting" && { hint: WAITING_HINT }),
+                      },
+                    ]
+                  : []
+              }),
       build,
     }
   }
 
-  /**
-   * Setting up as the owner meets it: the business, then the assistant, then
-   * the website, each its own group once one of its steps is reached.
-   */
+  /** Setting up's parts, each with its topic while it runs and its outcome once done. */
   const setupViews = (segment: ActivitySegment): SegmentView[] => {
     const whole = view(segment)
-    const partOf = (id: string) =>
-      SETUP_PARTS.find((each) => each.steps.includes(id))?.part ?? "business"
-    return (["business", "assistant", "website"] as const).flatMap((part) => {
-      const steps = segment.steps.filter((step) => partOf(step.id) === part)
-      const state = partState(steps)
-      if (!state) return []
-      const ids = new Set(steps.map((step) => step.id))
-      const deciding = steps.some(
-        (step) => step.id === "website" && step.state !== "done"
-      )
-      const title = (stands: ActivitySegment["state"]) =>
-        part === "business"
-          ? (segmentTitle({ ...segment, state: stands }, ctx) ?? "")
-          : setupTitle(part, stands, deciding, segment, ctx)
-      return [
-        {
-          ...whole,
-          id: part === "business" ? segment.id : `${segment.id}:${part}`,
-          state,
-          title: title(state),
-          working: title("now"),
-          steps: whole.steps.filter((step) => ids.has(step.id)),
-        },
-      ]
+    return setupParts(segment).map((part) => {
+      const ids = new Set(part.steps.map((step) => step.id))
+      return {
+        ...whole,
+        id: part.id,
+        state: part.state,
+        title: setupTitle(part.part, part.steps, part.state === "done", ctx),
+        working: setupTitle(part.part, part.steps, false, ctx),
+        steps: whole.steps.filter((step) => ids.has(step.id)),
+      }
     })
   }
 
@@ -480,8 +532,8 @@ export function panelFor(input: PanelInput): Panel | null {
       return text ? [{ id: segment.id, text, at: segment.at }] : []
     })
   // Times wait for the reader's zone, so the server's HTML and the first
-  // browser render agree. The reminders page lists its own reminders.
-  // A check-in means nothing to an owner still answering setup questions.
+  // browser render agree. The reminders page lists its own reminders. The
+  // owner meets a check-in only once it has run.
   const settingUp = journey.some(
     (segment) => segment.kind === "onboarding" && segment.state !== "done"
   )
@@ -490,34 +542,54 @@ export function panelFor(input: PanelInput): Panel | null {
         activity.upcoming.filter(
           (segment) =>
             !notStarted(segment) &&
-            (segment.kind === "reminder"
-              ? page !== "reminders"
-              : segment.kind !== "checkin" || !settingUp)
+            segment.kind !== "checkin" &&
+            (segment.kind !== "reminder" || page !== "reminders")
         )
       )
     : []
-  // The address before Google, as the owner meets them. No time in it, so it
-  // needs no zone.
-  const unstarted = activity.upcoming.filter(notStarted)
-  const queued =
-    unstarted.find((segment) => segment.kind === "address") ?? unstarted[0]
+  // Google once nothing has begun on it, and only once the owner has a
+  // domain of their own, live or connecting. No time in it, so it needs no
+  // zone. Its line is never in the owner's voice: its sign-in.
+  const claimed = ownDomainClaimed(activity.standing ?? [], workspace.host)
+  const queued = activity.upcoming.find(
+    (segment) => notStarted(segment) && segment.kind === "google"
+  )
   const upText = queued && rowLine(queued, ctx)
-  // Google is never a line in the owner's voice: its sign-in, and only once
-  // they have a domain of their own, live or connecting.
-  const google = queued?.kind === "google"
   const upNext: UpNext | null =
-    queued &&
-    upText &&
-    (!google || ownDomainClaimed(activity.standing ?? [], workspace.host))
+    queued && upText && claimed
       ? {
           id: queued.id,
           text: upText,
-          ...(google
-            ? { label: pageAction("google").label, href: "/api/google/start" }
-            : pageAction("own")),
+          label: pageAction("google").label,
+          href: "/api/google/start",
         }
       : null
-  const done = zone ? completedOf(workspace, ctx) : []
+  // A web address the owner said "Not now" to, or never got to, can be
+  // connected any time after setting up, unless one is being set up now.
+  const addressing = [...activity.now, ...activity.waiting].some(
+    (segment) =>
+      segment.kind === "address" ||
+      segment.kind === "domain" ||
+      segment.kind === "purchase"
+  )
+  const connect = business !== null && !settingUp && !claimed && !addressing
+
+  // A routine check-in that found nothing is no row: during setting up it is
+  // not said at all, after it the last one is one quiet line.
+  const checkins = activity.done.filter((segment) => segment.kind === "checkin")
+  const quiet = new Set(
+    checkins
+      .filter((segment) => settingUp || !wroteToOwner(segment))
+      .map((segment) => segment.id)
+  )
+  const done = zone
+    ? completedOf(workspace, ctx).filter((row) => !quiet.has(row.id))
+    : []
+  const [lastClear] = checkins.filter((segment) => !wroteToOwner(segment))
+  const checkIn =
+    zone && lastClear && !settingUp
+      ? `Last check-in ${timeOf(lastClear.at, zone, now)}, all clear`
+      : null
 
   // Where the panel has something to say. Getting started belongs to the
   // chat and, while it runs, the Website page; every other page shows the
@@ -543,43 +615,44 @@ export function panelFor(input: PanelInput): Panel | null {
   if (!shown[page]) return null
 
   const tone = live ? "live" : "idle"
-  // A job at work or waiting on the owner is the news, in the assistant's
-  // own words: "Reme is building your website". Every one of them, so two
-  // jobs at once each get a turn in the header.
-  const jobs = [current, ...activity.now, ...blocked]
-    .filter(running)
-    .flatMap((segment): Line[] => {
-      const said = segment ? pillLine(segment, ctx) : null
-      return segment && said
-        ? [{ tone: segment.state === "now" ? "working" : tone, lead: said }]
-        : []
+  // The header says one thing and holds it: what waits on the owner first,
+  // in the assistant's words ("Ava needs your answer"), then the work at
+  // hand ("Ava is building your website"). Getting to know the business is
+  // one line for its whole run, a question waiting or not.
+  const said = (segment: ActivitySegment | undefined): Line[] => {
+    const lead = segment && running(segment) ? pillLine(segment, ctx) : null
+    return segment && lead
+      ? [{ tone: segment.state === "now" ? "working" : tone, lead }]
+      : []
+  }
+  const owed = [current, ...blocked].filter(
+    (segment) => segment?.state === "waiting" && segment.kind !== "onboarding"
+  )
+  const forOwner: Line[] = owed.flatMap(said)
+  if (questions.length) {
+    forOwner.unshift({
+      tone,
+      lead:
+        questions.length === 1
+          ? needsLine(ctx)
+          : `${leading(assistantOf(workspace))} has ${questions.length} questions for you`,
     })
-  const forOwner: Line[] = []
+  }
+  // A version to publish leads a question, as the most pressing.
   if (approvals.length) {
-    forOwner.push({
+    forOwner.unshift({
       tone,
       lead: live ? "Your changes" : "Your website",
       detail: live ? "are ready to publish" : "is ready to publish",
     })
   }
-  const [question] = questions
-  if (question) {
-    forOwner.push(
-      questions.length === 1
-        ? {
-            tone,
-            lead: leading(assistantOf(workspace)),
-            detail: "has a question for you",
-          }
-        : { tone, lead: `${questions.length} questions`, detail: "for you" }
-    )
-  }
-  const turns = [...jobs, ...forOwner].filter(
-    (each, i, all) => all.findIndex((other) => other.lead === each.lead) === i
-  )
+  const needed = forOwner.length > 0
+  const [first] = [
+    ...forOwner,
+    ...[current, ...activity.now, ...blocked].flatMap(said),
+  ]
 
   const line = ((): Line => {
-    const [first] = turns
     if (first) return first
     if (page === "reminders" && reminders) {
       return { tone, lead: reminders.replace(/\.$/, "") }
@@ -612,21 +685,42 @@ export function panelFor(input: PanelInput): Panel | null {
     }
   }
 
+  // While the owner is wanted elsewhere, work at hand folds to one line.
+  const shownView = (segment: ActivitySegment) => {
+    const each = view(segment)
+    return { ...each, quiet: needed && each.state === "now" }
+  }
+  const parts = current?.kind === "onboarding" ? setupViews(current) : []
+  const before = at === -1 ? journey : journey.slice(0, at)
   return {
     line,
-    lines: turns.length > 1 ? turns : [line],
     journey: current
       ? current.kind === "onboarding"
-        ? setupViews(current)
-        : [view(current)]
+        ? parts.filter((part) => part.state !== "done")
+        : [shownView(current)]
       : [],
-    now: activity.now.map(view),
+    finished: [
+      ...parts.filter((part) => part.state === "done"),
+      ...before.flatMap((segment) =>
+        segment.kind === "onboarding"
+          ? setupViews(segment)
+          : segment.state === "done"
+            ? [view(segment)]
+            : []
+      ),
+      ...activity.done
+        .filter((segment) => segmentTitle(segment, ctx))
+        .map(view),
+    ],
+    now: activity.now.map(shownView),
     blocked: blocked.map(view),
     waiting,
     review,
     upNext,
     upcoming,
     done,
+    checkIn,
+    connect,
     suggestions,
   }
 }

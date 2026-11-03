@@ -9,7 +9,7 @@ import {
   type BuildStage,
   changeAsked,
   cleanArg,
-  elapsedText,
+  domainStep,
   type LineState,
   notStarted,
   onboardingLine,
@@ -19,6 +19,7 @@ import {
   planningLine,
   proofOf,
   segmentLine,
+  segmentStatus,
   segmentTitle,
   stageLine,
   standingLine,
@@ -429,7 +430,7 @@ describe("segment copy", () => {
     expect(standingLine(buying, ctx)).toBe("Registering the name")
   })
 
-  it("says what an owner task waits for by the step that waits, its note first", () => {
+  it("asks the owner in the header, and shows the one step they do", () => {
     const ctx = { seed: "org-1", assistant: "Reme" }
     const address = (id: string, note?: string, total?: number) =>
       segment("address", "waiting", {
@@ -445,31 +446,44 @@ describe("segment copy", () => {
         names: { domain: "spark.co.uk", provider: "123-reg" },
       })
     expect(pillLine(address("records"), ctx)).toBe(
-      "Reme is waiting for your domain setting"
+      "Reme needs a record added at 123-reg"
     )
     expect(pillLine(address("choose"), ctx)).toBe(
-      "Reme is waiting for your choice of web address"
+      "Reme needs your pick of web address"
     )
-    // As many changes as the card listed, and no number when none is known.
-    expect(segmentLine(address("records", undefined, 3), ctx)).toBe(
-      "3 changes to make at 123-reg"
+    expect(pillLine(address("purchase"), ctx)).toBe("Reme needs your payment")
+    // As many records as the card listed, and no number when none is known.
+    expect(domainStep(address("records", undefined, 3), ctx)).toBe(
+      "Add the 3 records at 123-reg"
     )
-    expect(segmentLine(address("records", undefined, 1), ctx)).toBe(
-      "One change to make at 123-reg"
+    expect(domainStep(address("records", undefined, 1), ctx)).toBe(
+      "Add the record at 123-reg"
     )
-    expect(segmentLine(address("records"), ctx)).toBe(
-      "Changes to make at 123-reg"
-    )
-    expect(pillLine(address("purchase"), ctx)).toBe(
-      "Reme is waiting for your payment"
+    expect(domainStep(address("records"), ctx)).toBe(
+      "Add the records at 123-reg"
     )
     // Buying it elsewhere waits on the owner's own purchase.
     expect(pillLine(address("purchase", "buying spark.co.uk"), ctx)).toBe(
-      "Reme is waiting for you to buy it"
+      "Reme needs you to buy the name"
     )
-    expect(
-      segmentLine(address("purchase", "buying spark.co.uk"), ctx)
-    ).toBeNull()
+    expect(domainStep(address("purchase", "buying spark.co.uk"), ctx)).toBe(
+      "Waiting for you to buy it"
+    )
+    // The question is on its card: the row names the topic and the wait, never the question.
+    const asked = segment("address", "waiting", {
+      steps: [
+        {
+          id: "find_out",
+          state: "waiting",
+          note: "Do you have a web address?",
+        },
+      ],
+    })
+    expect(segmentTitle(asked, ctx)).toBe("Your web address")
+    expect(segmentLine(asked, ctx)).toBeNull()
+    expect(domainStep(asked, ctx)).toBe("Waiting for your answer")
+    expect(segmentTitle(address("records"), ctx)).toBe("Connecting your domain")
+    expect(segmentLine(address("records"), ctx)).toBeNull()
     const google = segment("google", "waiting", {
       steps: [
         { id: "sign_in", state: "done" },
@@ -496,19 +510,17 @@ describe("segment copy", () => {
             plain(title)
             expect(title).toMatch(STARTS)
             for (const line of [
-              segmentLine(s, ctx, {
-                elapsedSeconds: 130,
-                until: "11:50",
-                provider: "Cloudflare",
-              }),
+              segmentLine(s, ctx, { until: "11:50" }),
+              segmentStatus(s, 130),
               pillLine(s, ctx),
               waitingRow(s, "11:50"),
+              domainStep(s, ctx),
             ]) {
               if (line === null) continue
               expect(line).not.toMatch(DASH)
               expect(line).not.toMatch(INTERNAL)
               expect(line).not.toMatch(/Reme/)
-              expect(line).not.toMatch(/…/)
+              expect(line).not.toMatch(/…|!/)
             }
           }
         }
@@ -516,107 +528,119 @@ describe("segment copy", () => {
     }
   })
 
-  it("uses the persona's name where the title is the assistant's own moment", () => {
-    for (const orgId of ORGS) {
-      const ctx = { seed: orgId, assistant: "Reme" }
-      expect(segmentTitle(segment("website", "now"), ctx)).toMatch(/^Reme is /)
-      expect(segmentTitle(segment("change", "now"), ctx)).toMatch(/^Reme is /)
-      expect(pillLine(segment("website", "now"), ctx)).toBe(
-        "Reme is building your website"
-      )
-      expect(pillLine(segment("purchase", "waiting"), ctx)).toBe(
-        "Reme is waiting for your payment"
-      )
-      expect(pillLine(segment("domain", "now"), ctx)).toBe(
-        "Reme is connecting spark.mnobinur.dev"
-      )
-      const bare = { seed: orgId, assistant: null }
-      expect(segmentTitle(segment("website", "now"), bare)).toMatch(
-        /^(?:Building|Putting) your website/
-      )
-      expect(pillLine(segment("purchase", "waiting"), bare)).toBe(
-        "Waiting for your payment"
+  it("names the assistant in the header, never in a row", () => {
+    const ctx = { seed: "org-1", assistant: "Reme" }
+    expect(segmentTitle(segment("website", "now"), ctx)).toBe("Your website")
+    expect(segmentTitle(segment("change", "now"), ctx)).toBe(
+      "Updating your website"
+    )
+    expect(pillLine(segment("website", "now"), ctx)).toBe(
+      "Reme is building your website"
+    )
+    expect(pillLine(segment("purchase", "waiting"), ctx)).toBe(
+      "Reme needs your payment"
+    )
+    expect(pillLine(segment("domain", "now"), ctx)).toBe(
+      "Reme is connecting your domain"
+    )
+    expect(pillLine(segment("golive", "waiting"), ctx)).toBe(
+      "Reme needs your go-ahead to publish"
+    )
+    const bare = { seed: "org-1", assistant: null }
+    expect(pillLine(segment("purchase", "waiting"), bare)).toBe(
+      "Your assistant needs your payment"
+    )
+    // Getting to know the business is one line, a question waiting or not.
+    for (const state of ["now", "waiting"] as const) {
+      expect(pillLine(segment("onboarding", state), ctx)).toBe(
+        "Reme is getting to know Spark Cleaning"
       )
     }
+    expect(pillLine(segment("onboarding", "waiting"), bare)).toBe(
+      "Getting to know Spark Cleaning"
+    )
   })
 
-  it("names what the website build is doing now in its title", () => {
+  it("says the build's step and what it is doing, under a title that stays", () => {
     const ctx = { seed: "org-1", assistant: "Reme" }
     const on = (id: string, count?: { done: number; total: number }) =>
-      segmentTitle(
+      segment("website", "now", {
+        steps: [
+          { id: "planning", state: "done" },
+          { id: "photos", state: "skipped" },
+          { id, state: "now", ...(count && { count }) },
+          { id: "ready", state: "next" },
+        ],
+      })
+    expect(segmentTitle(on("writing", { done: 2, total: 7 }), ctx)).toBe(
+      "Your website"
+    )
+    expect(segmentLine(on("writing", { done: 2, total: 7 }), ctx)).toBe(
+      "Step 2 of 3: writing your pages"
+    )
+    expect(segmentLine(on("writing", { done: 7, total: 7 }), ctx)).toBe(
+      "Step 2 of 3: putting the site together"
+    )
+    expect(segmentLine(on("checking"), ctx)).toBe(
+      "Step 2 of 3: checking every page"
+    )
+    expect(
+      segmentLine(
         segment("website", "now", {
-          steps: [
-            { id: "planning", state: "done" },
-            { id, state: "now", ...(count && { count }) },
-          ],
+          steps: [{ id: "planning", state: "now" }],
         }),
         ctx
       )
-    expect(on("writing", { done: 2, total: 7 })).toMatch(
-      /^Reme is writing your (?:pages|website)$/
-    )
-    expect(on("writing", { done: 7, total: 7 })).toMatch(
-      /^Reme is putting your (?:pages|website) together$/
-    )
-    expect(on("checking")).toMatch(
-      /^Reme is checking (?:your site|every page)$/
-    )
-    expect(on("photos")).toMatch(/^Reme is making (?:your )?photos/)
-    // The same org reads the same words on every poll.
-    expect(on("checking")).toBe(on("checking"))
-    // Ready, or no step at work, keeps the build's own title.
-    expect(on("ready")).toMatch(/^Reme is (?:building|putting) your website/)
+    ).toBe("Step 1 of 1: planning the pages from your choices")
+    expect(segmentLine(segment("website", "now"), ctx)).toBeNull()
   })
 
-  it("says what comes next for a job not begun, never that it is under way", () => {
-    for (const orgId of ORGS) {
-      const ctx = { seed: orgId, assistant: "Reme" }
-      expect(segmentTitle(segment("website", "upcoming"), ctx)).toMatch(
-        /^(?:Your website comes next|Next, your website)$/
-      )
-      expect(segmentTitle(segment("golive", "upcoming"), ctx)).toMatch(
-        /^Then (?:it|your website) goes live$/
-      )
-    }
-  })
-
-  it("puts the business, host and domain in the titles", () => {
+  it("keeps one name for a job not begun", () => {
     const ctx = { seed: "org-1", assistant: "Reme" }
-    expect(segmentTitle(segment("onboarding", "now"), ctx)).toContain(
-      "Spark Cleaning"
+    expect(segmentTitle(segment("website", "upcoming"), ctx)).toBe(
+      "Your website"
     )
-    expect(segmentTitle(segment("onboarding", "done"), ctx)).toContain(
-      "Spark Cleaning"
+    expect(segmentTitle(segment("golive", "upcoming"), ctx)).toBe("Going live")
+    expect(segmentTitle(segment("google", "upcoming"), ctx)).toBe(
+      "Get found on Google"
+    )
+  })
+
+  it("names the outcome once done, with the business and domain in it", () => {
+    const ctx = { seed: "org-1", assistant: "Reme" }
+    expect(segmentTitle(segment("onboarding", "now"), ctx)).toBe(
+      "About the business"
+    )
+    expect(segmentTitle(segment("onboarding", "done"), ctx)).toBe(
+      "Spark Cleaning set up"
+    )
+    expect(segmentTitle(segment("website", "done"), ctx)).toBe(
+      "Website draft ready to look at"
     )
     // The published site's host is the panel's noise, not its meaning.
-    expect(segmentTitle(segment("golive", "done"), ctx)).not.toContain(
-      "spark.mnobinur.dev"
+    expect(segmentTitle(segment("golive", "done"), ctx)).toBe(
+      "Your website is live"
     )
-    expect(segmentTitle(segment("domain", "now"), ctx)).toContain(
-      "spark.mnobinur.dev"
+    expect(segmentTitle(segment("domain", "done"), ctx)).toBe(
+      "spark.mnobinur.dev connected"
     )
-    expect(segmentTitle(segment("purchase", "done"), ctx)).toMatch(
-      /spark\.mnobinur\.dev/i
+    expect(segmentTitle(segment("purchase", "done"), ctx)).toBe(
+      "spark.mnobinur.dev is yours"
     )
     const nameless = segment("onboarding", "now", { names: undefined })
-    expect(segmentTitle(nameless, ctx)).toBe("Getting started")
+    expect(segmentTitle(nameless, ctx)).toBe("About the business")
     expect(segmentLine(nameless, ctx)).toBeNull()
   })
 
-  it("never changes a title between polls, and varies it between orgs", () => {
+  it("never changes a title between polls or orgs", () => {
     const s = segment("website", "now")
-    const seen = new Set<string>()
-    for (const orgId of ORGS) {
-      const ctx = { seed: orgId, assistant: "Reme" }
-      const first = segmentTitle(s, ctx)
-      expect(segmentTitle(s, ctx)).toBe(first)
-      seen.add(first as string)
-    }
-    expect(seen.size).toBeGreaterThan(1)
-    expect(seen.size).toBeLessThanOrEqual(3)
+    const seen = new Set(
+      ORGS.map((orgId) => segmentTitle(s, { seed: orgId, assistant: "Reme" }))
+    )
+    expect([...seen]).toEqual(["Your website"])
   })
 
-  it("counts nothing in onboarding: the question says enough", () => {
+  it("counts nothing in onboarding: the step list says enough", () => {
     const ctx = { seed: "org-1", assistant: "Reme" }
     const steps = (open: number) =>
       Array.from({ length: 8 }, (_, i) => ({
@@ -633,97 +657,48 @@ describe("segment copy", () => {
     const titled = segment("change", "now", {
       names: { change: "your hero title" },
     })
-    expect(segmentTitle(titled, ctx)).toBe("Reme is updating your hero title")
+    expect(segmentTitle(titled, ctx)).toBe("Updating your hero title")
     expect(pillLine(titled, ctx)).toBe("Reme is updating your hero title")
-    expect(segmentTitle(segment("change", "now"), ctx)).toBe(
-      "Reme is updating your website"
-    )
     expect(pillLine(segment("change", "now"), { seed: "org-1" })).toBe(
       "Updating your website"
     )
-  })
-
-  it("writes the lines under a running or waiting job", () => {
-    const ctx = { seed: "org-1", assistant: "Reme" }
-    expect(
-      segmentLine(
-        segment("website", "now", { usual_seconds: 360, late_seconds: 600 }),
-        ctx,
-        { elapsedSeconds: 130 }
-      )
-    ).toBe("2 minutes so far, about 6 to 10 minutes")
-    // The quick lane, rounded outward to whole minutes; an api that sends no
-    // late time gets the high end half again.
-    const quick = { usual_seconds: 45, late_seconds: 90 }
-    expect(segmentLine(segment("change", "now", quick), ctx)).toBe(
-      "About 1 to 2 minutes"
-    )
-    expect(
-      segmentLine(segment("change", "now", quick), ctx, { elapsedSeconds: 30 })
-    ).toBe("Under a minute so far, about 1 to 2 minutes")
-    expect(
-      segmentLine(segment("website", "now", { usual_seconds: 360 }), ctx)
-    ).toBe("About 6 to 9 minutes")
-    // A change names the step it is on, with the range beside it.
+    // A change names the step it is on; the model's own step wins.
     const doing = "Checking the page"
-    expect(segmentLine(segment("change", "now", quick), ctx, { doing })).toBe(
-      "Checking the page, about 1 to 2 minutes"
-    )
-    expect(
-      segmentLine(segment("change", "now", quick), ctx, {
-        doing,
-        elapsedSeconds: 130,
-      })
-    ).toBe("Checking the page, taking a little longer, about 3 to 5 minutes")
-    expect(segmentLine(segment("change", "now"), ctx, { doing })).toBe(
-      "Checking the page"
-    )
-    expect(segmentLine(segment("website", "now"), ctx)).toBeNull()
+    expect(segmentLine(segment("change", "now"), ctx, { doing })).toBe(doing)
     expect(
       segmentLine(
         segment("change", "now", { step: "Adding the new photos" }),
         ctx,
-        {
-          elapsedSeconds: 30,
-        }
+        { doing }
       )
     ).toBe("Adding the new photos")
+  })
+
+  it("gives a time left only inside the usual range, then says it is late", () => {
+    const timed = segment("website", "now", {
+      usual_seconds: 360,
+      late_seconds: 600,
+    })
+    expect(segmentStatus(timed, 130)).toBe("About 8 min left")
+    expect(segmentStatus(timed, 545)).toBe("About a minute left")
+    expect(segmentStatus(timed, 650)).toBe(
+      "Taking longer than usual, I'm on it"
+    )
+    // An api that sends no late time gets the high end half again.
     expect(
-      segmentLine(segment("change", "now"), ctx, { elapsedSeconds: 30 })
-    ).toBe("Under a minute so far")
-    // Past the top the range moves up to start above the time gone, and a
-    // restart is said whatever the time.
-    const timed = { usual_seconds: 360, late_seconds: 600 }
+      segmentStatus(segment("change", "now", { usual_seconds: 360 }), 130)
+    ).toBe("About 7 min left")
     expect(
-      segmentLine(segment("website", "now", timed), ctx, {
-        elapsedSeconds: 545,
-      })
-    ).toBe("9 minutes so far, about 6 to 10 minutes")
-    expect(
-      segmentLine(segment("website", "now", timed), ctx, {
-        elapsedSeconds: 650,
-      })
-    ).toBe("Taking a little longer, about 11 to 15 minutes")
-    expect(
-      segmentLine(segment("change", "now", quick), ctx, {
-        elapsedSeconds: 130,
-      })
-    ).toBe("Taking a little longer, about 3 to 5 minutes")
-    expect(
-      segmentLine(
-        segment("website", "now", { ...timed, restarted: true }),
-        ctx,
-        { elapsedSeconds: 700 }
+      segmentStatus(
+        segment("website", "now", { usual_seconds: 360, restarted: true }),
+        700
       )
-    ).toBe("11 minutes so far, Reme restarted it")
-    expect(
-      segmentLine(segment("change", "now", { restarted: true }), {
-        seed: "org-1",
-      })
-    ).toBe("Your assistant restarted it")
-    expect(
-      segmentLine(segment("domain", "waiting"), ctx, { provider: "Cloudflare" })
-    ).toBe("Changes to make at Cloudflare")
+    ).toBe("Restarted after a hiccup, picking up where it stopped")
+    // Nothing it cannot back: no range, no time so far, or not at work.
+    expect(segmentStatus(segment("website", "now"), 130)).toBeNull()
+    expect(segmentStatus(timed)).toBeNull()
+    expect(segmentStatus({ ...timed, state: "waiting" }, 130)).toBeNull()
+    const ctx = { seed: "org-1", assistant: "Reme" }
     expect(
       segmentLine(segment("purchase", "waiting"), ctx, { until: "11:50" })
     ).toBe("Pay by 11:50 to keep the name")
@@ -733,22 +708,22 @@ describe("segment copy", () => {
     expect(segmentLine(segment("website", "done"), ctx)).toBeNull()
   })
 
-  it("never quotes a range that has passed or says a phrase twice", () => {
-    const ctx = { seed: "org-1", assistant: "Reme" }
+  it("never gives a later time left than it gave before", () => {
     const s = segment("website", "now", {
       usual_seconds: 360,
       late_seconds: 600,
     })
+    let last = Number.POSITIVE_INFINITY
     for (let elapsedSeconds = 0; elapsedSeconds <= 3000; elapsedSeconds += 7) {
-      const line = segmentLine(s, ctx, { elapsedSeconds }) as string
-      const [, low, high] = /about (\d+) to (\d+) minutes/.exec(line) ?? []
-      expect(Number(high)).toBeGreaterThan(Number(low))
-      // The top has not passed, or the range starts above the time gone.
-      expect(
-        Number(high) * 60 >= elapsedSeconds || Number(low) * 60 > elapsedSeconds
-      ).toBe(true)
-      expect(line.match(/minutes?/g)?.length).toBeLessThanOrEqual(2)
-      expect(line).not.toMatch(/usually/i)
+      const line = segmentStatus(s, elapsedSeconds) ?? ""
+      const left = /About (\d+) min left/.exec(line)?.[1]
+      if (elapsedSeconds > 600) {
+        expect(line).toBe("Taking longer than usual, I'm on it")
+        continue
+      }
+      const minutes = left ? Number(left) : 1
+      expect(minutes).toBeLessThanOrEqual(last)
+      last = minutes
     }
   })
 
@@ -862,13 +837,24 @@ describe("page lines", () => {
       })
     expect(proofOf(done("find_out", "choose"), ctx)).toBeNull()
     expect(proofOf(done("find_out", "records"), ctx)).toEqual({
-      text: "The setting for spark.co.uk is in",
+      text: "Record for spark.co.uk found",
       at: STAMP,
     })
     // The furthest, not the first, and never a go-live segment's own "loads".
     expect(proofOf(done("records", "certificate"), ctx)?.text).toBe(
-      "The security padlock for spark.co.uk is ready"
+      "spark.co.uk secured"
     )
+    expect(proofOf(done("records", "ownership"), ctx)?.text).toBe(
+      "spark.co.uk ownership confirmed"
+    )
+    expect(
+      proofOf(
+        segment("google", "now", {
+          steps: [{ id: "verify", state: "done" as const, at: STAMP }],
+        }),
+        ctx
+      )?.text
+    ).toBe("Site ownership confirmed")
     expect(
       proofOf(segment("golive", "done", { steps: done("loads").steps }), ctx)
     ).toBeNull()
@@ -907,7 +893,7 @@ describe("page lines", () => {
       }))
     expect(
       standingLine(segment("domain", "now", { steps: steps(1) }), ctx)
-    ).toBe("Adding the security padlock")
+    ).toBe("Making the connection secure")
     expect(
       standingLine(segment("domain", "now", { steps: steps(2) }), ctx)
     ).toBe("Checking your website opens on it")
@@ -977,13 +963,5 @@ describe("cleanArg", () => {
 
   it("swaps a dash for a comma", () => {
     expect(cleanArg("one — two")).toBe("one, two")
-  })
-})
-
-describe("elapsedText", () => {
-  it("speaks in minutes", () => {
-    expect(elapsedText(5)).toBe("Under a minute")
-    expect(elapsedText(60)).toBe("1 minute")
-    expect(elapsedText(130)).toBe("2 minutes")
   })
 })

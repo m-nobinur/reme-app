@@ -25,7 +25,7 @@ export const ActivityStep = z.strictObject({
     .optional(),
   /** A waiting step's note from its owner task, written by code: shown as data. */
   note: Text(200).optional(),
-  /** An owner task's step: when it last moved, which dates the line a done step earns. */
+  /** A done step: when it settled (an owner task's last move, an onboarding step's last fact), which dates the line it earns. */
   at: Timestamp.optional(),
 })
 

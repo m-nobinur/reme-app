@@ -96,7 +96,7 @@ it("treats a task nothing has begun as no row, and offers it", () => {
     )
   ).toEqual([
     "published|done|Published today, 12:00 PM|Visit your website",
-    "address|done|spark.example.com|Use your own domain",
+    "address|done|spark.example.com|Connect",
     "google|next|Connect it once you have your own domain|-",
   ])
 })
@@ -106,7 +106,7 @@ it("offers a domain and Google when the site has neither", () => {
     summary(checklistFor(workspace([seg("golive", "done")]), ZONE, NOW))
   ).toEqual([
     "published|done|Published today, 12:00 PM|Visit your website",
-    "address|done|spark.example.com|Use your own domain",
+    "address|done|spark.example.com|Connect",
     "google|next|Connect it once you have your own domain|-",
   ])
 })

@@ -31,7 +31,6 @@ import {
   StateIcon,
   StatusIcon,
 } from "@workspace/ui/components/status-line"
-import { useCycle } from "@workspace/ui/hooks/use-cycle"
 import { SKIPPED, type StatusKind } from "@workspace/ui/lib/activity-copy"
 import {
   type AnswerSpec,
@@ -73,12 +72,16 @@ import {
 const SECTION_ACTION =
   "text-[0.8125rem] text-muted-foreground underline-offset-4 outline-none transition-colors hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
 
-/** Sections after the first are set off by a hairline. */
+/**
+ * Sections after the first are set off by a hairline. A `foldable` one is
+ * its heading line until pressed, so the section above it keeps the room.
+ */
 function PanelSection({
   title,
   icon,
   count,
   action,
+  foldable = false,
   children,
 }: {
   title: string
@@ -87,9 +90,22 @@ function PanelSection({
   count?: number
   /** A link or button to the rest of the list, at the heading's end. */
   action?: ReactNode
+  foldable?: boolean
   children: ReactNode
 }) {
   const id = useId()
+  const [open, setOpen] = useState(!foldable)
+  const heading = (
+    <>
+      {icon}
+      {title}
+      {count ? (
+        <span className="ms-1 rounded-full bg-muted px-1.5 font-medium text-[0.6875rem] text-muted-foreground tabular-nums leading-4">
+          {count}
+        </span>
+      ) : null}
+    </>
+  )
   return (
     <section
       aria-labelledby={id}
@@ -97,17 +113,32 @@ function PanelSection({
     >
       <div className="flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-1 font-semibold text-sm" id={id}>
-          {icon}
-          {title}
-          {count ? (
-            <span className="ms-1 rounded-full bg-muted px-1.5 font-medium text-[0.6875rem] text-muted-foreground tabular-nums leading-4">
-              {count}
-            </span>
-          ) : null}
+          {foldable ? (
+            <button
+              aria-controls={`${id}-body`}
+              aria-expanded={open}
+              className="-mx-1 flex min-h-6 items-center gap-1 rounded-md px-1 outline-none transition-colors hover:text-foreground/80 focus-visible:ring-3 focus-visible:ring-ring"
+              onClick={() => setOpen((was) => !was)}
+              type="button"
+            >
+              {heading}
+              <CaretDownIcon
+                aria-hidden
+                className={cn(
+                  "ms-1 size-3.5 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
+                  !open && "-rotate-90"
+                )}
+              />
+            </button>
+          ) : (
+            heading
+          )}
         </h2>
-        {action}
+        {open ? action : null}
       </div>
-      {children}
+      <div className="flex flex-col gap-3" hidden={!open} id={`${id}-body`}>
+        {children}
+      </div>
     </section>
   )
 }
@@ -240,7 +271,7 @@ function PhotoTile({ photo }: { photo: BuildPhoto }) {
         )}
         data-state="fallback"
       >
-        No photo, using a text layout
+        Text layout instead
       </div>
     )
   }
@@ -285,14 +316,7 @@ function StepDetail({
 }) {
   switch (row.id) {
     case "planning":
-      return (
-        <>
-          {at === "now" ? (
-            <p className={META}>Choosing a look, colours and pages.</p>
-          ) : null}
-          {plan ? <Decided plan={plan} /> : null}
-        </>
-      )
+      return plan ? <Decided plan={plan} /> : null
     case "photos": {
       if (at === "next" || !photos?.length) return null
       const fell = photos.filter((p) => p.state === "fallback").length
@@ -308,8 +332,8 @@ function StepDetail({
           {fell ? (
             <p className={META}>
               {fell === 1
-                ? "One section uses its text layout instead."
-                : `${fell} sections use their text layout instead.`}
+                ? "One section uses words instead of a photo"
+                : `${fell} sections use words instead of a photo`}
             </p>
           ) : null}
         </>
@@ -354,22 +378,22 @@ function StepDetail({
     case "design":
       return at === "now" ? (
         <p className={META}>
-          Reading the home page at phone, tablet and desktop widths.
+          Looking at the home page on a phone, tablet and laptop
         </p>
       ) : null
     case "polishing":
       return at === "now" ? (
-        <p className={META}>Making the changes the design review asked for.</p>
+        <p className={META}>Making the fixes the design review asked for</p>
       ) : null
     case "fixing":
       return at === "now" ? (
-        <p className={META}>
-          Fixing what the checks found, then checking again.
-        </p>
+        <p className={META}>Fixing what the checks found</p>
       ) : null
     case "checking":
       return at === "now" ? (
-        <p className={META}>Links, facts, accessibility and page weight.</p>
+        <p className={META}>
+          Links, your details, accessibility and page speed
+        </p>
       ) : null
     default:
       return null
@@ -415,6 +439,8 @@ type SegmentStep = {
   state: "done" | "now" | "waiting" | "next" | "skipped"
   /** The icon the step moves while it is at work. */
   kind: StatusKind
+  /** Beside the label, muted: "Waiting for your answer" on the step the owner answers. */
+  hint?: string
   /** What the step decided or made, under its row. */
   detail?: ReactNode
 }
@@ -459,13 +485,15 @@ function StepMark({
 }
 
 /**
- * One piece of work in the panel: a header with its icon, title and one
- * muted line, then its fixed steps, ticked as they finish. A caret folds the
- * steps while it runs. When it finishes on screen every step ticks, it
- * holds a moment, then the header turns to its done title and the steps
- * fold; a done segment is one line that does not open. A failed one keeps
- * its steps and marks the step that stopped. A screen reader hears the step
- * change, never a count ticking.
+ * One piece of work in the panel: a header with its icon, title and a muted
+ * line or two (what it is doing, how it is going for time), then its fixed
+ * steps, ticked as they finish. A caret folds the steps while it runs, and
+ * folded it is one line: the title and how it is going. `quiet` folds it
+ * while something else needs the owner. When it finishes on screen every
+ * step ticks, it holds a moment, then the header turns to its done title
+ * and the steps fold; a done segment is one line that does not open. A
+ * failed one keeps its steps and marks the step that stopped. A screen
+ * reader hears the step change, never a count ticking.
  */
 function PanelSegment({
   icon,
@@ -473,6 +501,8 @@ function PanelSegment({
   title,
   working = title,
   line = null,
+  status = null,
+  quiet = false,
   steps,
   children,
 }: {
@@ -483,6 +513,10 @@ function PanelSegment({
   /** The working title, kept while a segment that just finished shows its steps. */
   working?: string
   line?: string | null
+  /** How it is going for time: "About 5 min left". */
+  status?: string | null
+  /** Folded to one line, since the owner's attention is wanted elsewhere. */
+  quiet?: boolean
   steps: readonly SegmentStep[]
   /** What the owner can do in the segment: a review's buttons, Stop. */
   children?: ReactNode
@@ -491,7 +525,8 @@ function PanelSegment({
   const done = state === "done"
   const failed = state === "failed"
   const [folded, setFolded] = useState(done)
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(!quiet)
+  useEffect(() => setOpen(!quiet), [quiet])
   useEffect(() => {
     if (!done) {
       setFolded(false)
@@ -504,10 +539,8 @@ function PanelSegment({
   const current = steps.find(
     (step) => step.state === "now" || step.state === "waiting"
   )
-  // What is behind and what is at work; the steps to come stay out of the
-  // list, and a rail fading out below says there are more.
+  // What is behind and what is at work; the steps to come stay out of the list.
   const shownSteps = steps.filter((step) => step.state !== "next")
-  const more = shownSteps.length < steps.length
   const acts = Children.toArray(children).length > 0
   // Nothing begun and nothing to do draws no body: a rail alone is an empty block.
   const body = shownSteps.length > 0 || acts
@@ -546,8 +579,21 @@ function PanelSegment({
             id={`${id}-title`}
           >
             {done && !folded ? working : title}
+            {!shown && !done && (status ?? line) ? (
+              <span className="font-normal text-muted-foreground">
+                {` · ${status ?? line}`}
+              </span>
+            ) : null}
           </h3>
-          {line && !done ? <p className={META}>{line}</p> : null}
+          {shown && !done
+            ? [line, status].map((said) =>
+                said ? (
+                  <p className={META} key={said}>
+                    {said}
+                  </p>
+                ) : null
+              )
+            : null}
         </div>
         {done || !body ? null : (
           <button
@@ -619,17 +665,22 @@ function PanelSegment({
                         <p className="flex min-w-0 items-baseline gap-1.5 text-[0.8125rem]">
                           <span
                             className={cn(
-                              "min-w-0 truncate",
+                              "wrap-break-word min-w-0",
                               (step.state === "next" ||
                                 step.state === "skipped") &&
                                 "text-muted-foreground"
                             )}
                           >
                             {step.label}
-                            {step.state === "skipped" ? ` · ${SKIPPED}` : null}
-                            <span className="sr-only">
-                              {STEP_SAID[step.state]}
-                            </span>
+                            {step.state === "skipped" || step.hint ? (
+                              <span className="text-muted-foreground">
+                                {` · ${step.hint ?? SKIPPED}`}
+                              </span>
+                            ) : (
+                              <span className="sr-only">
+                                {STEP_SAID[step.state]}
+                              </span>
+                            )}
                           </span>
                         </p>
                         {step.state === "done" || step.state === "skipped"
@@ -638,11 +689,6 @@ function PanelSegment({
                       </div>
                     </li>
                   ))}
-                  {more && !acts ? (
-                    <li aria-hidden className="relative h-5">
-                      <span className="absolute inset-y-0 left-[7.5px] w-px bg-linear-to-b from-border to-transparent" />
-                    </li>
-                  ) : null}
                 </ol>
               ) : null}
               {children}
@@ -1470,11 +1516,12 @@ const HOUR = 3_600_000
 /**
  * Things with a time, in the order given, on a rail grouped by day: what
  * closes or is due next under "Coming up", or what just happened under
- * another title. Each row has its time of day in `zone` (UTC until the
- * reader's is known), its text, and how far off it is ("in 25 min", "2 hr
- * ago"), measured from `now`, which the panel's minute clock moves; the exact
- * time is its tooltip. One due within the hour, or past, is marked. Nothing
- * renders when the list is empty.
+ * another title. The section is its heading line until pressed. Each row has
+ * its time of day in `zone` (UTC until the reader's is known) and its text;
+ * one still to come also says how far off it is ("in 25 min"), measured from
+ * `now`, which the panel's minute clock moves. The exact time is the
+ * tooltip. One due within the hour, or past, is marked. Nothing renders when
+ * the list is empty.
  */
 function ComingUp({
   items,
@@ -1512,6 +1559,7 @@ function ComingUp({
     <PanelSection
       action={action}
       count={count ?? items.length}
+      foldable
       icon={icon}
       title={title}
     >
@@ -1559,17 +1607,17 @@ function ComingUp({
                       >
                         {item.text}
                       </span>
-                      <span
-                        className={cn(
-                          META,
-                          "tabular-nums",
-                          soon && "font-medium text-primary"
-                        )}
-                      >
-                        {ahead && left <= 0
-                          ? "due now"
-                          : relativeTime(item.at, now)}
-                      </span>
+                      {ahead ? (
+                        <span
+                          className={cn(
+                            META,
+                            "tabular-nums",
+                            soon && "font-medium text-primary"
+                          )}
+                        >
+                          {left <= 0 ? "due now" : relativeTime(item.at, now)}
+                        </span>
+                      ) : null}
                     </div>
                   </li>
                 )
@@ -1727,7 +1775,9 @@ type Thumbnail = { src: string } | "loading" | null
  * the link, "Request changes", which the app answers by putting the chat's
  * composer into website change mode. The host is the link's title rather
  * than its text, since a long one would not fit. The thumbnail holds its
- * ratio while it loads, so nothing moves when it arrives.
+ * ratio while it loads, so nothing moves when it arrives. `connect`, while
+ * the owner has no web address of their own, closes it with the row that
+ * says so.
  */
 function YourWebsite({
   host,
@@ -1735,6 +1785,7 @@ function YourWebsite({
   live,
   thumbnail = null,
   onRequestChanges,
+  connect = null,
 }: {
   host: string | null
   /** Where `host` opens, as the api built it (http and a port on local dev). */
@@ -1743,6 +1794,8 @@ function YourWebsite({
   thumbnail?: Thumbnail
   /** Starts a change to the live site in the chat. */
   onRequestChanges?: (() => void) | undefined
+  /** The way to connect a web address, while none is the owner's own. */
+  connect?: ReactNode
 }) {
   const shot = live ? thumbnail : null
   const change = live && onRequestChanges
@@ -1809,6 +1862,7 @@ function YourWebsite({
           ) : null}
         </div>
       ) : null}
+      {connect ? <WebAddress>{connect}</WebAddress> : null}
     </div>
   )
 }
@@ -1817,47 +1871,30 @@ function YourWebsite({
 
 /**
  * The panel in one line, for its header and for all of it when minimised:
- * a dot for the site (pulsing while a build works, the accent while a
- * version is live), the lead words, and the rest quieter. It never wraps;
- * the app picks what the line says. Spans only, and no live region: the
- * shell puts it inside the button that opens the panel.
- */
-/** How long each line holds the panel's header when several share it. */
-const LINE_TURN_MS = 4000
-
-/**
- * The panel's header line. With several `lines`, such as two jobs at work,
- * each takes a turn: the next slides in every few seconds, and a pointer
- * resting on it holds the one showing. The persona and its halo stay put.
+ * the assistant's face with a halo (pulsing while work runs, held while a
+ * version is live), the lead words, and the rest quieter. It never wraps and
+ * never turns between lines; the app picks the one that matters most. Spans
+ * only, and no live region: the shell puts it inside the button that opens
+ * the panel.
  */
 function LiveLine({
   tone,
   lead,
   detail = null,
-  lines,
   avatar = null,
 }: {
   tone: "working" | "live" | "idle"
   lead: string
   detail?: string | null
-  lines?: readonly { lead: string; detail?: string | null }[] | undefined
   /** The assistant's face, Reme's own when null. */
   avatar?: AvatarId | null
 }) {
-  const [held, setHeld] = useState(false)
-  const turns = lines && lines.length > 1 ? lines : [{ lead, detail }]
-  const { item, at } = useCycle(turns, LINE_TURN_MS, held)
-  const shown = item ?? { lead, detail }
   return (
     <span
       className="flex min-w-0 items-center gap-2 text-sm"
       data-slot="live-line"
       data-tone={tone}
-      onPointerEnter={() => setHeld(true)}
-      onPointerLeave={() => setHeld(false)}
     >
-      {/* The assistant, moving as it does everywhere; while it works a halo
-          pulses behind it, and when the work is live the halo holds. */}
       <span aria-hidden className="relative flex size-6 shrink-0">
         {tone === "idle" ? null : (
           <span
@@ -1870,21 +1907,33 @@ function LiveLine({
         )}
         <AssistantAvatar className="size-6" id={avatar} sway />
       </span>
-      <span
-        className={cn(
-          "min-w-0 truncate",
-          turns.length > 1 &&
-            "fade-in slide-in-from-bottom-1 animate-in duration-enter motion-reduce:animate-none"
-        )}
-        // A new key per turn replays the slide.
-        key={turns.length > 1 ? `${at}:${shown.lead}` : "line"}
-      >
-        <span className="font-medium">{shown.lead}</span>
-        {shown.detail ? (
-          <span className="text-muted-foreground"> {shown.detail}</span>
+      <span className="min-w-0 truncate">
+        <span className="font-medium">{lead}</span>
+        {detail ? (
+          <span className="text-muted-foreground"> {detail}</span>
         ) : null}
       </span>
     </span>
+  )
+}
+
+/**
+ * No web address of the owner's own yet: a row that says so, with the way
+ * to connect one (`children`), which the app draws as a message to the
+ * assistant. It sits as its own section in a list of them.
+ */
+function WebAddress({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-border not-first:border-t not-first:pt-4"
+      data-slot="web-address"
+    >
+      <p className="text-sm">
+        Web address
+        <span className="text-muted-foreground"> · Not connected</span>
+      </p>
+      {children}
+    </div>
   )
 }
 
@@ -1933,5 +1982,6 @@ export {
   stageWord,
   UpNext,
   WaitingOnYou,
+  WebAddress,
   YourWebsite,
 }

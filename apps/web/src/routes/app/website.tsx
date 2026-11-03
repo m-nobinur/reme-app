@@ -34,6 +34,7 @@ import { useLiveWorkspace } from "@/lib/workspace"
 import { photoActions, replaceLogo } from "@/panel/photo-actions"
 import {
   liveThumbnail,
+  useAskInChat,
   useBrowserZone,
   useRequestChanges,
 } from "@/panel/workspace-panel"
@@ -65,6 +66,7 @@ function BuildLink({ build }: { build: BuildSummary }) {
 
 function RowActionLink({ action }: { action: RowAction }) {
   const { conversations } = frame.useLoaderData()
+  const askInChat = useAskInChat()
   switch (action.kind) {
     case "visit":
       return (
@@ -94,13 +96,13 @@ function RowActionLink({ action }: { action: RowAction }) {
     }
     case "ask":
       return (
-        <Link
+        <button
           className={LINK}
-          state={() => ({ chat: crypto.randomUUID(), ask: action.ask })}
-          to="/app"
+          onClick={() => askInChat(action.ask)}
+          type="button"
         >
           {action.label}
-        </Link>
+        </button>
       )
   }
 }

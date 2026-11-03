@@ -2,7 +2,6 @@ import type {
   Activity,
   ActivitySegment,
   ActivityStep,
-  BuildActivity,
   CosToolName,
   MessageReading,
   OnboardingStatus,
@@ -190,10 +189,6 @@ export function cleanArg(
     kind === "page" && SLUG.test(text) ? cap(text.replace(/-/g, " ")) : text
   return words.length > max ? `${words.slice(0, max - 1).trimEnd()}…` : words
 }
-
-/** How long a job has run, in the units an owner thinks in. */
-export const elapsedText = (seconds: number) =>
-  seconds < 60 ? "Under a minute" : plural(Math.floor(seconds / 60), "minute")
 
 /**
  * How long a build takes, as a range in whole minutes rounded outward: the
@@ -1106,13 +1101,12 @@ type Names = {
   step: string | null
 }
 
+/** One name per job for its whole life; only done reads as the outcome. */
 type JobCopy = {
-  title: (n: Names) => readonly string[]
+  title: (n: Names) => string
   /** The title while the job has not begun, when it differs from `title`. */
-  next?: (n: Names) => readonly string[]
-  /** The title while it waits on the owner, when it differs from `title`. */
-  waiting?: (n: Names) => readonly string[]
-  done: (n: Names) => readonly string[]
+  next?: string
+  done: (n: Names) => string
   /** What stopped, after "The" and before "stopped". */
   noun: string
   /** What the pill says while the job runs, after "{assistant} is". */
@@ -1126,102 +1120,74 @@ const startDomain = (n: Names) => n.domain ?? "The domain"
 
 const JOBS: Record<JobKind, JobCopy> = {
   onboarding: {
-    title: (n) =>
-      n.business
-        ? [`Getting ${n.business} ready`, `Setting up ${n.business}`]
-        : ["Getting started"],
-    done: (n) => [
-      `${biz(n)} is set up`,
-      `Finished setting up ${n.business ?? "your business"}`,
-    ],
+    title: () => "About the business",
+    done: (n) => `${biz(n)} set up`,
     noun: "setup",
     pill: (n) => `getting to know ${n.business ?? "your business"}`,
   },
   website: {
-    title: (n) => [
-      is(n.assistant, "building your website"),
-      is(n.assistant, "putting your website together"),
-    ],
-    next: () => ["Your website comes next", "Next, your website"],
-    done: () => ["Your website is built", "Finished building your website"],
+    title: () => "Your website",
+    done: () => "Website draft ready to look at",
     noun: "website build",
     pill: () => "building your website",
   },
   golive: {
-    title: () => ["Putting your website live", "Taking your website live"],
-    next: () => ["Then it goes live", "Then your website goes live"],
-    waiting: () => ["Your website is ready"],
-    done: (n) => [`${biz(n)} is live`, `${biz(n)} is now live`],
+    title: () => "Going live",
+    done: () => "Your website is live",
     noun: "website launch",
-    pill: () => "putting your website live",
+    pill: () => "publishing your website",
   },
   change: {
-    title: (n) => [is(n.assistant, `updating ${n.change ?? "your website"}`)],
-    done: () => ["Your changes are made", "Finished making your changes"],
+    title: (n) => `Updating ${n.change ?? "your website"}`,
+    done: () => "Changes ready to look at",
     noun: "update",
     pill: (n) => `updating ${n.change ?? "your website"}`,
   },
   address: {
-    // By the step it is on, so a name being picked is not a domain going on.
+    // Picking a name is the address; from the record on, it is connecting.
     title: (n) =>
-      n.step === "find_out" || n.step === "choose"
-        ? ["Choosing your web address", "Picking a name for your website"]
+      n.step === "find_out" || n.step === "choose" || !n.step
+        ? "Your web address"
         : n.step === "purchase" && n.domain
-          ? [`Buying ${n.domain}`, `Getting ${n.domain}`]
-          : n.domain
-            ? [`Putting your website on ${n.domain}`, `Setting up ${n.domain}`]
-            : ["Getting your own web address", "Setting up your web address"],
-    next: () => ["Your own web address comes next", "Next, your own address"],
-    done: (n) => [`${startDomain(n)} is live`, `${startDomain(n)} is working`],
+          ? `Buying ${n.domain}`
+          : "Connecting your domain",
+    done: (n) => `${startDomain(n)} connected`,
     noun: "address setup",
-    pill: (n) =>
-      n.domain
-        ? `putting your website on ${n.domain}`
-        : "setting up your web address",
+    pill: () => "connecting your domain",
   },
   domain: {
-    title: (n) => [
-      `Connecting ${n.domain ?? "your domain"}`,
-      `Setting up ${n.domain ?? "your domain"}`,
-    ],
-    done: (n) => [`${startDomain(n)} is live`, `${startDomain(n)} is working`],
+    title: () => "Connecting your domain",
+    done: (n) => `${startDomain(n)} connected`,
     noun: "domain connection",
-    pill: (n) => `connecting ${n.domain ?? "your domain"}`,
+    pill: () => "connecting your domain",
   },
   purchase: {
-    title: (n) => [
-      `Buying ${n.domain ?? "your domain"}`,
-      `Getting ${n.domain ?? "your domain"}`,
-    ],
-    done: (n) => [
-      `${startDomain(n)} is yours`,
-      `${startDomain(n)} is registered`,
-    ],
+    title: (n) => `Buying ${n.domain ?? "your domain"}`,
+    done: (n) => `${startDomain(n)} is yours`,
     noun: "purchase",
     pill: (n) => `buying ${n.domain ?? "your domain"}`,
   },
   google: {
-    title: () => ["Connecting Google", "Linking your site to Google"],
-    next: () => ["Your site on Google comes next", "Next, your site on Google"],
-    done: () => ["Your site is on Google", "Your site is connected to Google"],
+    title: () => "Connecting Google",
+    next: "Get found on Google",
+    done: () => "Your website is on Google",
     noun: "Google connection",
     pill: () => "connecting Google",
   },
 }
 
 /**
- * The website's title while it is at work, by the stage it is on, so the
- * heading says what is happening now; two ways each, as the other titles.
+ * What the website build is doing at its stage, after "Step 3 of 6:". The
+ * pages all written read as putting the site together.
  */
-const WEBSITE_NOW: Partial<
-  Record<BuildStage | "assembling", readonly string[]>
-> = {
-  planning: ["planning your website", "planning your pages"],
-  photos: ["making your photos", "making photos for your website"],
-  writing: ["writing your pages", "writing your website"],
-  assembling: ["putting your pages together", "putting your website together"],
-  polishing: ["polishing the design", "polishing your website"],
-  checking: ["checking your site", "checking every page"],
+const WEBSITE_NOW: Record<BuildStage | "assembling", string> = {
+  planning: "planning the pages from your choices",
+  photos: "making your photos",
+  writing: "writing your pages",
+  assembling: "putting the site together",
+  polishing: "polishing the design",
+  checking: "checking every page",
+  ready: "getting it ready to look at",
 }
 
 /** The stage a website segment is on, with the pages all written read as putting them together. */
@@ -1298,76 +1264,71 @@ const namesOf = (segment: ActivitySegment, ctx: CopyContext): Names => {
   }
 }
 
-/**
- * The heading of the assistant's or the website's group while setting up.
- * The website's is about deciding until the owner has said yes.
- */
-export function setupTitle(
-  part: "assistant" | "website",
-  state: ActivitySegment["state"],
-  deciding: boolean,
-  segment: ActivitySegment,
-  ctx: CopyContext
-): string {
-  const done = state === "done"
-  if (part === "assistant") {
-    if (!done) return "Setting up your assistant"
-    return ctx.assistant
-      ? `${ctx.assistant} is ready`
-      : "Your assistant is ready"
-  }
-  if (done) return "Your website is planned"
-  const { business } = namesOf(segment, ctx)
-  return deciding
-    ? `A website for ${business ?? "your business"}`
-    : "Planning your website"
+/** The three parts of setting up, as the owner meets them. */
+export type SetupPart = "business" | "assistant" | "website"
+
+const SETUP_TOPIC: Record<SetupPart, string> = {
+  business: "About the business",
+  assistant: "Your assistant",
+  website: "Website choices",
 }
 
 /**
- * A segment's heading: its working title, its done title once done, and
- * "The {thing} stopped" when it failed. Null for a kind that is one row, not
- * a segment (reminders, check-ins, a turn).
+ * A part of setting up: its topic while it runs, and once done the line it
+ * keeps in Completed.
+ */
+export function setupTitle(
+  part: SetupPart,
+  steps: readonly ActivityStep[],
+  done: boolean,
+  ctx: CopyContext
+): string {
+  if (!done) return SETUP_TOPIC[part]
+  switch (part) {
+    case "business":
+      return "Business details saved"
+    case "assistant":
+      return `${named(ctx.assistant) ?? "Your assistant"} set up`
+    case "website":
+      return steps.some((s) => s.id === "website" && s.state === "skipped")
+        ? "Website left for later"
+        : "Website choices saved"
+  }
+}
+
+/**
+ * A segment's heading: one name for its whole life, its outcome once done,
+ * and "The {thing} stopped" when it failed. Null for a kind that is one row,
+ * not a segment (reminders, check-ins, a turn).
  */
 export function segmentTitle(segment: ActivitySegment, ctx: CopyContext) {
   const copy = job(segment)
   if (!copy) return null
   const n = namesOf(segment, ctx)
   if (segment.state === "failed") return `The ${copy.noun} stopped`
-  if (segment.state === "upcoming" && copy.next) {
-    return pick(ctx, `${segment.id}:next`, copy.next(n))
-  }
-  if (segment.state === "waiting" && copy.waiting) {
-    return pick(ctx, `${segment.id}:waiting`, copy.waiting(n))
-  }
-  const done = segment.state === "done"
-  const stage =
-    segment.kind === "website" && segment.state === "now"
-      ? websiteNow(segment)
-      : null
-  const now = stage ? WEBSITE_NOW[stage] : undefined
-  if (now) {
-    return is(n.assistant, pick(ctx, `${segment.id}:${stage}`, now))
-  }
-  return pick(
-    ctx,
-    `${segment.id}:${done ? "done" : "title"}`,
-    done ? copy.done(n) : copy.title(n)
-  )
+  if (segment.state === "upcoming" && copy.next) return copy.next
+  return segment.state === "done" ? copy.done(n) : copy.title(n)
 }
 
 type LineExtras = {
-  elapsedSeconds?: number
   /** A time, already formatted in the business zone. */
   until?: string
-  /** The DNS provider's name, when known. */
-  provider?: string
   /** What stopped, for a failed segment. */
   why?: string
   /** A change's build row at work, such as "Checking the page". */
   doing?: string
 }
 
-/** The muted line under a segment's title, or null when it has none (done, upcoming, or nothing the title and steps don't say). */
+/** "Step 3 of 6: writing your pages", counting the steps this build runs. */
+const websiteStep = (segment: ActivitySegment) => {
+  const steps = segment.steps.filter((s) => s.state !== "skipped")
+  const at = steps.findIndex((s) => s.state === "now" || s.state === "waiting")
+  if (at === -1) return null
+  const stage = websiteNow(segment)
+  return `Step ${at + 1} of ${steps.length}${stage ? `: ${WEBSITE_NOW[stage]}` : ""}`
+}
+
+/** The muted line under a segment's title, or null when the title and its steps say it all. */
 export function segmentLine(
   segment: ActivitySegment,
   ctx: CopyContext,
@@ -1375,75 +1336,19 @@ export function segmentLine(
 ): string | null {
   const copy = job(segment)
   if (!copy) return null
-  const n = namesOf(segment, ctx)
   const { state } = segment
   if (state === "failed") {
-    const next = askAgain(n.assistant)
+    const next = askAgain(named(ctx.assistant))
     const why = cleanArg(extras.why, "text", 80)?.replace(/[.!]+$/, "")
     return why ? `${why}. ${next}` : next
   }
   if (state !== "now" && state !== "waiting") return null
   const waiting = state === "waiting"
-  const elapsed =
-    extras.elapsedSeconds === undefined
-      ? null
-      : `${elapsedText(extras.elapsedSeconds)} so far`
-  const range =
-    segment.usual_seconds === undefined
-      ? null
-      : rangeText(
-          segment.usual_seconds,
-          // An api older than the late time: the high end is half again.
-          segment.late_seconds ?? segment.usual_seconds * 1.5,
-          extras.elapsedSeconds
-        )
-  // The time so far, then what can be said of it: a restart or the lane's
-  // range. Past the range's top the range alone says it, as it has to grow.
-  // Nothing it cannot back.
-  const said = segment.restarted
-    ? `${n.assistant ?? "your assistant"} restarted it`
-    : (range?.text ?? null)
-  const timing =
-    range?.longer && !segment.restarted
-      ? `Taking a little longer, ${said}`
-      : elapsed && said
-        ? `${elapsed}, ${said}`
-        : (elapsed ?? (said && cap(said)))
   switch (segment.kind as JobKind) {
-    // The question at work says enough; no count of what is left.
-    case "onboarding":
-      return null
     case "website":
-      return cleanArg(segment.step, "text", 60) ?? timing
-    case "change": {
-      // The step it is on, with the range beside it.
-      const doing = cleanArg(segment.step ?? extras.doing, "text", 60)
-      return doing && range
-        ? `${doing}, ${range.longer ? "taking a little longer, " : ""}${range.text}`
-        : (doing ?? timing)
-    }
-    case "golive":
-      // Waiting, its one step says what it waits for.
-      return waiting ? null : "Going live in a minute"
-    // At work, the title and the step list already say what is happening.
-    case "address": {
-      if (!waiting) return null
-      const step = waitingStep(segment)
-      // These name the wait for the pill; the title already says them.
-      if (step?.note?.startsWith("buying ") || step?.note === "picking a name")
-        return null
-      // The step's own note first: code wrote it for this wait.
-      const note = cleanArg(step?.note, "text", 80)
-      if (note) return cap(note)
-      if (step?.id === "purchase") return payBy(extras)
-      if (step?.id === "records" || step?.id === "ownership")
-        return dnsChanges(segment, n.provider)
-      return null
-    }
-    case "domain":
-      return waiting
-        ? dnsChanges(segment, cleanArg(extras.provider) ?? n.provider)
-        : null
+      return cleanArg(segment.step, "text", 60) ?? websiteStep(segment)
+    case "change":
+      return cleanArg(segment.step ?? extras.doing, "text", 60)
     case "purchase":
       return waiting ? payBy(extras) : null
     case "google": {
@@ -1456,19 +1361,84 @@ export function segmentLine(
           : "Google needs you to sign in again")
       )
     }
+    // The title and its one step say the rest; a line would repeat the card.
+    default:
+      return null
   }
 }
 
 /**
- * The DNS changes the owner has to make, at their provider by name: as many
- * as the connect card listed, carried as the records step's count, and no
- * number when the count is not known.
+ * How a build at work is going for time: the time left only while it is
+ * inside its usual range, then that it is late, never a new number. A
+ * restart says so instead. Null without a range or the time so far.
  */
-const dnsChanges = (segment: ActivitySegment, provider: string | null) => {
+export function segmentStatus(
+  segment: ActivitySegment,
+  elapsedSeconds?: number
+): string | null {
+  if (segment.state !== "now") return null
+  if (segment.restarted)
+    return "Restarted after a hiccup, picking up where it stopped"
+  if (segment.usual_seconds === undefined || elapsedSeconds === undefined)
+    return null
+  // An api older than the late time: the high end is half again.
+  const late = segment.late_seconds ?? segment.usual_seconds * 1.5
+  if (elapsedSeconds > late) return "Taking longer than usual, I'm on it"
+  const left = Math.ceil((late - elapsedSeconds) / 60)
+  return left <= 1 ? "About a minute left" : `About ${left} min left`
+}
+
+/**
+ * The record the owner adds, at their provider by name: as many as the
+ * connect card listed, carried as the records step's count.
+ */
+const addRecords = (segment: ActivitySegment, provider: string | null) => {
   const total = segment.steps.find((s) => s.id === "records")?.count?.total
   const where = provider ?? "your DNS provider"
-  if (!total) return `Changes to make at ${where}`
-  return `${total === 1 ? "One change" : `${total} changes`} to make at ${where}`
+  return total === 1
+    ? `Add the record at ${where}`
+    : `Add the ${total ? `${total} ` : ""}records at ${where}`
+}
+
+/** What a waiting job's current step needs from the owner, after "{assistant} needs". */
+const NEEDS: Readonly<Record<string, string>> = {
+  find_out: "your answer",
+  choose: "your pick of web address",
+  purchase: "your payment",
+  payment: "your payment",
+  sign_in: "you to sign in to Google",
+  permissions: "one more Google permission",
+  verify: "your help with Google",
+  approval: "your go-ahead to publish",
+  // By kind, for a wait with no step of its own.
+  golive: "your go-ahead to publish",
+}
+
+/**
+ * The one line an address or domain shows under its title: what the owner
+ * does now, or what the assistant is doing for it. Null between steps.
+ */
+export function domainStep(
+  segment: ActivitySegment,
+  ctx: CopyContext
+): string | null {
+  const step = currentStep(segment)
+  if (!step) return null
+  if (step.state === "now") return STEP_NOW[step.id] ?? UNIVERSAL.working
+  switch (step.id) {
+    case "records":
+    case "ownership":
+    case "dns":
+      return addRecords(segment, namesOf(segment, ctx).provider)
+    case "purchase":
+      return step.note?.startsWith("buying ")
+        ? "Waiting for you to buy it"
+        : "Waiting for your payment"
+    case "choose":
+      return "Waiting for your pick"
+    default:
+      return WAITING_HINT
+  }
 }
 
 /** A purchase waiting on payment, by when the name's hold ends. */
@@ -1477,20 +1447,39 @@ const payBy = (extras: LineExtras) => {
   return by ? `Pay by ${by} to keep the name` : "Pay soon to keep the name"
 }
 
-/** The panel pill: "Reme is building your website", or "Reme is waiting for your payment". Null when nothing runs or waits. */
+/** "Ava needs your answer": the header when something waits on the owner. */
+export const needsLine = (ctx: CopyContext, what = "your answer") =>
+  `${named(ctx.assistant) ?? "Your assistant"} needs ${what}`
+
+/**
+ * The panel's header for a job: "Ava is building your website", or "Ava
+ * needs a record added at Cloudflare" when it waits on the owner. Getting
+ * to know the business keeps its one line while a question waits, since
+ * there one always does. Null when nothing runs or waits.
+ */
 export function pillLine(segment: ActivitySegment, ctx: CopyContext) {
-  const assistant = named(ctx.assistant)
-  if (segment.state === "failed") {
-    const copy = job(segment)
-    return copy ? `The ${copy.noun} stopped` : null
+  const copy = job(segment)
+  if (!copy) return null
+  if (segment.state === "failed") return `The ${copy.noun} stopped`
+  const n = namesOf(segment, ctx)
+  const at = is(n.assistant, copy.pill(n))
+  if (segment.kind === "onboarding") {
+    return segment.state === "now" || segment.state === "waiting" ? at : null
   }
   if (segment.state === "waiting") {
-    const what = waitsFor(segment)
-    return what ? is(assistant, `waiting for ${what}`) : null
+    const current = currentStep(segment)
+    const step = current?.id ?? ""
+    return needsLine(
+      ctx,
+      ["records", "ownership", "dns"].includes(step)
+        ? `a record added at ${n.provider ?? "your DNS provider"}`
+        : // Buying it elsewhere waits on the owner's own purchase, not a payment here.
+          current?.note?.startsWith("buying ")
+          ? "you to buy the name"
+          : (NEEDS[step] ?? NEEDS[segment.kind])
+    )
   }
-  const copy = job(segment)
-  if (segment.state !== "now" || !copy) return null
-  return is(assistant, copy.pill(namesOf(segment, ctx)))
+  return segment.state === "now" ? at : null
 }
 
 /** A waiting row under its segment: "Waiting for your payment, until 11:50". */
@@ -1608,44 +1597,44 @@ const STEP_LABELS: Partial<
     customers: "Customers",
     proof: "What sets you apart",
     contact: "Contact details",
-    assistant: "Your assistant",
+    assistant: "Name, pronouns and tone",
     website: "Website",
-    quote_form: "Quote requirements",
+    quote_form: "Quote questions",
     photos: "Photos",
     look: "Look and feel",
   },
   website: {
-    planning: "Planning",
+    planning: "The plan",
     photos: "Photos",
     writing: "Pages",
-    polishing: "Polishing",
-    checking: "Checking",
-    ready: "Ready",
+    polishing: "Design polish",
+    checking: "Final checks",
+    ready: "Ready to look at",
   },
   golive: {
-    approval: "Your approval",
+    approval: "Your go-ahead",
     publishing: "Publishing",
-    loads: "Checking it loads",
+    loads: "Checking it opens",
   },
   change: {
-    understanding: "Understanding the change",
-    making: "Making it",
-    checking: "Checking",
-    ready: "Ready",
+    understanding: "Your request",
+    making: "The change",
+    checking: "Checks",
+    ready: "Ready to look at",
   },
   address: {
-    find_out: "Current address",
+    find_out: "Your web address",
     choose: "Name",
     purchase: "Purchase",
-    records: "Domain setting",
+    records: "Record at your provider",
     ownership: "Ownership",
-    certificate: "Security padlock",
-    loads: "Live check",
+    certificate: "Secure connection",
+    loads: "Opens at your address",
   },
   domain: {
-    dns: "Domain setting",
-    certificate: "Security padlock",
-    loads: "Live check",
+    dns: "Record at your provider",
+    certificate: "Secure connection",
+    loads: "Opens at your address",
   },
   purchase: {
     details: "Your details",
@@ -1656,67 +1645,37 @@ const STEP_LABELS: Partial<
   google: {
     sign_in: "Sign in",
     permissions: "Permissions",
-    verify: "Verifying your site",
-    sitemap: "Sending your pages to Google",
+    verify: "Site ownership",
+    sitemap: "Your pages sent to Google",
     first_data: "Your first search numbers",
   },
 }
 
 const isStage = (id: string): id is BuildStage => Object.hasOwn(STAGES, id)
 
-/** An onboarding step while it is asked: the question, not its name. */
-const ONBOARDING_ASKS: Readonly<Record<string, string>> = {
-  work: "What services do you offer?",
-  area: "Where do you work?",
-  customers: "Who are your customers?",
-  proof: "What helps customers trust you?",
-  contact: "How do customers reach you?",
-  assistant: "What should your assistant be like?",
-  website: "Would you like a website?",
-  quote_form: "What do you need to know to quote?",
-  photos: "Do you have photos to use?",
-  look: "How should your website look?",
-}
-
 /**
- * A step's label. The website's step at work says what it is doing from its
- * count and, given its build row's `items`, which pages are written or at
- * work ("Home and Services are done, 5 to go") or the repair the checks
- * asked for; an onboarding step being asked is its question, and the
- * approval waited on says so; every other step, and one in a segment that
- * stopped, is its name.
- * Null for a step the table does not know, which the panel leaves out.
+ * A step's label for the Website page: the website's step at work says what
+ * it is doing from its count ("Home and Services are done, 3 to go"); every
+ * other step is its name. Null for a step the table does not know.
  */
-export function stepLabel(
-  segment: ActivitySegment,
-  step: ActivityStep,
-  items?: BuildActivity["items"]
-) {
-  const working = segment.state === "now" && step.state === "now"
-  if (segment.kind === "website" && working && isStage(step.id)) {
-    const fixing = step.id === "checking" && items?.find((i) => !i.done)
-    if (fixing) return fixing.label
-    return stageLine(step.id, "working", {
-      ...step.count,
-      ...(items && {
-        working: items.filter((i) => i.working).length,
-        written: items.filter((i) => i.done).map((i) => i.label),
-      }),
-    })
+export function stepLabel(segment: ActivitySegment, step: ActivityStep) {
+  if (
+    segment.kind === "website" &&
+    segment.state === "now" &&
+    step.state === "now" &&
+    isStage(step.id)
+  ) {
+    return stageLine(step.id, "working", step.count)
   }
-  const asked = step.state === "now" || step.state === "waiting"
-  if (segment.kind === "onboarding" && asked && ONBOARDING_ASKS[step.id]) {
-    return ONBOARDING_ASKS[step.id]
-  }
-  if (segment.kind === "golive" && asked && step.id === "approval") {
-    return "Waiting for your approval to publish"
-  }
-  return STEP_LABELS[segment.kind]?.[step.id] ?? null
+  return stepName(segment, step)
 }
 
-/** A step's short name, whatever it is doing. */
+/** A step's one name, the same while it is next, at work, waiting and done. */
 export const stepName = (segment: ActivitySegment, step: ActivityStep) =>
   STEP_LABELS[segment.kind]?.[step.id] ?? null
+
+/** The hint beside the step waiting on the owner; its icon says the rest. */
+export const WAITING_HINT = "Waiting for your answer"
 
 /** What a skipped step says beside its label. */
 export const SKIPPED = "Skipped"
@@ -1749,20 +1708,8 @@ export const stepKind = (
   segment.kind === "website" && isStage(step.id)
     ? stageKind(step.id)
     : segment.kind === "onboarding"
-      ? "question"
+      ? "waiting"
       : segmentKind(segment)
-
-/** A finished job as a Completed row: what got done, in a few words. */
-const COMPLETED: Record<JobKind, (n: Names) => string> = {
-  onboarding: (n) => `${biz(n)} set up`,
-  website: () => "Website built",
-  golive: () => "Website published",
-  change: () => "Website changes made",
-  address: (n) => `${startDomain(n)} connected`,
-  domain: (n) => `${startDomain(n)} connected`,
-  purchase: (n) => `${startDomain(n)} registered`,
-  google: () => "Connected to Google",
-}
 
 /** An owner task nothing has begun: the panel offers it as Up next. */
 export const notStarted = (segment: ActivitySegment) =>
@@ -1775,16 +1722,16 @@ export const notStarted = (segment: ActivitySegment) =>
  * A step with no line here (finding out, choosing) earns no row of its own.
  */
 const PROVED: Readonly<Record<string, (n: Names) => string>> = {
-  purchase: (n) => `${startDomain(n)} is registered in your name`,
-  records: (n) => `The setting for ${domain(n)} is in`,
-  ownership: (n) => `Ownership of ${domain(n)} is confirmed`,
-  certificate: (n) => `The security padlock for ${domain(n)} is ready`,
-  loads: (n) => `Your website loads at ${domain(n)}`,
-  sign_in: () => "You signed in to Google",
-  permissions: () => "Google can read your search data",
-  verify: () => "Google confirmed the site is yours",
-  sitemap: () => "Your pages were sent to Google",
-  first_data: () => "Google sent its first search numbers",
+  purchase: (n) => `${startDomain(n)} registered in your name`,
+  records: (n) => `Record for ${domain(n)} found`,
+  ownership: (n) => `${startDomain(n)} ownership confirmed`,
+  certificate: (n) => `${startDomain(n)} secured`,
+  loads: (n) => `Your website opens at ${domain(n)}`,
+  sign_in: () => "Signed in to Google",
+  permissions: () => "Google search data shared",
+  verify: () => "Site ownership confirmed",
+  sitemap: () => "Your pages sent to Google",
+  first_data: () => "First search numbers in from Google",
 }
 
 /** The line an owner task's furthest done step earns, and when that step moved. */
@@ -1801,7 +1748,7 @@ export function proofOf(segment: ActivitySegment, ctx: CopyContext) {
 }
 
 /** The check-in sent the owner a message. */
-const wroteToOwner = (segment: ActivitySegment) =>
+export const wroteToOwner = (segment: ActivitySegment) =>
   segment.steps.some((s) => s.id === "message" && s.state === "done")
 
 /**
@@ -1816,19 +1763,16 @@ export function rowLine(
   title?: string | null
 ): string | null {
   const assistant = named(ctx.assistant)
-  if (segment.state === "done" && Object.hasOwn(COMPLETED, segment.kind)) {
-    return COMPLETED[segment.kind as JobKind](namesOf(segment, ctx))
-  }
+  const copy = job(segment)
+  // A finished job reads as its done title, the words it had in Now.
+  if (segment.state === "done" && copy) return copy.done(namesOf(segment, ctx))
   switch (segment.kind) {
     case "reminder":
       return title?.trim() ? reminderTitle(tidy(title)) : "A reminder"
     case "checkin": {
-      if (segment.state === "upcoming") {
-        return assistant ? `${assistant}'s next check-in` : "Next check-in"
-      }
       const who = assistant ?? "Your assistant"
       return wroteToOwner(segment)
-        ? `${who} checked in and messaged you`
+        ? `${who} checked in and left you a message`
         : `${who} checked in, all clear`
     }
     case "purchase":
@@ -1992,9 +1936,10 @@ type PageExtras = {
 /** An address or domain step at work, for a standing row, which shows no steps. */
 const STEP_NOW: Readonly<Record<string, string>> = {
   purchase: "Registering the name",
-  records: "Looking for the setting",
+  records: "Looking for your record",
+  dns: "Looking for your record",
   ownership: "Checking the domain is yours",
-  certificate: "Adding the security padlock",
+  certificate: "Making the connection secure",
   loads: "Checking your website opens on it",
 }
 
@@ -2094,10 +2039,7 @@ export function pageAction(key: PageActionKey, subject?: string | null) {
   const what = cleanArg(subject, "text", 60) ?? "my domain"
   switch (key) {
     case "own":
-      return {
-        label: "Use your own domain",
-        ask: "I'd like to use my own domain",
-      }
+      return { label: "Connect", ask: "Help me connect my web address" }
     case "dns":
       return {
         label: "Show the change",
