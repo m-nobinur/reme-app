@@ -22,6 +22,7 @@ import {
   Done,
   Problem,
 } from "@workspace/ui/components/assistant/decision"
+import { ReplyPill } from "@workspace/ui/components/assistant/reply-pill"
 import { BrandMark } from "@workspace/ui/components/brand-mark"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConnectRow } from "@workspace/ui/components/connect-row"
@@ -97,19 +98,16 @@ function AddedPill() {
   const last = useAuiState((s) => s.message.isLast && !s.thread.isRunning)
   if (!last) return null
   return (
-    <Button
-      className="self-start rounded-full text-muted-foreground"
+    <ReplyPill
+      className="self-start"
       disabled={sent}
       onClick={() => {
         setSent(true)
         aui.thread().append(DONE_WAITING)
       }}
-      size="sm"
-      type="button"
-      variant="outline"
     >
       {DONE_WAITING}
-    </Button>
+    </ReplyPill>
   )
 }
 
