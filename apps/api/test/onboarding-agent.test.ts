@@ -2490,6 +2490,20 @@ describe("the owner's words in say", () => {
     }
   })
 
+  it("refuses an outcome tacked onto what it will do", () => {
+    // Seen in the eval on 2026-11-03.
+    expect(
+      sayProblems(
+        "When landlords or letting agents get in touch, I'll flag them as repeat clients so their jobs get priority."
+      ).some((p) => p.startsWith("say promises an outcome"))
+    ).toBe(true)
+    expect(
+      sayProblems(
+        "When landlords or letting agents get in touch, I'll flag them as repeat clients."
+      )
+    ).toEqual([])
+  })
+
   it("refuses a word from its own question's examples that the owner never used", () => {
     const question =
       "Who are your usual customers? For example, homeowners, commercial estates, or local councils."
