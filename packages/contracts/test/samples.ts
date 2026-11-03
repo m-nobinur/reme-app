@@ -1182,6 +1182,7 @@ export const samples: Record<ContractName, unknown> = {
       },
     ],
     buy_here: true,
+    usd_gbp: 0.7457,
   },
   FontPair: {
     id: "outfit_figtree",

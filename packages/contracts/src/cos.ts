@@ -729,8 +729,10 @@ const LegacyOffer = z.strictObject({
  * `find_domain`'s output: one row per name stem, best first, the first the
  * recommended one, each ending free or taken with only the prices there is
  * data for. The model quotes no other price. `buy_here` is set only while
- * buying in the app is on; without it the owner buys from a provider. No
- * stem with a free ending is `domain.unavailable`.
+ * buying in the app is on; without it the owner buys from a provider.
+ * `usd_gbp` is pounds per dollar from the ECB's latest daily rate, set only
+ * while that rate is at most 3 days old, so a dollar price may carry a
+ * pound estimate. No stem with a free ending is `domain.unavailable`.
  */
 export const FindDomainOutput = z.union([
   z.discriminatedUnion("outcome", [
@@ -738,6 +740,7 @@ export const FindDomainOutput = z.union([
       outcome: z.literal("found"),
       rows: z.array(DomainStemOffer).min(1).max(6),
       buy_here: z.literal(true).optional(),
+      usd_gbp: z.number().positive().optional(),
     }),
     Refused,
   ]),

@@ -30990,6 +30990,10 @@
                           "buy_here": {
                             "type": "boolean",
                             "const": true
+                          },
+                          "usd_gbp": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
                           }
                         },
                         "required": [
@@ -48579,6 +48583,10 @@
                   "buy_here": {
                     "type": "boolean",
                     "const": true
+                  },
+                  "usd_gbp": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
                   }
                 },
                 "required": [

@@ -8827,6 +8827,7 @@ export interface components {
                     }[]
                     /** @constant */
                     buy_here?: true
+                    usd_gbp?: number
                   }
                 | {
                     /** @constant */
@@ -13407,6 +13408,7 @@ export interface components {
               }[]
               /** @constant */
               buy_here?: true
+              usd_gbp?: number
             }
           | {
               /** @constant */
