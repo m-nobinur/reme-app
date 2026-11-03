@@ -474,7 +474,7 @@ describe("the plan's checks", () => {
       )
     // The default is only a default: no way chosen.
     expect(logoOf(tray)?.path).toBeUndefined()
-    expect(logoOf(tray)?.card.preselected).toEqual(["create"])
+    expect(logoOf(tray)?.card.preselected).toEqual([])
     const shown = (words: string, logo?: "upload" | "create") => {
       const s = typed(words, o, tray)
       const checked = checkPlan(

@@ -27,6 +27,8 @@ describe("the logo round the panel shows", () => {
       type: "lockup",
       style: "minimal",
     },
+    planned: ids,
+    styles: ["minimal", "minimal", "minimal"],
     variants,
   })
   const read = (manifest: object | null, facts: Held[] = []) =>
