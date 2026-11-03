@@ -32,6 +32,7 @@ import {
   PersonaCard,
   PRONOUNS,
   type QuoteField,
+  RECAP_REPLY,
   type ReopenStep,
   type RequestChangeOutput,
   ReviewQuoteFormInput,
@@ -46,6 +47,7 @@ import {
   UPLOAD_TYPES,
 } from "@workspace/contracts"
 import DIRECTIONS from "@workspace/starter-site/directions.json"
+import { phoneText } from "@workspace/starter-site/phone"
 import type { Part, ToolPart } from "./chat.ts"
 import type { JevDecision } from "./jev.ts"
 import {
@@ -62,6 +64,7 @@ import {
   quoteForm,
   quoteUnchanged,
   type RetryReason,
+  recap,
   retry,
   started,
   type Voice,
@@ -94,6 +97,7 @@ export type StepId =
   | "design"
   | "upload"
   | "quote_form"
+  | "recap"
   | "build"
 
 export { ONBOARDING_GOAL }
@@ -1213,6 +1217,16 @@ export const STEPS: readonly Step[] = [
   // Prices, hours and how enquiries arrive are the assistant's to ask once
   // its work needs them, never here.
   askDetails("contact"),
+  {
+    // The business read back from its facts, for the owner to confirm or
+    // correct in words before the assistant's own setup.
+    id: "recap",
+    done: (o) => o.closed.includes("recap") || detailsDone(o, "assistant"),
+    ask: (o, newId) => [
+      text(recapOf(o)),
+      call("tool-ask_open", AskOpenInput.parse({ about: "recap" }), newId),
+    ],
+  },
   askDetails("assistant"),
   askChoice("build_for_me", "site.build_mode"),
   // An org that reaches the design after the tray shipped is asked in one
@@ -1238,6 +1252,18 @@ export const STEPS: readonly Step[] = [
     ],
   },
 ]
+
+/** The recap's words, from the facts as held. */
+export function recapOf(o: Onboarding): string {
+  const phone = factValue(o.facts, "business.phone")?.e164
+  return recap(voiceOf(o), {
+    services: factValue(o.facts, "business.offerings")?.items ?? [],
+    area: factValue(o.facts, "service_area.text")?.text ?? null,
+    customers: factValue(o.facts, "business.audience")?.text ?? null,
+    phone: phone ? phoneText(phone) : null,
+    email: factValue(o.facts, "business.email")?.address ?? null,
+  })
+}
 
 /** The script's quote form, for a typed answer no model could read: a short form to confirm. */
 const defaultQuoteForm = (o: Onboarding, newId: () => string) => [
@@ -1430,7 +1456,14 @@ export function stepOf(part: ToolPart): StepId | null {
   if (part.type === "tool-ask_upload") return "upload"
   if (part.type === "tool-review_quote_form") return "quote_form"
   if (part.type === "tool-ask_design") return "design"
-  const input = part.input as { key?: StepId; step?: StepId } | null
+  const input = part.input as {
+    key?: StepId
+    step?: StepId
+    about?: string
+  } | null
+  if (part.type === "tool-ask_open") {
+    return input?.about === "recap" ? "recap" : null
+  }
   if (part.type === "tool-ask_fact") return input?.key ?? null
   if (part.type === "tool-ask_choice" || part.type === "tool-ask_details") {
     return input?.step ?? null
@@ -1619,7 +1652,8 @@ export function cardAnswer(
     const answer = AskOpenOutput.safeParse(output)
     if (!answer.success) return null
     const { about } = part.input as AskOpenInput
-    return answer.data.answer === "skipped" && SKIPPABLE.includes(about)
+    return answer.data.answer === "skipped" &&
+      SKIPPABLE.includes(about as FactValueKey)
       ? { kind: "passed", step: about as StepId }
       : { kind: "facts", facts: [] }
   }
@@ -1811,6 +1845,12 @@ export function typedAnswer(part: ToolPart, words: string): Answer {
   if (part.type === "tool-ask_open") {
     const { about } = part.input as AskOpenInput
     if (about === "quote.form") return { kind: "retry", reason: "quote" }
+    // Without a model nothing can read a correction, so only a yes settles the recap.
+    if (about === "recap") {
+      return norm(words) === norm(RECAP_REPLY) || yesNo(words) === true
+        ? { kind: "passed", step: "recap" }
+        : { kind: "retry", reason: "unclear" }
+    }
     if (SKIPPABLE.includes(about) && saysSkip(words))
       return { kind: "passed", step: about as StepId }
     return typedFact(about, words)
@@ -2053,6 +2093,11 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
     // A question in words counts only as a skip of an optional fact, on its
     // card or typed over it: the row outlives a reopen, as asked counts do not.
     if (row.type === "tool-ask_open") {
+      // The recap closes once the owner replies, and opens again when it is shown again.
+      if (row.step === "recap") {
+        if (row.state === "input-available") closed.delete("recap")
+        else closed.add("recap")
+      }
       if (
         SKIPPABLE.includes(row.step as FactValueKey) &&
         (row.answer === "skipped" ||
