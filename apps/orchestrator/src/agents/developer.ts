@@ -1074,6 +1074,7 @@ export const reportComplete = (current: Session) =>
           orgId,
           assignmentId,
           facts: current.brief.snapshot.facts,
+          saveFile: sandboxFor(env, orgId).saveFile,
           holdPhotos: true,
         })
 

@@ -237,6 +237,7 @@ describe("quickEdit", () => {
       disk.set(path, content)
     },
     writeBytes: async () => undefined,
+    saveFile: async () => 0,
   }
   const kit = {
     withOrg: async (_: unknown, fn: (db: unknown) => Promise<unknown>) =>
