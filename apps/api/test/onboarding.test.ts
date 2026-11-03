@@ -6,6 +6,7 @@ import {
   type FactValue,
   FONT_PAIRS,
   INDUSTRIES,
+  NAME_IDEAS,
   PALETTES,
   PaletteId,
   RECAP_REPLY,
@@ -336,27 +337,20 @@ describe("the onboarding steps", () => {
     const card = cardFor("contact")
     expect(AskDetailsInput.parse(card.input)).toEqual({
       step: "contact",
-      prefill: [
-        {
-          key: "business.email",
-          value: { address: "probe@brightclean.invalid" },
-        },
-      ],
+      prefill: [],
       skippable: false,
+      sign_in_email: "probe@brightclean.invalid",
     })
     const half = start({ facts: [...ALL_BEFORE("contact"), PHONE] })
     expect(currentStep(half)?.id).toBe("contact")
     expect(
       AskDetailsInput.parse(
         (onboardingStep(half, counter())[1] as ToolPart).input
-      ).prefill
-    ).toEqual([
-      PHONE,
-      {
-        key: "business.email",
-        value: { address: "probe@brightclean.invalid" },
-      },
-    ])
+      )
+    ).toMatchObject({
+      prefill: [PHONE],
+      sign_in_email: "probe@brightclean.invalid",
+    })
     expect(
       currentStep(start({ facts: [...ALL_BEFORE("contact"), PHONE, EMAIL] }))
         ?.id
@@ -506,13 +500,16 @@ describe("the onboarding steps", () => {
     ])
   })
 
-  it("labels the build card's no as Skip", () => {
+  it("labels the build card's answers as the owner says them", () => {
     const labels = (at: Onboarding) =>
       AskChoiceInput.parse(
         (onboardingStep(at, counter())[1] as ToolPart).input
       ).options.map((o) => o.label)
     const facts = ALL_BEFORE("build_for_me")
-    expect(labels(start({ facts }))).toEqual(["Yes, build it for me", "Skip"])
+    expect(labels(start({ facts }))).toEqual([
+      "Yes, build my website",
+      "No, I already have one",
+    ])
   })
 
   it("resolves the build card, then closes in a step of its own so no client sends again", () => {
@@ -1146,11 +1143,15 @@ describe("a reply Jev read", () => {
     for (const held of [[], [maya]]) {
       const now = start({ facts: [...ALL_BEFORE("assistant"), ...held] })
       const card = detailsCard("assistant", now, counter())
+      const input = AskDetailsInput.parse(card.input)
+      const name: FactValue[] = held.length
+        ? []
+        : [{ key: "assistant.name", value: { name: input.ideas?.[0] ?? "" } }]
       const button = cardAnswer(
         card,
         {
           answer: "stated",
-          facts: AskDetailsInput.parse(card.input).prefill,
+          facts: [...input.prefill, ...name],
           skip_all: true,
         },
         []
@@ -2286,8 +2287,8 @@ describe("the assistant card's name ideas", () => {
   const ideas = (o: Onboarding) =>
     AskDetailsInput.parse(detailsCard("assistant", o, counter()).input).ideas
 
-  it("carries the names written for the business once they are ready", () => {
-    expect(ideas(start())).toBeUndefined()
+  it("carries the names written for the business once they are ready, the house ones until then", () => {
+    expect(ideas(start())).toEqual([...NAME_IDEAS])
     const prepared = {
       services_phrase: "your cleans",
       assistant_names: ["Poppy", "Theo"],
@@ -2295,12 +2296,11 @@ describe("the assistant card's name ideas", () => {
     expect(ideas(start({ prepared }))).toEqual(["Poppy", "Theo"])
   })
 
-  it("opens filled with Reme, she/her, the first she/her face and professional, the org's own picks first", () => {
+  it("opens on she/her, the first she/her face and professional with no name, the org's own picks first", () => {
     const prefill = (o: Onboarding) =>
       AskDetailsInput.parse(detailsCard("assistant", o, counter()).input)
         .prefill
     expect(prefill(start())).toEqual([
-      { key: "assistant.name", value: { name: "Reme" } },
       { key: "assistant.pronouns", value: { id: "she_her" } },
       { key: "assistant.avatar", value: { id: "she_1" } },
       { key: "assistant.tone", value: { id: "professional" } },

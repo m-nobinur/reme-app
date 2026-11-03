@@ -616,9 +616,10 @@ describe("the plan's checks", () => {
       key: "assistant.avatar",
       value: { id: "he_1" },
     })
+    // The card holds no name, so none of the assistant's is the card's to refuse.
     expect(
-      left({ ...man, "assistant.name": { name: "Reme" } }, chosen)[0]
-    ).toMatch(/does not fit the pronouns/)
+      left({ ...man, "assistant.name": { name: "Reme" } }, chosen)
+    ).toEqual([])
     // Listed as its own choice, the refusal says a value they asked for is theirs.
     expect(left(man, all).join()).toMatch(
       /assistant.pronouns is not what the card holds.*leave it out of chosen_for_owner/
@@ -1530,7 +1531,7 @@ describe("the plan's parts", () => {
     ])
   })
 
-  it("builds a details card with what is held and the sign-in email filled in", () => {
+  it("builds a details card with what is held and the sign-in email offered", () => {
     const o = onboarding([
       ...without("business.phone", "business.email"),
       QUOTE,
@@ -1556,10 +1557,9 @@ describe("the plan's parts", () => {
         state: "input-available",
         input: {
           step: "contact",
-          prefill: [
-            { key: "business.email", value: { address: "dave@regal.invalid" } },
-          ],
+          prefill: [],
           skippable: false,
+          sign_in_email: "dave@regal.invalid",
         },
       },
     ])

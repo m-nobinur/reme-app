@@ -1116,18 +1116,14 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         ["service_area.text", expect.any(Object), "owner_stated"],
       ])
       // The next step is the next question, in the same row: the contact
-      // card, the sign-in email filled in.
+      // card, the sign-in email offered beside an empty email field.
       expect(pendingCall(await me.tail(id))).toMatchObject({
         type: "tool-ask_details",
         input: {
           step: "contact",
-          prefill: [
-            {
-              key: "business.email",
-              value: { address: "owner@chat-probe.invalid" },
-            },
-          ],
+          prefill: [],
           skippable: false,
+          sign_in_email: "owner@chat-probe.invalid",
         },
       })
     })
