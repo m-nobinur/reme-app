@@ -6,8 +6,10 @@ import {
   CALM_PALETTES,
   type DrawLogosRequest,
   LOGO_VARIANTS,
+  type LogoChip,
   type LogoPalettes,
   type LogoRound,
+  type LogoStyle,
   PALETTES,
   type PaletteFromImage,
 } from "@workspace/contracts"
@@ -54,7 +56,7 @@ const INPUT: AskDesignInput = {
           },
         ],
         multiple: false,
-        preselected: ["create"],
+        preselected: [],
         other: null,
         skippable: false,
       },
@@ -93,11 +95,24 @@ const logo = (id: string): Asset => ({
   bytes: 100,
   use: "logo",
 })
-const roundOf = (round: number, brief: LogoRound["brief"]): LogoRound => ({
+const roundOf = (
+  round: number,
+  brief: LogoRound["brief"],
+  directions?: DrawLogosRequest["directions"],
+  chips?: LogoChip[]
+): LogoRound => ({
   round,
   status: "ready",
+  started_at: new Date().toISOString(),
   variants: Array.from({ length: LOGO_VARIANTS }, (_, at) => ({
     id: uuid(round * 10 + at),
+    direction: directions?.[at] ?? {
+      type: brief.type,
+      style: (brief.style === "surprise"
+        ? "minimal"
+        : brief.style) as LogoStyle,
+    },
+    ...(chips ? { chips } : {}),
   })),
   brief,
 })
@@ -109,8 +124,8 @@ const OLD = roundOf(1, {
   style: "retro",
 })
 
-/** Services that draw a ready round at once from the brief asked for. */
-function fakes(given: LogoRound[] = []) {
+/** Services that draw a ready round at once from the brief asked for, with `chips` on each design. */
+function fakes(given: LogoRound[] = [], chips?: LogoChip[]) {
   const rounds = [...given]
   const drawn: DrawLogosRequest[] = []
   const kept: string[] = []
@@ -122,7 +137,12 @@ function fakes(given: LogoRound[] = []) {
     logoPalettes: async () => ({ palettes: [] }),
     drawLogos: async (request) => {
       drawn.push(request)
-      const round = roundOf(rounds.length + 1, request.brief)
+      const round = roundOf(
+        rounds.length + 1,
+        request.brief,
+        request.directions,
+        chips
+      )
       rounds.push(round)
       return round
     },
@@ -194,7 +214,8 @@ async function render(
       (each) =>
         each.getAttribute("aria-label") === name ||
         each.textContent?.trim() === name ||
-        (each.tagName === "LABEL" && each.textContent?.startsWith(name))
+        ((each.tagName === "LABEL" || each.hasAttribute("aria-pressed")) &&
+          each.textContent?.startsWith(name))
     )
   const press = (name: string) =>
     act(async () => {
@@ -215,7 +236,7 @@ it("asks whether they have a logo on its own page, then shows the designs with n
   expect(tray.designs()).toBeNull()
 
   await tray.press("No, create one for me")
-  expect(tray.header()).toBe("Your logo")
+  expect(tray.header()).toBe("Pick your logo")
   expect(tray.designs()).not.toBeNull()
   expect(tray.container.textContent).not.toContain("No, create one for me")
   await vi.waitFor(() => expect(fake.kept).toEqual([uuid(10)]))
@@ -229,7 +250,7 @@ it("opens on the way the owner chose in words: the designs on create, the drop z
   })
   const fake = fakes()
   const made = await render(fake.services, { input: withPath("create") })
-  expect(made.header()).toBe("Your logo")
+  await vi.waitFor(() => expect(made.header()).toBe("Pick your logo"))
   await vi.waitFor(() => expect(fake.kept).toEqual([uuid(10)]))
   expect(made.designs()).not.toBeNull()
   expect(made.container.textContent).not.toContain("Drop your logo")
@@ -256,7 +277,7 @@ it("going back to the designs draws them at once, with no yes or no first and no
   // Reads from here on never answer, so what shows is what the page held.
   fake.services.logoRounds = () => new Promise(() => undefined)
   await tray.press("Previous question")
-  expect(tray.header()).toBe("Your logo")
+  expect(tray.header()).toBe("Pick your logo")
   expect(tray.container.textContent).not.toContain("Yes, I have my logo")
   const shown = tray.designs()
   expect(shown?.closest("[style*='display: none']")).toBeNull()
@@ -277,7 +298,7 @@ it("draws a changed brief before moving on, then moves on from the new round", a
 
   await tray.press("Redesign my logo")
   expect(fake.drawn).toHaveLength(1)
-  expect(tray.header()).toBe("Your logo")
+  expect(tray.header()).toBe("Pick your logo")
   await vi.waitFor(() => expect(fake.kept).toEqual([uuid(20)]))
   await vi.waitFor(() => expect(tray.control("Next")).toBeDefined())
   expect(tray.control("Redesign my logo")).toBeUndefined()
@@ -324,6 +345,168 @@ it("Pick for me with nothing picked takes the first design drawn", async () => {
   expect(tray.onFinish.mock.calls[0]?.[0].answers.logo).toEqual({
     logo: logo(uuid(10)),
   })
+})
+
+const DIRECTIONS = [
+  { type: "lockup", style: "hand_drawn" },
+  { type: "icon", style: "geometric" },
+  { type: "emblem", style: "retro" },
+] as const
+
+/** The tray as the api opens it for Pruning Co: three directions and a look in the owner's words. */
+const SUGGESTED: AskDesignInput = {
+  questions: INPUT.questions.map((q) =>
+    q.visual === "logo"
+      ? {
+          ...q,
+          start: {
+            directions: [...DIRECTIONS],
+            description: "a neatly pruned tree",
+          },
+        }
+      : q
+  ),
+}
+
+const IDEAS: LogoChip[] = [
+  { kind: "detail", label: "Fewer details", change: "fewer small details" },
+  {
+    kind: "style",
+    label: "Old-school feel",
+    change: "an old-school, heritage feel",
+    set: { style: "retro" },
+  },
+]
+
+it("answers the logo question on one tap: nothing picked first, no Next", async () => {
+  const tray = await render(fakes().services)
+  expect(tray.header()).toBe("Do you have a logo?")
+  const way = tray.control("No, create one for me")
+  expect(way?.getAttribute("aria-pressed")).toBe("false")
+  expect(tray.control("Next")).toBeUndefined()
+  await tray.press("No, create one for me")
+  expect(tray.designs()).not.toBeNull()
+})
+
+it("draws one design per suggested direction first, each captioned for its kind", async () => {
+  const fake = fakes()
+  const tray = await render(fake.services, { input: SUGGESTED })
+  await vi.waitFor(() => expect(fake.drawn).toHaveLength(1))
+  expect(fake.drawn[0]?.directions).toEqual(DIRECTIONS)
+  expect(fake.drawn[0]?.brief).toMatchObject({
+    description: "a neatly pruned tree",
+    type: "lockup",
+    style: "hand_drawn",
+  })
+  await tray.press("No, create one for me")
+  expect(tray.container.textContent).toContain(
+    "A badge for vans, signs and uniforms"
+  )
+  expect(tray.container.textContent).toContain(
+    "Your brief: symbol and name, hand-drawn,"
+  )
+})
+
+it("an idea adds its words and sets its option, a second tap takes both back, and Redesign sends them on the picked design", async () => {
+  const fake = fakes([], IDEAS)
+  const tray = await render(fake.services, { input: SUGGESTED })
+  await tray.press("No, create one for me")
+  await vi.waitFor(() => expect(fake.kept).toEqual([uuid(10)]))
+  await vi.waitFor(() => expect(tray.control("Old-school feel")).toBeDefined())
+  const field = () =>
+    tray.container.querySelector<HTMLTextAreaElement>("textarea")
+  const retro = () =>
+    tray.container.querySelector<HTMLInputElement>(
+      'input[type="radio"][name$="-style"]:checked'
+    )
+
+  await tray.press("Old-school feel")
+  expect(tray.control("Old-school feel")?.getAttribute("aria-pressed")).toBe(
+    "true"
+  )
+  expect(field()?.value).toBe("an old-school, heritage feel")
+  expect(retro()?.closest("label")?.textContent).toContain("Retro")
+  await vi.waitFor(() => expect(tray.control("Redesign my logo")).toBeDefined())
+
+  await tray.press("Old-school feel")
+  expect(field()?.value).toBe("")
+  expect(retro()?.closest("label")?.textContent).toContain("Hand-drawn")
+
+  await tray.press("Fewer details")
+  await tray.press("Redesign my logo")
+  expect(fake.drawn.at(-1)).toMatchObject({
+    changes: "fewer small details",
+    base: uuid(10),
+  })
+  expect(fake.drawn.at(-1)?.directions).toBeUndefined()
+})
+
+it("offers the fixed ideas when the picked design's own are late", async () => {
+  const fake = fakes()
+  const tray = await render(fake.services, { input: SUGGESTED })
+  await tray.press("No, create one for me")
+  await vi.waitFor(() => expect(fake.kept).toEqual([uuid(10)]))
+  expect(tray.control("Bolder")).toBeUndefined()
+  await vi.waitFor(() => expect(tray.control("Bolder")).toBeDefined(), {
+    timeout: 4000,
+  })
+  expect(tray.control("Different icon")).toBeDefined()
+  expect(tray.control("Other colours")).toBeDefined()
+})
+
+it("Edit opens the brief on What should change?, with the field focused", async () => {
+  const fake = fakes()
+  const tray = await render(fake.services, { input: SUGGESTED })
+  await tray.press("No, create one for me")
+  await vi.waitFor(() => expect(fake.kept).toEqual([uuid(10)]))
+  await tray.press("Edit")
+  const field = tray.container.querySelector<HTMLTextAreaElement>("textarea")
+  expect(field?.placeholder).toBe(
+    "For example: bolder lettering, a leaf instead of a tree, darker green"
+  )
+  expect(field?.getAttribute("rows")).toBe("4")
+  expect(
+    tray.container.querySelector(`label[for="${field?.id}"]`)?.textContent
+  ).toBe("What should change?")
+  await vi.waitFor(() => expect(document.activeElement).toBe(field))
+})
+
+it("shows four fitted letterings, the suggested one tagged, and all of them on More styles", async () => {
+  const pairs = ["a", "b", "c", "d", "e", "f", "g", "h"].map((id) => ({
+    id,
+    label: `Pair ${id}`,
+    hint: null,
+    visual: null,
+  }))
+  const lettering: AskDesignInput = {
+    questions: [
+      {
+        id: "lettering",
+        question: "Which lettering do you prefer?",
+        visual: "font_pair",
+        card: {
+          step: "font",
+          options: pairs,
+          initial: ["a", "b", "c", "d"],
+          multiple: false,
+          preselected: ["a"],
+          other: null,
+          skippable: true,
+        },
+        suggested: "a",
+      },
+    ],
+  }
+  const tray = await render(fakes().services, {
+    input: lettering,
+    businessName: "Pruning Co",
+  })
+  const radios = () => tray.container.querySelectorAll('input[type="radio"]')
+  expect(radios()).toHaveLength(4)
+  expect(tray.container.textContent).toContain("Suggested for Pruning Co")
+  await tray.press("More styles")
+  expect(radios()).toHaveLength(8)
+  expect(tray.control("More styles")).toBeUndefined()
 })
 
 it("Pick for me after Yes keeps the upload and waits for the logo", async () => {
