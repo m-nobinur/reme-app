@@ -414,7 +414,9 @@ describe.skipIf(!url)("buying a domain against a database", () => {
         {
           stem: "brightclean",
           why: "matches your business name",
-          endings: { com: { state: "free", price_gbp_year: 12 } },
+          endings: {
+            com: { state: "free", price_gbp_year: 12, registrar_usd: 10.46 },
+          },
         },
       ],
     })
@@ -428,8 +430,9 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     })
     const live = await find(buyEnv(site.store, true).env, kit, site.orgId, {})
     expect(asked(liveNet).some((n) => n.endsWith(".net"))).toBe(false)
-    // One row per stem, .com taken beside the free UK endings; a stem with
-    // nothing free is left out.
+    expect(asked(liveNet)).toContain("brightclean.co")
+    // One row per stem, .com and .co taken beside the free UK endings, each
+    // with the registrar's price; a stem with nothing free is left out.
     expect(live).toEqual({
       outcome: "found",
       rows: [
@@ -437,9 +440,10 @@ describe.skipIf(!url)("buying a domain against a database", () => {
           stem: "brightclean",
           why: "matches your business name",
           endings: {
-            "co.uk": { state: "free", price_gbp_year: 8 },
+            "co.uk": { state: "free", price_gbp_year: 8, registrar_usd: 5.3 },
             com: { state: "taken" },
-            uk: { state: "free", price_gbp_year: 8 },
+            uk: { state: "free", price_gbp_year: 8, registrar_usd: 5.3 },
+            co: { state: "taken" },
           },
         },
       ],
@@ -480,10 +484,20 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     ])
   })
 
-  it("refuses when nothing is free or over its cap, and when the registrar is down", async () => {
+  it("shows a name over its cap as free at the registrar's price only, refuses when nothing is free, and when the registrar is down", async () => {
     const site = await published()
     stubNet(false, { "brightclean.com": priced("brightclean.com", "99.00") })
     const { env } = buyEnv(site.store)
+    expect(await find(env, kit, site.orgId, {})).toMatchObject({
+      rows: [
+        {
+          stem: "brightclean",
+          endings: { com: { state: "free", registrar_usd: 99 } },
+        },
+      ],
+    })
+    vi.unstubAllGlobals()
+    stubNet(false)
     expect(await find(env, kit, site.orgId, {})).toMatchObject({
       refused: true,
       code: "domain.unavailable",
