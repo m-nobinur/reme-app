@@ -400,7 +400,10 @@ test("the quote form preview is the customers' form, live but never sent, and co
   await expect(trigger).toBeFocused()
   await trigger.click()
   await expect(modal.getByLabel("Your name")).toHaveValue("")
-  await modal.getByRole("button", { name: "Close preview" }).click()
+  await expect(
+    modal.getByRole("button", { name: "Close preview" })
+  ).toHaveCount(0)
+  await modal.getByRole("button", { name: "Close", exact: true }).click()
   await expect(modal).toHaveCount(0)
   await expect(trigger).toBeFocused()
 

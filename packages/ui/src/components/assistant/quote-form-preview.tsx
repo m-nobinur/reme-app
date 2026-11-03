@@ -275,13 +275,6 @@ function QuoteFormPreview({
           </form>
           <div className="flex flex-wrap justify-end gap-2 border-border border-t px-5 py-4">
             <Button
-              onClick={() => setOpen(false)}
-              type="button"
-              variant="outline"
-            >
-              Close preview
-            </Button>
-            <Button
               onClick={() => {
                 setOpen(false)
                 onConfirm()
