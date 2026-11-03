@@ -1474,13 +1474,16 @@ export function pillLine(segment: ActivitySegment, ctx: CopyContext) {
     return segment.state === "now" || segment.state === "waiting" ? at : null
   }
   if (segment.state === "waiting") {
-    const step = currentStep(segment)?.id ?? ""
-    const records = ["records", "ownership", "dns"].includes(step)
+    const current = currentStep(segment)
+    const step = current?.id ?? ""
     return needsLine(
       ctx,
-      records
+      ["records", "ownership", "dns"].includes(step)
         ? `a record added at ${n.provider ?? "your DNS provider"}`
-        : (NEEDS[step] ?? NEEDS[segment.kind])
+        : // Buying it elsewhere waits on the owner's own purchase, not a payment here.
+          current?.note?.startsWith("buying ")
+          ? "you to buy the name"
+          : (NEEDS[step] ?? NEEDS[segment.kind])
     )
   }
   return segment.state === "now" ? at : null

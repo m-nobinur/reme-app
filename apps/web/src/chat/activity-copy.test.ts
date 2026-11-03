@@ -463,6 +463,9 @@ describe("segment copy", () => {
       "Add the records at 123-reg"
     )
     // Buying it elsewhere waits on the owner's own purchase.
+    expect(pillLine(address("purchase", "buying spark.co.uk"), ctx)).toBe(
+      "Reme needs you to buy the name"
+    )
     expect(domainStep(address("purchase", "buying spark.co.uk"), ctx)).toBe(
       "Waiting for you to buy it"
     )
