@@ -2167,7 +2167,11 @@ describe("a planned turn", () => {
         plan({
           say: "Added the date.",
           pending_card: "declined",
-          next: { kind: "review_quote_form", fields: dated, note: null },
+          next: {
+            kind: "review_quote_form",
+            fields: [...left, dated[2] as (typeof dated)[number]],
+            note: null,
+          },
         }),
       ]).model,
       PRICE,
@@ -2568,6 +2572,253 @@ describe("the owner's words in say", () => {
     ).toEqual([])
   })
 
+  const CUSTOMERS =
+    "Mostly homeowners. A few letting agents and landlords who send repeat work, and the odd school or church."
+
+  it("refuses work the business doesn't take on, or a customer status, that the owner never gave", () => {
+    const has = (start: string) => (p: string) => p.startsWith(start)
+    // The eval of 2026-11-03, round 1's replies.
+    expect(
+      problemsOf(
+        SERVICES,
+        "If someone asks for routine lawn mowing, I'll flag that it falls outside your main services."
+      ).some(has("say claims the business doesn't take something on"))
+    ).toBe(true)
+    expect(
+      problemsOf(
+        AREA,
+        "If an enquiry comes in from beyond 20 miles, I will check the size of the felling work before turning it away.",
+        "service_area.text"
+      ).some(has("say claims the business doesn't take something on"))
+    ).toBe(true)
+    expect(
+      problemsOf(
+        CUSTOMERS,
+        "Letting agents and landlords with repeat work, noted. When they reach out, I'll flag them as existing accounts.",
+        "business.audience"
+      ).some(has('say calls them "existing accounts"'))
+    ).toBe(true)
+    // What the owner did say is theirs to have read back.
+    expect(
+      problemsOf(
+        "Mostly Harrogate and the villages round it. Nothing above two storeys though, no ladders that high.",
+        "Nothing above two storeys, noted. If someone asks about a three-storey house, I'll tell them it isn't one for you.",
+        "service_area.text"
+      )
+    ).toEqual([])
+    expect(
+      problemsOf(
+        CUSTOMERS,
+        "Letting agents and landlords, noted. When they get in touch, I'll treat it as repeat work.",
+        "business.audience"
+      )
+    ).toEqual([])
+  })
+
+  it("names a long list of services by its range, never one by one", () => {
+    const services = [
+      "Tree pruning and crown reductions",
+      "Tree felling",
+      "Hedge trimming",
+      "Stump grinding",
+    ]
+    const every = (p: string) =>
+      p.startsWith("say reads back every one of the owner's services")
+    expect(
+      sayProblems(
+        "Tree pruning and crown reductions, felling, hedge trimming and stump grinding, noted.",
+        { services }
+      ).some(every)
+    ).toBe(true)
+    expect(
+      sayProblems(
+        "Pruning right through to stump grinding, so the whole job.",
+        { services }
+      )
+    ).toEqual([])
+    // A range that spans the list is the whole of it; part of it is still refused.
+    expect(
+      problemsOf(
+        SERVICES,
+        "From pruning and crown reductions to stump grinding, noted."
+      )
+    ).toEqual([])
+    expect(
+      problemsOf(SERVICES, "From felling to stump grinding, noted.").some((p) =>
+        p.startsWith("say names tree felling and stump grinding as if")
+      )
+    ).toBe(true)
+  })
+
+  it("reads the Markdown as the owner sees it, so bold or a bullet hides nothing", () => {
+    expect(
+      sayProblems("A mix of homeowners and landlords **makes good sense**.")
+    ).toContainEqual(expect.stringMatching(/^say passes a verdict/))
+    expect(
+      problemsOf(SERVICES, "- **Stump grinding**\n- **Tree surgery**").some(
+        (p) => p.startsWith("say names stump grinding as if")
+      )
+    ).toBe(true)
+    expect(
+      sayProblems(
+        "Done, the form now has these changes:\n\n- **What needs doing:** customers can tick more than one\n- **Garden access:** added *Not sure*\n- **Photos:** now required"
+      )
+    ).toEqual([])
+    for (const [say, problem] of [
+      ["## Your quote", "say holds a heading"],
+      ["| Question | Type |\n| --- | --- |", "say holds a table"],
+      ["All set 🎉", "say holds an emoji"],
+      ["Here is the **area", "say opens bold with ** and never closes it"],
+    ]) {
+      expect(sayProblems(say as string), say).toContain(problem)
+    }
+    const wall = Array.from({ length: 52 }, () => "word").join(" ")
+    expect(sayProblems(`${wall}.`)).toContainEqual(
+      expect.stringMatching(/^say has a paragraph of 52 words/)
+    )
+    expect(
+      sayProblems(`${wall.slice(0, 120)}.\n\n${wall.slice(0, 120)}.`)
+    ).toEqual([])
+  })
+
+  it("names every change made to the quote form or the recap", () => {
+    const field = (
+      key: string,
+      label: string,
+      type: "radio" | "checkbox" | "photos",
+      required: boolean,
+      options: string[] | null = null
+    ) => ({ key, label, type, required, hint: null, options })
+    const waiting = [
+      field("work", "What needs doing?", "radio", true, [
+        "Pruning",
+        "Felling",
+        "Hedges",
+      ]),
+      field("access", "Garden access", "radio", true, [
+        "Down the side",
+        "Through the house",
+      ]),
+      field("photos", "Photos of the tree or hedge", "photos", false),
+    ]
+    const changed = [
+      {
+        ...(waiting[0] as (typeof waiting)[number]),
+        type: "checkbox" as const,
+      },
+      {
+        ...(waiting[1] as (typeof waiting)[number]),
+        options: ["Down the side", "Through the house", "Not sure"],
+      },
+      { ...(waiting[2] as (typeof waiting)[number]), required: true },
+    ]
+    const form = call(
+      "tool-review_quote_form",
+      { fields: waiting, note: null },
+      counter()
+    )
+    const asked = typed(
+      'Let people tick more than one job, felling and stump grinding usually go together. Add a "Not sure" option to garden access, and make photos required.',
+      onboarding(EVERYTHING),
+      form
+    )
+    const proposed = (say: string) =>
+      errorsOf(
+        plan({
+          pending_card: "declined",
+          next: { kind: "review_quote_form", fields: changed, note: null },
+          say,
+        }),
+        asked
+      )
+    // Round 1's reply to these three changes, 2026-11-03.
+    const round1 = proposed(
+      "I have switched the services so people can tick multiple options, and made photos mandatory."
+    )
+    expect(round1).toContainEqual(
+      expect.stringMatching(
+        /^say names 2 of the 3 changes you made and leaves out Garden access/
+      )
+    )
+    expect(round1).toContainEqual(
+      expect.stringMatching(/^say uses "mandatory"/)
+    )
+    expect(
+      proposed(
+        "Done, the form now has these changes:\n\n- **What needs doing:** customers can tick more than one\n- **Garden access:** added *Not sure*\n- **Photos:** now required"
+      )
+    ).toEqual([])
+
+    const recap = call("tool-ask_open", { about: "recap" }, counter())
+    const corrected = typed(
+      "Change the area, Cheshire too, and the email is now hello@regalrides.invalid",
+      onboarding([...without(...PERSONA_KEYS), QUOTE]),
+      recap
+    )
+    const fixed = (say: string) =>
+      errorsOf(
+        plan({
+          pending_card: "answered",
+          facts: {
+            "service_area.text": { text: "Greater Manchester and Cheshire" },
+            "business.email": { address: "hello@regalrides.invalid" },
+          },
+          next: { kind: "ask_details", step: "assistant" },
+          say,
+        }),
+        corrected
+      )
+    expect(
+      fixed(
+        "Added Cheshire. Now a bit about me, since I'll be the one answering for Regal Rides."
+      )
+    ).toContainEqual(
+      expect.stringMatching(
+        /^say names 1 of the 2 changes you made and leaves out business\.email/
+      )
+    )
+    expect(
+      fixed(
+        "Added Cheshire, and the email is now the new one.\n\nNow a bit about me, since I'll be the one answering for Regal Rides."
+      )
+    ).toEqual([])
+  })
+
+  it("passes what round 1 refused by mistake", () => {
+    // Words of the trade and of the question's own example, eval 2026-11-03.
+    expect(
+      problemsOf(
+        "Mobile dog grooming around Bristol, mostly busy families",
+        "Busy families with dogs, anywhere within Bristol, noted.",
+        "business.audience",
+        "Who books you? For example, people with one or two dogs, or breeders within the city."
+      )
+    ).toEqual([])
+    // "full groom" says nothing about "full picture".
+    expect(
+      sayProblems("That gives me the full picture.", {
+        items: ["full groom", "bath and tidy", "nail clipping"],
+      })
+    ).toEqual([])
+    // What they don't do is not a list to sum up.
+    expect(
+      listsOf(
+        "Regular cleans, deep cleans and end of tenancy. No external window cleaning, nothing like after-builders mess, no carpets."
+      )
+    ).toEqual([["Regular cleans", "deep cleans", "end of tenancy"]])
+    // Asking the customer is how the owner gets what they need to quote.
+    expect(
+      sayProblems(
+        "I'll ask every enquiry for those so you have what you need to quote."
+      )
+    ).toEqual([])
+    expect(
+      sayProblems(
+        "Is it mostly homeowners? Let me know if it is mostly homeowners or landlords."
+      )
+    ).toContainEqual(expect.stringMatching(/^Leave out a sign-off/))
+  })
+
   it("thanks for a correction only when the plan changed a held fact", () => {
     const thanks = "Silverline it is, thanks for clearing that up."
     expect(sayProblems(thanks, { corrected: false })).toContain(
@@ -2688,6 +2939,19 @@ describe("a streamed turn", () => {
     expect(said.length).toBeGreaterThan(1)
     expect(said.slice(0, -1).every((s) => /[.?!]$/.test(s.trim()))).toBe(true)
     expect(out.firstChunkMs).not.toBeNull()
+  })
+
+  it("sends a bulleted list a line at a time, so no bullet waits for the last one", async () => {
+    const say =
+      "Done, the form now has these changes:\n\n- **Pick-up address:** now required\n- **Passengers:** removed\n- **Date:** added"
+    const { out, said } = await streamed(
+      [plan({ say, next: { kind: "answer_only" } })],
+      typed("Make the pick-up required, drop passengers and add the date")
+    )
+    expect(out.ok).toBe(true)
+    expect(said.join("")).toBe(say)
+    expect(said.slice(0, -1).every((s) => /[.?!:]\n$|\n$/.test(s))).toBe(true)
+    expect(said.length).toBeGreaterThan(2)
   })
 
   it("says what the plan is on before its message, and names its facts once they are committed", async () => {
