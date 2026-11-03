@@ -501,9 +501,9 @@ export const LOGO_VARIANTS = 3
 
 /**
  * Seconds from asking for a round to seeing it, which the tray says while
- * it waits. Drawing took 24 s at the median and 29 s at p95 over eight
- * rounds (six local on 2026-11-04, two on staging); the queue's batch wait
- * adds up to 5 s and the tray's poll up to 2.5 s.
+ * it waits. Drawing took 25 s at the median and 29 s at p95 over ten
+ * rounds (eight local on 2026-11-04, two on staging); the queue's batch
+ * wait adds up to 5 s and the tray's poll up to 2.5 s.
  */
 export const LOGO_ROUND_SECONDS = 30
 
