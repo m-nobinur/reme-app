@@ -39,7 +39,7 @@ test("Escape collapses to one row and the row opens it again", async ({
   page,
 }) => {
   await open(page, "QuestionTray")
-  const first = tray(page, 0)
+  const first = state(page, "Palette, nothing picked")
   await first.getByRole("radio").first().focus()
   await page.keyboard.press("Escape")
   await expect(first.getByRole("radiogroup")).toHaveCount(0)
@@ -126,4 +126,58 @@ test("the tray has no accessibility violations on a phone", async ({
 }) => {
   await open(page, "QuestionTray", 360)
   await axe(page, "QuestionTray 360")
+})
+
+test("the logo question answers from the keyboard in one press, with no Next", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  const logo = state(page, "Logo, nothing chosen")
+  await expect(logo.getByRole("radio")).toHaveCount(0)
+  await expect(logo.getByRole("button", { name: "Next" })).toHaveCount(0)
+  const create = logo.getByRole("button", { name: /No, create one for me/ })
+  await expect(create).toHaveAttribute("aria-pressed", "false")
+  await create.focus()
+  await page.keyboard.press("Enter")
+  await expect(logo.getByRole("heading")).toHaveText(
+    /Designing your logo|Pick your logo/
+  )
+})
+
+test("an idea for a redesign toggles from the keyboard, and Edit moves into What should change?", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  const picked = state(page, "Logo, a design picked")
+  await expect(picked.getByRole("heading")).toHaveText("Pick your logo")
+  const idea = picked.getByRole("button", { name: "Old-school feel" })
+  await idea.focus()
+  await page.keyboard.press("Space")
+  await expect(idea).toHaveAttribute("aria-pressed", "true")
+  await expect(
+    picked.getByRole("textbox", { name: "What should change?" })
+  ).toHaveValue("an old-school, heritage feel")
+  await expect(
+    picked.getByRole("button", { name: "Redesign my logo" })
+  ).toBeEnabled()
+  await page.keyboard.press("Space")
+  await expect(idea).toHaveAttribute("aria-pressed", "false")
+
+  const fresh = state(page, "Logo, its ideas late: the fixed ones")
+  await expect(fresh.getByRole("button", { name: "Bolder" })).toBeVisible()
+  await fresh.getByRole("button", { name: "Edit" }).click()
+  await expect(
+    fresh.getByRole("textbox", { name: "What should change?" })
+  ).toBeFocused()
+})
+
+test("lettering shows four styles and More styles shows them all", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  const lettering = state(page, "Lettering, may be skipped")
+  await expect(lettering.getByRole("radio")).toHaveCount(4)
+  await expect(lettering.getByText(/^Suggested for /)).toBeVisible()
+  await lettering.getByRole("button", { name: "More styles" }).click()
+  await expect(lettering.getByRole("radio")).toHaveCount(8)
 })
