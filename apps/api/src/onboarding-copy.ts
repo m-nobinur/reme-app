@@ -68,7 +68,6 @@ const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 const md = (text: string) => text.replace(/[\\`*_]/g, "\\$&")
 
 /** The few words the owner's eye should land on. */
-const bold = (text: string) => `**${md(text)}**`
 
 /** ", Sam" when the owner's name is known. */
 const comma = (name: string) => (name ? `, ${name}` : "")
@@ -151,14 +150,14 @@ export function opener(v: Voice): string {
   return say(
     v,
     pick(v, "opener", [
-      `${hi} I'll be looking after enquiries and quotes for ${b} from now on, and I can build you a website too if you need one.
+      `${hi} I'll be looking after enquiries and quotes for ${b} from now on, and I can build you a website too if you need one. First I'd like to get to know the business.
 
-First I'd like to get to know the business. ${bold(`What does ${b} do?`)} Tell me the way you'd explain it to a new customer: the main jobs, and anything you don't take on.
+What does ${b} do? Tell me the way you'd explain it to a new customer: the main jobs, and anything you don't take on.
 
 The more detail you give me, the better I can answer your customers.`,
-      `${hi} From now on I'll handle enquiries and quotes for ${b}, and if you need a website, I can build that too.
+      `${hi} From now on I'll handle enquiries and quotes for ${b}, and if you need a website, I can build that too. To start, I'd like to get to know the business.
 
-To start, I'd like to get to know the business. ${bold(`What does ${b} do?`)} Describe it the way you would to a new customer: the main jobs, and anything you don't take on.
+What does ${b} do? Describe it the way you would to a new customer: the main jobs, and anything you don't take on.
 
 The more you tell me, the better I can answer for you.`,
     ])
@@ -211,7 +210,7 @@ export function recap(
   )
   return say(
     v,
-    `Here's what I've noted for ${bold(v.business)}:\n\n${rows.join("\n")}\n\nHave I got that right?`
+    `Here's what I've noted for ${md(v.business)}:\n\n${rows.join("\n")}\n\nHave I got that right?`
   )
 }
 

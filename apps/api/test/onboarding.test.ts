@@ -386,7 +386,7 @@ describe("the onboarding steps", () => {
     const [said, card, ...rest] = onboardingStep(start({ facts }), counter())
     expect(rest).toEqual([])
     expect((said as { text: string }).text).toBe(
-      `Here's what I've noted for **${BUSINESS}**:\n\n- **Services:** end of tenancy cleans, oven cleaning and MOT tests\n- **Area:** Bristol and Bath\n- **Customers:** mostly families\n- **Contact:** 01632 960001, hello@brightclean.invalid\n\nHave I got that right?`
+      `Here's what I've noted for ${BUSINESS}:\n\n- **Services:** end of tenancy cleans, oven cleaning and MOT tests\n- **Area:** Bristol and Bath\n- **Customers:** mostly families\n- **Contact:** 01632 960001, hello@brightclean.invalid\n\nHave I got that right?`
     )
     expect(card).toMatchObject({
       type: "tool-ask_open",
@@ -1645,11 +1645,10 @@ describe("the onboarding copy", () => {
       // tables or emoji.
       expect(text, name).not.toMatch(/^#|^\s*\||\p{Emoji_Presentation}/mu)
       expect((text.match(/\*\*/g)?.length ?? 0) % 2, name).toBe(0)
-      // Only the opener's question is bold; every other question stays plain.
-      if (name !== "opener")
-        expect(text, name).not.toMatch(
-          /\*\*[^*]*\?\s*\*\*|\*\*[^*\n]*\*\*[^.!?\n]*\?/
-        )
+      // Bold marks list labels only; a question stays plain.
+      expect(text, name).not.toMatch(
+        /\*\*[^*]*\?\s*\*\*|\*\*[^*\n]*\*\*[^.!?\n]*\?/
+      )
       for (const paragraph of text.split(/\n\s*\n/))
         expect(paragraph.split(/\s+/).length, name).toBeLessThanOrEqual(50)
       expect(voiceProblems(text, { assistantNamed: true }), name).toEqual({
@@ -1689,7 +1688,7 @@ describe("the onboarding copy", () => {
         email: "first_last@sparkle.invalid",
       })
     ).toBe(
-      "Here's what I've noted for **Sparkle\\_Clean**:\n\n- **Services:** \\*Deep\\* cleans and ovens\n- **Customers:** mostly families, and two letting agents\n- **Contact:** first\\_last@sparkle.invalid\n\nHave I got that right?"
+      "Here's what I've noted for Sparkle\\_Clean:\n\n- **Services:** \\*Deep\\* cleans and ovens\n- **Customers:** mostly families, and two letting agents\n- **Contact:** first\\_last@sparkle.invalid\n\nHave I got that right?"
     )
   })
 
@@ -1780,9 +1779,10 @@ describe("the onboarding copy", () => {
       expect(text).toMatch(/anything you don't take on/)
       expect(text).toMatch(/the better I can answer/)
       expect(text).not.toMatch(/[—–]|\bReme\b/)
-      // Short paragraphs, one idea each, the one thing asked in bold.
+      // Short paragraphs, one idea each, the question opening its own.
       expect(text.split("\n\n").length).toBeLessThanOrEqual(3)
-      expect(text).toContain(`**What does ${BUSINESS} do?**`)
+      expect(text).toContain(`\n\nWhat does ${BUSINESS} do?`)
+      expect(text).not.toContain("**")
       seen.add(text)
       // No name from the sign-in: no stray comma or space before it.
       const nameless = (

@@ -2972,7 +2972,7 @@ describe("the recap", () => {
       "tool-ask_open",
     ])
     expect((parts[1] as { text: string }).text).toBe(
-      "Here's what I've noted for **Regal Rides**:\n\n- **Services:** wedding cars\n- **Area:** Greater Manchester\n- **Customers:** couples getting married\n- **Contact:** 07700 900412, bookings@regal.invalid\n\nHave I got that right?"
+      "Here's what I've noted for Regal Rides:\n\n- **Services:** wedding cars\n- **Area:** Greater Manchester\n- **Customers:** couples getting married\n- **Contact:** 07700 900412, bookings@regal.invalid\n\nHave I got that right?"
     )
   })
 
