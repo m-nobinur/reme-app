@@ -165,7 +165,6 @@ import {
   askedSoFar,
   checkPlan,
   DEFAULT_ONBOARDING_MODEL,
-  opensNoted,
   PLANNER,
   PLANNER_VERSION,
   type PlanCall,
@@ -2427,21 +2426,6 @@ async function recentRows(db: OrgScopedDb, id: string): Promise<PlanRow[]> {
 }
 
 /**
- * Whether a reply earlier in the conversation opened with "..., noted.": the
- * rows the planner reads are only the newest few, and the opener is allowed
- * once in the whole onboarding.
- */
-async function notedBefore(db: OrgScopedDb, id: string): Promise<boolean> {
-  const texts = await db.execute<{ text: string }>(
-    sql`select p->>'text' as text
-    from ${conversationMessages} m, jsonb_array_elements(m.content->'parts') p
-    where m.conversation_id = ${id} and m.content->>'role' = 'assistant'
-      and p->>'type' = 'text' and p->>'text' ilike '%noted%'`
-  )
-  return [...texts].some((row) => opensNoted(row.text))
-}
-
-/**
  * How often each fact has been asked here: the cards in every row, and the
  * questions in words the planner's answered turns sent, read from each such
  * turn's last logged step, the plan the owner saw.
@@ -2525,7 +2509,6 @@ async function openPlan(
     input,
     rows: await recentRows(db, id),
     asked: await askedOf(db, id),
-    notedBefore: await notedBefore(db, id),
   }
   const data = turnData(state)
   const reserved = await planReservation(price, data)

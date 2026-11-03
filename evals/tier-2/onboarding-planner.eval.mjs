@@ -20,7 +20,6 @@ import {
   askedSoFar,
   buildMissing,
   DEFAULT_ONBOARDING_MODEL,
-  opensNoted,
   PLANNER,
   plannerModel,
   planParts,
@@ -62,15 +61,16 @@ import { PATTERNS, styleContext, styleHits } from "./planner-style.mjs"
  * checklist allowed it, the quote form asks business-specific questions and
  * never the contact details, and it took at most `MAX_TURNS` owner turns.
  * The twelve conversations (`ONBOARDING_EVAL_PERSONAS=conversations`) also
- * hold four assertions each: no fact asked twice, no `voiceProblems` hit in
- * any line the owner reads, no question about a fact already held, and the
+ * hold four assertions each: no fact asked twice, no hard `voiceProblems`
+ * hit in any line the owner reads, no question about a fact already held, and the
  * build starts within one turn of the design tray's last answer. Every
  * question the planner can ask is answered: the design tray (picked or
  * skipped), an open question (stated or skipped), a fact, details, a choice,
  * the photo upload (skipped) and the quote form (accepted).
  * It prints every transcript so a person can read the tone, and a table per
  * model: owners passed, fallbacks, first plans refused, cost per onboarding
- * and call latency.
+ * and call latency, then the share of planner replies holding each style
+ * pattern the checks no longer refuse (`planner-style.mjs`).
  *
  *   node --env-file=.env.local --import ./evals/json-imports.mjs \
  *     --experimental-transform-types evals/tier-2/onboarding-planner.eval.mjs
@@ -265,12 +265,6 @@ async function onboard(persona, spec) {
     input,
     rows: sim.rows.slice(-PLANNER.rows),
     asked: askedNow(),
-    // As `chat.ts` reads it: every reply in the conversation, not the newest rows.
-    notedBefore: sim.rows.some(
-      (r) =>
-        r.role === "assistant" &&
-        r.parts.some((p) => p.type === "text" && opensNoted(p.text))
-    ),
   })
   const put = (facts) => {
     for (const fact of facts) {
@@ -323,8 +317,8 @@ async function onboard(persona, spec) {
     for (const part of parts) {
       if (part.type !== "text") continue
       heard.push({ text: part.text, named: assistantNamed })
-      const { hard, soft } = voiceProblems(part.text, { assistantNamed })
-      for (const problem of [...hard, ...soft]) flag(`say: ${problem}`)
+      const { hard } = voiceProblems(part.text, { assistantNamed })
+      for (const problem of hard) flag(`say: ${problem}`)
     }
   }
   const heard = []
