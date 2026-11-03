@@ -14,6 +14,7 @@ import {
   ONBOARDING_GOAL,
   PALETTES,
   PRONOUNS,
+  type QuoteField,
   TEMPLATES,
   TONES,
   TOOL_CALL_CANCELLED,
@@ -42,6 +43,7 @@ import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { PayDialog } from "@workspace/ui/components/assistant/pay-dialog"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
+import { QuoteFormPreview } from "@workspace/ui/components/assistant/quote-form-preview"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
@@ -953,7 +955,7 @@ const ASK_UPLOAD_OPEN: ThreadMessageLike[] = [
 const quoteField = (
   key: string,
   label: string,
-  type: string,
+  type: QuoteField["type"],
   extra: { required?: boolean; hint?: string; options?: string[] } = {}
 ) => ({
   key,
@@ -986,6 +988,54 @@ const LIMOUSINE_QUESTIONS = [
     }
   ),
 ]
+
+/** One question of every type the contract allows. */
+const EVERY_TYPE_QUESTIONS = [
+  quoteField("summary", "What do you need doing", "text", {
+    hint: "A line is enough",
+  }),
+  quoteField("details", "Tell us more", "textarea", { required: false }),
+  quoteField("passengers", "Passengers", "number"),
+  quoteField("journey_day", "Day of the journey", "date"),
+  quoteField("journey_time", "Date and time of the journey", "datetime"),
+  quoteField("occasion", "Occasion", "select", {
+    required: false,
+    options: ["Wedding", "Airport transfer", "Night out"],
+  }),
+  quoteField("vehicle", "Vehicle", "radio", {
+    hint: "The minibus seats up to 16",
+    options: ["Saloon", "Stretch limousine", "Minibus"],
+  }),
+  quoteField("extras", "Extras", "checkbox", {
+    required: false,
+    options: ["Child seat", "Champagne", "Red carpet"],
+  }),
+  quoteField("pickup_photos", "Photos of the pick-up point", "photos", {
+    required: false,
+  }),
+  quoteField("second_phone", "A second number", "tel", { required: false }),
+  quoteField("billing_email", "Email for the invoice", "email", {
+    required: false,
+  }),
+]
+
+/** The preview's button, with what the modal's "Looks good" did beside it. */
+function QuotePreviewSample() {
+  const [confirmed, setConfirmed] = useState(false)
+  return (
+    <div className="flex items-center gap-3 p-4">
+      <QuoteFormPreview
+        fields={EVERY_TYPE_QUESTIONS}
+        onConfirm={() => setConfirmed(true)}
+      />
+      {confirmed ? (
+        <p className="text-muted-foreground text-sm" role="status">
+          Confirmed
+        </p>
+      ) : null}
+    </div>
+  )
+}
 
 /** A `review_quote_form` call in one of its states. */
 const reviewQuote = (
@@ -2856,6 +2906,7 @@ const assistantCatalog = [
       />
     ),
   })),
+  { name: "QuoteFormPreview", render: () => <QuotePreviewSample /> },
   // The upload card and the provider that gives it the app's upload.
   ...(["AskUpload", "UploadPhotosProvider"] as const).map((name) => ({
     name,
