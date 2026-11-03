@@ -1601,8 +1601,9 @@ function changesOf(
     const removed = before
       .filter((f) => !pairs.some((p) => p.was === f))
       .map((was) => ({ was, now: undefined }))
+    // What the prompt keeps for a question the owner didn't mention; a hint may change.
     const shown = (f?: (typeof before)[number]) =>
-      f && JSON.stringify([f.label, f.type, f.required, f.hint, f.options])
+      f && JSON.stringify([f.label, f.type, f.required, f.options])
     return [...pairs, ...removed].flatMap(({ was, now }) => {
       if (shown(was) === shown(now)) return []
       const key = now?.key ?? was?.key ?? ""

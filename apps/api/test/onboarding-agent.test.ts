@@ -2771,7 +2771,12 @@ describe("the owner's words in say", () => {
       hint: null,
       options: ["Stretch limo", "Executive saloon"],
     }
-    const rekeyed = (fields: typeof FIELDS, say: string) =>
+    const rekeyed = (
+      fields: (Omit<(typeof FIELDS)[number], "hint"> & {
+        hint: string | null
+      })[],
+      say: string
+    ) =>
       errorsOf(
         plan({
           pending_card: "declined",
@@ -2788,7 +2793,11 @@ describe("the owner's words in say", () => {
           limo
         )
       )
-    const renamed = FIELDS.map((f) => ({ ...f, key: `${f.key}_info` }))
+    const renamed = FIELDS.map((f) => ({
+      ...f,
+      key: `${f.key}_info`,
+      hint: "For example, 4",
+    }))
     expect(
       rekeyed(renamed, "Added a question on which car they want.")
     ).toEqual([])
