@@ -252,7 +252,7 @@ export async function ownerRoute(
   const { pathname } = new URL(request.url)
   const method = request.method
   if (pathname === "/workspace" && method === "GET") {
-    const { body, etag } = await readTaggedWorkspace(kit, owner.orgId, env)
+    const { body, etag } = await readTaggedWorkspace(kit, owner, env)
     const headers = { etag, "cache-control": "private, no-cache" }
     if (unchanged(request.headers.get("if-none-match"), headers.etag)) {
       return new Response(null, { status: 304, headers })
