@@ -32,8 +32,12 @@ vi.mock("@assistant-ui/react", async (original) => ({
       thread: {
         isRunning: false,
         messages: [
-          { id: "msg-1", role: "assistant" },
-          ...store.after.map((role, i) => ({ id: `after-${i}`, role })),
+          { id: "msg-1", role: "assistant", content: [] },
+          ...store.after.map((role, i) => ({
+            id: `after-${i}`,
+            role,
+            content: [],
+          })),
         ],
       },
     }),
@@ -120,6 +124,28 @@ const FOUND = {
       stem: "sparklecleanbristol",
       why: "Says where you work.",
       endings: { com: FREE(12) },
+    },
+  ],
+  buy_here: true,
+}
+/** The same names with buying here off: no Reme price, the registrar's where known. */
+const FOUND_OFF = {
+  outcome: "found",
+  rows: [
+    {
+      stem: "sparkleclean",
+      why: "Short, and it is your name.",
+      endings: {
+        "co.uk": { state: "free", registrar_usd: 5.3 },
+        com: { state: "taken" },
+        uk: { state: "free" },
+        co: { state: "free" },
+      },
+    },
+    {
+      stem: "sparklecleanbristol",
+      why: "Says where you work.",
+      endings: { com: { state: "free", registrar_usd: 10.46 } },
     },
   ],
 }
@@ -259,32 +285,37 @@ const submit = (tray: HTMLElement) =>
       ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
   )
 
-it("shows four cards at most: the best name twice, then each next name once", async () => {
+it("shows a card per name with its free endings, the first one Recommended", async () => {
   const all = { "co.uk": FREE(8), com: FREE(12), uk: FREE(8) }
   const { tray } = await draw("find_domain", {
     args: {},
     result: {
       outcome: "found",
-      rows: ["a", "b", "c"].map((stem) => ({ stem, why: "x", endings: all })),
+      buy_here: true,
+      rows: ["a", "b", "c", "d", "e", "f"].map((stem) => ({
+        stem,
+        why: "x",
+        endings: all,
+      })),
     },
   })
-  const cards = tray.querySelectorAll('[role="radiogroup"] input[type=radio]')
-  expect([...cards].map((card) => (card as HTMLInputElement).value)).toEqual([
-    "a.co.uk",
-    "a.com",
-    "b.co.uk",
-    "c.co.uk",
-  ])
+  const cards = tray.querySelectorAll('[role="radiogroup"] > fieldset')
+  expect(cards).toHaveLength(6)
+  expect(
+    [...(cards[0]?.querySelectorAll("input[type=radio]") ?? [])].map(
+      (card) => (card as HTMLInputElement).value
+    )
+  ).toEqual(["a.co.uk", "a.uk", "a.com"])
+  expect(tray.textContent?.match(/Recommended/g)).toHaveLength(1)
 })
 
-it("offers one card a free full domain, best first, price only", async () => {
+it("offers each free ending of a name, Reme's price only while buying here is on", async () => {
   const { tray } = await found()
-  const cards = tray.querySelectorAll('[role="radiogroup"] > label')
-  // A taken ending is no card; the pill is the best card's only extra.
+  const cards = tray.querySelectorAll('[role="radiogroup"] > fieldset')
+  // A taken ending is no pill; the Recommended pill is the first card's only extra.
   expect([...cards].map((card) => card.textContent)).toEqual([
-    "Best pick. Short, and it is your name.sparkleclean.co.uk£8 a year",
-    "sparkleclean.uk£8 a year",
-    "sparklecleanbristol.com£12 a year",
+    "sparklecleanRecommended. Short, and it is your name.sparkleclean.co.uk.uk£8 a year",
+    "sparklecleanbristolsparklecleanbristol.com",
   ])
   expect(() => radio(tray, "sparkleclean.com, £12 a year")).toThrow()
   const options = [
@@ -294,10 +325,42 @@ it("offers one card a free full domain, best first, price only", async () => {
   expect(
     options.filter((option) => option.checked).map((o) => o.value)
   ).toEqual([NAME])
-  // The reason is the best card's description, and no other card has one.
+  // The reason describes the first card's endings, and no other card's.
   expect(
     options.map((option) => option.getAttribute("aria-describedby") !== null)
-  ).toEqual([true, false, false])
+  ).toEqual([true, true, false])
+})
+
+it("with buying here off, says where to buy the picked name and connects it once bought", async () => {
+  const purchase = purchaseOf()
+  const { tray } = await draw(
+    "find_domain",
+    { args: {}, result: FOUND_OFF },
+    purchase
+  )
+  expect(tray.textContent).not.toContain("£")
+  expect(() => button(tray, "Continue")).toThrow()
+  const where = () =>
+    tray.querySelector('[data-slot="connect-rows"]')?.textContent
+  expect(where()).toContain("Buy it from")
+  expect(where()).toContain("CloudflareFrom $5.30 a year")
+  expect(where()).toContain("GoDaddygodaddy.com")
+  await act(async () => radio(tray, "sparkleclean.co").click())
+  expect(where()).toContain("Cloudflarecloudflare.com")
+  const links = [...tray.querySelectorAll("a")].map((a) => a.href)
+  expect(links).toEqual([
+    "https://domains.cloudflare.com/?domain=sparkleclean.co",
+    "https://www.godaddy.com/domainsearch/find?domainToCheck=sparkleclean.co",
+  ])
+  await act(async () => tray.querySelector("a")?.click())
+  expect(purchase.elsewhere).toHaveBeenCalledWith("sparkleclean.co")
+  // Following a link stays on the names, with I've bought it at hand.
+  expect(tray.querySelector("h2")?.textContent).toBe("Choose your web address")
+  await press(tray, "I've bought it")
+  expect(purchase.bought).toHaveBeenCalledWith("sparkleclean.co")
+  expect(tray.textContent).toContain(
+    "I can't see sparkleclean.co at the registry yet."
+  )
 })
 
 it("goes on with the ending picked, not the best one", async () => {
@@ -599,6 +662,8 @@ it("buys elsewhere: links with the name, tells the api, then waits for done", as
     { args: {}, result: FOUND },
     purchase
   )
+  // Buying here on: the providers wait behind their own button.
+  expect(tray.querySelector("a")).toBeNull()
   await press(tray, "Buy directly from a provider")
   const links = [...tray.querySelectorAll("a")].map((a) => a.href)
   expect(links).toEqual([
@@ -639,21 +704,21 @@ it("connects a name bought elsewhere once the registry shows it", async () => {
   await act(async () => tray.querySelector("a")?.click())
   await press(tray, "I've bought it")
   expect(chat.textContent).toContain(`${NAME} is yours.`)
-  expect(chat.querySelectorAll("tbody tr")).toHaveLength(1)
+  expect(chat.querySelectorAll('[data-slot="dns-record"]')).toHaveLength(1)
   expect(tray.textContent).toBe("")
 })
 
-it("leaves one line on Not now, and none of the tray once the chat moves on", async () => {
+it("leaves one line on Skip for now, and none of the tray once the chat moves on", async () => {
   const { chat, tray } = await found()
-  await press(tray, "Not now")
-  expect(chat.textContent).toBe("You said not now.")
+  await press(tray, "Skip for now")
+  expect(chat.textContent).toBe("Found 2 namesYou said not now.")
   expect(tray.textContent).toBe("")
 
   sessionStorage.clear()
   store.after = ["user"]
   const later = await found()
   expect(later.chat.textContent).toBe(
-    "Names I offered: sparkleclean.co.uk, sparkleclean.uk, sparklecleanbristol.com."
+    "Found 2 namesNames I offered: sparkleclean.co.uk, sparklecleanbristol.com."
   )
   expect(later.tray.textContent).toBe("")
 })

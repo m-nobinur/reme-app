@@ -1571,6 +1571,34 @@ const CONNECT_DOMAIN_STATES = [
   ),
 ]
 
+const PRUNX = "prunx.bnwise.tech"
+const PRUNX_RECORDS = {
+  outcome: "connecting",
+  method: "records",
+  email_affected: false,
+  provider: {
+    id: "cloudflare",
+    name: "Cloudflare",
+    settings_url:
+      "https://dash.cloudflare.com/?to=/:account/bnwise.tech/dns/records",
+  },
+  steps: [{ type: "CNAME", name: "prunx", value: "domains.remeai.co.uk" }],
+}
+
+/** A connect the owner's typed name ran, with no card. */
+const typedConnect = (id: string) =>
+  cosCall("connect_domain", `connect_${id}`, {
+    args: { name: PRUNX },
+    result: PRUNX_RECORDS,
+  })
+
+// The steps for a name the owner typed, at Cloudflare; then the same steps
+// once the owner has asked for a new name instead, folded to one line.
+const CONNECT_STEPS_NOW: ThreadMessageLike[] = [
+  ask(`Yes, it's ${PRUNX}`),
+  typedConnect("typed"),
+]
+
 const REMOVE_DOMAIN_STATES = decisionStates(
   "remove_domain",
   { name: DOMAIN },
@@ -1608,16 +1636,82 @@ const DOMAIN_BOUGHT_STATES = [
 const FREE_UK = { state: "free", price_gbp_year: 8 } as const
 const FREE_COM = { state: "free", price_gbp_year: 12 } as const
 const TAKEN = { state: "taken" } as const
+const CF_UK = { state: "free", registrar_usd: 5.3 } as const
+const CF_COM = { state: "free", registrar_usd: 10.46 } as const
+const FREE = { state: "free" } as const
 
-// What find_domain answers: name rows best first, one ending taken, none
-// free, and a search still running.
+/** Six names for Pruning Co as the registrar checked them, with buying here off. */
+const PRUNING_ROWS = {
+  outcome: "found",
+  rows: [
+    {
+      stem: "pruningco",
+      why: "matches your business name",
+      endings: { "co.uk": CF_UK, uk: CF_UK, com: CF_COM, co: FREE },
+    },
+    {
+      stem: "pruningleeds",
+      why: "your name plus Leeds",
+      endings: { "co.uk": CF_UK, uk: CF_UK, com: CF_COM, co: TAKEN },
+    },
+    {
+      stem: "pruningtrees",
+      why: "your name plus trees",
+      endings: { "co.uk": CF_UK, uk: TAKEN, com: CF_COM, co: FREE },
+    },
+    {
+      stem: "leedstreesurgery",
+      why: "Leeds plus what you do",
+      endings: { "co.uk": CF_UK, uk: CF_UK, com: TAKEN, co: TAKEN },
+    },
+    {
+      stem: "pruning-leeds",
+      why: "your name and Leeds, with a dash",
+      endings: { "co.uk": CF_UK, uk: CF_UK, com: CF_COM, co: FREE },
+    },
+    {
+      stem: "pruningsurgery",
+      why: "your name plus surgery",
+      endings: { "co.uk": CF_UK, uk: CF_UK, com: CF_COM, co: FREE },
+    },
+  ],
+} as const
+
+const CONNECT_STEPS_PAUSED: ThreadMessageLike[] = [
+  ask(`Yes, it's ${PRUNX}`),
+  typedConnect("paused"),
+  ask("No, help me get one"),
+  cosCall("find_domain", "find_after", {
+    args: {},
+    result: PRUNING_ROWS,
+  }),
+]
+
+// What find_domain answers: a search still running, a refusal with none
+// free, then six names with buying here off, the tray docked for them.
 const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
+  ask("No, help me get one"),
+  cosCall(
+    "find_domain",
+    "find_running",
+    { args: { step: "Looking for names for Pruning Co" } },
+    IN_FLIGHT
+  ),
+  cosCall("find_domain", "find_none", {
+    args: { query: "sparkle" },
+    result: refusal("domain.unavailable", "That name isn't free to register."),
+  }),
+  cosCall("find_domain", "find_found", { args: {}, result: PRUNING_ROWS }),
+]
+
+/** The same names with buying here on: Reme's price, and Continue to Your details. */
+const FIND_DOMAIN_BUY_HERE: ThreadMessageLike[] = [
   ask("I don't have a website address. Can you sort one?"),
-  cosCall("find_domain", "find_running", { args: {} }, IN_FLIGHT),
-  cosCall("find_domain", "find_found", {
+  cosCall("find_domain", "find_found_here", {
     args: {},
     result: {
       outcome: "found",
+      buy_here: true,
       rows: [
         {
           stem: "sparkleclean",
@@ -1631,10 +1725,6 @@ const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
         },
       ],
     },
-  }),
-  cosCall("find_domain", "find_none", {
-    args: { query: "sparkle" },
-    result: refusal("domain.unavailable", "That name isn't free to register."),
   }),
 ]
 
@@ -2945,12 +3035,33 @@ const assistantCatalog = [
     ),
   },
   // The connect card and the records it ends on.
-  ...(["ConnectDomain", "ConnectSteps"] as const).map((name) => ({
-    name,
+  // Each state in a thread of its own: a later domain card folds an earlier one.
+  {
+    name: "ConnectDomain",
     render: () => (
-      <FixtureThread height="h-[340rem]" messages={CONNECT_DOMAIN_STATES} />
+      <div className="flex flex-col gap-4">
+        {CONNECT_DOMAIN_STATES.map((state, at) => (
+          <FixtureThread
+            height="h-[44rem]"
+            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list
+            key={at}
+            messages={[state]}
+          />
+        ))}
+      </div>
     ),
-  })),
+  },
+  {
+    name: "ConnectSteps",
+    render: () => (
+      <div className="flex flex-col gap-4">
+        <FixtureThread height="h-[44rem]" messages={CONNECT_STEPS_NOW} />
+        <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+          <FixtureThread height="h-[56rem]" messages={CONNECT_STEPS_PAUSED} />
+        </DomainPurchaseProvider>
+      </div>
+    ),
+  },
   {
     name: "DomainBought",
     render: () => (
@@ -2966,7 +3077,12 @@ const assistantCatalog = [
   {
     name: "FindDomain",
     render: () => (
-      <FixtureThread height="h-[60rem]" messages={FIND_DOMAIN_STATES} />
+      <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+        <div className="flex flex-col gap-4">
+          <FixtureThread height="h-[64rem]" messages={FIND_DOMAIN_STATES} />
+          <FixtureThread height="h-[48rem]" messages={FIND_DOMAIN_BUY_HERE} />
+        </div>
+      </DomainPurchaseProvider>
     ),
   },
   // The purchase card, its tray and the provider that gives it the app's checkout.
