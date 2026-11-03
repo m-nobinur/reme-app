@@ -792,7 +792,6 @@ async function showTray(index: number, content: number) {
         collapsed: false,
         onCollapsedChange: () => undefined,
         onBack: () => undefined,
-        onForward: () => undefined,
         // biome-ignore lint/correctness/noChildrenProp: the frame requires children as a prop, which createElement's rest argument does not satisfy
         children: createElement("div", { key: index }, `Page ${index + 1}`),
       })
