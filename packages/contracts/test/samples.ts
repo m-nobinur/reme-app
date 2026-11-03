@@ -1172,14 +1172,16 @@ export const samples: Record<ContractName, unknown> = {
           "co.uk": { state: "free", price_gbp_year: 8 },
           com: { state: "taken" },
           uk: { state: "free", price_gbp_year: 8 },
+          co: { state: "free" },
         },
       },
       {
         stem: "brightcleanbristol",
         why: "your name plus Bristol",
-        endings: { com: { state: "free", price_gbp_year: 12 } },
+        endings: { com: { state: "free", registrar_usd: 10.46 } },
       },
     ],
+    buy_here: true,
   },
   FontPair: {
     id: "outfit_figtree",
