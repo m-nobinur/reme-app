@@ -4,6 +4,7 @@ import {
   AVATARS,
   DETAILS_KEYS,
   type FactValue,
+  NAME_IDEAS,
   PRONOUNS,
   type PronounId,
   TONES,
@@ -37,8 +38,10 @@ import { type FocusEvent, type FormEvent, useId, useRef, useState } from "react"
  * field is needed and checked as the owner leaves its page; nothing is sent
  * until the last one reads. Every page stays in the form, hidden, so going
  * back finds what was typed, and a reload resumes on the page reached. The
- * assistant's pages also offer Pick for me, which sends at once with the
- * prefill for anything left empty, and the owner's reply reads Pick for me.
+ * assistant's name page offers Pick for me while the name is empty, which
+ * sends at once with the first name idea and the prefill for anything left
+ * empty, and the owner's reply reads Pick for me. The business email starts
+ * empty, with a chip that fills in the sign-in email.
  * Once answered or skipped it shows nothing: the owner's reply after it says
  * what they gave.
  */
@@ -70,41 +73,40 @@ type DetailsKey = (typeof DETAILS_KEYS)[keyof typeof DETAILS_KEYS][number]
 
 const isPick = (key: string): key is PickKey => key in PICKS
 
-/**
- * A line under a field that says where the answer ends up. The sign-in email
- * is prefilled here, so the owner needs to know it is public.
- */
+/** A line under a field that says where the answer ends up: the email is public. */
 const HINT: Partial<Record<string, string>> = {
   "business.email":
     "Shown on your website. Use a business address if you have one.",
 }
 
-/**
- * Reme first, so an owner can take the product's own name in one tap, then
- * the names written for this business, or a few plain ones without them.
- */
-const nameIdeas = (written: readonly string[] | undefined) => [
-  ...new Set(["Reme", ...(written?.length ? written : ["Ava", "Marcus"])]),
-]
+/** The names written for this business, or the house ones without them. */
+const nameIdeas = (written: readonly string[] | undefined) =>
+  written?.length ? written : NAME_IDEAS
 
-/** Name ideas, a tap each to fill the name field. */
-function NameIdeas({
-  ideas,
+/** Values a tap each puts in a field, under it. */
+function FillChips({
+  label,
+  values,
+  text = (value) => value,
   onPick,
 }: {
-  ideas: readonly string[]
-  onPick: (name: string) => void
+  label: string
+  values: readonly string[]
+  /** What a chip says, its value by default. */
+  text?: (value: string) => string
+  onPick: (value: string) => void
 }) {
+  if (values.length === 0) return null
   return (
-    <ul aria-label="Name ideas" className="flex flex-wrap gap-2 pt-1">
-      {ideas.map((name) => (
-        <li key={name}>
+    <ul aria-label={label} className="flex flex-wrap gap-2 pt-1">
+      {values.map((value) => (
+        <li key={value}>
           <button
-            className="h-7 rounded-full border border-border bg-card px-3 text-xs transition-colors hover:border-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            onClick={() => onPick(name)}
+            className="h-7 max-w-full truncate rounded-full border border-border bg-card px-3 text-xs transition-colors hover:border-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            onClick={() => onPick(value)}
             type="button"
           >
-            {name}
+            {text(value)}
           </button>
         </li>
       ))}
@@ -300,6 +302,12 @@ function DetailsTray({
   const formRef = useRef<HTMLFormElement>(null)
   const key = keys[page] ?? keys[0]
   const last = page === keys.length - 1
+  const ideas = nameIdeas(input.ideas)
+  // Watched so a chip never repeats the name typed, and Pick for me shows
+  // only while the name is empty.
+  const [assistantName, setName] = useState(() =>
+    String(startOf("assistant.name", "name") ?? "")
+  )
 
   /** What every field holds now, by name. */
   const values = () =>
@@ -377,7 +385,20 @@ function DetailsTray({
     if (last) send(values())
     else forward()
   }
-  // What the owner set, and the prefill for any field left empty.
+  /** Puts a value in a key's first field, as if typed. */
+  const fill = (each: DetailsKey, value: string) => {
+    const field = formRef.current?.querySelector<HTMLInputElement>(
+      `[name="${fieldOf(each)}"]`
+    )
+    if (!field) return
+    field.value = value
+    if (each === "assistant.name") setName(value)
+    setProblem(null)
+    save({ page, values: values() })
+    field.focus()
+  }
+  // What the owner set, the prefill for any field left empty, and the first
+  // name idea for an empty name.
   const pickForMe = () =>
     send(
       {
@@ -388,7 +409,10 @@ function DetailsTray({
               ? [[each, String(value?.id ?? "")]]
               : FACT_INPUTS[each].fields.map((field) => [
                   field.name,
-                  String(value?.[field.name] ?? ""),
+                  String(
+                    value?.[field.name] ??
+                      (each === "assistant.name" ? ideas[0] : "")
+                  ),
                 ])
           })
         ),
@@ -405,7 +429,11 @@ function DetailsTray({
       onBack={page > 0 ? back : undefined}
       onCollapsedChange={setCollapsed}
       page={{ index: page, total: keys.length }}
-      pick={input.step === "assistant" ? { onPick: pickForMe } : undefined}
+      pick={
+        key === "assistant.name" && !assistantName.trim()
+          ? { onPick: pickForMe }
+          : undefined
+      }
       question={askOf(key)}
       submit={{ form: `${id}-form` }}
     >
@@ -417,11 +445,11 @@ function DetailsTray({
           // Stored only, not state: the fields already hold what is typed.
           save({ page, values: values() })
           const field = event.target
-          if (
-            field instanceof HTMLInputElement &&
-            field.name === "assistant.pronouns"
-          ) {
+          if (!(field instanceof HTMLInputElement)) return
+          if (field.name === "assistant.pronouns") {
             setPronouns(field.value as PronounId)
+          } else if (field.name === fieldOf("assistant.name")) {
+            setName(field.value)
           }
         }}
         onSubmit={submit}
@@ -468,18 +496,20 @@ function DetailsTray({
                     title={factLabel(each)}
                   />
                   {each === "assistant.name" ? (
-                    <NameIdeas
-                      ideas={nameIdeas(input.ideas)}
-                      onPick={(name) => {
-                        const field =
-                          formRef.current?.querySelector<HTMLInputElement>(
-                            `[name="${fieldOf(each)}"]`
-                          )
-                        if (!field) return
-                        field.value = name
-                        setProblem(null)
-                        field.focus()
-                      }}
+                    <FillChips
+                      label="Name ideas"
+                      onPick={(value) => fill(each, value)}
+                      values={ideas.filter(
+                        (idea) => idea !== assistantName.trim()
+                      )}
+                    />
+                  ) : null}
+                  {each === "business.email" && input.sign_in_email ? (
+                    <FillChips
+                      label="Your sign-in email"
+                      onPick={(value) => fill(each, value)}
+                      text={(value) => `Use ${value}`}
+                      values={[input.sign_in_email]}
                     />
                   ) : null}
                   {HINT[each] ? (

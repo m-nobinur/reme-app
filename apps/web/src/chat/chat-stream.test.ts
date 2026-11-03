@@ -1684,7 +1684,11 @@ const PERSONA_TRAY = row(COS, "msg_owner", {
       type: "tool-ask_details",
       toolCallId: "call_persona",
       state: "input-available",
-      input: { step: "assistant", prefill: PERSONA, skippable: false },
+      input: {
+        step: "assistant",
+        prefill: PERSONA.slice(1),
+        skippable: false,
+      },
     },
   ],
 })
@@ -1812,12 +1816,12 @@ it("the design tray's last answer is saved before Looks good is sent, and a refu
   })
 })
 
-it("the assistant tray opens on the defaults, ticked, says Next before the last page, and Pick for me keeps them", async () => {
+it("the assistant tray opens on the defaults with no name, says Next before the last page, and Pick for me fills the name", async () => {
   const chat = await openTray(PERSONA_TRAY)
   const checked = (value: string) =>
     chat.querySelector<HTMLInputElement>(`input[value="${value}"]`)?.checked
   expect(chat.querySelector<HTMLInputElement>("input[type=text]")?.value).toBe(
-    "Reme"
+    ""
   )
   expect([
     checked("she_her"),
@@ -1825,7 +1829,7 @@ it("the assistant tray opens on the defaults, ticked, says Next before the last 
     checked("professional"),
   ]).toEqual([true, true, true])
   expect(() => button(chat, "Done")).toThrow()
-  await press(chat, "Next")
+  expect(button(chat, "Next")).toBeDefined()
   turns.push(() =>
     Promise.resolve(
       new Response(frames({ type: "finish" }), {

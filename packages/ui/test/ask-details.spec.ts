@@ -17,7 +17,7 @@ test("only the open asks show a tray; answered and skipped ones give way", async
   page,
 }) => {
   await open(page, "AskDetails")
-  await expect(pending(page)).toHaveCount(4)
+  await expect(pending(page)).toHaveCount(5)
   await expect(
     page.getByText("07700 900123 · sam@brightclean.example")
   ).toBeVisible()
@@ -26,7 +26,7 @@ test("only the open asks show a tray; answered and skipped ones give way", async
   )
 })
 
-test("the contact tray checks the phone, then starts the email from the sign-in", async ({
+test("the contact tray checks the phone, then offers the sign-in email without filling it", async ({
   page,
 }) => {
   await open(page, "AskDetails")
@@ -43,9 +43,13 @@ test("the contact tray checks the phone, then starts the email from the sign-in"
   // Enter in the field moves on, as Next does.
   await page.keyboard.press("Enter")
   await expect(contact.getByText("2 of 2", { exact: true })).toBeVisible()
-  await expect(
-    contact.getByRole("textbox", { name: "Email address" })
-  ).toHaveValue("sam@brightclean.example")
+  const email = contact.getByRole("textbox", { name: "Email address" })
+  await expect(email).toHaveValue("")
+  await contact
+    .getByRole("button", { name: "Use sam@brightclean.example" })
+    .click()
+  await expect(email).toHaveValue("sam@brightclean.example")
+  await expect(email).toBeFocused()
   await expect(
     contact.getByText(
       "Shown on your website. Use a business address if you have one."
@@ -67,14 +71,15 @@ test("the assistant tray asks for a name, pronouns, a look and a tone, a page ea
   await open(page, "AskDetails")
   const assistant = pending(page).nth(1)
   await expect(assistant.getByText("1 of 4", { exact: true })).toBeVisible()
-  await expect(
-    assistant.getByRole("button", { name: "Pick for me" })
-  ).toBeVisible()
+  const pick = assistant.getByRole("button", { name: "Pick for me" })
+  await expect(pick).toBeVisible()
   await assistant.getByRole("button", { name: "Next", exact: true }).click()
   await expect(assistant.getByRole("alert")).toHaveText([
     "Check the assistant's name.",
   ])
   await assistant.getByRole("textbox", { name: "Assistant's name" }).fill("Ava")
+  // Nothing on the page is left to pick.
+  await expect(pick).toHaveCount(0)
   await assistant.getByRole("button", { name: "Next", exact: true }).click()
   const pronouns = assistant.getByRole("group", { name: "Pronouns" })
   await expect(pronouns.getByRole("radio")).toHaveCount(3)
@@ -94,15 +99,22 @@ test("the assistant tray asks for a name, pronouns, a look and a tone, a page ea
   await expect(assistant.getByRole("button", { name: "Done" })).toBeVisible()
 })
 
-test("a filled assistant tray opens on its first page, a pick stays editable a page away", async ({
+test("the name starts empty with three ideas, and a tapped idea fills it and leaves the row", async ({
   page,
 }) => {
   await open(page, "AskDetails")
   const assistant = pending(page).nth(3)
   await expect(assistant.getByText("1 of 4", { exact: true })).toBeVisible()
+  const name = assistant.getByRole("textbox", { name: "Assistant's name" })
+  await expect(name).toHaveValue("")
+  const ideas = assistant.getByRole("list", { name: "Name ideas" })
+  await expect(ideas.getByRole("button")).toHaveText(["Reme", "Ava", "Grace"])
+  await ideas.getByRole("button", { name: "Ava" }).click()
+  await expect(name).toHaveValue("Ava")
+  await expect(ideas.getByRole("button")).toHaveText(["Reme", "Grace"])
   await expect(
-    assistant.getByRole("textbox", { name: "Assistant's name" })
-  ).toHaveValue("Reme")
+    assistant.getByRole("button", { name: "Pick for me" })
+  ).toHaveCount(0)
   // Every pick stays editable a page away.
   await assistant.getByRole("button", { name: "Next", exact: true }).click()
   await expect(

@@ -551,6 +551,7 @@ const askDetails = (
     skippable?: boolean
     prefill?: unknown[]
     ideas?: string[]
+    sign_in_email?: string
   } = {}
 ) => ({
   args: {
@@ -558,6 +559,7 @@ const askDetails = (
     prefill: (extra.prefill ?? []) as [],
     skippable: extra.skippable ?? false,
     ...(extra.ideas ? { ideas: extra.ideas } : {}),
+    ...(extra.sign_in_email ? { sign_in_email: extra.sign_in_email } : {}),
   },
   isError: extra.isError,
   result: extra.result,
@@ -610,10 +612,10 @@ const ASK_DETAILS_STATES: ThreadMessageLike[] = [
 const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
   {
     content: [
-      question(
-        "How can customers reach Brightclean? I have filled in the email you signed up with."
-      ),
-      askDetails("contact", { prefill: [SIGN_IN_EMAIL] }),
+      question("How can customers reach Brightclean?"),
+      askDetails("contact", {
+        sign_in_email: SIGN_IN_EMAIL.value.address,
+      }),
     ],
     role: "assistant",
     status: WAITING,
@@ -623,7 +625,7 @@ const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
       question("Last thing: what should your assistant be called?"),
       askDetails("assistant", {
         skippable: true,
-        ideas: ["Marcus", "Priya"],
+        ideas: ["Poppy", "Hannah", "Rosa"],
       }),
     ],
     role: "assistant",
@@ -647,11 +649,21 @@ const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
       question("Here's your assistant as it comes. Change anything you like."),
       askDetails("assistant", {
         prefill: [
-          { key: "assistant.name", value: { name: "Reme" } },
           { key: "assistant.pronouns", value: { id: "they_them" } },
           { key: "assistant.avatar", value: { id: "reme" } },
           { key: "assistant.tone", value: { id: "friendly" } },
         ],
+      }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("And the email?"),
+      askDetails("contact", {
+        prefill: [{ key: "business.phone", value: { e164: "+447700900123" } }],
+        sign_in_email: SIGN_IN_EMAIL.value.address,
       }),
     ],
     role: "assistant",
