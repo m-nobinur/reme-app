@@ -103,6 +103,12 @@ export const ToneId = z.enum(ids(TONES))
  */
 export const SKIP_REPLY = "I'd like to skip this question."
 
+/**
+ * The message the confirm pill under the business recap sends. The api reads
+ * it as the owner confirming the recap; a correction is typed instead.
+ */
+export const RECAP_REPLY = "All correct"
+
 export const TEMPLATES = [
   {
     id: "classic",

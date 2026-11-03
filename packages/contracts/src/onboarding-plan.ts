@@ -106,12 +106,15 @@ export const ReopenStep = z.enum([
  * never the model's.
  */
 export const PlanNext = z.discriminatedUnion("kind", [
-  /** A question the owner answers in words, naming the fact it is after. */
+  /**
+   * A question the owner answers in words, naming the fact it is after, or
+   * "recap": the business read back from its facts, written by the api.
+   */
   z.strictObject({
     kind: z.literal("ask_open"),
-    about: z.enum([...PLAN_FACT_KEYS, "quote.form"] as unknown as [
-      PlanFactKey | "quote.form",
-      ...(PlanFactKey | "quote.form")[],
+    about: z.enum([...PLAN_FACT_KEYS, "quote.form", "recap"] as unknown as [
+      PlanFactKey | "quote.form" | "recap",
+      ...(PlanFactKey | "quote.form" | "recap")[],
     ]),
   }),
   /**

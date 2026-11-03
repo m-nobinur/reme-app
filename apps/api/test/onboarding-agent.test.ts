@@ -4,6 +4,7 @@ import {
   OnboardingPlan,
   PERSONA_CARD,
   type OnboardingPlan as Plan,
+  RECAP_REPLY,
   SKIP_REPLY,
 } from "@workspace/contracts"
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
@@ -27,6 +28,7 @@ import {
   checkPlan,
   DEFAULT_ONBOARDING_MODEL,
   doingLine,
+  listsOf,
   type PlanState,
   plannerInstructions,
   plannerModel,
@@ -101,6 +103,8 @@ const QUOTE: FactValue = { key: "quote.form", value: { fields: FIELDS } }
 
 const without = (...keys: string[]) =>
   EVERYTHING.filter((f) => !keys.includes(f.key))
+
+const PERSONA_KEYS = ["assistant.name", "assistant.pronouns", "assistant.tone"]
 
 const onboarding = (
   facts: FactValue[] = [EVERYTHING[0] as FactValue],
@@ -1271,10 +1275,13 @@ describe("what the planner reads and how often it asks", () => {
   })
 
   it("keeps to the script's order: each code step's own card next", () => {
-    const o = onboarding([
-      ...without("assistant.name", "assistant.pronouns", "assistant.tone"),
-      QUOTE,
-    ])
+    const o = onboarding(
+      [
+        ...without("assistant.name", "assistant.pronouns", "assistant.tone"),
+        QUOTE,
+      ],
+      { closed: ["recap"] }
+    )
     expect(
       errorsOf(
         plan({
@@ -1449,7 +1456,7 @@ describe("going back to a step", () => {
     const checked = checkPlan(
       plan({
         pending_card: "declined",
-        say: "Rooms are a question of their own now. Does this look right?",
+        say: "Rooms are a question of their own now.",
         next: { kind: "review_quote_form", fields: redrafted, note: null },
       }),
       s
@@ -1531,14 +1538,18 @@ describe("the plan's parts", () => {
     const s = typed("ok", o)
     const checked = checkPlan(
       plan({
-        say: "How should customers reach you?",
+        say: "Last bit on the business side, how customers get hold of you.",
         next: { kind: "ask_details", step: "contact" },
       }),
       s
     )
     if (!checked.ok) throw new Error(checked.errors.join("; "))
     expect(planParts(checked.checked, s, counter())).toEqual([
-      { type: "text", text: "How should customers reach you?", state: "done" },
+      {
+        type: "text",
+        text: "Last bit on the business side, how customers get hold of you.",
+        state: "done",
+      },
       {
         type: "tool-ask_details",
         toolCallId: "id1",
@@ -1828,7 +1839,7 @@ describe("a planned turn", () => {
           "business.email": { address: "bookings@regal.invalid" },
         },
         pending_card: "answered",
-        say: "Weddings and proms across Greater Manchester, lovely. Who books you most?",
+        say: "Greater Manchester, noted. Who books you most?",
         next: { kind: "ask_open", about: "business.audience" },
       }),
     ])
@@ -2351,51 +2362,210 @@ describe("the owner's words in say", () => {
     )
     expect(
       sayProblems(
-        "Couples and business travellers make a good mix for a chauffeur firm. Do you have a slogan?",
+        "Couples and business travellers, noted. Do you have a slogan?",
         context
       )
     ).toEqual([])
   })
 
-  it("refuses the owner's list read back, and passes a reply that just has it", () => {
-    const listed =
-      "say reads the owner's list back to them; say in a few words that you have it, or pick out one detail, and move on"
-    const owner =
-      "The address, whether it's a house or a shop, roughly how many windows, and if they want gutters or the conservatory done too."
-    // Both seen in local onboarding on 2026-10-29.
-    for (const said of [
-      "Understood, covering the address, property style, window count, and any extras like gutters or conservatories.",
-      "Got it, the address, property style and gutters.",
-    ]) {
-      expect(sayProblems(said, { typed: owner }), said).toContain(listed)
-    }
+  // The staging live test of 2026-11-03, a tree surgery in Leeds.
+  const SERVICES =
+    "We're a tree surgery and garden care company in Leeds. Main jobs are tree pruning and crown reductions, tree felling, hedge trimming and stump grinding."
+  const AREA =
+    "Leeds and about 20 miles out, so Bradford, Wakefield, Harrogate and Wetherby. We'll go further for big felling jobs."
+  const asking = (about: string, question: string) => ({
+    card: call("tool-ask_open", { about }, counter()),
+    rows: [{ role: "assistant", parts: [{ type: "text", text: question }] }],
+  })
+  /** The checks' findings on `say` for an owner who typed `words` over an open question. */
+  const problemsOf = (
+    words: string,
+    say: string,
+    about = "business.offerings",
+    question = "What does the business do?"
+  ) => {
+    const { card, rows } = asking(about, question)
+    const s = { ...typed(words, onboarding(), card), rows } as PlanState
+    return errorsOf(
+      plan({
+        pending_card: "answered",
+        next: { kind: "ask_open", about: "service_area.text" },
+        say,
+      }),
+      s
+    )
+  }
+
+  it("lists the owner's lists as they wrote them", () => {
+    expect(listsOf(SERVICES)).toEqual([
+      [
+        "tree pruning and crown reductions",
+        "tree felling",
+        "hedge trimming",
+        "stump grinding",
+      ],
+    ])
+    expect(listsOf(AREA)).toEqual([
+      ["Bradford", "Wakefield", "Harrogate", "Wetherby"],
+    ])
     expect(
-      sayProblems(
-        "Got it, that's everything a quote needs. Here is what I'll ask new enquiries.",
-        { typed: owner }
+      listsOf(
+        "Mostly homeowners. A few letting agents and landlords who send repeat work, and the odd school or church."
       )
     ).toEqual([])
+    // Read as lists in the eval on 2026-11-03: a sentence with commas is not one.
     expect(
-      sayProblems("Wren it is, they/them, and keeping things casual.", {
-        typed: "Call yourself Wren, they/them, and keep it casual.",
-        persona: {
-          names: ["Wren"],
-          pronouns: ["they_them"],
-          tones: ["casual"],
-        },
-      })
-    ).not.toContain(listed)
-    // The pair the planner's prompt shows.
-    const family = {
-      typed: "Divorce, child arrangements, mediation and prenups, in Leeds.",
+      listsOf("Hiya! We're Regal Rides, limo and chauffeur hire in Manchester.")
+    ).toEqual([])
+  })
+
+  it("refuses part of the owner's list named as the whole, and passes one item or all of them", () => {
+    const part = (named: string) => (p: string) =>
+      p.startsWith(`say names ${named} as if that were the owner's whole list`)
+    // Both seen on staging on 2026-11-03.
+    expect(
+      problemsOf(SERVICES, "Stump grinding and tree surgery, noted.").some(
+        part("stump grinding")
+      )
+    ).toBe(true)
+    expect(
+      problemsOf(
+        AREA,
+        "Harrogate and Wetherby included, got it.",
+        "service_area.text"
+      ).some(part("Harrogate and Wetherby"))
+    ).toBe(true)
+    // One thing and what the assistant will do with it, or the whole answer.
+    for (const say of [
+      "Further out for big felling jobs, noted. I won't turn those away just because they're past the 20 miles.",
+      "Bradford, Wakefield, Harrogate and Wetherby, noted.",
+      "Leeds and 20 miles out, further for big fells.",
+    ]) {
+      expect(problemsOf(AREA, say, "service_area.text"), say).toEqual([])
     }
     expect(
-      sayProblems(
-        "Got it, divorce, child arrangements, mediation and prenups across Leeds.",
-        family
+      problemsOf(
+        SERVICES,
+        "Tree pruning and crown reductions, felling, hedges and stump grinding, noted."
       )
-    ).toContain(listed)
-    expect(sayProblems("Mediation across Leeds, noted.", family)).toEqual([])
+    ).toEqual([])
+  })
+
+  it("refuses a verdict on the owner's answer", () => {
+    // Each seen on staging on 2026-11-03.
+    for (const say of [
+      "A mix of homeowners and letting agents makes good sense.",
+      "Combining felling and stump grinding makes complete sense.",
+      "Clear access for the chipper makes a huge difference to a job.",
+      "No problem at all.",
+      // Seen in the eval after the rewrite, 2026-11-03.
+      "Covering Leeds and Bradford in person gives clients plenty of flexibility.",
+      "Offering mediation is helpful to know.",
+      "Having every chauffeur DBS checked is a strong selling point.",
+    ]) {
+      expect(
+        sayProblems(say).some((p) => p.startsWith("say passes a verdict")),
+        say
+      ).toBe(true)
+    }
+    expect(sayProblems("Does that make sense for your jobs?")).toEqual([])
+  })
+
+  it("refuses a promise of work it does not do", () => {
+    // Seen in the eval on 2026-11-03.
+    for (const say of [
+      "Knowing the vehicle up front means I can check availability across the fleet before quoting.",
+      "I'll book them in for a consultation.",
+    ]) {
+      expect(
+        sayProblems(say).some((p) => p.startsWith("say promises")),
+        say
+      ).toBe(true)
+    }
+    for (const say of [
+      "When an airport run comes in, I'll ask for the flight number.",
+      "I'll call myself Reme.",
+    ]) {
+      expect(sayProblems(say), say).toEqual([])
+    }
+  })
+
+  it("refuses an outcome tacked onto what it will do", () => {
+    // Seen in the eval on 2026-11-03.
+    expect(
+      sayProblems(
+        "When landlords or letting agents get in touch, I'll flag them as repeat clients so their jobs get priority."
+      ).some((p) => p.startsWith("say promises an outcome"))
+    ).toBe(true)
+    expect(
+      sayProblems(
+        "When landlords or letting agents get in touch, I'll flag them as repeat clients."
+      )
+    ).toEqual([])
+  })
+
+  it("refuses a word from its own question's examples that the owner never used", () => {
+    const question =
+      "Who are your usual customers? For example, homeowners, commercial estates, or local councils."
+    const customers =
+      "Mostly homeowners. A few letting agents and landlords who send repeat work, and the odd school or church."
+    const borrowed = (p: string) => p.includes('"estates", an example')
+    expect(
+      problemsOf(
+        customers,
+        "A mix of homeowners and estates work, noted.",
+        "business.audience",
+        question
+      ).some(borrowed)
+    ).toBe(true)
+    // A question may reuse its own words; the owner's own word is theirs.
+    expect(
+      problemsOf(
+        customers,
+        "Homeowners first, noted. What sets you apart from other local firms?",
+        "business.audience",
+        question
+      )
+    ).toEqual([])
+  })
+
+  it("refuses the owner's service said in other words", () => {
+    const renamed = (p: string) =>
+      p.startsWith('say calls their "stump grinding" "stump removal"')
+    expect(
+      problemsOf(SERVICES, "Stump removal on its own, noted.").some(renamed)
+    ).toBe(true)
+    expect(problemsOf(SERVICES, "Tree surgery in Leeds, noted.")).toEqual([])
+  })
+
+  it("only leads in when a card asks the question under it", () => {
+    const o = onboarding([
+      ...without("business.phone", "business.email", ...PERSONA_KEYS),
+      QUOTE,
+    ])
+    const asks =
+      "say asks a question, but the card under it asks it in its title; lead in with one short line that asks nothing"
+    const contact = (say: string) =>
+      errorsOf(
+        plan({ next: { kind: "ask_details", step: "contact" }, say }),
+        typed("That's all for quotes", o)
+      )
+    expect(
+      contact("Next, what phone number and email should customers use?")
+    ).toContain(asks)
+    expect(
+      contact("Last bit on the business side, how customers get hold of you.")
+    ).toEqual([])
+    // Above the quote form, whose own buttons take the reply (staging, 2026-11-03).
+    expect(
+      sayProblems(
+        "Here is a draft of the questions. Take a look and let me know if you would like any changes.",
+        { leadIn: true }
+      ).some((p) => p.startsWith("say asks for the owner's reply"))
+    ).toBe(true)
+    expect(
+      sayProblems("Here is a draft of the questions.", { leadIn: true })
+    ).toEqual([])
   })
 
   it("thanks for a correction only when the plan changed a held fact", () => {
@@ -2417,6 +2587,77 @@ describe("the owner's words in say", () => {
       say: thanks,
     })
     expect(errorsOf(changed, s)).toEqual([])
+  })
+})
+
+describe("the recap", () => {
+  const beforeRecap = () => onboarding([...without(...PERSONA_KEYS), QUOTE])
+  const recapCard = () => call("tool-ask_open", { about: "recap" }, counter())
+
+  it("comes after the contact details, and its words are the facts as held", () => {
+    const s = typed("07700 900412 and bookings@regal.invalid", beforeRecap())
+    expect(
+      errorsOf(
+        plan({
+          next: { kind: "ask_details", step: "assistant" },
+          say: "Got the number and email.",
+        }),
+        s
+      )
+    ).toContain("the next step is ask_open recap; ask that, or answer_only")
+    const p = plan({
+      next: { kind: "ask_open", about: "recap" },
+      say: "Got the number and email.",
+    })
+    const checked = checkPlan(p, s)
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    const parts = planParts(checked.checked, s, counter())
+    expect(parts.map((part) => part.type)).toEqual([
+      "text",
+      "text",
+      "tool-ask_open",
+    ])
+    expect((parts[1] as { text: string }).text).toBe(
+      "Here's what I've noted: wedding cars. You cover Greater Manchester. Your customers are couples getting married. They reach you on 07700 900412 or bookings@regal.invalid.\n\nHave I got that right?"
+    )
+  })
+
+  it("moves on once the owner confirms or corrects it", () => {
+    const o = beforeRecap()
+    const confirmed = typed(RECAP_REPLY, o, recapCard())
+    const next = {
+      pending_card: "answered" as const,
+      next: { kind: "ask_details" as const, step: "assistant" as const },
+      say: "That's Regal Rides covered. Next, how I come across to you and your customers.",
+    }
+    expect(errorsOf(plan(next), confirmed)).toEqual([])
+    expect(
+      errorsOf(
+        plan({
+          ...next,
+          next: { kind: "ask_open", about: "recap" },
+          say: "Got it.",
+        }),
+        confirmed
+      )
+    ).toContain("the recap is settled already; go on to the next step")
+    const corrected = typed(
+      "Change the area, it's Cheshire too",
+      o,
+      recapCard()
+    )
+    expect(
+      errorsOf(
+        plan({
+          ...next,
+          facts: {
+            "service_area.text": { text: "Greater Manchester and Cheshire" },
+          },
+          say: "Added Cheshire. Now a bit about me, since I'll be the one answering for Regal Rides.",
+        }),
+        corrected
+      )
+    ).toEqual([])
   })
 })
 
@@ -2558,7 +2799,9 @@ describe("a streamed turn", () => {
     expect(out.ok).toBe(true)
     expect(out.calls.map((c) => c.errors.length > 0)).toEqual([true, false])
     expect(JSON.stringify(run.prompts[1])).toContain("ceremony or praise")
-    expect(await plannerInstructions()).toContain("How you sound")
+    expect(await plannerInstructions()).toContain(
+      "These read as filler and are refused"
+    )
   })
 
   it("offers no photo move: the photos are a tray question", async () => {

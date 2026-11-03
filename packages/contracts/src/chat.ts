@@ -159,9 +159,11 @@ export const AskFactOutput = z.discriminatedUnion("answer", [
 
 /**
  * `ask_open`'s input: a question the owner answers in their own words, by the
- * fact it is after or "quote.form". The assistant's message asks it; the
- * tray's title is the web's copy for `about`. `skippable` marks a question
- * the owner may pass on; a call without it, as stored before it, is required.
+ * fact it is after, "quote.form", or "recap": the business read back from its
+ * facts, which the owner confirms or corrects. The assistant's message asks
+ * it; the tray's title is the web's copy for `about`. `skippable` marks a
+ * question the owner may pass on; a call without it, as stored before it, is
+ * required.
  */
 type OpenKey = Exclude<
   FactValueKey,
@@ -169,16 +171,17 @@ type OpenKey = Exclude<
 >
 
 export const AskOpenInput = z.strictObject({
-  about: z.enum(
-    FactValue.options
+  about: z.enum([
+    ...(FactValue.options
       .map((o) => o.shape.key.value)
       .filter(
         (key) =>
           key !== "media.uploads" &&
           !(REVIEW_FACT_KEYS as readonly string[]).includes(key) &&
           !(CONTENT_FACT_KEYS as readonly string[]).includes(key)
-      ) as [OpenKey, ...OpenKey[]]
-  ),
+      ) as OpenKey[]),
+    "recap",
+  ] as unknown as [OpenKey | "recap", ...(OpenKey | "recap")[]]),
   skippable: z.boolean().optional(),
 })
 

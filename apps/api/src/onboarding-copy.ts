@@ -132,55 +132,77 @@ export function say(v: Pick<Voice, "tone">, text: string): string {
 export const firstName = (owner: string) => owner.trim().split(/\s+/)[0] ?? ""
 
 /**
- * The first message, six ways, written at sign-up with no model: a greeting
- * by first name when the sign-in gave one, who I am and what I take on
- * (enquiries, quotes, follow-ups; a website only if they want one), a few
- * quick questions to understand the business and its goals, and the first
- * question: what the business does and its main services. Text only, so it
- * ends on the question.
+ * The first message, written at sign-up with no model: the owner's new
+ * assistant saying what it will take on from now on (a website only if they
+ * want one), then the first question, which asks for detail and says why.
+ * It has no name yet and does not know the trade. Text only, so it ends on
+ * the question's reason.
  */
 export function opener(v: Voice): string {
   const name = firstName(v.owner)
-  const hi = (greeting: string) => (name ? `${greeting} ${name}` : greeting)
   const b = v.business
+  const hi = `Hi${name ? ` ${name}` : ""}, good to meet you.`
   return say(
     v,
     pick(v, "opener", [
-      `${hi("Hi")}. I'm the new business assistant at ${b}. I'll help with the day-to-day: answering enquiries, preparing quotes and following up with customers.
+      `${hi} I'll be looking after enquiries and quotes for ${b} from now on, and I can build you a website too if you need one.
 
-First I'd like to understand the business and your goals, so I'll ask a few quick questions.
+First I'd like to get to know the business. What does ${b} do? Tell me the way you'd explain it to a new customer: the main jobs, and anything you don't take on. The more detail you give me, the better I can answer your customers.`,
+      `${hi} From now on I'll handle enquiries and quotes for ${b}, and if you need a website, I can build that too.
 
-To start, what does ${b} do, and what are your main services?`,
-      `${hi("Hello")}. I'll be the business assistant for ${b}, looking after enquiries, quotes and follow-ups so you can get on with the work.
-
-A few quick questions first, so I get a feel for what you do and where you want the business to go.
-
-In your own words, what does ${b} do, and which services do customers come to you for most?`,
-      `${hi("Hi")}. I'm your business assistant. Before I take anything on, I'd like to understand ${b} properly.
-
-I'll ask a few quick questions about the business and your goals. Your answers shape how I talk to customers and put quotes together, and your website too if you'd like one.
-
-What does ${b} do, and which services matter most to you?`,
-      `${hi("Hi")}. I'm the business assistant for ${b}, here to help run things: replying to enquiries, following up on quotes and keeping track of what needs doing.
-
-A few quick questions will help me understand your business and where you want to take it.
-
-Let's begin with the heart of it: what does the business do, and what are your main services?`,
-      `Good to meet you${name ? `, ${name}` : ""}. I'm the business assistant for ${b}.
-
-This won't take long. I'll ask a few quick questions so I understand the business and your goals. Then I can start on enquiries and quotes, and a website if you need one.
-
-First, the big one. What does ${b} do, and what are the main services you offer?`,
-      `${hi("Hello")}. I'm your new business assistant, and my first job is getting to know ${b}.
-
-I'll ask a few quick questions about the business and your goals. After that I can take on enquiries, quotes and follow-ups, and set up a website if you need one.
-
-So tell me, what does ${b} do, and what services do you offer?`,
+To start, I'd like to get to know the business. What does ${b} do? Describe it the way you would to a new customer: the main jobs, and anything you don't take on. The more you tell me, the better I can answer for you.`,
     ])
   )
 }
 
-type Asked = Exclude<StepId, "upload" | "build" | "manual_builder">
+/** "a, b and c". */
+const listed = (items: readonly string[]) =>
+  items.length < 2
+    ? (items[0] ?? "")
+    : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`
+
+/**
+ * A recorded phrase as it reads inside a sentence: no closing stop, and no
+ * lead-in the sentence already says. Shortcut: only "we cover" and "our
+ * customers are" style lead-ins go; widen when a recap reads badly.
+ */
+const bare = (text: string) =>
+  text
+    .trim()
+    .replace(/[.!]+$/, "")
+    .replace(
+      /^(?:(?:we|i) (?:cover|serve|work in|go to)|(?:our|my) (?:customers|clients) are)\s+/i,
+      ""
+    )
+
+/**
+ * The business read back before the assistant's own setup, from the facts
+ * exactly as held, so the owner sees what was recorded and can correct it.
+ * A fact not held is left out.
+ */
+export function recap(
+  v: Voice,
+  held: {
+    services: readonly string[]
+    area: string | null
+    customers: string | null
+    phone: string | null
+    email: string | null
+  }
+): string {
+  const contact = [held.phone, held.email].filter(Boolean).join(" or ")
+  const lines = [
+    held.services.length > 0 &&
+      `Here's what I've noted: ${listed(held.services.map(lower))}.`,
+    held.area && `You cover ${bare(held.area)}.`,
+    held.customers && `Your customers are ${lower(bare(held.customers))}.`,
+    contact &&
+      `${held.customers ? "They" : "Customers"} reach you on ${contact}.`,
+  ].filter(Boolean)
+  return say(v, `${lines.join(" ")}\n\nHave I got that right?`)
+}
+
+type Asked = Exclude<StepId, "upload" | "build" | "manual_builder" | "recap">
 
 /** "your services", or the phrase written for this business. */
 const services = (v: Voice) => v.services ?? "your services"
@@ -233,23 +255,17 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
     `So people searching nearby can find you, which city or town are you based in, and which neighbouring areas do you serve?`,
     `Which part of the map is yours? Tell me where you're based and how far you'll go for a job, for example "Manchester, Salford and Stockport".`,
   ],
-  // The business's practical side, on one card.
+  // The business's practical side, on one card. Its title asks the question,
+  // so the line before it only leads in.
   contact: (v) => [
-    `Now the practical bits. Which phone number and email should customers use to reach ${v.business}? Check the details below and change anything that isn't right.`,
-    `I have a good picture of ${v.business} now. How should customers get in touch? Add the phone number and the email for enquiries below.`,
-    `Just the contact details left for the business: the phone number and the email address enquiries should go to.`,
+    "Last bit on the business side, how customers get hold of you.",
+    `Last thing about ${v.business}, the details customers use to reach you.`,
   ],
-  // Phase 1 to 2: what they told us, then the working relationship.
+  // Phase 1 to 2, after the recap: the working relationship, led in only,
+  // since the card's title asks.
   assistant: (v) => [
-    `I have a clear picture of ${v.business} now: who you are and what you offer.
-
-Before we get to the design, how would you like me to introduce myself to you and your visitors? Give me a name and the personality you'd like me to have.`,
-    `That's everything I need about ${v.business} for now. I can already picture how the site should read.
-
-Now a little about me. I'll be looking after your enquiries and keeping you posted, so I should have a name and a manner you like. What should we call me, and how should I come across?`,
-    `Thanks${comma(v.owner)}. I have a good feel for ${v.business}, and a few ideas for the site already.
-
-Before the website, let's settle who I am on your team. Choose the name I'll go by, my pronouns and the tone I should use with you and your customers.`,
+    `That's ${v.business} covered. Next, how I come across to you and your customers.`,
+    `Now a bit about me, since I'll be the one answering for ${v.business}.`,
   ],
   pronouns: (v) =>
     v.assistant
@@ -366,9 +382,8 @@ export function quoteForm(v: Voice): string {
   return say(
     v,
     pick(v, "quote_form", [
-      `Here's a starting point for what I'll ask each customer before a quote. Keep it, or tell me what to change.`,
-      `I've drafted what ${v.business} needs to know before a quote. Say if anything is missing.`,
-      `Here's a short list to start from. Confirm it, or tell me what you always ask first.`,
+      "Here's a starting point for what I'll ask each customer before a quote.",
+      `I've drafted what ${v.business} needs to know before a quote.`,
     ])
   )
 }
@@ -378,8 +393,8 @@ export function quoteUnchanged(v: Voice): string {
   return say(
     v,
     pick(v, "quote_unchanged", [
-      "I couldn't make that change to the questions just now, so here they are as they stand. Tell me again what you'd like different, or confirm them.",
-      "Sorry, I didn't manage to redo the questions just then. Here they are as they are: say again what to change, or confirm them below.",
+      "I couldn't make that change to the questions just now, so here they are as they stand.",
+      "Sorry, I didn't manage to redo the questions just then. Here they are as they were.",
     ])
   )
 }

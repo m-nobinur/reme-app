@@ -29,9 +29,16 @@ import {
   ThumbsUpIcon,
   XIcon,
 } from "@phosphor-icons/react"
-import { type ServerButton, SKIP_REPLY } from "@workspace/contracts"
+import {
+  RECAP_REPLY,
+  type ServerButton,
+  SKIP_REPLY,
+} from "@workspace/contracts"
 import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
-import { waitsToSkip } from "@workspace/ui/components/assistant/ask-open"
+import {
+  waitsOnRecap,
+  waitsToSkip,
+} from "@workspace/ui/components/assistant/ask-open"
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
@@ -74,6 +81,7 @@ import {
 import { cn } from "@workspace/ui/lib/utils"
 import { localMidnight } from "@workspace/ui/lib/zone"
 import {
+  type ComponentProps,
   type ComponentType,
   createContext,
   type FC,
@@ -774,6 +782,7 @@ const ThreadRoot: FC<{
                 <ThreadScrollToBottom below={below} unseen={unseen} />
                 <div className="flex flex-col gap-2">
                   <SkipThisOne />
+                  <RecapReplies />
                   <div className="empty:hidden" ref={setTray} />
                   <Composer autoFocus={autoFocus} expanded={isEmpty} />
                   {/* The same gap as the tray above the composer. */}
@@ -1019,16 +1028,60 @@ const SkipThisOne: FC = () => {
   )
   if (!waiting || !sendable) return null
   return (
-    <Button
-      className="self-start rounded-full text-muted-foreground"
+    <ReplyPill
+      className="self-start"
       data-slot="skip-this-one"
       onClick={() => aui.thread().append(SKIP_REPLY)}
-      size="sm"
-      type="button"
-      variant="outline"
     >
       Skip this one
-    </Button>
+    </ReplyPill>
+  )
+}
+
+/** A quick reply above the composer. */
+const ReplyPill: FC<ComponentProps<typeof Button>> = ({
+  className,
+  ...props
+}) => (
+  <Button
+    className={cn("rounded-full text-muted-foreground", className)}
+    size="sm"
+    type="button"
+    variant="outline"
+    {...props}
+  />
+)
+
+/**
+ * Under the business recap: one pill confirms it as the owner's message; the
+ * other starts a correction in the composer for the owner to finish, and
+ * sends nothing.
+ */
+const RecapReplies: FC = () => {
+  const aui = useAui()
+  const input = useContext(ComposerInputContext)
+  const sendable = useSendable()
+  const waiting = useAuiState(
+    (s) => !s.thread.isRunning && waitsOnRecap(s.thread.messages.at(-1)?.parts)
+  )
+  if (!waiting || !sendable) return null
+  return (
+    <div className="flex flex-wrap gap-2" data-slot="recap-replies">
+      <ReplyPill onClick={() => aui.thread().append(RECAP_REPLY)}>
+        {RECAP_REPLY}
+      </ReplyPill>
+      <ReplyPill
+        onClick={() => {
+          // A draft is the owner's words: keep it, never replace it.
+          if (!aui.composer().getState().text.trim()) {
+            aui.composer().setText("Change ")
+          }
+          input.current?.focus()
+        }}
+      >
+        Change something
+      </ReplyPill>
+    </div>
   )
 }
 

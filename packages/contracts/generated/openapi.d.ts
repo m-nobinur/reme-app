@@ -3056,6 +3056,7 @@ export interface components {
         | "site.direction"
         | "site.pages"
         | "quote.form"
+        | "recap"
       skippable?: boolean
     }
     AskOpenOutput:

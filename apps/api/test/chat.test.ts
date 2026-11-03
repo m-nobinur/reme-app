@@ -168,7 +168,7 @@ describe("the script's next step", () => {
     })
     expect(row.content.parts).toEqual([
       { type: "step-start" },
-      { type: "text", text: expect.stringMatching(/\?$/), state: "done" },
+      { type: "text", text: expect.stringMatching(/\?/), state: "done" },
     ])
   })
 })

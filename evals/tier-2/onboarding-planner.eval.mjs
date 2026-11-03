@@ -1,6 +1,6 @@
 import { appendFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { DETAILS_KEYS } from "@workspace/contracts"
+import { DETAILS_KEYS, RECAP_REPLY } from "@workspace/contracts"
 import { priceOf } from "../../apps/api/src/cos/agent.ts"
 import {
   again,
@@ -37,6 +37,7 @@ import {
   CORRECTS_TWICE,
   MISLEADING,
   PERSONAS,
+  PRUNING_CO,
   SKIPPER,
   SKIPS_EVERYTHING,
 } from "../onboarding-personas.mjs"
@@ -182,7 +183,7 @@ function scriptRows(rows) {
       .map((p) => ({
         type: p.type,
         state: p.state,
-        step: p.input?.key ?? p.input?.step ?? null,
+        step: p.input?.key ?? p.input?.step ?? p.input?.about ?? null,
         answer: p.output?.answer ?? null,
         choice: p.output?.ids?.[0] ?? null,
         reply: p.state === "output-error" ? reply : null,
@@ -278,6 +279,7 @@ async function onboard(persona, spec) {
   const refusals = []
   let turns = 0
   let quoteChanged = false
+  let reviews = 0
   let trayTurn = null
   let buildTurn = null
   const asks = {}
@@ -490,7 +492,8 @@ async function onboard(persona, spec) {
       await typed(scripted)
       continue
     }
-    let act = card ? cardAction(persona, card, { quoteChanged }) : null
+    let act = card ? cardAction(persona, card, { quoteChanged, reviews }) : null
+    if (card?.type === "tool-review_quote_form") reviews += 1
     if (act?.kind === "open") {
       act = {
         kind: "answer",
@@ -553,6 +556,9 @@ async function onboard(persona, spec) {
       `no build after ${turns} owner turns; missing ${buildMissing(end).join(", ")}`
     )
   }
+  const area = factOf(sim.facts, "service_area.text")?.text ?? ""
+  if (persona.areaAfter && !persona.areaAfter.test(area))
+    problems.push(`the recap's correction was not kept: ${area}`)
   const missing = REQUIRED.filter((k) => !sim.facts.some((f) => f.key === k))
   if (missing.length > 0)
     problems.push(`required facts missing: ${missing.join(", ")}`)
@@ -580,9 +586,16 @@ async function onboard(persona, spec) {
     const name = (factOf(sim.facts, "business.name")?.name ?? "")
       .replace(/\s*\(.*\)$/, "")
       .toLowerCase()
-    const wrong = says.filter((s) =>
-      persona.notTrade.test(s.toLowerCase().split(name).join(""))
-    )
+    // Once the owner names the trade they don't do ("we don't do any
+    // cleaning"), a reply may say it back: the word is then theirs.
+    let theirs = false
+    const wrong = lines().flatMap(({ from, text }) => {
+      const named = persona.notTrade.test(
+        text.toLowerCase().split(name).join("")
+      )
+      if (from === "Owner") theirs ||= named
+      return from === "Assistant" && named && !theirs ? [text] : []
+    })
     if (wrong.length > 0) problems.push(`said the wrong trade: ${wrong[0]}`)
   }
   // An optional detail the owner deferred is asked at most twice in all.
@@ -689,7 +702,7 @@ const LOGO = {
 }
 
 /** What the owner does with a card, by the sheet's rules, or null to type. */
-function cardAction(persona, card, { quoteChanged }) {
+function cardAction(persona, card, { quoteChanged, reviews }) {
   const input = card.input
   const typed = (rule) =>
     rule?.startsWith("type:") ? { kind: "type", text: rule.slice(5) } : null
@@ -724,6 +737,11 @@ function cardAction(persona, card, { quoteChanged }) {
     return { kind: "answer", output: { answers, skip_all: false } }
   }
   if (card.type === "tool-ask_open") {
+    // The recap's confirm pill sends its words; an owner may type a correction.
+    if (input.about === "recap")
+      return { kind: "type", text: persona.recap ?? RECAP_REPLY }
+    const answer = persona.answers?.[input.about]
+    if (answer) return { kind: "type", text: answer }
     return input.skippable && (persona.cards.open === "skip" || persona.skipAll)
       ? { kind: "answer", output: { answer: "skipped" } }
       : { kind: "open" }
@@ -805,7 +823,9 @@ function cardAction(persona, card, { quoteChanged }) {
     )
   }
   if (card.type === "tool-review_quote_form") {
-    const rule = persona.quote ?? "confirm"
+    // A list answers each proposal in turn, the last one every proposal after.
+    const rules = [persona.quote ?? "confirm"].flat()
+    const rule = rules[Math.min(reviews, rules.length - 1)]
     if (rule.startsWith("change:") && !quoteChanged) {
       return {
         kind: "answer",
@@ -839,6 +859,7 @@ export default async function run() {
     SKIPPER,
     SKIPS_EVERYTHING,
     CORRECTS_TWICE,
+    PRUNING_CO,
   ].filter((p) => !only || only.includes(p.id))
   const results = []
   for (const modelId of ids) {

@@ -8,6 +8,7 @@ import {
   INDUSTRIES,
   PALETTES,
   PaletteId,
+  RECAP_REPLY,
   SKIP_REPLY,
   TONES,
   type ToneId,
@@ -55,6 +56,7 @@ import {
   question,
   quoteForm,
   quoteUnchanged,
+  recap,
   retry,
   say,
   started,
@@ -158,6 +160,12 @@ function walk(o: Onboarding, answers: (card: ToolPart) => unknown) {
       at = applied(at, { kind: "facts", facts: [QUOTE] })
       continue
     }
+    // The recap is answered in words: its confirm pill sends RECAP_REPLY.
+    if (card && stepOf(card) === "recap") {
+      asked.push("recap")
+      at = applied(at, typedAnswer(card, RECAP_REPLY))
+      continue
+    }
     if (!card) return { asked, at, step }
     const id = card.type === "tool-request_change" ? "build" : stepOf(card)
     asked.push(id as StepId)
@@ -235,6 +243,7 @@ describe("the onboarding steps", () => {
       "industry",
       "quote_form",
       "contact",
+      "recap",
       "assistant",
       "build_for_me",
       "design",
@@ -351,7 +360,87 @@ describe("the onboarding steps", () => {
     expect(
       currentStep(start({ facts: [...ALL_BEFORE("contact"), PHONE, EMAIL] }))
         ?.id
-    ).toBe("assistant")
+    ).toBe("recap")
+  })
+
+  it("reads the business back from its facts before the assistant's setup, and moves on once the owner confirms", () => {
+    const facts = [
+      ...ALL_BEFORE("contact").filter(
+        (f) =>
+          ![
+            "business.offerings",
+            "business.audience",
+            "service_area.text",
+          ].includes(f.key)
+      ),
+      {
+        key: "business.offerings",
+        value: {
+          items: ["End of tenancy cleans", "Oven cleaning", "MOT tests"],
+        },
+      },
+      { key: "business.audience", value: { text: "Mostly families." } },
+      {
+        key: "service_area.text",
+        value: { text: "We cover Bristol and Bath." },
+      },
+      PHONE,
+      EMAIL,
+    ]
+    const [said, card, ...rest] = onboardingStep(start({ facts }), counter())
+    expect(rest).toEqual([])
+    expect((said as { text: string }).text).toBe(
+      "Here's what I've noted: end of tenancy cleans, oven cleaning and MOT tests. You cover Bristol and Bath. Your customers are mostly families. They reach you on 01632 960001 or hello@brightclean.invalid.\n\nHave I got that right?"
+    )
+    expect(card).toMatchObject({
+      type: "tool-ask_open",
+      input: { about: "recap" },
+    })
+    // Without the customers, the contact line names who it means.
+    const plain = onboardingStep(
+      start({
+        facts: facts.filter((f) => f.key !== "business.audience"),
+        asked: { "business.audience": 1 },
+      }),
+      counter()
+    )
+    expect((plain[0] as { text: string }).text).toContain(
+      "Customers reach you on"
+    )
+    // A yes settles it; without a model a correction cannot be read.
+    const asked = card as ToolPart
+    expect(typedAnswer(asked, RECAP_REPLY)).toEqual({
+      kind: "passed",
+      step: "recap",
+    })
+    expect(typedAnswer(asked, "Yes, that's right")).toMatchObject({
+      kind: "passed",
+    })
+    expect(typedAnswer(asked, "Change the area to Bath only")).toEqual({
+      kind: "retry",
+      reason: "unclear",
+    })
+    // Typed over, it closes; shown again, it opens.
+    const over = {
+      type: "tool-ask_open",
+      step: "recap",
+      answer: null,
+      choice: null,
+    }
+    expect(
+      progressOf([{ ...over, state: "output-error", reply: RECAP_REPLY }])
+        .closed
+    ).toEqual(["recap"])
+    expect(
+      progressOf([
+        { ...over, state: "output-error", reply: "Hm, what?" },
+        { ...over, state: "input-available", reply: null },
+      ]).closed
+    ).toEqual([])
+    const confirmed = start({ facts, closed: ["recap"] })
+    const [lead, persona] = onboardingStep(confirmed, counter())
+    expect(persona).toMatchObject({ input: { step: "assistant" } })
+    expect((lead as { text: string }).text).not.toMatch(/\?/)
   })
 
   it("asks the business name after what it does, when sign-up gave none, filled in from the org", () => {
@@ -516,8 +605,10 @@ function cardFor(step: StepId): ToolPart {
     (f) => step !== "business.name" || f.key !== "business.name"
   )
   // The four cards the tray replaced are asked to an org that was on them.
+  // The recap is confirmed in words, so it is closed rather than held.
   const at = start({
     facts,
+    closed: step === "recap" ? [] : ["recap"],
     ...(["template", "palette", "font", "pages"].includes(step)
       ? { oldDesign: true }
       : {}),
@@ -1414,9 +1505,23 @@ const lines = (v: Voice): [string, string][] => [
   ["opener", opener(v)],
   ...(
     STEPS.map((s) => s.id).filter(
-      (id) => id !== "upload" && id !== "build" && id !== "manual_builder"
-    ) as Exclude<StepId, "upload" | "build" | "manual_builder">[]
+      (id) =>
+        id !== "upload" &&
+        id !== "build" &&
+        id !== "manual_builder" &&
+        id !== "recap"
+    ) as Exclude<StepId, "upload" | "build" | "manual_builder" | "recap">[]
   ).map((id): [string, string] => [id, question(id, v)]),
+  [
+    "recap",
+    recap(v, {
+      services: ["End of tenancy cleans", "Oven cleaning", "Regular cleans"],
+      area: "Bristol and about 15 miles out.",
+      customers: "Mostly families, plus two letting agents",
+      phone: "0117 496 0321",
+      email: "hello@freshstart.invalid",
+    }),
+  ],
   ...STEPS.flatMap(({ id }): [string, string][] => {
     const line = back(id, v)
     return line ? [[`back ${id}`, line]] : []
@@ -1576,14 +1681,17 @@ describe("the onboarding copy", () => {
       expect(text).toContain("Probe")
       expect(text).not.toContain("Probe Owner")
       expect(text).toContain(BUSINESS)
-      expect(text).toMatch(/business assistant/)
-      expect(text).toMatch(/quick questions/)
-      // A business assistant first: the website is one thing it offers.
+      // The owner's new assistant from now on: the website is one thing it offers.
+      expect(text).toMatch(/from now on/i)
       expect(text).toMatch(/quote/)
-      expect(text).not.toMatch(/build you a website|starting with your website/)
-      expect(text.trim()).toMatch(/\?$/)
+      expect(text).toMatch(/website/)
+      expect(text).toMatch(/if you need/)
+      // The first question asks for detail and says why.
+      expect(text).toContain(`What does ${BUSINESS} do?`)
+      expect(text).toMatch(/anything you don't take on/)
+      expect(text).toMatch(/the better I can answer/)
       expect(text).not.toMatch(/[—–]|\bReme\b/)
-      expect(text.split("\n\n").length).toBeLessThanOrEqual(3)
+      expect(text.split("\n\n").length).toBeLessThanOrEqual(2)
       seen.add(text)
       // No name from the sign-in: no stray comma or space before it.
       const nameless = (
@@ -1591,7 +1699,7 @@ describe("the onboarding copy", () => {
       ).text
       expect(nameless).not.toMatch(/ ,| {2}/)
     }
-    expect(seen.size).toBeGreaterThanOrEqual(6)
+    expect(seen.size).toBeGreaterThanOrEqual(2)
   })
 })
 
