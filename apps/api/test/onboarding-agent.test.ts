@@ -616,10 +616,10 @@ describe("the plan's checks", () => {
       key: "assistant.avatar",
       value: { id: "he_1" },
     })
-    // The card holds no name, so none of the assistant's is the card's to refuse.
+    // The card's name is its first idea, written for she/her.
     expect(
-      left({ ...man, "assistant.name": { name: "Reme" } }, chosen)
-    ).toEqual([])
+      left({ ...man, "assistant.name": { name: "Reme" } }, chosen)[0]
+    ).toMatch(/does not fit the pronouns/)
     // Listed as its own choice, the refusal says a value they asked for is theirs.
     expect(left(man, all).join()).toMatch(
       /assistant.pronouns is not what the card holds.*leave it out of chosen_for_owner/

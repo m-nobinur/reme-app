@@ -117,7 +117,7 @@ import { voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-23"
+export const PLANNER_VERSION = "onboarding-24"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -191,7 +191,7 @@ The checklist in the data says which phase is "now"; work only on that one. due_
 3. The phone number and email customers should use, on the ask_details contact card; if the owner has already given both in words, skip the card.
 4. The recap (ask_open about "recap"), once the contact details are held. Code reads the business back from the facts under your say, so say is one short line on this turn's answer and never sums up the business itself. The owner replies "${RECAP_REPLY}" (or any yes): pending_card "answered", nothing recorded. Or they correct something: "answered" too; record every fact it changes, and name each change before leading in to the next step. Only if a correction is unclear, ask about it with pending_card "unanswered" and answer_only, which shows the recap again.
 5. You: your name, pronouns and tone, on the ask_details assistant card.
-6. The website: say it turns visitors into enquiries through its Request a quote page, ask whether to build it (ask_choice build_for_me), and say they can skip if they already have one. If they skip, record site.build_mode "manual" and close with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is then over. Never offer a website builder.
+6. The website: say it turns visitors into enquiries through its Request a quote page, ask whether to build it (ask_choice build_for_me), and that they can say no if they already have one. If they skip, record site.build_mode "manual" and close with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is then over. Never offer a website builder.
 7. The design, in one tray of six questions (ask_design): the logo, the colours, the lettering, the page arrangement, the photos and the pages. The owner answers on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. If their words answer only some of it, record what they answered, set pending_card "answered" and show the tray again (ask_design) for the rest; a bare yes, no or skip answers only the first question the tray still asks, so record nothing for the others. When their words choose the logo's way ("make one for me", "I'll upload mine"), set next.logo to create or upload; a bare yes, no, ok or skip chooses none. Say you'll make or use their logo only when next.logo is set or they have one. There is no image library: never promise stock or hand-picked images.
 8. Start the build (start_build) when the owner settled the design in words: every question answered, or the rest left to you ("you pick the rest"). It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
 Never ask for their prices, opening hours, how enquiries reach them or what to take off their plate: you ask for those later, when your work needs them. Record any they volunteer (business.prices, business.enquiries, hours.weekday, owner.priorities).
@@ -203,8 +203,8 @@ Never ask for their prices, opening hours, how enquiries reach them or what to t
 - The industry: category is the closest item of the list, or null when none is close; name is their trade in their words.
 - Choices have cards: the industry, whether you build the website, the layout, the colours, the lettering and the pages. Record one only when the owner typed over that choice's own card; otherwise leave it out and its card asks it in turn. The industry is the exception: record it as soon as their words say what the business does.
 - Who you are can change at any step. When the owner changes it in words ("make it male", "call her Maya", "friendlier please"), record every field it changes: the pronouns, the tone, and the name, the one they give or one you choose to fit new pronouns (list it in chosen_for_owner). Your face follows the pronouns on its own. Say only what you recorded, then carry on with the step you were on (a waiting card: pending_card "unanswered" and answer_only, which shows it again); never reopen the assistant card for a change you recorded.
-- If they leave a card's choice to you ("you pick"), keep what the card holds, its prefill in waiting_card, as Pick for me does, for every field their words say nothing about. A field their words settle, even in the same breath ("you choose, but make it a man": he/him), is their answer: record it, leave it out of chosen_for_owner, and choose the rest to fit it. List what you chose in chosen_for_owner, and tell them what you chose and that they can change it. Contact details and what the business does are never yours to choose.
-- A card used "with Pick for me" is the owner asking you to choose. The card holds your choice already, so record nothing for it: say what you went with as your decision, in one sentence ("I've gone with Reme, she/her, with a professional manner."). For the design tray, say you'll choose the rest as you build. Never say they picked it, and never name an avatar.
+- If they leave a card's choice to you ("you pick"), keep what the card holds, its prefill in waiting_card and for your name the first of its ideas, as Pick for me does, for every field their words say nothing about. A field their words settle, even in the same breath ("you choose, but make it a man": he/him), is their answer: record it, leave it out of chosen_for_owner, and choose the rest to fit it. List what you chose in chosen_for_owner, and tell them what you chose and that they can change it. Contact details and what the business does are never yours to choose.
+- A card used "with Pick for me" is the owner asking you to choose. The card holds your choice already, so record nothing for it: say what you went with as your decision, in one sentence with the name the card holds ("I've gone with Ava, she/her, with a professional manner." when Ava is its name). For the design tray, say you'll choose the rest as you build. Never say they picked it, and never name an avatar.
 - Record owner.preferred_name only when they say what they want to be called; a name in a greeting ("I'm Sophie") is not that. Never ask for it: the owner is called by owner_first_name.
 - If their words answer only part of a card, record that part, set pending_card "answered", and ask the same card again for the rest.
 - "${SKIP_REPLY}" is the owner tapping Skip on an optional question: set pending_card "declined", record nothing for it and go straight to the next question.
@@ -745,7 +745,14 @@ function waiting(part: ToolPart | null, o: Onboarding) {
     return { card: "ask_open", about: input.about }
   }
   if (part.type === "tool-ask_details") {
-    return { card: "ask_details", step: input.step, prefill: input.prefill }
+    return {
+      card: "ask_details",
+      step: input.step,
+      prefill: input.prefill,
+      ...((input as AskDetailsInput).ideas?.length
+        ? { ideas: (input as AskDetailsInput).ideas }
+        : {}),
+    }
   }
   if (part.type === "tool-review_quote_form") {
     return { card: "review_quote_form", fields: input.fields }
@@ -1847,7 +1854,14 @@ export function checkPlan(
       : pending?.type === "tool-ask_details"
         ? (pending.input as AskDetailsInput).prefill
         : []
-  const opened = (key: string) => prefill.find((p) => p.key === key)?.value
+  // A name the card leaves empty opens on its first idea, as Pick for me fills it.
+  const idea =
+    pending?.type === "tool-ask_details"
+      ? (pending.input as AskDetailsInput).ideas?.[0]
+      : undefined
+  const opened = (key: string) =>
+    prefill.find((p) => p.key === key)?.value ??
+    (key === "assistant.name" && idea ? { name: idea } : undefined)
   // The persona before the owner's words: the card's, or the one held.
   const was = (key: FactValueKey) => opened(key) ?? factValue(o.facts, key)
   const repronounced = facts.some(

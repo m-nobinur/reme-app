@@ -296,13 +296,13 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
     const ask = bold(`Would you like me to build a website for ${v.business}?`)
     const thanks = (line: string) => (v.picked ? "" : `${line}\n\n`)
     return [
-      `${thanks(`Thanks${comma(v.owner)}.`)}I can also build ${v.business} a website, with a Request a quote page that sends each enquiry straight to me with the details you need to reply. If you already have a site, choose Skip for now.
+      `${thanks(`Thanks${comma(v.owner)}.`)}I can also build ${v.business} a website, with a Request a quote page that sends each enquiry straight to me with the details you need to reply.
 
 ${ask}`,
-      `${thanks(`Thanks${comma(v.owner)}.`)}One more thing I can do: build a website for ${v.business}. Every page would point visitors to Request a quote, and each enquiry would reach me with what you need to quote the job. If you already have a site, just skip this.
+      `${thanks(`Thanks${comma(v.owner)}.`)}One more thing I can do: build a website for ${v.business}. Every page would point visitors to Request a quote, and each enquiry would reach me with what you need to quote the job.
 
 ${ask}`,
-      `${thanks(`Thanks${comma(v.owner)}.`)}If ${v.business} needs a website, I can build it. It would have a Request a quote page, so customers describe the job and the enquiry comes to me ready for a quote. If you already have one, skip this and I'll stick to enquiries and quotes.
+      `${thanks(`Thanks${comma(v.owner)}.`)}If ${v.business} needs a website, I can build it. It would have a Request a quote page, so customers describe the job and the enquiry comes to me ready for a quote. If you already have one, say so and I'll stick to enquiries and quotes.
 
 ${ask}`,
     ]
@@ -379,9 +379,9 @@ const BACK: Partial<Record<Asked, (v: Voice) => string>> = {
   quote_form: () =>
     "Back to quotes now. What do you need to know from a customer before you can quote a job?",
   contact: (v) =>
-    `Now, back to how customers reach ${v.business}. Check the phone number and email below.`,
+    `Now, back to how customers reach ${v.business}. Add the phone number and email below.`,
   assistant: () =>
-    "Back to me now. Check my name, pronouns and tone below, and change anything you like.",
+    "Back to me now. Pick my name, then check my pronouns and tone below.",
   build_for_me: (v) =>
     `Now, back to the website. Would you like me to build one for ${v.business}?`,
   design: (v) =>
