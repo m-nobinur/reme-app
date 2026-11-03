@@ -264,6 +264,24 @@ export class RemeSandbox extends DurableObject<Env> {
   }
 
   /**
+   * Stream a file from the container into the sites bucket under `key` and
+   * return its size. A site's tar is tens of MB: as a base64 string decoded
+   * in the caller it ran the Developer's isolate out of memory (#593).
+   */
+  async saveFile(path: string, key: string): Promise<number> {
+    return this.use(async () => {
+      const at = { cwd: WORKSPACE }
+      const size = Number((await this.files.stat(path, at)).size)
+      const file = await this.files.readFile(path, at)
+      await this.env.SITES.put(
+        key,
+        file.body ? file.body.pipeThrough(new FixedLengthStream(size)) : ""
+      )
+      return size
+    })
+  }
+
+  /**
    * Write a file, creating its directory as 0.12 did. A string with
    * `encoding: "base64"` is decoded first.
    */

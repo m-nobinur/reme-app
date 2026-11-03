@@ -49,8 +49,9 @@ vi.mock("@cloudflare/sandbox", () => {
         disk.set(`${path}/`, new Uint8Array())
       }
       async stat(path: string) {
-        if (!disk.has(path)) throw fail("ENOENT")
-        return {}
+        const found = disk.get(path)
+        if (!found) throw fail("ENOENT")
+        return { size: BigInt(found.length) }
       }
       async remove(path: string) {
         disk.delete(path)
@@ -135,9 +136,17 @@ const newSandbox = (id = "sandbox-1", container = fakeContainer()) => {
     exports: { SandboxEgress: () => ({ egress: true }) },
     blockConcurrencyWhile: (fn: () => Promise<unknown>) => fn(),
   }
-  const env = { SANDBOX_POOL: { getByName: () => pool } }
+  const env = {
+    SANDBOX_POOL: { getByName: () => pool },
+    SITES: {
+      put: async (key: string, body: ReadableStream<Uint8Array>) => {
+        bucket.set(key, new Uint8Array(await new Response(body).arrayBuffer()))
+      },
+    },
+  }
   return { sandbox: new RemeSandbox(ctx as never, env as never), container }
 }
+const bucket = new Map<string, Uint8Array>()
 
 beforeEach(() => {
   ;({ pool, kv: slots } = newPool())
@@ -333,6 +342,29 @@ describe("a file call", () => {
     expect(
       await sandbox.readFile("/tmp/b.bin", { encoding: "base64" })
     ).toEqual({ content: btoa("\u0000ÿ") })
+  })
+
+  // #593: R2 takes a stream only when its length is known, and the bytes never
+  // become a string in any isolate on the way.
+  it("streams a file into the bucket at its known length", async () => {
+    const lengths: number[] = []
+    vi.stubGlobal(
+      "FixedLengthStream",
+      class extends TransformStream<Uint8Array, Uint8Array> {
+        constructor(length: number) {
+          super()
+          lengths.push(length)
+        }
+      }
+    )
+    const { sandbox } = newSandbox()
+    disk.set("/tmp/source.tar.zst", new Uint8Array([0, 1, 255]))
+    expect(
+      await sandbox.saveFile("/tmp/source.tar.zst", "sites/o/r/source")
+    ).toBe(3)
+    expect([...(bucket.get("sites/o/r/source") ?? [])]).toEqual([0, 1, 255])
+    expect(lengths).toEqual([3])
+    vi.unstubAllGlobals()
   })
 
   it("answers exists from the disk", async () => {

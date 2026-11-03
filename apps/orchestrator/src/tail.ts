@@ -384,6 +384,8 @@ export async function finishRevision(input: {
   orgId: string
   assignmentId: string
   facts: readonly FactRecord[]
+  /** Streams a file from the site's sandbox into `sites` and returns its size. */
+  saveFile: (path: string, key: string) => Promise<number>
   /** The Developer's report holds the photos as the pipeline placed them; a quick edit draws its own. */
   holdPhotos?: boolean
 }) {
@@ -532,10 +534,7 @@ export async function finishRevision(input: {
       `${GIT} add -A && (${GIT} commit -qm "report_complete" || true) && tar --zstd -cf /tmp/source.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite --exclude=./.astro-cache -C ${SITE_ROOT} .`
     )
     if (r.exitCode !== 0) throw new Error(`source snapshot failed: ${r.stderr}`)
-    await sites.put(
-      `${prefix}source.tar.zst`,
-      await sandbox.readFileBuffer("/tmp/source.tar.zst")
-    )
+    await input.saveFile("/tmp/source.tar.zst", `${prefix}source.tar.zst`)
     return { key: `${prefix}source.tar.zst`, ms: since(started) }
   })
 

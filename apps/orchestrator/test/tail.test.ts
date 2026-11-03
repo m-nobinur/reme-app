@@ -478,3 +478,51 @@ describe("the site's security headers", () => {
     expect(csp).toContain("connect-src 'self' https://cloudflareinsights.com")
   })
 })
+
+// #593: the Developer's isolate ran out of memory decoding the source tar as
+// base64, every retry died at the same step, and the build never finished.
+describe("the source snapshot at the end of a report", () => {
+  it("goes from the sandbox to R2 without being read back through the caller", async () => {
+    const reads: string[] = []
+    const saved: [string, string][] = []
+    const done: Record<string, unknown> = {
+      documents: { json: null },
+      "astro check": { exit_code: 0, output: "", ms: 0 },
+      "site host": "acme.example",
+      "astro build": { exit_code: 0, output: "", ms: 0 },
+      revision: "rev-1",
+      "custom sections": { exit_code: 0, key: null, ms: 0 },
+      "upload dist": { files: 1, reused: 0, bytes: 1, ms: 0 },
+      "text changes": {},
+    }
+    const out = await finishRevision({
+      steps: {
+        do: async <T>(name: string, fn: () => Promise<T>) =>
+          name in done ? (done[name] as T) : fn(),
+      },
+      sandbox: {
+        exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+        readFileBuffer: async (path: string) => {
+          reads.push(path)
+          return new Uint8Array()
+        },
+        writeFile: async () => undefined,
+      },
+      saveFile: async (path: string, key: string) => {
+        saved.push([path, key])
+        return 1
+      },
+      kit: {},
+      sites: {},
+      hostSuffix: "-stg.remeai.co.uk",
+      orgId: "o",
+      assignmentId: "a",
+      facts: [],
+    } as unknown as Parameters<typeof finishRevision>[0])
+    expect(saved).toEqual([
+      ["/tmp/source.tar.zst", "sites/o/rev-1/source.tar.zst"],
+    ])
+    expect(reads).toEqual([])
+    expect(out.source.key).toBe("sites/o/rev-1/source.tar.zst")
+  })
+})

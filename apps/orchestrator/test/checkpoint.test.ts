@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest"
 
 const disk = new Map<string, string>()
 const commands: string[] = []
+const reads: string[] = []
 let destroyed = 0
 /** The site's `RemeSandbox` stub, as `getByName` returns it. */
 const stub = {
@@ -22,9 +23,15 @@ const stub = {
     if (command.includes("tar --zstd -xf")) disk.set("site", "restored")
     return { exitCode: 0, stdout: "", stderr: "" }
   },
-  readFile: async (path: string) => ({
-    content: btoa(disk.get(path) ?? ""),
-  }),
+  readFile: async (path: string) => {
+    reads.push(path)
+    return { content: btoa(disk.get(path) ?? "") }
+  },
+  saveFile: async (path: string, key: string) => {
+    const body = new TextEncoder().encode(disk.get(path) ?? "")
+    bucket.set(key, body)
+    return body.length
+  },
   writeFile: async (path: string, body: unknown) => {
     disk.set(path, String(body))
   },
@@ -102,7 +109,17 @@ describe("a blocked build's checkpoint", () => {
     const taken = await checkpoint(env, ids)
     expect(taken.key).toBe("sites/org-1/checkpoints/asg-1.tar.zst")
     expect(new TextDecoder().decode(bucket.get(taken.key))).toBe("packed site")
+    expect(taken.bytes).toBe("packed site".length)
     expect(commands.at(-1)).toContain("--exclude=./node_modules")
+  })
+
+  // #593: a 13 MB tar read back as base64 and decoded in the Developer's
+  // isolate ran it out of memory, so the tar goes to R2 from the sandbox.
+  it("never reads the tar back through the caller", async () => {
+    disk.set("site", "edited")
+    reads.length = 0
+    await checkpoint(env, ids)
+    expect(reads).toEqual([])
   })
 
   it("leaves a container that kept its disk alone", async () => {

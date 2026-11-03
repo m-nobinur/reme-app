@@ -99,6 +99,7 @@ export async function withDeadline<T>(
 const FILE_CALLS: ReadonlySet<PropertyKey> = new Set([
   "readFile",
   "writeFile",
+  "saveFile",
   "exists",
   "mkdir",
 ])
@@ -157,6 +158,7 @@ export const tailSandbox = (sandbox: ReturnType<typeof sandboxFor>) => ({
   },
   writeFile: (path: string, content: string) =>
     sandbox.writeFile(path, content),
+  saveFile: (path: string, key: string) => sandbox.saveFile(path, key),
   writeBytes: (path: string, content: Uint8Array) =>
     sandbox.writeFile(path, new Blob([content]).stream()),
 })
@@ -371,12 +373,8 @@ export async function checkpoint(
   if (packed.exitCode !== 0) {
     throw new Error(`checkpoint failed: ${packed.stderr}`)
   }
-  const file = await sandbox.readFile("/tmp/checkpoint.tar.zst", {
-    encoding: "base64",
-  })
-  const body = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
-  await env.SITES.put(key, body)
-  return { taken: true, key, bytes: body.length, ms: Date.now() - started }
+  const bytes = await sandbox.saveFile("/tmp/checkpoint.tar.zst", key)
+  return { taken: true, key, bytes, ms: Date.now() - started }
 }
 
 /**
