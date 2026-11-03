@@ -4342,6 +4342,75 @@
                     "upload",
                     "create"
                   ]
+                },
+                "start": {
+                  "type": "object",
+                  "properties": {
+                    "directions": {
+                      "minItems": 3,
+                      "maxItems": 3,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "lockup",
+                              "icon",
+                              "wordmark",
+                              "monogram",
+                              "emblem",
+                              "abstract"
+                            ]
+                          },
+                          "style": {
+                            "type": "string",
+                            "enum": [
+                              "minimal",
+                              "geometric",
+                              "gradient",
+                              "mascot",
+                              "hand_drawn",
+                              "luxury",
+                              "retro",
+                              "three_d"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "style"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        {
+                          "type": "string",
+                          "const": ""
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "directions",
+                    "description"
+                  ],
+                  "additionalProperties": false
+                },
+                "suggested": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40,
+                  "pattern": "\\S"
                 }
               },
               "required": [
@@ -46190,6 +46259,45 @@
             "type": "string",
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "directions": {
+            "minItems": 3,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "lockup",
+                    "icon",
+                    "wordmark",
+                    "monogram",
+                    "emblem",
+                    "abstract"
+                  ]
+                },
+                "style": {
+                  "type": "string",
+                  "enum": [
+                    "minimal",
+                    "geometric",
+                    "gradient",
+                    "mascot",
+                    "hand_drawn",
+                    "luxury",
+                    "retro",
+                    "three_d"
+                  ]
+                }
+              },
+              "required": [
+                "type",
+                "style"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -48585,6 +48693,22 @@
             "maxLength": 60,
             "pattern": "\\S"
           },
+          "mood": {
+            "type": "string",
+            "enum": [
+              "modern",
+              "warm",
+              "elegant",
+              "classic",
+              "bold"
+            ]
+          },
+          "feel": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          },
           "display": {
             "type": "object",
             "properties": {
@@ -48711,6 +48835,8 @@
         "required": [
           "id",
           "label",
+          "mood",
+          "feel",
           "display",
           "body"
         ],
@@ -50750,6 +50876,11 @@
                     "failed"
                   ]
                 },
+                "started_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
                 "variants": {
                   "maxItems": 3,
                   "type": "array",
@@ -50760,10 +50891,120 @@
                         "type": "string",
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "direction": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "lockup",
+                              "icon",
+                              "wordmark",
+                              "monogram",
+                              "emblem",
+                              "abstract"
+                            ]
+                          },
+                          "style": {
+                            "type": "string",
+                            "enum": [
+                              "minimal",
+                              "geometric",
+                              "gradient",
+                              "mascot",
+                              "hand_drawn",
+                              "luxury",
+                              "retro",
+                              "three_d"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "style"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "chips": {
+                        "maxItems": 4,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "detail",
+                                "style",
+                                "type",
+                                "colour"
+                              ]
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 30,
+                              "pattern": "\\S"
+                            },
+                            "change": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "pattern": "\\S"
+                            },
+                            "set": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "lockup",
+                                    "icon",
+                                    "wordmark",
+                                    "monogram",
+                                    "emblem",
+                                    "abstract"
+                                  ]
+                                },
+                                "style": {
+                                  "type": "string",
+                                  "enum": [
+                                    "minimal",
+                                    "geometric",
+                                    "gradient",
+                                    "mascot",
+                                    "hand_drawn",
+                                    "luxury",
+                                    "retro",
+                                    "three_d"
+                                  ]
+                                },
+                                "colors": {
+                                  "minItems": 1,
+                                  "maxItems": 5,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "pattern": "^#[0-9a-f]{6}$"
+                                  }
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "label",
+                            "change"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
-                      "id"
+                      "id",
+                      "direction"
                     ],
                     "additionalProperties": false
                   }
@@ -50832,6 +51073,7 @@
               "required": [
                 "round",
                 "status",
+                "started_at",
                 "variants",
                 "brief"
               ],

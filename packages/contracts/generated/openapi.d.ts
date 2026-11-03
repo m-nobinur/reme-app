@@ -1273,6 +1273,30 @@ export interface components {
         }[]
         /** @enum {string} */
         path?: "upload" | "create"
+        start?: {
+          directions: {
+            /** @enum {string} */
+            type:
+              | "lockup"
+              | "icon"
+              | "wordmark"
+              | "monogram"
+              | "emblem"
+              | "abstract"
+            /** @enum {string} */
+            style:
+              | "minimal"
+              | "geometric"
+              | "gradient"
+              | "mascot"
+              | "hand_drawn"
+              | "luxury"
+              | "retro"
+              | "three_d"
+          }[]
+          description: string | ""
+        }
+        suggested?: string
       }[]
     }
     AskDesignOutput: {
@@ -12765,6 +12789,26 @@ export interface components {
       changes?: string
       /** Format: uuid */
       base?: string
+      directions?: {
+        /** @enum {string} */
+        type:
+          | "lockup"
+          | "icon"
+          | "wordmark"
+          | "monogram"
+          | "emblem"
+          | "abstract"
+        /** @enum {string} */
+        style:
+          | "minimal"
+          | "geometric"
+          | "gradient"
+          | "mascot"
+          | "hand_drawn"
+          | "luxury"
+          | "retro"
+          | "three_d"
+      }[]
     }
     ErrorEnvelope: {
       /** @enum {string} */
@@ -13407,6 +13451,9 @@ export interface components {
         | "cormorant_manrope"
         | "fraunces_figtree"
       label: string
+      /** @enum {string} */
+      mood: "modern" | "warm" | "elegant" | "classic" | "bold"
+      feel: string
       display: {
         family: string
         weights: (100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900)[]
@@ -13938,9 +13985,58 @@ export interface components {
         round: number
         /** @enum {string} */
         status: "drawing" | "ready" | "failed"
+        /** Format: date-time */
+        started_at: string
         variants: {
           /** Format: uuid */
           id: string
+          direction: {
+            /** @enum {string} */
+            type:
+              | "lockup"
+              | "icon"
+              | "wordmark"
+              | "monogram"
+              | "emblem"
+              | "abstract"
+            /** @enum {string} */
+            style:
+              | "minimal"
+              | "geometric"
+              | "gradient"
+              | "mascot"
+              | "hand_drawn"
+              | "luxury"
+              | "retro"
+              | "three_d"
+          }
+          chips?: {
+            /** @enum {string} */
+            kind: "detail" | "style" | "type" | "colour"
+            label: string
+            change: string
+            set?: {
+              /** @enum {string} */
+              type?:
+                | "lockup"
+                | "icon"
+                | "wordmark"
+                | "monogram"
+                | "emblem"
+                | "abstract"
+              /** @enum {string} */
+              style?:
+                | "minimal"
+                | "geometric"
+                | "gradient"
+                | "mascot"
+                | "hand_drawn"
+                | "luxury"
+                | "retro"
+                | "three_d"
+              colors?: string[]
+            }
+          }[]
         }[]
         brief: {
           description: string | ""

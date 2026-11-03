@@ -52,9 +52,25 @@ export const FontPairId = z.enum(
   Object.keys(fonts) as [FontPairKey, ...FontPairKey[]]
 )
 
+/**
+ * What a pair feels like. The design tray offers four pairs from four
+ * different moods, so the owner compares feelings rather than near twins.
+ */
+export const FONT_MOODS = [
+  "modern",
+  "warm",
+  "elegant",
+  "classic",
+  "bold",
+] as const
+export const FontMood = z.enum(FONT_MOODS)
+
 export const FontPair = z.strictObject({
   id: FontPairId,
   label: Text(60),
+  mood: FontMood,
+  /** The pair in a few plain words, which the decision call scores the business against. */
+  feel: Text(80),
   display: z.strictObject({
     family: Family,
     weights: z.array(Weight).min(1).max(3),
@@ -347,6 +363,7 @@ export const LEGACY_FONT_PAIR = {
 
 export type FontPairId = z.infer<typeof FontPairId>
 export type FontPair = z.infer<typeof FontPair>
+export type FontMood = z.infer<typeof FontMood>
 export type Palette = z.infer<typeof Palette>
 export type SectionKind = z.infer<typeof SectionKind>
 export type SectionVariant = z.infer<typeof SectionVariant>

@@ -455,7 +455,32 @@ export const samples: Record<ContractName, unknown> = {
       {
         round: 1,
         status: "ready",
-        variants: [{ id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293" }],
+        started_at: "2026-11-04T09:00:00Z",
+        variants: [
+          {
+            id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+            direction: { type: "emblem", style: "retro" },
+            chips: [
+              {
+                kind: "detail",
+                label: "Fewer details",
+                change: "fewer small details",
+              },
+              {
+                kind: "style",
+                label: "Hand-drawn look",
+                change: "a hand-drawn, crafted look",
+                set: { style: "hand_drawn" },
+              },
+              {
+                kind: "colour",
+                label: "Darker forest green",
+                change: "a darker forest green",
+                set: { colors: [paletteSample.ink] },
+              },
+            ],
+          },
+        ],
         brief: {
           description: "",
           colors: [paletteSample.primary],
@@ -1184,6 +1209,8 @@ export const samples: Record<ContractName, unknown> = {
   FontPair: {
     id: "outfit_figtree",
     label: "Outfit and Figtree",
+    mood: "modern",
+    feel: "Round geometric sans serif, clean and friendly",
     display: { family: "Outfit", weights: [500, 600], italic: false },
     body: { family: "Figtree", weights: [400, 500] },
   },
