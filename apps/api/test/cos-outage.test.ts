@@ -1,3 +1,6 @@
+import models from "@workspace/facade/models/openrouter.models.json" with {
+  type: "json",
+}
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { cosModel } from "../src/chat.ts"
 import {
@@ -33,8 +36,13 @@ describe("the outage fallback", () => {
       })
       .catch(() => undefined)
     expect(body.models).toEqual([DEFAULT_MODEL, OUTAGE_MODEL])
-    expect((body.provider as { ignore: string[] }).ignore).toContain(
-      "amazon-bedrock"
+    const excluded = (id: string) =>
+      models.find((m) => m.id === id)?.compat.openRouterRouting.ignore ?? []
+    expect((body.provider as { ignore: string[] }).ignore).toEqual(
+      expect.arrayContaining([
+        ...excluded(DEFAULT_MODEL),
+        ...excluded(OUTAGE_MODEL),
+      ])
     )
   })
 })

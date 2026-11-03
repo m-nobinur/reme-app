@@ -131,11 +131,11 @@ export const FALLBACK_MODEL = "google/gemini-3.8-flash"
 
 /**
  * The model OpenRouter tries when the owner turn's model has no provider up
- * (its `models` list). Same price cap as the default, so the reservation
- * holds, and another lab, so one lab's outage does not take both. A test
- * keeps it in the facade's list.
+ * (its `models` list). At or under the default's price cap, so the
+ * reservation holds, and another lab, so one lab's outage does not take
+ * both. A test keeps it in the facade's list.
  */
-export const OUTAGE_MODEL = "anthropic/claude-sonnet-5.5"
+export const OUTAGE_MODEL = "google/gemini-3.8-flash"
 
 /**
  * Which model, effort and path serves each kind of CoS work (CM1). Every
