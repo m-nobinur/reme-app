@@ -33,6 +33,13 @@ const EXEC_ENV = {
   HOME: "/home/reme",
   PLAYWRIGHT_BROWSERS_PATH: "/opt/pw-browsers",
   NODE_EXTRA_CA_CERTS: CA,
+  // Egress refuses telemetry.astro.build, which logged an error on every run.
+  ASTRO_TELEMETRY_DISABLED: "1",
+  // The tail's identity (`GIT` in tail.ts), so the lead's own commits work too.
+  GIT_AUTHOR_NAME: "reme",
+  GIT_AUTHOR_EMAIL: "developer@reme.invalid",
+  GIT_COMMITTER_NAME: "reme",
+  GIT_COMMITTER_EMAIL: "developer@reme.invalid",
 }
 
 /**

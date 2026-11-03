@@ -183,6 +183,11 @@ describe("a sandbox's first command", () => {
           PLAYWRIGHT_BROWSERS_PATH: "/opt/pw-browsers",
           NODE_EXTRA_CA_CERTS:
             "/etc/cloudflare/certs/cloudflare-containers-ca.crt",
+          ASTRO_TELEMETRY_DISABLED: "1",
+          GIT_AUTHOR_NAME: "reme",
+          GIT_AUTHOR_EMAIL: "developer@reme.invalid",
+          GIT_COMMITTER_NAME: "reme",
+          GIT_COMMITTER_EMAIL: "developer@reme.invalid",
           REME_COMMAND: "echo hi",
           REME_CWD: "/workspace",
         },
