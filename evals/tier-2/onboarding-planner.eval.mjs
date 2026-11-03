@@ -37,6 +37,7 @@ import {
   CORRECTS_TWICE,
   MISLEADING,
   PERSONAS,
+  PRUNING_CO,
   SKIPPER,
   SKIPS_EVERYTHING,
 } from "../onboarding-personas.mjs"
@@ -182,7 +183,7 @@ function scriptRows(rows) {
       .map((p) => ({
         type: p.type,
         state: p.state,
-        step: p.input?.key ?? p.input?.step ?? null,
+        step: p.input?.key ?? p.input?.step ?? p.input?.about ?? null,
         answer: p.output?.answer ?? null,
         choice: p.output?.ids?.[0] ?? null,
         reply: p.state === "output-error" ? reply : null,
@@ -839,6 +840,7 @@ export default async function run() {
     SKIPPER,
     SKIPS_EVERYTHING,
     CORRECTS_TWICE,
+    PRUNING_CO,
   ].filter((p) => !only || only.includes(p.id))
   const results = []
   for (const modelId of ids) {

@@ -1,3 +1,5 @@
+import { SKIP_REPLY } from "@workspace/contracts"
+
 /**
  * The owners `tier-2/onboarding-planner.eval.mjs` onboards. Each has a sheet
  * the owner simulator answers open questions from, the truth the run checks
@@ -519,6 +521,41 @@ export const CORRECTS_TWICE = {
   },
   quote: "confirm",
   quoteExpect: [/bed/i, /often|frequen/i, /home|office/i],
+}
+
+/**
+ * The staging live test of 2026-11-03 replayed: the owner's first seven
+ * messages word for word, so the replies before and after a prompt change
+ * read side by side. The contact details are swapped for fake ones.
+ */
+export const PRUNING_CO = {
+  id: "pruning-co",
+  signIn: { orgName: "Pruning Co", ownerName: "Dev" },
+  sheet: `You are Dev, you run Pruning Co, a tree surgery and garden care company in Leeds, UK. Services: tree pruning and crown reductions, tree felling, hedge trimming, stump grinding. Area: Leeds and about 20 miles out (Bradford, Wakefield, Harrogate, Wetherby), further for big felling jobs. Customers: mostly homeowners, some letting agents and landlords who send repeat work, the odd school or church. Phone 0113 496 0123. Email hello@pruningco.invalid. Assistant: Ava, she/her, professional. Call you Dev.`,
+  style: "Brief and practical.",
+  truth: {
+    name: /pruning co/i,
+    phone: "+441134960123",
+    email: "hello@pruningco.invalid",
+    assistant: /ava/i,
+  },
+  turns: {
+    1: "We're a tree surgery and garden care company in Leeds. Main jobs are tree pruning and crown reductions, tree felling, hedge trimming and stump grinding.",
+    2: "Leeds and about 20 miles out, so Bradford, Wakefield, Harrogate and Wetherby. We'll go further for big felling jobs.",
+    3: "Mostly homeowners. A few letting agents and landlords who send repeat work, and the odd school or church.",
+    4: SKIP_REPLY,
+    5: "Address and postcode, what needs doing, roughly how big the tree or hedge is, and a couple of photos. Also whether we can get a chipper down the side or it all has to come through the house, and if it's near power lines or a road.",
+    6: 'Let people tick more than one job, felling and stump grinding usually go together. Add a "Not sure" option to garden access, and make photos required.',
+    7: "good",
+  },
+  cards: {
+    pronouns: "she_her",
+    tone: "professional",
+    build_for_me: "yes",
+    upload: "skip",
+  },
+  quote: "confirm",
+  quoteExpect: [/address|postcode/i, /chipper|access/i, /photo/i],
 }
 
 /**
