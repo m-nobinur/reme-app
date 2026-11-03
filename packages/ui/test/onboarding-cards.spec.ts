@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test"
 import { PALETTES } from "@workspace/contracts"
-import { open } from "./helpers"
+import { axe, open, settled } from "./helpers"
 
 /**
  * Onboarding's choice and photo questions, in the tray: native groups the
@@ -325,4 +325,144 @@ test("a finished design tray reads back as chips: the logo, colours, a pair in i
   ]) {
     await expect(bubble.getByText(words, { exact: true })).toBeVisible()
   }
+})
+
+test("the quote form preview is the customers' form, live but never sent, and confirms like the card", async ({
+  page,
+}) => {
+  await open(page, "QuoteFormPreview")
+  const trigger = page.getByRole("button", { name: "Preview form" })
+  await trigger.click()
+  const modal = page.getByRole("dialog", { name: "Form preview" })
+  await expect(modal).toBeVisible()
+
+  await expect(modal.getByRole("group")).toHaveCount(4)
+  await expect(modal.getByRole("group", { name: "Your details" })).toBeVisible()
+  await expect(modal.getByRole("group", { name: "Your request" })).toBeVisible()
+  for (const label of [
+    "Your name",
+    "Email address",
+    "Phone number optional",
+    "What do you need doing",
+    "Tell us more optional",
+    "Passengers",
+    "Day of the journey",
+    "Date and time of the journey",
+    "Occasion optional",
+    "Photos of the pick-up point optional",
+    "A second number optional",
+    "Email for the invoice optional",
+  ]) {
+    await expect(modal.getByLabel(label, { exact: true })).toBeVisible()
+  }
+  await expect(modal.getByLabel("Passengers")).toHaveAttribute("type", "number")
+  await expect(
+    modal.getByLabel("Date and time of the journey")
+  ).toHaveAttribute("type", "datetime-local")
+  await expect(modal.getByLabel("Day of the journey")).toHaveAttribute(
+    "type",
+    "date"
+  )
+  await expect(
+    modal.getByLabel("Photos of the pick-up point optional")
+  ).toHaveAttribute("type", "file")
+  await expect(modal.getByLabel("A second number optional")).toHaveAttribute(
+    "type",
+    "tel"
+  )
+  await expect(modal).toContainText("The minibus seats up to 16")
+  await expect(modal).toContainText("A line is enough")
+
+  await modal.getByLabel("Your name").fill("Sam")
+  await expect(modal.getByLabel("Your name")).toHaveValue("Sam")
+  await modal.getByLabel("Occasion optional").selectOption("Night out")
+  await expect(modal.getByLabel("Occasion optional")).toHaveValue("Night out")
+  const vehicle = modal.getByRole("group", { name: "Vehicle" })
+  await vehicle.getByRole("radio", { name: "Saloon" }).check()
+  await vehicle.getByRole("radio", { name: "Minibus" }).check()
+  await expect(vehicle.getByRole("radio", { name: "Saloon" })).not.toBeChecked()
+  const extras = modal.getByRole("group", { name: "Extras optional" })
+  await extras.getByRole("checkbox", { name: "Child seat" }).check()
+  await extras.getByRole("checkbox", { name: "Champagne" }).check()
+  await expect(extras.getByRole("checkbox", { checked: true })).toHaveCount(2)
+
+  const send = modal.getByRole("button", { name: "Send quote request" })
+  await expect(send).toBeDisabled()
+  await expect(modal).toContainText(
+    "This is a preview, so nothing is sent or saved."
+  )
+
+  await axe(page, "QuoteFormPreview light")
+
+  // Closing forgets the answers, and focus goes back to the button.
+  await page.keyboard.press("Escape")
+  await expect(modal).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+  await trigger.click()
+  await expect(modal.getByLabel("Your name")).toHaveValue("")
+  await modal.getByRole("button", { name: "Close preview" }).click()
+  await expect(modal).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+
+  await trigger.click()
+  await modal.getByRole("button", { name: "Looks good" }).click()
+  await expect(modal).toHaveCount(0)
+  await expect(page.getByRole("status")).toHaveText("Confirmed")
+})
+
+test("the quote form preview keeps focus inside, rises from the bottom on a phone and has no violations", async ({
+  page,
+}) => {
+  await open(page, "QuoteFormPreview", 390)
+  await page.getByRole("button", { name: "Preview form" }).click()
+  const modal = page.getByRole("dialog", { name: "Form preview" })
+  await expect(modal).toBeVisible()
+  await settled(page)
+  const box = await modal.boundingBox()
+  expect(box?.x).toBe(0)
+  expect(box?.width).toBe(390)
+  expect((box?.y ?? 0) + (box?.height ?? 0)).toBe(900)
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press("Tab")
+    // Base UI's guards sit at both ends and hand focus back in a tick later.
+    await expect
+      .poll(
+        () =>
+          modal.evaluate(
+            (el) =>
+              el.contains(document.activeElement) &&
+              !document.activeElement?.hasAttribute("data-base-ui-focus-guard")
+          ),
+        { message: `focus left the sheet on Tab ${i + 1}` }
+      )
+      .toBe(true)
+  }
+  await axe(page, "QuoteFormPreview phone")
+
+  await open(page, "QuoteFormPreview", 1024, "dark")
+  await page.getByRole("button", { name: "Preview form" }).click()
+  await expect(page.getByRole("dialog", { name: "Form preview" })).toBeVisible()
+  await axe(page, "QuoteFormPreview dark")
+})
+
+test("the card's Preview form shows the questions as the owner has left them, and Looks good there confirms", async ({
+  page,
+}) => {
+  await open(page, "ReviewQuoteForm")
+  const card = page
+    .locator('[data-slot="review-quote-form"]')
+    .filter({ has: page.getByRole("button", { name: "Looks good" }) })
+    .first()
+  await card.getByRole("button", { name: "Remove Occasion" }).click()
+  await card.getByRole("button", { name: "Preview form" }).click()
+  const modal = page.getByRole("dialog", { name: "Form preview" })
+  await expect(modal.getByRole("group", { name: "Your details" })).toBeVisible()
+  await expect(modal.getByLabel("Pick-up address")).toBeVisible()
+  await expect(modal.getByLabel(/^Occasion/)).toHaveCount(0)
+  // The catalog's runtime takes no tool results, so reaching the card's own
+  // confirm shows as the error it throws.
+  const failed = page.waitForEvent("pageerror")
+  await modal.getByRole("button", { name: "Looks good" }).click()
+  expect((await failed).message).toMatch(/does not support tool results/)
+  await expect(modal).toHaveCount(0)
 })
