@@ -160,6 +160,15 @@ const ICANN = "https://www.icann.org/resources/pages/benefits-2013-09-16-en"
 
 const pounds = (gbp: number) => `£${gbp}`
 
+/**
+ * Cloudflare's price in the dollars it bills, with a pound estimate to the
+ * nearest pound, at least £1, while a fresh rate came with the names.
+ */
+export const registrarPrice = (usd: number, usdGbp?: number) =>
+  `From $${usd.toFixed(2)} a year${
+    usdGbp ? ` (about ${pounds(Math.max(1, Math.round(usd * usdGbp)))})` : ""
+  }`
+
 /** One free full domain: its ending, Reme's yearly price and the registrar's, where known. */
 type Offer = {
   name: string
@@ -314,11 +323,13 @@ function Elsewhere({
   name,
   heading,
   usd,
+  usdGbp,
   onFollow,
 }: {
   name: string
   heading: string
   usd?: number | undefined
+  usdGbp?: number | undefined
   onFollow?: () => void
 }) {
   const links = buyElsewhereLinks(name)
@@ -327,7 +338,7 @@ function Elsewhere({
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <ConnectRow
           href={links.cloudflare}
-          line={usd ? `From $${usd.toFixed(2)} a year` : "cloudflare.com"}
+          line={usd ? registrarPrice(usd, usdGbp) : "cloudflare.com"}
           mark="cloudflare"
           name="Cloudflare"
           newTab
@@ -378,6 +389,7 @@ function useBought(name: string, onBought: (output: Connecting) => void) {
 function ChoosePage({
   rows,
   buyHere,
+  usdGbp,
   frame,
   onPick,
   onElsewhere,
@@ -387,6 +399,7 @@ function ChoosePage({
 }: {
   rows: readonly DomainStemOffer[]
   buyHere: boolean
+  usdGbp?: number | undefined
   frame: Frame
   onPick: (name: string) => void
   onElsewhere: (name: string) => void
@@ -462,6 +475,7 @@ function ChoosePage({
             name={picked}
             onFollow={() => onFollow(picked)}
             usd={offer?.usd}
+            usdGbp={usdGbp}
           />
         </div>
       ) : null}
@@ -489,6 +503,7 @@ function ChoosePage({
                 name={picked}
                 onFollow={() => onElsewhere(picked)}
                 usd={offer?.usd}
+                usdGbp={usdGbp}
               />
             </div>
           ) : null}
@@ -1099,6 +1114,7 @@ export function BuyTray({
   draftId,
   rows,
   buyHere = false,
+  usdGbp,
   name,
   prefill,
 }: {
@@ -1107,6 +1123,8 @@ export function BuyTray({
   rows?: readonly DomainStemOffer[] | undefined
   /** Buying here is on, so a name goes on to Your details. */
   buyHere?: boolean
+  /** Pounds per dollar, for the pound estimate beside Cloudflare's price. */
+  usdGbp?: number | undefined
   name?: string | undefined
   /** Your details for `name` as `buy_domain` prefilled them. */
   prefill?: DomainRegistrantPrefill | undefined
@@ -1160,6 +1178,7 @@ export function BuyTray({
         <ChoosePage
           buyHere={buyHere}
           frame={frame}
+          usdGbp={usdGbp}
           onBought={(picked, output) =>
             keep({ at: "connecting", name: picked, output })
           }
@@ -1251,6 +1270,7 @@ export const FindDomain: ToolCallMessagePartComponent = (props) => {
         buyHere={view.output.buy_here === true}
         draftId={props.toolCallId}
         rows={view.output.rows}
+        usdGbp={view.output.usd_gbp}
       />
     </>
   )
