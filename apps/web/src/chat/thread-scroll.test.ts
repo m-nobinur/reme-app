@@ -502,7 +502,12 @@ afterEach(async () => {
 })
 
 /** The owner sends, the reply streams in and ends: their message at the top. */
-async function sendAndReply(id: string, reply = `${id}-reply`, height = 260) {
+async function sendAndReply(
+  id: string,
+  reply = `${id}-reply`,
+  height = 260,
+  top = TOP
+) {
   await setState({
     messages: [
       ...state.messages,
@@ -521,8 +526,20 @@ async function sendAndReply(id: string, reply = `${id}-reply`, height = 260) {
     isRunning: false,
   })
   await frames()
-  expect(ownerMessageTop()).toBe(TOP)
+  expect(ownerMessageTop()).toBe(top)
 }
+
+/** A tall message keeps this much of its end in view: the library's default, 6em. */
+const VISIBLE = 96
+
+it("a message up to the clamp stays whole at the top, a taller one keeps its last lines", async () => {
+  // A long message folded to six lines is about 220 px, and eight lines whole
+  // about 270; the clamp is 20rem.
+  layout.rows.set("u1", 290)
+  await sendAndReply("u1")
+  layout.rows.set("u2", 500)
+  await sendAndReply("u2", undefined, undefined, -(500 - VISIBLE))
+})
 
 it("the owner's message stays at the top when the docked tray leaves", async () => {
   layout.footer = 421
