@@ -1,9 +1,7 @@
-import {
-  type ActivitySegment,
-  type ActivityStep,
-  type FactValueKey,
-  PRONOUNS,
-  TONES,
+import type {
+  ActivitySegment,
+  ActivityStep,
+  FactValueKey,
 } from "@workspace/contracts"
 import { phoneText } from "@workspace/starter-site/phone"
 import {
@@ -127,18 +125,8 @@ function settled(
   if (area) out.area = done(area)
   if (phone && email) out.contact = done(`${phoneText(phone)}, ${email}`)
   const name = factValue(o.facts, "assistant.name")?.name
-  const pronouns = factValue(o.facts, "assistant.pronouns")?.id
-  const tone = factValue(o.facts, "assistant.tone")?.id
-  if (name && pronouns && tone) {
-    out.assistant = done(
-      [
-        name,
-        PRONOUNS.find((each) => each.id === pronouns)?.label,
-        TONES.find((each) => each.id === tone)?.label.toLowerCase(),
-      ]
-        .filter(Boolean)
-        .join(", ")
-    )
+  if (name && fact("assistant.pronouns") && fact("assistant.tone")) {
+    out.assistant = done(name)
   }
   if (quote) {
     out.quote_form = done(

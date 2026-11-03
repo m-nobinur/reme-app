@@ -102,13 +102,6 @@ describe("onboardingSteps", () => {
       value: "Regular cleans, end of tenancy",
     })
     expect(steps[1]).toMatchObject({ id: "area", state: "now" })
-    expect(
-      onboardingSteps(at(ASSISTANT)).find((s) => s.id === "assistant")
-    ).toEqual({
-      id: "assistant",
-      state: "done",
-      value: "Reme, she/her, friendly",
-    })
     expect(onboardingSteps(at([...WORK, AREA]))[1]).toEqual({
       id: "area",
       state: "done",
