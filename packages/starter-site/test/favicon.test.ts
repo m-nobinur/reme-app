@@ -3,7 +3,13 @@ import { join } from "node:path"
 import { PALETTES } from "@workspace/contracts"
 import sharp from "sharp"
 import { beforeAll, describe, expect, test } from "vitest"
-import { initialOf, markColours, markSvg, siteMark } from "../src/favicon"
+import {
+  initialOf,
+  markColours,
+  markSvg,
+  siteMark,
+  symbolOf,
+} from "../src/favicon"
 import { type Built, build, readPages } from "./build"
 import { FILLED } from "./fixture"
 
@@ -61,6 +67,120 @@ describe("the mark", () => {
     ).toEqual({ primary: palette.primary, paper: palette.paper })
     expect(markColours("", palette.primary).primary).toMatch(/^#[0-9a-f]{6}$/i)
     expect(markColours("", "").primary).toMatch(/^#[0-9a-f]{6}$/i)
+  })
+})
+
+type Colour = { r: number; g: number; b: number }
+const BLUE = { r: 0, g: 0, b: 255 }
+const RED = { r: 255, g: 0, b: 0 }
+const WHITE = { r: 255, g: 255, b: 255 }
+const BLACK = { r: 0, g: 0, b: 0 }
+type Rect = [x: number, y: number, w: number, h: number, colour: Colour]
+
+/** A logo of `rects` on `background`, transparent when there is none. */
+const picture = (
+  w: number,
+  h: number,
+  background: Colour | null,
+  rects: Rect[]
+) =>
+  sharp({
+    create: {
+      width: w,
+      height: h,
+      channels: 4,
+      background: background ?? { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite(
+      rects.map(([x, y, rw, rh, colour]) => ({
+        input: {
+          create: { width: rw, height: rh, channels: 3, background: colour },
+        },
+        left: x,
+        top: y,
+      }))
+    )
+    .png()
+    .toBuffer()
+
+/** The pixels of a data URI's PNG, or undefined when there is none. */
+const pixels = async (uri: string | undefined) => {
+  if (!uri) return undefined
+  const { data, info } = await sharp(
+    Buffer.from(uri.split(",")[1] ?? "", "base64")
+  )
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  return {
+    at: (x: number, y: number) => [
+      ...data.subarray((y * info.width + x) * 4, (y * info.width + x) * 4 + 4),
+    ],
+    all: Array.from({ length: info.width * info.height }, (_, i) => [
+      ...data.subarray(i * 4, i * 4 + 4),
+    ]),
+  }
+}
+
+describe("the symbol cut from a logo", () => {
+  test("is the block beside a wide bar, without the bar", async () => {
+    const uri = await symbolOf(
+      await picture(600, 200, null, [
+        [20, 20, 160, 160, BLUE],
+        [260, 80, 300, 40, RED],
+      ])
+    )
+    const seen = (await pixels(uri))?.all.filter((p) => p[3] === 255)
+    expect(seen?.length).toBeGreaterThan(0)
+    expect(seen?.every((p) => p[2] === 255 && p[0] === 0)).toBe(true)
+  })
+
+  test("is nothing for a wide bar alone", async () => {
+    expect(
+      await symbolOf(await picture(400, 100, null, [[0, 20, 400, 60, RED]]))
+    ).toBeUndefined()
+  })
+
+  test("is nothing when a wide piece holds most of the ink", async () => {
+    expect(
+      await symbolOf(
+        await picture(600, 200, null, [
+          [20, 80, 40, 40, BLUE],
+          [160, 70, 400, 60, RED],
+        ])
+      )
+    ).toBeUndefined()
+  })
+
+  test("leaves the background of an opaque logo transparent but keeps white inside the drawing", async () => {
+    const cut = await pixels(
+      await symbolOf(
+        await picture(600, 200, WHITE, [
+          [20, 20, 160, 160, BLUE],
+          [50, 50, 100, 100, WHITE],
+          [260, 80, 300, 40, RED],
+        ])
+      )
+    )
+    expect(cut?.at(0, 0)?.[3]).toBe(0)
+    expect(cut?.at(255, 255)?.[3]).toBe(0)
+    expect(cut?.at(128, 128)).toEqual([255, 255, 255, 255])
+  })
+
+  test("keeps an opaque framed picture whole, white inside and all", async () => {
+    const framed = await picture(300, 300, WHITE, [
+      [20, 20, 260, 260, BLACK],
+      [30, 30, 240, 240, WHITE],
+      [100, 100, 100, 100, BLACK],
+    ])
+    const uri = await symbolOf(framed)
+    const today = await sharp(framed)
+      .resize(128, 128, { fit: "inside" })
+      .png()
+      .toBuffer()
+    expect(uri).toBe(`data:image/png;base64,${today.toString("base64")}`)
+    expect((await pixels(uri))?.at(20, 20)).toEqual([255, 255, 255, 255])
   })
 })
 

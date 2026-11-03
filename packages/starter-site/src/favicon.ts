@@ -177,7 +177,7 @@ export function markSvg(
   const glyph = GLYPHS[initialOf(name)]
   const scale = 0.34
   const inner = image
-    ? `<image href="${image}" x="9" y="9" width="46" height="46" preserveAspectRatio="xMidYMid meet"/>`
+    ? `<image href="${image}" x="7" y="7" width="50" height="50" preserveAspectRatio="xMidYMid meet"/>`
     : glyph
       ? `<path fill="${primary}" transform="translate(${((64 - glyph[0] * scale) / 2).toFixed(2)} 15) scale(${scale})" d="${glyph[1]}"/>`
       : `<circle cx="32" cy="32" r="10" fill="${primary}"/>`
@@ -199,10 +199,181 @@ type MarkSite = {
   logo: string
 }
 
+const dataUri = (png: Buffer) =>
+  `data:image/png;base64,${png.toString("base64")}`
+
+type Box = { l: number; t: number; r: number; b: number; ink: number }
+
 /**
- * The owner's logo as a PNG data URI, from the file the build placed under
- * src/assets (the site root is the build's working directory), or undefined
- * when there is no logo or its file is not there.
+ * The logo's symbol as a PNG data URI, or undefined when it has none worth
+ * cutting out (the initial is drawn instead). Works on a 512 px copy:
+ * 1. ink is what is opaque or, on an opaque logo, far from the border's
+ *    median colour;
+ * 2. the ink splits at empty strips across and down, so a symbol comes
+ *    apart from its name;
+ * 3. the symbol is the squarish piece holding 15% to 75% of the ink, and a
+ *    squarish logo in one piece is its own symbol;
+ * 4. it is cut with a margin and, on an opaque logo, the background that
+ *    reaches the image edge turns transparent. White inside the drawing
+ *    stays.
+ * An opaque logo with nothing to cut apart (a frame, a fill, one piece) is
+ * drawn whole, exactly as the mark drew every logo before.
+ */
+export async function symbolOf(file: Buffer): Promise<string | undefined> {
+  const whole = async () =>
+    dataUri(
+      await sharp(file).resize(128, 128, { fit: "inside" }).png().toBuffer()
+    )
+  const { data, info } = await sharp(file)
+    .ensureAlpha()
+    .resize(512, 512, { fit: "inside", withoutEnlargement: true })
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const { width: W, height: H } = info
+  const at = (i: number) => data[i] as number
+  const border: number[] = []
+  for (let x = 0; x < W; x++) border.push(x, (H - 1) * W + x)
+  for (let y = 0; y < H; y++) border.push(y * W, y * W + W - 1)
+  const opaque =
+    border.filter((i) => at(i * 4 + 3) < 128).length * 2 <= border.length
+  const median = (c: number) =>
+    border.map((i) => at(i * 4 + c)).sort((a, b) => a - b)[
+      border.length >> 1
+    ] ?? 0
+  const bg = [median(0), median(1), median(2)] as const
+  const ink = new Uint8Array(W * H)
+  let total = 0
+  for (let i = 0; i < W * H; i++) {
+    const o = i * 4
+    if (
+      at(o + 3) > 32 &&
+      (!opaque ||
+        Math.hypot(at(o) - bg[0], at(o + 1) - bg[1], at(o + 2) - bg[2]) > 48)
+    ) {
+      ink[i] = 1
+      total++
+    }
+  }
+  if (opaque && (total === 0 || total > 0.5 * W * H)) return whole()
+
+  const inkIn = (b: Omit<Box, "ink">): Box => {
+    const p = { l: W, t: H, r: -1, b: -1, ink: 0 }
+    for (let y = b.t; y <= b.b; y++)
+      for (let x = b.l; x <= b.r; x++)
+        if (ink[y * W + x]) {
+          p.ink++
+          p.l = Math.min(p.l, x)
+          p.r = Math.max(p.r, x)
+          p.t = Math.min(p.t, y)
+          p.b = Math.max(p.b, y)
+        }
+    return p
+  }
+  const all = inkIn({ l: 0, t: 0, r: W - 1, b: H - 1 })
+  if (all.ink === 0) return undefined
+  const gap = Math.max(3, Math.round(0.025 * Math.max(W, H)))
+  const split = (b: Box, across: boolean): Box[] => {
+    const [from, to] = across ? [b.l, b.r] : [b.t, b.b]
+    const pieces: Box[] = []
+    let start = -1
+    let empty = 0
+    for (let i = from; i <= to + 1; i++) {
+      let used = false
+      for (
+        let j = across ? b.t : b.l;
+        i <= to && !used && j <= (across ? b.b : b.r);
+        j++
+      )
+        used = ink[across ? j * W + i : i * W + j] === 1
+      if (used) {
+        if (start < 0) start = i
+        empty = 0
+        continue
+      }
+      empty++
+      if (start >= 0 && (empty >= gap || i > to)) {
+        const end = i - empty
+        pieces.push(
+          across ? { ...b, l: start, r: end } : { ...b, t: start, b: end }
+        )
+        start = -1
+      }
+    }
+    return pieces.map(inkIn).filter((p) => p.ink > 0)
+  }
+  const parts = [...split(all, true), ...split(all, false)]
+  const aspect = (p: Box) => (p.r - p.l + 1) / (p.b - p.t + 1)
+  const squarish = (p: Box) => aspect(p) >= 0.55 && aspect(p) <= 1.8
+  const big = parts.filter(
+    (p) => p.ink > 0.03 * all.ink && p.ink < 0.97 * all.ink
+  )
+  const symbol = big.filter(squarish).sort((a, b) => b.ink - a.ink)[0]
+  const pick =
+    symbol && symbol.ink > 0.15 * all.ink && symbol.ink < 0.75 * all.ink
+      ? symbol
+      : !big.length && squarish(all)
+        ? all
+        : undefined
+  if (!pick) return undefined
+  if (opaque && pick === all) return whole()
+
+  if (opaque) {
+    const seen = new Uint8Array(W * H)
+    const stack = border.filter((i) => !ink[i])
+    for (const i of stack) seen[i] = 1
+    for (let i = stack.pop(); i !== undefined; i = stack.pop()) {
+      data[i * 4 + 3] = 0
+      const x = i % W
+      for (const n of [
+        i - W,
+        i + W,
+        x > 0 ? i - 1 : -1,
+        x < W - 1 ? i + 1 : -1,
+      ])
+        if (n >= 0 && n < W * H && !ink[n] && !seen[n]) {
+          seen[n] = 1
+          stack.push(n)
+        }
+    }
+  }
+  const pad = Math.round(
+    0.04 * Math.max(pick.r - pick.l + 1, pick.b - pick.t + 1)
+  )
+  const l = Math.max(0, pick.l - pad)
+  const t = Math.max(0, pick.t - pad)
+  const w = Math.min(W - l, pick.r - pick.l + 1 + 2 * pad)
+  const h = Math.min(H - t, pick.b - pick.t + 1 + 2 * pad)
+  // A transparent logo is cut from the full-size file so a small symbol keeps its detail.
+  const full = opaque ? info : await sharp(file).metadata()
+  const fullW = full.width ?? W
+  const fullH = full.height ?? H
+  const k = fullW / W
+  const left = Math.round(l * k)
+  const top = Math.round(t * k)
+  const cut = await (opaque
+    ? sharp(data, { raw: { width: W, height: H, channels: 4 } })
+    : sharp(file).ensureAlpha()
+  )
+    .extract({
+      left,
+      top,
+      width: Math.min(Math.round(w * k), fullW - left),
+      height: Math.min(Math.round(h * k), fullH - top),
+    })
+    .resize(256, 256, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png()
+    .toBuffer()
+  return dataUri(cut)
+}
+
+/**
+ * The owner's logo, cut to its symbol, as a PNG data URI, from the file the
+ * build placed under src/assets (the site root is the build's working
+ * directory), or undefined when there is no logo, its file is not there or
+ * it has no symbol to draw.
  */
 async function logoUri(path: string): Promise<string | undefined> {
   if (!path) return undefined
@@ -211,11 +382,7 @@ async function logoUri(path: string): Promise<string | undefined> {
   // The field is written by the Developer, so a path that climbs out of the
   // assets folder reads nothing rather than any file the build can see.
   if (!file.startsWith(root + sep) || !existsSync(file)) return undefined
-  const png = await sharp(readFileSync(file))
-    .resize(128, 128, { fit: "inside" })
-    .png()
-    .toBuffer()
-  return `data:image/png;base64,${png.toString("base64")}`
+  return symbolOf(readFileSync(file))
 }
 
 /** This site's mark: the owner's logo when there is one, else its initial. */
