@@ -999,7 +999,7 @@ export function sayProblems(
     : (context.changes ?? []).filter((c) => !c.names.some((n) => words.has(n)))
   if (unnamed.length > 0) {
     problems.push(
-      `say names ${(context.changes?.length ?? 0) - unnamed.length} of the ${context.changes?.length} changes the plan makes and leaves out ${[...new Set(unnamed.map((c) => c.what))].join(", ")}; change only what the owner asked for, keeping the rest exactly as it was, and name each change you make, in a bulleted list when there are three or more`
+      `say names ${(context.changes?.length ?? 0) - unnamed.length} of the ${context.changes?.length} changes the owner asked for and leaves out ${[...new Set(unnamed.map((c) => c.what))].join(", ")}; name each one, in a bulleted list when there are three or more`
     )
   }
   return problems
@@ -1485,6 +1485,7 @@ export function sayContext(
         .join("\n")
     : undefined
   const lists = typed && (onBusiness || !answering) ? listsOf(typed) : []
+  const asked = new Set(wordsOf(typed ?? "").map(stem))
   return {
     prices: about === "business.prices" || "business.prices" in plan.facts,
     skipButton:
@@ -1519,7 +1520,11 @@ export function sayContext(
     ),
     declined: declinedIn(ownerWords(s)),
     services: plan.facts["business.offerings"]?.items ?? [],
-    changes: changesOf(plan, s, answering),
+    // Only what the owner asked for: a change they never mentioned is not
+    // theirs to read about, and refusing it until named cost a fallback.
+    changes: changesOf(plan, s, answering).filter((c) =>
+      c.names.some((n) => asked.has(n))
+    ),
     ...(lastQuestion ? { offered: offeredIn(lastQuestion) } : {}),
     items: [
       ...values("business.offerings").flatMap((v) => v.items),
@@ -1573,10 +1578,10 @@ const valueWords = (value: unknown) =>
   new Set(contentWords(JSON.stringify(value ?? "")))
 
 /**
- * The changes the plan makes at the owner's request, which say must name
- * one by one: each question of a quote form proposed again that differs from
- * the waiting one, and each fact a recap correction replaces. A change is
- * named by its label's or fact's words, or by a word it adds or removes.
+ * The changes the plan makes when the owner asks for some: each question of
+ * a quote form proposed again that differs from the waiting one, and each
+ * fact a recap correction replaces. A change is named by its label's or
+ * fact's words, or by a word it adds or removes.
  */
 function changesOf(
   plan: OnboardingPlan,

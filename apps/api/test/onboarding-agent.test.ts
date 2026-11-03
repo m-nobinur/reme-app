@@ -2744,7 +2744,7 @@ describe("the owner's words in say", () => {
     )
     expect(round1).toContainEqual(
       expect.stringMatching(
-        /^say names 2 of the 3 changes the plan makes and leaves out Garden access/
+        /^say names 2 of the 3 changes the owner asked for and leaves out Garden access/
       )
     )
     expect(round1).toContainEqual(
@@ -2756,8 +2756,9 @@ describe("the owner's words in say", () => {
       )
     ).toEqual([])
 
-    // A new key on a question the owner can't see changed is no change; a
-    // rewritten label they didn't ask for is (eval, 2026-11-03).
+    // Only what the owner asked for must be named: not a new key or hint
+    // they can't see changed, nor a label they never mentioned (eval,
+    // 2026-11-03, where demanding it made the turn fall back).
     const limo = call(
       "tool-review_quote_form",
       { fields: FIELDS, note: null },
@@ -2801,18 +2802,15 @@ describe("the owner's words in say", () => {
     expect(
       rekeyed(renamed, "Added a question on which car they want.")
     ).toEqual([])
+    const relabelled = renamed.map((f) =>
+      f.key === "passengers_info" ? { ...f, label: "Number of passengers" } : f
+    )
     expect(
-      rekeyed(
-        renamed.map((f) =>
-          f.key === "passengers_info"
-            ? { ...f, label: "Number of passengers" }
-            : f
-        ),
-        "Added a question on which car they want."
-      )
-    ).toContainEqual(
+      rekeyed(relabelled, "Added a question on which car they want.")
+    ).toEqual([])
+    expect(rekeyed(relabelled, "Done, the form is updated.")).toContainEqual(
       expect.stringMatching(
-        /^say names 1 of the 3 changes the plan makes and leaves out Number of passengers, Passengers; change only what the owner asked for/
+        /^say names 0 of the 1 changes the owner asked for and leaves out Which car; name each one/
       )
     )
 
@@ -2841,7 +2839,7 @@ describe("the owner's words in say", () => {
       )
     ).toContainEqual(
       expect.stringMatching(
-        /^say names 1 of the 2 changes the plan makes and leaves out business\.email/
+        /^say names 1 of the 2 changes the owner asked for and leaves out business\.email/
       )
     )
     expect(
