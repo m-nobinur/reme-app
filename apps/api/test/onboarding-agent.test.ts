@@ -2648,6 +2648,13 @@ describe("the owner's words in say", () => {
         p.startsWith("say names tree felling and stump grinding as if")
       )
     ).toBe(true)
+    // One item picked out stays a detail, whatever "from ... to" is nearby.
+    expect(
+      problemsOf(
+        SERVICES,
+        "If someone asks for stump grinding anywhere from Leeds to Harrogate, I'll ask for photos."
+      )
+    ).toEqual([])
   })
 
   it("reads the Markdown as the owner sees it, so bold or a bullet hides nothing", () => {

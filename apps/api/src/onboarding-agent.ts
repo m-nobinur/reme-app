@@ -1331,15 +1331,11 @@ function partOfList(
   lists: readonly (readonly string[])[],
   owner: ReadonlySet<string> = new Set()
 ) {
-  const theirs = sentence
-    .split(/,|\s(?:and|or)\s/i)
-    .filter(
-      (part) =>
-        wordsOf(part).length <= 5 &&
-        contentWords(part).some((w) => owner.has(w))
-    )
-  // A range's two ends are two of their phrases too.
-  if (theirs.length < 2 && !RANGE.test(sentence)) return null
+  const phrase = (part: string) =>
+    wordsOf(part).length <= 5 && contentWords(part).some((w) => owner.has(w))
+  const theirs = sentence.split(/,|\s(?:and|or)\s/i).filter(phrase)
+  // A range's two ends are two of their phrases too: "From felling to stump grinding".
+  if (theirs.length + rangeOf(sentence).filter(phrase).length < 2) return null
   const words = new Set(contentWords(sentence))
   for (const list of lists) {
     if (spans(sentence, list)) continue
@@ -1351,12 +1347,17 @@ function partOfList(
 
 /** "Pruning right through to stump grinding", "from X to Y": a range, its two ends. */
 const RANGE =
-  /\bfrom\s+(.+?)\s+(?:right\s+)?(?:through\s+)?to\s+([^,;.!?]+)|(.+?)\s+(?:right\s+|all the way\s+)?through\s+to\s+([^,;.!?]+)/i
+  /\bfrom\s+([^,;.!?]+?)\s+(?:right\s+)?(?:through\s+)?to\s+([^,;.!?]+)|([^,;.!?]+?)\s+(?:right\s+|all the way\s+)?through\s+to\s+([^,;.!?]+)/i
+
+/** A sentence's range as its two ends, or none. */
+const rangeOf = (sentence: string): string[] => {
+  const m = sentence.match(RANGE)
+  return m ? [m[1] ?? m[3] ?? "", m[2] ?? m[4] ?? ""] : []
+}
 
 /** Whether a sentence names a range from the list's first item to its last, which is the whole list. */
 function spans(sentence: string, list: readonly string[]) {
-  const m = sentence.match(RANGE)
-  const [from, to] = [m?.[1] ?? m?.[3], m?.[2] ?? m?.[4]]
+  const [from, to] = rangeOf(sentence)
   return Boolean(
     from &&
       to &&
