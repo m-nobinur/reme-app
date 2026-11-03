@@ -117,6 +117,11 @@ declare module "@tanstack/react-router" {
      * the mode, once per `key`, and the owner's next send carries it.
      */
     compose?: { mode: "site_change"; key: string }
+    /**
+     * Set fresh by a panel or page action: the conversation on screen sends
+     * `text` as the owner's message, once per `key`, when its history is in.
+     */
+    send?: { text: string; key: string }
   }
   interface StaticDataRouteOption {
     /**

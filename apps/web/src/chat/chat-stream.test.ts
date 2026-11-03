@@ -24,6 +24,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { conversationList } from "./conversations"
 import { saveDesignAnswer } from "./design"
 import { useConversationRuntime } from "./runtime"
+import { SendAsked } from "./send-asked"
 import { sendsOn } from "./turn"
 
 /** Images in the thread other than Reme's avatar, which is meant to be there. */
@@ -60,6 +61,16 @@ vi.mock("@tanstack/react-start/server", () => ({
   getCookie: (name: string) => (name === "wos-session" ? "sealed" : undefined),
   setCookie: () => undefined,
   getRequestProtocol: () => "https",
+}))
+
+/** The location state a panel action set, as the chat page reads it. */
+const location = vi.hoisted(() => ({
+  state: {} as { send?: { text: string; key: string } },
+}))
+vi.mock("@tanstack/react-router", async (original) => ({
+  ...(await original<typeof import("@tanstack/react-router")>()),
+  useLocation: ({ select }: { select: (l: typeof location) => unknown }) =>
+    select(location),
 }))
 
 // Every time the AI SDK asks whether to send on its own, and what it was
@@ -126,6 +137,7 @@ const refusal = (status: number, code: string, message: string) => () =>
   )
 
 beforeEach(() => {
+  location.state = {}
   vi.mocked(sendsOn).mockClear()
   tools = {
     zone: "Europe/London",
@@ -226,6 +238,7 @@ function Chat() {
   return createElement(
     AssistantRuntimeProvider,
     { runtime },
+    createElement(SendAsked, { conversation: ID }),
     createElement(ServerButtonUI),
     createElement(ChangeAskedUI),
     createElement(PersonaCardUI),
@@ -695,6 +708,46 @@ it("a stored conversation sends nothing until it is the thread on screen, then s
   await vi.waitFor(() => expect(sent).toHaveLength(1))
   await vi.waitFor(() => expect(transcript(container)).toHaveLength(2))
   await matches(container, FIXTURE.histories.typed)
+})
+
+it("sends a panel action into the stored conversation once its history is in, once", async () => {
+  const release: { open?: () => void } = {}
+  hold = new Promise<void>((resolve) => {
+    release.open = resolve
+  })
+  stored = FIXTURE.histories.start
+  location.state = {
+    send: { text: "Help me connect my web address", key: "press-1" },
+  }
+  turns.push(sse(FIXTURE.streams.typed))
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  mounted.push({ root, container })
+  await act(async () => root.render(createElement(Chat)))
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector('[data-slot="aui_thread-history-skeleton"]')
+    ).not.toBeNull()
+  )
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  expect(sent).toEqual([])
+
+  hold = null
+  await act(async () => release.open?.())
+  await vi.waitFor(() => expect(sent).toHaveLength(1))
+  expect(JSON.stringify(sent[0])).toContain("Help me connect my web address")
+  expect(JSON.stringify(sent[0])).toContain(ID)
+  // As a typed message does, it overtakes the open card, and the reply asks again.
+  await vi.waitFor(() =>
+    expect(transcript(container)).toEqual([
+      "Help me connect my web address",
+      "What number should customers ring?Phone numberSubmit",
+    ])
+  )
+  // A re-render with the same press sends nothing more.
+  await act(async () => root.render(createElement(Chat)))
+  expect(sent).toHaveLength(1)
 })
 
 it("renders a recorded answer turn the way a reload of the stored row does", async () => {

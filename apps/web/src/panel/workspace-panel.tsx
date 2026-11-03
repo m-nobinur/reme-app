@@ -277,15 +277,36 @@ function Website({
 /** Connect, which asks the assistant for help with a web address, as any other message would. */
 function ConnectAddress() {
   const { label, ask } = pageAction("own")
+  const askInChat = useAskInChat()
   return (
-    <Link
-      className={NEXT_STEP}
-      state={() => ({ chat: crypto.randomUUID(), ask })}
-      to="/app"
-    >
+    <button className={NEXT_STEP} onClick={() => askInChat(ask)} type="button">
       {label}
-    </Link>
+    </button>
   )
+}
+
+/**
+ * Says `text` as the owner's message in the conversation on screen, or in
+ * their most recent one from any other page, so the assistant keeps the
+ * context. With no conversation yet, a new chat opens with it.
+ */
+export function useAskInChat() {
+  const router = useRouter()
+  const { conversations } = frame.useLoaderData()
+  return (text: string) => {
+    const send = { text, key: crypto.randomUUID() }
+    const inChat = router.state.matches.some(
+      (match) => match.routeId === "/app/_conversation"
+    )
+    const chat = lastChat(conversations)
+    void router.navigate(
+      inChat
+        ? { to: ".", state: { send } }
+        : chat
+          ? { to: "/app/c/$id", params: { id: chat.id }, state: { send } }
+          : { to: "/app", state: { chat: crypto.randomUUID(), ask: text } }
+    )
+  }
 }
 
 /**

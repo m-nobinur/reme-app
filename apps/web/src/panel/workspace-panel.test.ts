@@ -265,7 +265,7 @@ it("puts a job waiting on the owner first under Now, with no group of its own", 
   expect(section("Waiting on you")).toBeUndefined()
 })
 
-it("offers to connect a web address, as a message into the chat", async () => {
+it("offers to connect a web address, as a message into the open or latest chat", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 2,
@@ -286,11 +286,48 @@ it("offers to connect a web address, as a message into the chat", async () => {
       done: [],
     },
   }
+  const ask = "Help me connect my web address"
+  const sent = () => router.navigate.mock.lastCall?.[0]
+  const RECENT = "00000000-0000-4000-8000-00000000000d"
+  loader.conversations = [
+    {
+      id: ONBOARDING,
+      archived_at: null,
+      updated_at: "2026-09-26T10:00:00.000Z",
+    } as unknown as Conversation,
+    {
+      id: RECENT,
+      archived_at: null,
+      updated_at: "2026-09-27T10:00:00.000Z",
+    } as unknown as Conversation,
+  ]
+  router.state.matches = [{ routeId: "/app/_conversation" }]
   await render()
   expect(container.textContent).toContain("Web address · Not connected")
   expect(section("Up next")).toBeUndefined()
-  expect(link("Connect")?.dataset.to).toBe("/app")
   expect(section("Coming up")).toBeUndefined()
+  // In a conversation, into that conversation.
+  await act(async () => buttonNamed("Connect")?.click())
+  expect(sent()).toEqual({
+    to: ".",
+    state: { send: { text: ask, key: expect.any(String) } },
+  })
+  // From any other page, into the most recent one.
+  router.state.matches = []
+  await act(async () => buttonNamed("Connect")?.click())
+  expect(sent()).toEqual({
+    to: "/app/c/$id",
+    params: { id: RECENT },
+    state: { send: { text: ask, key: expect.any(String) } },
+  })
+  // With none, a new chat opens with it.
+  loader.conversations = []
+  await act(async () => root.render(createElement(Frame)))
+  await act(async () => buttonNamed("Connect")?.click())
+  expect(sent()).toEqual({
+    to: "/app",
+    state: { chat: expect.any(String), ask },
+  })
   // The Website tab offers it too.
   const tab = [...container.querySelectorAll('[role="tab"]')].find(
     (each) => each.textContent === "Website"

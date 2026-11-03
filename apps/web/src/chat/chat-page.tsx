@@ -54,6 +54,7 @@ import { saveDesignAnswer } from "./design"
 import { domainPurchase } from "./domain-purchase"
 import { asked, missingConversations, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
+import { SendAsked } from "./send-asked"
 import { ChatSiteReadyCard } from "./site-ready"
 import { StillWorking } from "./still-working"
 import { trayServices } from "./tray-services"
@@ -215,6 +216,7 @@ export function ChatPage() {
       <MemoryChipUI />
       <PersonaCardUI />
       <EnquiryCardUI />
+      <SendAsked conversation={id} />
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">
         {missing ? (
