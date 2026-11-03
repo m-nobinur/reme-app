@@ -56,6 +56,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -111,6 +116,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -166,6 +176,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -221,6 +236,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -276,6 +296,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -331,6 +356,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -17704,6 +17734,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {
@@ -17759,6 +17794,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {
@@ -17814,6 +17854,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {
@@ -17869,6 +17914,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {
@@ -17924,6 +17974,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {
@@ -17979,6 +18034,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {
