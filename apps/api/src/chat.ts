@@ -62,6 +62,7 @@ import {
   caughtUp,
   contextOf,
   cosPrefix,
+  FALLBACK_MODEL,
   LIMITS,
   messageTaint,
   NotRun,
@@ -808,9 +809,10 @@ export function cosModel(env: Env, task: CosRoute = "owner_turn") {
   const { effort } = ROUTES[route]
   const modelId = env.COS_MODEL ?? ROUTES[route].model
   // A step that fails twice before anything streamed goes to the fallback.
-  const fallbackId = (
-    env.REME_MODEL_FALLBACK ?? DEFAULT_ONBOARDING_MODEL
-  ).replace(/^openrouter\//, "")
+  const fallbackId = (env.REME_MODEL_FALLBACK ?? FALLBACK_MODEL).replace(
+    /^openrouter\//,
+    ""
+  )
   const model = env.OPENROUTER_API_KEY
     ? retrying(
         openrouterModel(env.OPENROUTER_API_KEY, modelId, {

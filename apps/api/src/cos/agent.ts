@@ -122,9 +122,12 @@ import { startedBefore, type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
 
 /**
  * The model when `COS_MODEL` is unset, at its own default reasoning effort
- * (the owner's call, 2026-10-01). A test keeps it in the facade's list.
+ * (the owner's call, 2026-11-04). A test keeps it in the facade's list.
  */
-export const DEFAULT_MODEL = "openai/gpt-6.1-sol"
+export const DEFAULT_MODEL = "openai/gpt-6.1-terra"
+
+/** Where a step that fails twice before anything streamed goes, when `REME_MODEL_FALLBACK` is unset. */
+export const FALLBACK_MODEL = "google/gemini-3.8-flash"
 
 /**
  * The model OpenRouter tries when the owner turn's model has no provider up

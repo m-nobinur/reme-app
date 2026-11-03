@@ -225,7 +225,7 @@ const factOf = (facts, key) => facts.find((f) => f.key === key)?.value
 
 /** One owner, onboarded by one model. */
 async function onboard(persona, spec) {
-  // `model@effort` sets the reasoning effort; the api's default is low.
+  // `model@effort` sets the reasoning effort; the api's default is medium.
   const [modelId, effort] = spec.split("@")
   const model = plannerModel(KEY, modelId, effort)
   const price = priceOf(modelId)

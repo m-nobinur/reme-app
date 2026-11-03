@@ -3001,7 +3001,7 @@ describe("a streamed turn", () => {
 })
 
 describe("the planner's request", () => {
-  it("asks for JSON at low effort, with the instructions marked for the cache", async () => {
+  it("asks for JSON at medium effort, with the instructions marked for the cache", async () => {
     const sent: Record<string, unknown>[] = []
     const real = globalThis.fetch
     globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
@@ -3056,8 +3056,8 @@ describe("the planner's request", () => {
       stream: boolean
       messages: { role: string; content: unknown }[]
     }[]
-    expect(body?.model).toBe("google/gemini-3.8-flash")
-    expect(body?.reasoning).toEqual({ effort: "low" })
+    expect(body?.model).toBe("openai/gpt-6.1-terra")
+    expect(body?.reasoning).toEqual({ effort: "medium" })
     expect(body?.response_format).toEqual({ type: "json_object" })
     expect(body?.stream).toBe(true)
     expect(body?.messages[0]).toEqual({

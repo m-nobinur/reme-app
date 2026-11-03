@@ -112,10 +112,10 @@ import { voiceProblems } from "./voice.ts"
  */
 
 /**
- * The model when `ONBOARDING_MODEL` is unset (the owner's call, 2026-10-01).
- * It refuses reasoning effort `none`, so `low` is its floor.
+ * The model when `ONBOARDING_MODEL` is unset, at medium reasoning (the
+ * owner's call, 2026-11-04).
  */
-export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
+export const DEFAULT_ONBOARDING_MODEL = "openai/gpt-6.1-terra"
 
 /** Bumped with any change to the instructions or the plan's schema. */
 export const PLANNER_VERSION = "onboarding-25"
@@ -163,13 +163,13 @@ export const PLANNER = {
 export const SAY_MAX = 900
 
 /**
- * The planner's model through OpenRouter. `low` reasoning for a turn the
- * owner waits on; `medium` for a call made in the background.
+ * The planner's model through OpenRouter, at `medium` reasoning unless a
+ * caller (the eval) asks for another.
  */
 export function plannerModel(
   apiKey: string,
   modelId: string,
-  effort: "low" | "medium" = "low"
+  effort: "low" | "medium" = "medium"
 ) {
   return openrouterModel(apiKey, modelId, {
     // The providers under the routing cap differ in what they enforce; the
