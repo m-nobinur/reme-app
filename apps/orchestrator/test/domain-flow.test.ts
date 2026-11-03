@@ -690,6 +690,7 @@ describe("the Domain Connect link", () => {
   const signed = {
     ...env,
     APP_ORIGIN: "https://staging.remeai.co.uk",
+    DOMAIN_CONNECT: "on",
     DOMAIN_CONNECT_KEY: keyPair().privateKey,
   } as unknown as Env
   const inspection = { apex: APEX } as Inspection
@@ -711,10 +712,17 @@ describe("the Domain Connect link", () => {
     )
   })
 
-  it("has none without the key, the chat, a lone CNAME or our live template", async () => {
+  it("has none with the flag off, without the key, the chat, a lone CNAME or our live template", async () => {
     stubNet({ [TEMPLATE]: () => Response.json({ version: 1 }) })
     const caa = { type: "CAA" as const, name: "@", value: CAA_FOR_US }
     const none = [
+      await applyLink(
+        { ...signed, DOMAIN_CONNECT: undefined } as unknown as Env,
+        inspection,
+        [www],
+        APEX,
+        body
+      ),
       await applyLink(env, inspection, [www], APEX, body),
       await applyLink(signed, inspection, [www], APEX, {
         conversation_id: "x",
@@ -724,6 +732,6 @@ describe("the Domain Connect link", () => {
     ]
     stubNet({ [TEMPLATE]: () => new Response(null, { status: 404 }) })
     none.push(await applyLink(signed, inspection, [www], APEX, body))
-    expect(none).toEqual(Array(5).fill(undefined))
+    expect(none).toEqual(Array(6).fill(undefined))
   })
 })

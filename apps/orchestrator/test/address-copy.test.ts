@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 import {
-  addressOffer,
   addressOfferOwn,
   domainTakesOver,
   googleOffer,
@@ -22,7 +21,6 @@ const BARE = {}
 
 /** Every moment, for a business with full facts and one with none. */
 const moments = (about: typeof DOX | typeof BARE): [string, Update][] => [
-  ["A, the address offer", addressOffer(about)],
   ["A, their email's domain", addressOfferOwn("doxcleaning.co.uk", about)],
   ["E, Google once the setting is in", googleOffer("dox.bnwise.tech", about)],
   ["G, live", liveOffer(about)],
@@ -82,7 +80,6 @@ describe.each([
 
     it("names a benefit in the owner's terms in every offer", () => {
       const offers = [
-        addressOffer(about),
         addressOfferOwn("doxcleaning.co.uk", about),
         googleOffer("dox.bnwise.tech", about),
         liveGoogleOffer(about),
@@ -95,17 +92,16 @@ describe.each([
 )
 
 it("tells the brief about the business so the model can use its name, trade and area", () => {
-  expect(addressOffer(DOX).brief).toContain(
+  expect(liveOffer(DOX).brief).toContain(
     "About the business: DOX Cleaning, a cleaning business, serving London."
   )
-  expect(addressOffer(BARE).brief).not.toContain("About the business")
+  expect(liveOffer(BARE).brief).not.toContain("About the business")
 })
 
-it("assumes no van, and the offer that follows the build's own message does not repeat it", () => {
+it("assumes no van", () => {
   for (const [, update] of moments(DOX)) {
     expect(`${update.template} ${update.brief}`).not.toMatch(/\bvan\b/i)
   }
-  expect(addressOffer(DOX).brief).toContain("do not say it started")
 })
 
 it("says the padlock line in plain words, with no promise to report back", () => {

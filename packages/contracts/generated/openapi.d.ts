@@ -8783,7 +8783,8 @@ export interface components {
                           | {
                               /** @constant */
                               state: "free"
-                              price_gbp_year: number
+                              price_gbp_year?: number
+                              registrar_usd?: number
                             }
                           | {
                               /** @constant */
@@ -8793,7 +8794,8 @@ export interface components {
                           | {
                               /** @constant */
                               state: "free"
-                              price_gbp_year: number
+                              price_gbp_year?: number
+                              registrar_usd?: number
                             }
                           | {
                               /** @constant */
@@ -8803,7 +8805,19 @@ export interface components {
                           | {
                               /** @constant */
                               state: "free"
-                              price_gbp_year: number
+                              price_gbp_year?: number
+                              registrar_usd?: number
+                            }
+                          | {
+                              /** @constant */
+                              state: "taken"
+                            }
+                        co?:
+                          | {
+                              /** @constant */
+                              state: "free"
+                              price_gbp_year?: number
+                              registrar_usd?: number
                             }
                           | {
                               /** @constant */
@@ -8811,6 +8825,8 @@ export interface components {
                             }
                       }
                     }[]
+                    /** @constant */
+                    buy_here?: true
                   }
                 | {
                     /** @constant */
@@ -12703,7 +12719,8 @@ export interface components {
           | {
               /** @constant */
               state: "free"
-              price_gbp_year: number
+              price_gbp_year?: number
+              registrar_usd?: number
             }
           | {
               /** @constant */
@@ -12713,7 +12730,8 @@ export interface components {
           | {
               /** @constant */
               state: "free"
-              price_gbp_year: number
+              price_gbp_year?: number
+              registrar_usd?: number
             }
           | {
               /** @constant */
@@ -12723,7 +12741,19 @@ export interface components {
           | {
               /** @constant */
               state: "free"
-              price_gbp_year: number
+              price_gbp_year?: number
+              registrar_usd?: number
+            }
+          | {
+              /** @constant */
+              state: "taken"
+            }
+        co?:
+          | {
+              /** @constant */
+              state: "free"
+              price_gbp_year?: number
+              registrar_usd?: number
             }
           | {
               /** @constant */
@@ -13333,7 +13363,8 @@ export interface components {
                     | {
                         /** @constant */
                         state: "free"
-                        price_gbp_year: number
+                        price_gbp_year?: number
+                        registrar_usd?: number
                       }
                     | {
                         /** @constant */
@@ -13343,7 +13374,8 @@ export interface components {
                     | {
                         /** @constant */
                         state: "free"
-                        price_gbp_year: number
+                        price_gbp_year?: number
+                        registrar_usd?: number
                       }
                     | {
                         /** @constant */
@@ -13353,7 +13385,19 @@ export interface components {
                     | {
                         /** @constant */
                         state: "free"
-                        price_gbp_year: number
+                        price_gbp_year?: number
+                        registrar_usd?: number
+                      }
+                    | {
+                        /** @constant */
+                        state: "taken"
+                      }
+                  co?:
+                    | {
+                        /** @constant */
+                        state: "free"
+                        price_gbp_year?: number
+                        registrar_usd?: number
                       }
                     | {
                         /** @constant */
@@ -13361,6 +13405,8 @@ export interface components {
                       }
                 }
               }[]
+              /** @constant */
+              buy_here?: true
             }
           | {
               /** @constant */

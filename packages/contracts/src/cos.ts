@@ -718,11 +718,6 @@ export const FindDomainInput = z.strictObject({
   step: ToolStep,
 })
 
-/**
- * `find_domain`'s output: one row per name stem, best first, each ending free
- * at the price table's price or taken. The model quotes no other price. No
- * stem with a free ending is `domain.unavailable`.
- */
 /** One name as `find_domain` offered it before the name rows. */
 const LegacyOffer = z.strictObject({
   name: DomainName,
@@ -730,11 +725,19 @@ const LegacyOffer = z.strictObject({
   why: Text(200),
 })
 
+/**
+ * `find_domain`'s output: one row per name stem, best first, the first the
+ * recommended one, each ending free or taken with only the prices there is
+ * data for. The model quotes no other price. `buy_here` is set only while
+ * buying in the app is on; without it the owner buys from a provider. No
+ * stem with a free ending is `domain.unavailable`.
+ */
 export const FindDomainOutput = z.union([
   z.discriminatedUnion("outcome", [
     z.strictObject({
       outcome: z.literal("found"),
-      rows: z.array(DomainStemOffer).min(1).max(5),
+      rows: z.array(DomainStemOffer).min(1).max(6),
+      buy_here: z.literal(true).optional(),
     }),
     Refused,
   ]),

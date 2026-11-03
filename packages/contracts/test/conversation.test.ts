@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
+  addressQuestions,
+  BuildQuestions,
   BuildQuestionsPart,
   Conversation,
   ConversationList,
@@ -8,6 +10,7 @@ import {
   MessageFeedback,
   QuestionReply,
 } from "../src/conversation.ts"
+import { ADDRESS_ASK } from "../src/domain.ts"
 import { ajv, generated } from "./json-schema.ts"
 import { samples } from "./samples.ts"
 
@@ -221,5 +224,17 @@ describe("BuildQuestionsPart and QuestionReply", () => {
       answer: { kind: "closed" },
     }
     expect(verdict("QuestionReply", QuestionReply, reply)).toEqual(REFUSED)
+  })
+})
+
+describe("addressQuestions", () => {
+  it("asks whether the owner has an address, then its name, as a stack that parses", () => {
+    const stack = addressQuestions()
+    expect(BuildQuestions.parse(stack)).toEqual(stack)
+    expect(stack.questions.map((q) => q.text)).toEqual([
+      ADDRESS_ASK.have,
+      ADDRESS_ASK.name,
+    ])
+    expect(addressQuestions().questions[0]?.id).not.toBe(stack.questions[0]?.id)
   })
 })

@@ -30801,7 +30801,7 @@
                           },
                           "rows": {
                             "minItems": 1,
-                            "maxItems": 5,
+                            "maxItems": 6,
                             "type": "array",
                             "items": {
                               "type": "object",
@@ -30834,11 +30834,14 @@
                                               "type": "integer",
                                               "exclusiveMinimum": 0,
                                               "maximum": 9007199254740991
+                                            },
+                                            "registrar_usd": {
+                                              "type": "number",
+                                              "exclusiveMinimum": 0
                                             }
                                           },
                                           "required": [
-                                            "state",
-                                            "price_gbp_year"
+                                            "state"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -30870,11 +30873,14 @@
                                               "type": "integer",
                                               "exclusiveMinimum": 0,
                                               "maximum": 9007199254740991
+                                            },
+                                            "registrar_usd": {
+                                              "type": "number",
+                                              "exclusiveMinimum": 0
                                             }
                                           },
                                           "required": [
-                                            "state",
-                                            "price_gbp_year"
+                                            "state"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -30906,11 +30912,53 @@
                                               "type": "integer",
                                               "exclusiveMinimum": 0,
                                               "maximum": 9007199254740991
+                                            },
+                                            "registrar_usd": {
+                                              "type": "number",
+                                              "exclusiveMinimum": 0
                                             }
                                           },
                                           "required": [
-                                            "state",
-                                            "price_gbp_year"
+                                            "state"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "taken"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    },
+                                    "co": {
+                                      "oneOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "free"
+                                            },
+                                            "price_gbp_year": {
+                                              "type": "integer",
+                                              "exclusiveMinimum": 0,
+                                              "maximum": 9007199254740991
+                                            },
+                                            "registrar_usd": {
+                                              "type": "number",
+                                              "exclusiveMinimum": 0
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
                                           ],
                                           "additionalProperties": false
                                         },
@@ -30940,6 +30988,10 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "buy_here": {
+                            "type": "boolean",
+                            "const": true
                           }
                         },
                         "required": [
@@ -45973,11 +46025,14 @@
                         "type": "integer",
                         "exclusiveMinimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "registrar_usd": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
                       }
                     },
                     "required": [
-                      "state",
-                      "price_gbp_year"
+                      "state"
                     ],
                     "additionalProperties": false
                   },
@@ -46009,11 +46064,14 @@
                         "type": "integer",
                         "exclusiveMinimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "registrar_usd": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
                       }
                     },
                     "required": [
-                      "state",
-                      "price_gbp_year"
+                      "state"
                     ],
                     "additionalProperties": false
                   },
@@ -46045,11 +46103,53 @@
                         "type": "integer",
                         "exclusiveMinimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "registrar_usd": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
                       }
                     },
                     "required": [
-                      "state",
-                      "price_gbp_year"
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "const": "taken"
+                      }
+                    },
+                    "required": [
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "co": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "const": "free"
+                      },
+                      "price_gbp_year": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "registrar_usd": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "state"
                     ],
                     "additionalProperties": false
                   },
@@ -48291,7 +48391,7 @@
                   },
                   "rows": {
                     "minItems": 1,
-                    "maxItems": 5,
+                    "maxItems": 6,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -48324,11 +48424,14 @@
                                       "type": "integer",
                                       "exclusiveMinimum": 0,
                                       "maximum": 9007199254740991
+                                    },
+                                    "registrar_usd": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0
                                     }
                                   },
                                   "required": [
-                                    "state",
-                                    "price_gbp_year"
+                                    "state"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -48360,11 +48463,14 @@
                                       "type": "integer",
                                       "exclusiveMinimum": 0,
                                       "maximum": 9007199254740991
+                                    },
+                                    "registrar_usd": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0
                                     }
                                   },
                                   "required": [
-                                    "state",
-                                    "price_gbp_year"
+                                    "state"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -48396,11 +48502,53 @@
                                       "type": "integer",
                                       "exclusiveMinimum": 0,
                                       "maximum": 9007199254740991
+                                    },
+                                    "registrar_usd": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0
                                     }
                                   },
                                   "required": [
-                                    "state",
-                                    "price_gbp_year"
+                                    "state"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "state": {
+                                      "type": "string",
+                                      "const": "taken"
+                                    }
+                                  },
+                                  "required": [
+                                    "state"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "co": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "state": {
+                                      "type": "string",
+                                      "const": "free"
+                                    },
+                                    "price_gbp_year": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "registrar_usd": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "state"
                                   ],
                                   "additionalProperties": false
                                 },
@@ -48430,6 +48578,10 @@
                       ],
                       "additionalProperties": false
                     }
+                  },
+                  "buy_here": {
+                    "type": "boolean",
+                    "const": true
                   }
                 },
                 "required": [

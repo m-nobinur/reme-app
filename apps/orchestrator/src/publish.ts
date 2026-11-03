@@ -4,6 +4,9 @@ import {
   ApprovalDecision,
   ApprovalRequest,
   ApprovalTarget,
+  addressOfferText,
+  addressQuestions,
+  type BuildQuestions,
   DomainCheck,
   type DomainInspection,
   type FactRecord,
@@ -44,7 +47,6 @@ import {
 import { checkBuild, checkContent, parsePage } from "@workspace/gates"
 import {
   aboutOf,
-  addressOffer,
   addressOfferOwn,
   CONNECT_GOOGLE,
   liveAddressAgain,
@@ -698,27 +700,6 @@ async function ownAddress(
   return "refused" in found || !found.registered || found.in_use ? null : found
 }
 
-const addressQuestions = () => ({
-  kind: "address" as const,
-  questions: [
-    {
-      id: crypto.randomUUID(),
-      text: ADDRESS_ASK.have,
-      input: {
-        kind: "choice" as const,
-        options: [ADDRESS_ASK.yes, ADDRESS_ASK.no, ADDRESS_ASK.later],
-      },
-      skippable: false,
-    },
-    {
-      id: crypto.randomUUID(),
-      text: ADDRESS_ASK.name,
-      input: { kind: "text" as const, maxLength: 253, email: false },
-      skippable: true,
-    },
-  ],
-})
-
 const connectOwn = (name: string): ServerButton => {
   const label = `Connect ${name}`
   return {
@@ -774,8 +755,9 @@ const busyThrow = (posted: string, what: string) => {
 /**
  * The first build has started: offer the owner their own address while it
  * runs, once, so it can go live on the publish. An email on its own domain
- * names it, with a Connect button; otherwise the card asks whether they have
- * one. Nothing when an address task already exists. A busy chat throws, for
+ * names it, with a Connect button; otherwise the fixed offer and the card
+ * that asks whether they have one. Nothing when an address task already
+ * exists, as it does once the onboarding reply made the offer itself. A busy chat throws, for
  * the step's few retries; past them the CoS offers it in its next reply.
  */
 export async function offerAddress(
@@ -789,12 +771,9 @@ export async function offerAddress(
   if (open) return
   const own = await ownAddress(kit, orgId)
   const about = await aboutOf(kit, orgId)
-  const text = await writeUpdate(
-    env,
-    kit,
-    orgId,
-    own ? addressOfferOwn(own.name, about) : addressOffer(about)
-  )
+  const text = own
+    ? await writeUpdate(env, kit, orgId, addressOfferOwn(own.name, about))
+    : addressOfferText(about)
   const posted = await postAssistantMessage(kit, {
     orgId,
     key: `address.offer:${orgId}`,
@@ -892,7 +871,7 @@ export async function sayLive(
   )
   let copy = liveOffer(about)
   let button = visit
-  let questions: ReturnType<typeof addressQuestions> | undefined
+  let questions: BuildQuestions | undefined
   let reopen = false
   let own: DomainInspection | null = null
   if (

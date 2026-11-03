@@ -53,6 +53,11 @@ interface __BaseEnv_Env {
    */
   DOMAIN_CONNECT_TRIAL?: string
   /**
+   * `on` offers Add it for me at all. Off by default: the template is not
+   * live, so the key and the trial alone link nothing.
+   */
+  DOMAIN_CONNECT?: string
+  /**
    * Stripe's secret key, for a bought domain's hold (capture or release) and
    * its renewal Subscription (src/stripe.ts). Unset, `buy_domain` refuses
    * with `domain.buy_unavailable` and finding a domain still works.

@@ -1,6 +1,6 @@
 import type { UIMessageChunk } from "ai"
 import { afterEach, describe, expect, it } from "vitest"
-import { clock, pace, readingBeat, wordsOf } from "../src/pacing.ts"
+import { clock, pace, readingBeat, TYPING, wordsOf } from "../src/pacing.ts"
 
 const text = "Lovely, a cleaning business in Leeds. Let me set a few things up."
 const chunks: UIMessageChunk[] = [
@@ -92,5 +92,32 @@ describe("pace", () => {
     // Under the 600 ms floor of a reading beat; a long word can take 100 ms.
     expect(Math.max(...waits.slice(0, -1))).toBeLessThan(600)
     expect(waits.at(-1)).toBeGreaterThanOrEqual(300)
+  })
+
+  it("pauses on typing dots before a second message in the same reply", async () => {
+    const waits: number[] = []
+    clock.sleep = (ms) => {
+      waits.push(ms)
+      return Promise.resolve()
+    }
+    const message = (words: string): UIMessageChunk[] => [
+      { type: "start-step" },
+      { type: "text-start", id: "text" },
+      { type: "text-delta", id: "text", delta: words },
+      { type: "text-end", id: "text" },
+    ]
+    const out: UIMessageChunk[] = []
+    await pace(
+      [...message("All set."), ...message("Now its address.")],
+      (c) => out.push(c),
+      { typed: 0, since: Date.now() },
+      true
+    )
+    const types = out.map((c) => c.type)
+    const typing = out.indexOf(TYPING)
+    expect(typing).toBe(types.indexOf("text-end") + 1)
+    expect(types[typing + 1]).toBe("start-step")
+    expect(out.filter((c) => c === TYPING)).toHaveLength(1)
+    expect(waits.some((ms) => ms >= 1200 && ms <= 1600)).toBe(true)
   })
 })

@@ -81,6 +81,7 @@ import {
   costOf,
   DEFAULT_MODEL,
   DESCRIPTIONS,
+  firstCall,
   GOOGLE_FIRST_LINE,
   GOOGLE_NOW_LINE,
   INSTRUCTIONS,
@@ -402,7 +403,19 @@ describe("the CoS's instructions", () => {
         /Once the owner's setting is in, I offer Google myself, with a Connect Google button; when that message is in the conversation, don't offer it again/
       )
       expect(INSTRUCTIONS).toMatch(
-        /When the workspace's buying is false, never offer to buy a domain or call find_domain/
+        /When the workspace's buying is false, the card shows where to buy each name, at Cloudflare or GoDaddy[^\n]*never offer to buy it here and never call buy_domain/
+      )
+    })
+
+    it("look for names at once on No, help me get one, and never ask in words for a name the card asks", () => {
+      expect(INSTRUCTIONS).toMatch(
+        /"No, help me get one"[^\n]*call find_domain straight away/
+      )
+      expect(INSTRUCTIONS).toMatch(
+        /address card asking "What is it\?" is still waiting, never ask for the name in words/
+      )
+      expect(INSTRUCTIONS).toMatch(
+        /A domain the owner typed connects at once, with no card/
       )
     })
   })
@@ -4758,5 +4771,25 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       expect(approval).not.toHaveBeenCalled()
       expect(await remindersOf(id)).toEqual([])
     })
+  })
+})
+
+describe("firstCall", () => {
+  const typed = (text: string) => [
+    { role: "user" as const, content: "context" },
+    { role: "user" as const, content: [{ type: "text" as const, text }] },
+  ]
+  it("starts a reply to the address card with the lookup it asks for", () => {
+    expect(firstCall(typed("No, help me get one"))).toBe("find_domain")
+    expect(firstCall(typed("Yes, it's prunx.bnwise.tech"))).toBe(
+      "inspect_domain"
+    )
+  })
+  it("leaves any other message to the model", () => {
+    expect(firstCall(typed("No thanks"))).toBeNull()
+    expect(firstCall(typed("I have my own domain"))).toBeNull()
+    expect(
+      firstCall([{ role: "assistant", content: "No, help me get one" }])
+    ).toBeNull()
   })
 })

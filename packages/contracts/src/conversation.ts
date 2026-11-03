@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { JsonObject, Timestamp, Uuid } from "./common.ts"
+import { ADDRESS_ASK } from "./domain.ts"
 import { Enquiry } from "./enquiry.ts"
 import {
   ANSWER_TEXT_MAX,
@@ -212,6 +213,32 @@ export const BuildQuestions = z.discriminatedUnion("kind", [
   }),
   z.strictObject({ kind: z.literal("address"), questions: Questions }),
 ])
+
+/**
+ * The address stack: whether the owner has a web address, then its name
+ * after a Yes. One builder for every message that asks it, so the reply that
+ * follows the build's start and a posted offer ask the same thing.
+ */
+export const addressQuestions = (): BuildQuestions => ({
+  kind: "address",
+  questions: [
+    {
+      id: crypto.randomUUID(),
+      text: ADDRESS_ASK.have,
+      input: {
+        kind: "choice",
+        options: [ADDRESS_ASK.yes, ADDRESS_ASK.no, ADDRESS_ASK.later],
+      },
+      skippable: false,
+    },
+    {
+      id: crypto.randomUUID(),
+      text: ADDRESS_ASK.name,
+      input: { kind: "text", maxLength: 253, email: false },
+      skippable: true,
+    },
+  ],
+})
 
 /** How `BuildQuestions` is stored among a message's parts: an AI SDK data part. */
 export const BuildQuestionsPart = z.strictObject({
