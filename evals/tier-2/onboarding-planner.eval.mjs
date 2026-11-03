@@ -42,6 +42,7 @@ import {
   SKIPPER,
   SKIPS_EVERYTHING,
 } from "../onboarding-personas.mjs"
+import { PATTERNS, styleContext, styleHits } from "./planner-style.mjs"
 
 /**
  * Tier 2 (§16.3), live: the onboarding planner against the real model, over
@@ -281,6 +282,7 @@ async function onboard(persona, spec) {
   const plans = []
   const problems = []
   const says = []
+  const styled = []
   let fallbacks = 0
   let refusedFirst = 0
   const refusals = []
@@ -387,6 +389,7 @@ async function onboard(persona, spec) {
     const parts = planParts(checked, s, newId)
     put([...checked.stated, ...checked.chosen])
     says.push(checked.plan.say)
+    styled.push(styleHits(checked.plan.say, styleContext(checked.plan, s)))
     plans.push(checked.plan)
     for (const problem of sayProblems(
       checked.plan.say,
@@ -658,6 +661,7 @@ async function onboard(persona, spec) {
     fallbacks,
     refusedFirst,
     refusals,
+    styled,
     turns,
     transcript: lines(),
     heard,
@@ -911,6 +915,25 @@ export default async function run() {
         mine.map((r) => r.turns),
         50
       )} |`
+    )
+  }
+  table.push(
+    "",
+    "Planner replies holding each style pattern the checks no longer refuse:",
+    "",
+    `| Model | Replies | ${PATTERNS.join(" | ")} |`,
+    `| --- | --- |${" --- |".repeat(PATTERNS.length)}`
+  )
+  for (const modelId of ids) {
+    const replies = results
+      .filter((r) => r.modelId === modelId)
+      .flatMap((r) => r.styled)
+    const share = (name) => {
+      const n = replies.filter((hits) => hits.includes(name)).length
+      return `${n} (${Math.round((100 * n) / Math.max(1, replies.length))}%)`
+    }
+    table.push(
+      `| ${modelId} | ${replies.length} | ${PATTERNS.map(share).join(" | ")} |`
     )
   }
   table.push(
