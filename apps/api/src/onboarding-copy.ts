@@ -284,7 +284,7 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
     v.assistant
       ? [
           `${v.assistant} it is. Which pronouns should I go by?`,
-          `${v.assistant}, noted. Which pronouns suit me best?`,
+          `${v.assistant} suits me. Which pronouns fit best?`,
         ]
       : ["Which pronouns should I go by?"],
   tone: () => [
@@ -322,7 +322,7 @@ A few quick questions, your logo first. You can leave any of them to me.`,
   ],
   palette: (v) => [
     `${v.picked ? "" : v.template ? `${v.template} it is. ` : "Thanks, I'll keep your notes in mind. "}Which colours feel right for ${v.business}?`,
-    `${v.picked ? "" : "Noted. "}Now for colour. Which of these palettes fits ${v.business}?`,
+    `Now for colour. Which of these palettes fits ${v.business}?`,
   ],
   font: (v) =>
     [

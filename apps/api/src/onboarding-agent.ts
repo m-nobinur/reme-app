@@ -238,6 +238,7 @@ Acknowledge an answer one of three ways, and vary them:
 - Most answers hold one thing that changes how you'll handle work: an exception, a condition, a repeat customer, an unusual service. When one does, name it and say in one short clause what you'll do about it when an enquiry comes in, which is only ever one of the things you really do: answer the customer, ask them the quote questions, prepare the quote, or bring it to the owner. That's an action, with no "so ..." after it: never an outcome you promise ("so their jobs get priority") or a quality you'll bring ("with care").
 - When the answer holds a number or a condition worth confirming, such as a radius or "further for big jobs", sum up the whole of it in a few words, in their terms. A long list of services is different: name its range or a group in their terms ("Divorce right through to mediation"), never every item.
 - When it holds neither, and always after a skip, no acknowledgement: a natural bridge straight to the next question.
+A summary followed by ", noted." may open one reply in the whole onboarding, and none once opened_with_noted is true: open another natural way, or with no acknowledgement at all.
 The owner reads the acknowledgement to check you understood, so code refuses one that gets them wrong:
 - Part of a list named as if it were the whole. Naming two of their five services reads as if you missed three.
 - A word they never used for their own business. Examples your question offered were the shape of an answer, not theirs.
@@ -262,7 +263,7 @@ Each is one turn from a different trade, showing the move and say. They show the
 <example>
 A window cleaner answers the area question: "Mostly Harrogate and the villages round it. Nothing above two storeys though, no ladders that high."
 next: ask_open business.audience
-say: "Nothing above two storeys, noted. If someone asks about a three-storey house, I'll tell them it isn't one for you. Who usually books you?"
+say: "So nothing above two storeys. If someone asks about a three-storey house, I'll tell them it isn't one for you.\n\nWho usually books you?"
 </example>
 
 <example>
@@ -280,7 +281,7 @@ say: "Divorce right through to mediation, noted.\n\nWhere are your clients based
 <example>
 A cleaner answers who their customers are: "Families mostly, and two letting agents who send me end of tenancy cleans every month."
 next: ask_open business.proof
-say: "Two letting agents with monthly end of tenancy cleans, noted. When they get in touch, I'll ask which property it's for.\n\nWhat helps new customers trust you, such as years trading, insurance or vetted cleaners?"
+say: "When one of the letting agents gets in touch for an end of tenancy clean, I'll ask which property it's for.\n\nWhat helps new customers trust you, such as years trading, insurance or vetted cleaners?"
 </example>
 
 <example>
@@ -414,6 +415,8 @@ export type PlanState = {
    * question or a card (`askedSoFar`). Absent counts as never.
    */
   asked?: Readonly<Record<string, number>>
+  /** Whether an earlier reply in this conversation opened with "..., noted." (`opensNoted`). */
+  notedBefore?: boolean
 }
 
 /** The business facts the build needs from the owner, in the order they come up. */
@@ -795,6 +798,7 @@ export function turnData(s: PlanState): string {
     facts: factsOf(o),
     owner_first_name: firstName(o.ownerName) || null,
     waiting_card: s.input.kind === "message" ? waiting(s.pending, o) : null,
+    opened_with_noted: s.notedBefore ?? false,
     recent_conversation: transcriptOf(s.rows),
     owner_now:
       s.input.kind === "message"
@@ -986,6 +990,11 @@ export function sayProblems(
       )
     }
   }
+  if (context.notedBefore && opensNoted(read)) {
+    problems.push(
+      'say opens with ", noted.", which an earlier reply already did; open another natural way, or with no acknowledgement'
+    )
+  }
   if (context.corrected === false && CORRECTION_THANKS.test(say)) {
     problems.push(
       "say thanks the owner for a correction, but nothing they said changed what was held"
@@ -1043,6 +1052,13 @@ const SENTENCE = /(?<=[.!?])\s+|\s*\n\s*/
 /** The same, with a stop inside bold ("**Who books you?**") ending its sentence too. */
 const BOLD_SENTENCE = /(?<=[.!?](?:\*\*)?)\s+|\s*\n\s*/
 
+/**
+ * Whether a reply opens with a summary and "noted" ("Weekly cleans, noted."),
+ * the opener a whole onboarding may use once.
+ */
+export const opensNoted = (say: string) =>
+  /^[^.?!\n]*\bnoted(?=[,.!])/i.test(plain(say).trim())
+
 /** A block of Markdown bullets. */
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/
 
@@ -1064,6 +1080,8 @@ type SayContext = {
   corrected?: boolean
   /** Whether the owner has named the assistant, so "Reme" is an internal. */
   assistantNamed?: boolean
+  /** Whether an earlier reply already opened with "..., noted.", so this one may not. */
+  notedBefore?: boolean
   /** The longer sentences the assistant has already said in the recent rows, which say must not repeat. */
   said?: ReadonlySet<string>
   /** The persona values say may name as its own: what the turn ends with, and what it held before. */
@@ -1558,6 +1576,7 @@ export function sayContext(
     }),
     // An assistant the owner called Reme may say its own name.
     assistantNamed: Boolean(name) && name?.toLowerCase() !== "reme",
+    notedBefore: s.notedBefore ?? false,
     said: new Set(
       s.rows
         .filter((r) => r.role === "assistant")

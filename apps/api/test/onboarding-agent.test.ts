@@ -29,6 +29,7 @@ import {
   DEFAULT_ONBOARDING_MODEL,
   doingLine,
   listsOf,
+  opensNoted,
   type PlanState,
   plannerInstructions,
   plannerModel,
@@ -2707,6 +2708,22 @@ describe("the owner's words in say", () => {
         "Done:\n\n- **Moving date:** removed\n- **Photos:** now required\n\nAnything else to change?"
       )
     ).toEqual([])
+  })
+
+  it('lets one reply in an onboarding open with ", noted."', () => {
+    const opener =
+      "Divorce right through to mediation, noted.\n\nWhere are your clients based?"
+    expect(opensNoted(opener)).toBe(true)
+    expect(opensNoted("**Weekly cleans**, noted. Who books you?")).toBe(true)
+    expect(opensNoted("Noted. Who books you?")).toBe(true)
+    expect(opensNoted("Here's what I've noted for **Pruning Co**:")).toBe(false)
+    expect(opensNoted("Where do you work? I've noted the services.")).toBe(
+      false
+    )
+    expect(sayProblems(opener)).toEqual([])
+    expect(sayProblems(opener, { notedBefore: true })).toContain(
+      'say opens with ", noted.", which an earlier reply already did; open another natural way, or with no acknowledgement'
+    )
   })
 
   it("names every change made to the quote form or the recap", () => {
