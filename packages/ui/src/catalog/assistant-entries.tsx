@@ -262,10 +262,11 @@ const SUGGESTIONS: ThreadSuggestion[] = [
   { prompt: "What is on my website now?" },
 ]
 
-/** A thread with the owner app's composer settings. */
+/** A thread as the app mounts it for the owner: its composer settings, and thumbs on every reply with words. */
 function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
   return (
     <FixtureThread
+      rates
       {...props}
       settings={{
         assistant: "Reme",

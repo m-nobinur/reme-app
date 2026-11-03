@@ -259,3 +259,21 @@ for (const width of [336, 360]) {
     expect(last.middle).toBeLessThan(button.bottom)
   })
 }
+
+test("every onboarding reply with words takes a thumb, not only the newest", async ({
+  page,
+}) => {
+  await open(page, "Onboarding")
+  const replies = page.locator(
+    '[data-entry="Onboarding"] [data-slot="aui_assistant-message-root"]'
+  )
+  const count = await replies.count()
+  expect(count).toBeGreaterThan(1)
+  for (let at = 0; at < count; at++) {
+    const reply = replies.nth(at)
+    await reply.hover()
+    await expect(
+      reply.getByRole("button", { name: "Helpful", exact: true })
+    ).toBeVisible()
+  }
+})
