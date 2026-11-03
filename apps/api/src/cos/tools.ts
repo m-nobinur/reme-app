@@ -1781,16 +1781,24 @@ export const connectProposed = (messages: readonly ModelMessage[]) =>
         )
     )
 
-/** Whether the org already has `name` live: connecting it again moves live DNS. */
+/**
+ * Whether the org already has `name` live: connecting it again moves live
+ * DNS. Without a name, whether any domain is live, which a new one replaces.
+ */
 export async function isLive(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
-  name: string
+  name?: string
 ): Promise<boolean> {
   const [active] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
     db
       .select({ id: domains.id })
       .from(domains)
-      .where(sql`${eq(domains.name, name)} and ${domains.state} = 'active'`)
+      .where(
+        name
+          ? sql`${eq(domains.name, name)} and ${domains.state} = 'active'`
+          : sql`${domains.state} = 'active'`
+      )
+      .limit(1)
   )
   return Boolean(active)
 }

@@ -480,7 +480,7 @@ export type OwnerSaid = {
   newContact: (input: CosChangeRequest, said: string) => Promise<object | null>
   /** Whether the owner's last message put the website on exactly this name (Jev, sure). */
   putOn: (input: ConnectDomainInput) => Promise<boolean>
-  /** Whether connecting this name asks whatever was granted: it is live, or a connect was proposed since the owner's message. */
+  /** Whether connecting this name asks whatever was granted: a domain is live, or a connect was proposed since the owner's message. */
   pinned: (input: ConnectDomainInput) => Promise<boolean>
 }
 
@@ -564,12 +564,16 @@ export async function riskOf(
     }
     case "connect_domain": {
       // Connecting makes a record on our side and changes nothing at the
-      // owner's provider, so a name they typed is their yes (product plan,
-      // risk tiers). One already live moves live DNS, so it asks.
+      // owner's provider, so a name in their latest message is their yes
+      // (product plan, risk tiers). A live domain, which it would move or
+      // replace, still asks.
       const domain = input as ConnectDomainInput
       if (await said.pinned(domain).catch(() => true)) return "always_ask"
-      if (await ownerWrote(said, (m) => namesDomain(m, domain.name)))
-        return "owner_asked"
+      const last = await said
+        .messages()
+        .then((m) => m.at(-1) ?? "")
+        .catch(() => "")
+      if (namesDomain(last, domain.name)) return "owner_asked"
       return (await said.putOn(domain).catch(() => false))
         ? "owner_asked"
         : "always_ask"
@@ -1811,8 +1815,9 @@ const cardFor =
           run.turn.sessionId,
           messages
         )) === "not-applicable",
-      pinned: async ({ name: domain }) =>
-        connectProposed(messages) || (await isLive(run.tools, domain)),
+      // Any live domain: the new one would replace it.
+      pinned: async () =>
+        connectProposed(messages) || (await isLive(run.tools)),
     })
     const granted: GrantKind[] =
       risk === "grantable"
