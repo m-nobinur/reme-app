@@ -11,6 +11,7 @@ import {
   DomainPurchaseProvider,
   purchaseStatusOf,
   readDetails,
+  registrarPrice,
 } from "@workspace/ui/components/assistant/buy-domain"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
 import { act, createElement } from "react"
@@ -329,6 +330,28 @@ it("offers each free ending of a name, Reme's price only while buying here is on
   expect(
     options.map((option) => option.getAttribute("aria-describedby") !== null)
   ).toEqual([true, true, false])
+})
+
+it("puts a pound estimate beside Cloudflare's dollar price when a rate came with the names, and none beside GoDaddy", async () => {
+  const { tray } = await draw("find_domain", {
+    args: {},
+    result: { ...FOUND_OFF, usd_gbp: 0.7457 },
+  })
+  const where = () =>
+    tray.querySelector('[data-slot="connect-rows"]')?.textContent
+  expect(where()).toContain("CloudflareFrom $5.30 a year (about £4)")
+  expect(where()).toContain("GoDaddygodaddy.com")
+  await act(async () => radio(tray, "sparklecleanbristol.com").click())
+  expect(where()).toContain("CloudflareFrom $10.46 a year (about £8)")
+})
+
+it("registrarPrice rounds the pounds to the nearest pound, at least £1, and shows dollars alone with no rate", () => {
+  expect(registrarPrice(5.3, 0.7457)).toBe("From $5.30 a year (about £4)")
+  expect(registrarPrice(10.46, 0.7457)).toBe("From $10.46 a year (about £8)")
+  expect(registrarPrice(6, 0.75)).toBe("From $6.00 a year (about £5)")
+  expect(registrarPrice(0.5, 0.7457)).toBe("From $0.50 a year (about £1)")
+  expect(registrarPrice(5.3)).toBe("From $5.30 a year")
+  expect(registrarPrice(5.3, undefined)).toBe("From $5.30 a year")
 })
 
 it("with buying here off, says where to buy the picked name and connects it once bought", async () => {
