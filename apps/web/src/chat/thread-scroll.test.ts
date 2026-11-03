@@ -27,8 +27,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 const USER_ROW = 40
 const REPLY_ROW = 200
-/** Where the owner's message rests: just above the view, the reply's first line at its top. */
-const TOP = -USER_ROW
+/** Where the owner's message rests: at the top of the view, the reply below it. */
+const TOP = 0
 
 /** What the model lays out; a test changes it, then runs frames. */
 let layout: {
@@ -501,8 +501,13 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
-/** The owner sends, the reply streams in and ends: its first line at the top. */
-async function sendAndReply(id: string, reply = `${id}-reply`, height = 260) {
+/** The owner sends, the reply streams in and ends: their message at the top. */
+async function sendAndReply(
+  id: string,
+  reply = `${id}-reply`,
+  height = 260,
+  top = TOP
+) {
   await setState({
     messages: [
       ...state.messages,
@@ -521,10 +526,22 @@ async function sendAndReply(id: string, reply = `${id}-reply`, height = 260) {
     isRunning: false,
   })
   await frames()
-  expect(ownerMessageTop()).toBe(TOP)
+  expect(ownerMessageTop()).toBe(top)
 }
 
-it("the reply's first line stays at the top when the docked tray leaves", async () => {
+/** A tall message keeps this much of its end in view: the library's default, 6em. */
+const VISIBLE = 96
+
+it("a message up to the clamp stays whole at the top, a taller one keeps its last lines", async () => {
+  // A long message folded to six lines is about 220 px, and eight lines whole
+  // about 270; the clamp is 20rem.
+  layout.rows.set("u1", 290)
+  await sendAndReply("u1")
+  layout.rows.set("u2", 500)
+  await sendAndReply("u2", undefined, undefined, -(500 - VISIBLE))
+})
+
+it("the owner's message stays at the top when the docked tray leaves", async () => {
   layout.footer = 421
   await frames()
   await sendAndReply("u1")
@@ -536,7 +553,7 @@ it("the reply's first line stays at the top when the docked tray leaves", async 
   expect(ownerMessageTop()).toBe(TOP)
 })
 
-it("the reply's first line stays at the top through each step the tray swaps", async () => {
+it("the owner's message stays at the top through each step the tray swaps", async () => {
   layout.footer = 421
   await frames()
   await sendAndReply("u1")
@@ -549,7 +566,7 @@ it("the reply's first line stays at the top through each step the tray swaps", a
   expect(ownerMessageTop()).toBe(TOP)
 })
 
-it("the reply's first line stays at the top when the viewport resizes after the reply", async () => {
+it("the owner's message stays at the top when the viewport resizes after the reply", async () => {
   await sendAndReply("u1")
   const from = painted.length
   // 23:47:24: the viewport 41 px taller, no input, no new message.
@@ -563,7 +580,7 @@ it("the reply's first line stays at the top when the viewport resizes after the 
   expect(ownerMessageTop()).toBe(TOP)
 })
 
-it("the reply's first line stays at the top when the tray leaves as they send", async () => {
+it("the owner's message stays at the top when the tray leaves as they send", async () => {
   layout.footer = 421
   await frames()
   // Pick for me on the persona tray: the turn starts as the tray goes.
@@ -604,7 +621,7 @@ it("a card in the slot that fits the held space moves nothing", async () => {
   expect(ownerMessageTop()).toBe(TOP)
 })
 
-it("the reply's first line stays at the top through the history refresh after a turn", async () => {
+it("the owner's message stays at the top through the history refresh after a turn", async () => {
   await sendAndReply("u1")
   const from = painted.length
   // The rows read back after the turn: the same messages, new objects.
@@ -614,7 +631,7 @@ it("the reply's first line stays at the top through the history refresh after a 
   expect(ownerMessageTop()).toBe(TOP)
 })
 
-it("the reply's first line stays at the top when the reply's id changes as the turn ends", async () => {
+it("the owner's message stays at the top when the reply's id changes as the turn ends", async () => {
   // The placeholder reply gives way to the stored one in the update that ends the run.
   await sendAndReply("u1", "row-7")
   const from = painted.length
@@ -639,7 +656,7 @@ it("a tray docking under a reply that fills the view keeps the reader at its end
   ).toBeLessThanOrEqual(1)
 })
 
-it("a tray docking under a reply that fills the view keeps its first line at the top", async () => {
+it("a tray docking under a reply that fills the view keeps the owner's message at the top", async () => {
   await sendAndReply("u1", "u1-reply", 1200)
   layout.footer = 421
   await frames()
@@ -756,7 +773,7 @@ const SENDS = [
   { what: "Skip this one", footer: 124, leavesFirst: false },
 ]
 for (const { what, footer, leavesFirst } of SENDS) {
-  it(`${what} glides the new turn up until the reply's first line is at the top`, async () => {
+  it(`${what} glides the new turn up until their message is at the top`, async () => {
     layout.footer = footer
     await frames()
     await sendAndReply("u1")

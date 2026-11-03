@@ -99,6 +99,8 @@ import {
   type RefObject,
   useContext,
   useEffect,
+  useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -477,10 +479,9 @@ const KeepTurnAnchor: FC = () => {
 }
 
 /**
- * Keeps the reply's first line at the top until the owner's next send (the
- * viewport scrolls their own message just out of view), and the end of the
- * thread in view. assistant-ui follows the bottom by itself only when the
- * viewport is not anchored to a turn.
+ * Keeps the owner's message at the top with the reply below it until their
+ * next send, and the end of the thread in view. assistant-ui follows the
+ * bottom by itself only when the viewport is not anchored to a turn.
  *
  * - The space assistant-ui holds below a pinned reply is measured here as
  *   well, the moment anything under the owner's message resizes. The footer
@@ -490,7 +491,7 @@ const KeepTurnAnchor: FC = () => {
  *   the tray's height, and the drop stayed.
  * - A footer that appears or grows (the tray) under a reply that already
  *   fills the view covers its last lines: a reader at its end stays there,
- *   and one still at its first line stays there too.
+ *   and one still at the start of the reply stays there too.
  * - The after slot sits in the message group ahead of that space, so a card
  *   landing in it fills the space rather than landing below it.
  * - Between turns, what lands with no turn of the owner's (a message the
@@ -760,9 +761,10 @@ const ThreadRoot: FC<{
         }}
       >
         <ThreadPrimitive.Viewport
-          // The owner's message scrolls just out of view, so the reply's
-          // first line sits at the top.
-          topAnchorMessageClamp={{ tallerThan: "0px", visibleHeight: "0px" }}
+          // A message of eight lines, and a longer one folded to six, show
+          // whole at the top: the library's 10em would keep only the last
+          // lines of either. The visible height stays its default.
+          topAnchorMessageClamp={{ tallerThan: "20rem" }}
           turnAnchor="top"
           data-slot="aui_thread-viewport"
           // Clear of the workspace's floating panel, where there is one; the
@@ -1829,6 +1831,33 @@ function useDesignReply() {
     : null
 }
 
+/** A typed message of more lines than this shows only the first few behind Show more. */
+const LONG_AFTER_LINES = 8
+const COLLAPSED_LINES = 6
+
+/**
+ * Whether a message's text runs past `LONG_AFTER_LINES`, counted where it
+ * sits so a narrower window counts again, and whether the owner has opened
+ * it. `clip` goes on the element that holds the text.
+ */
+function useLongText() {
+  const [clip, setClip] = useState<HTMLElement | null>(null)
+  const [long, setLong] = useState(false)
+  const [open, setOpen] = useState(false)
+  useLayoutEffect(() => {
+    if (!clip) return
+    const measure = () => {
+      const line = Number.parseFloat(getComputedStyle(clip).lineHeight)
+      setLong(line > 0 && clip.scrollHeight > line * LONG_AFTER_LINES)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(clip)
+    return () => observer.disconnect()
+  }, [clip])
+  return { clip: setClip, long, open, toggle: () => setOpen((was) => !was) }
+}
+
 const UserMessage: FC = () => {
   // A skipped question's reply is a note in the thread, not words the owner said.
   const skipped = useAuiState((s) => {
@@ -1836,6 +1865,9 @@ const UserMessage: FC = () => {
     return rest.length === 0 && only?.type === "text" && only.text === SKIPPED
   })
   const design = useDesignReply()
+  const text = useLongText()
+  const textId = useId()
+  const collapsed = text.long && !text.open
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
@@ -1853,16 +1885,47 @@ const UserMessage: FC = () => {
           {design ? (
             <DesignReply {...design} />
           ) : (
-            <MessagePrimitive.Parts components={USER_PARTS} />
+            <div
+              data-slot="aui_user-message-text"
+              id={textId}
+              ref={text.clip}
+              className="relative overflow-hidden"
+              style={
+                collapsed ? { maxHeight: `${COLLAPSED_LINES}lh` } : undefined
+              }
+            >
+              <MessagePrimitive.Parts components={USER_PARTS} />
+              {collapsed && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-muted to-transparent"
+                />
+              )}
+            </div>
           )}
         </div>
-        <span
-          data-slot="aui_user-message-meta"
-          className="me-2 mt-1 flex items-center justify-end gap-1 text-muted-foreground"
-        >
-          <MessageTime />
-          <DeliveryTick />
-        </span>
+        <div className="mt-1 flex items-center">
+          {text.long && (
+            <Button
+              aria-controls={textId}
+              aria-expanded={text.open}
+              className="-ms-1 text-muted-foreground"
+              onClick={text.toggle}
+              size="xs"
+              type="button"
+              variant="link"
+            >
+              {text.open ? "Show less" : "Show more"}
+            </Button>
+          )}
+          <span
+            data-slot="aui_user-message-meta"
+            className="ms-auto me-2 flex items-center gap-1 text-muted-foreground"
+          >
+            <MessageTime />
+            <DeliveryTick />
+          </span>
+        </div>
       </div>
     </MessagePrimitive.Root>
   )

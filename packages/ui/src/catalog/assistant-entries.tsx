@@ -1097,6 +1097,34 @@ const REVIEW_QUOTE_STATES: ThreadMessageLike[] = [
   },
 ]
 
+/** The owner's own messages by length: twelve lines, eight (as long as one stays whole) and one. */
+const LONG_MESSAGES: ThreadMessageLike[] = [
+  {
+    content: "Tell me about the business.",
+    role: "assistant",
+    status: DONE,
+  },
+  reply(
+    [
+      "Here is everything, so you do not have to ask.",
+      "",
+      "Weekly and fortnightly home cleans",
+      "End of tenancy cleans with a deposit guarantee",
+      "Deep cleans before and after a move",
+      "Oven and appliance cleans",
+      "Office cleans, evenings only",
+      "",
+      "We cover Leeds, Headingley, Roundhay and Horsforth.",
+      "Fully insured, and we bring our own supplies.",
+      "Prices start at £14 an hour with a two hour minimum.",
+    ].join("\n")
+  ),
+  { content: "Thanks, that is plenty.", role: "assistant", status: DONE },
+  reply(Array.from({ length: 8 }, (_, i) => `Item ${i + 1}`).join("\n")),
+  { content: "Got it.", role: "assistant", status: DONE },
+  reply("Short and sweet."),
+]
+
 /** The questions still open, each docked in a thread of its own. */
 const REVIEW_QUOTE_OPEN: ThreadMessageLike[] = [
   {
@@ -3361,6 +3389,10 @@ const assistantCatalog = [
   {
     name: "Thread",
     render: () => <OwnerThread height="h-[56rem]" messages={CONVERSATION} />,
+  },
+  {
+    name: "ThreadLongMessage",
+    render: () => <OwnerThread height="h-[60rem]" messages={LONG_MESSAGES} />,
   },
   {
     name: "ThreadEmpty",

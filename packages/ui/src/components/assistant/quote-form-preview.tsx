@@ -1,4 +1,7 @@
-import type { QuoteField } from "@workspace/contracts"
+import {
+  type QuoteField,
+  QUOTE_FORM_WORDS as WORDS,
+} from "@workspace/contracts"
 import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
@@ -15,28 +18,16 @@ import { useId, useState } from "react"
 /**
  * The request form as customers meet it, in the app's own look: the contact
  * questions the site always asks, then each question by type. The words are
- * the starter site's defaults (`site-config.ts`), since the site's brand may
+ * the starter site's defaults, held in contracts, since the site's brand may
  * not be chosen yet. The controls work so the owner can try them, but nothing
  * is sent or kept: the form is not submitted and closing it forgets the
  * answers. It opens as a modal, and as a sheet from the bottom on a phone.
  */
 
-const WORDS = {
-  details: "Your details",
-  request: "Your request",
-  name: "Your name",
-  email: "Email address",
-  phone: "Phone number",
-  choose: "Choose one",
-  photoLinks: "Links to photos, one per line",
-  optional: "optional",
-  submit: "Send quote request",
-}
-
 const CONTACT: QuoteField[] = [
-  question("name", WORDS.name, "text", true),
-  question("email", WORDS.email, "email", true),
-  question("phone", WORDS.phone, "tel", false),
+  question("name", WORDS.quoteNameLabel, "text", true),
+  question("email", WORDS.quoteEmailLabel, "email", true),
+  question("phone", WORDS.quotePhoneLabel, "tel", false),
 ]
 
 function question(
@@ -69,7 +60,7 @@ function Label({ field }: { field: QuoteField }) {
         <>
           {" "}
           <span className="ms-0.5 text-muted-foreground text-xs">
-            {WORDS.optional}
+            {WORDS.quoteOptional}
           </span>
         </>
       )}
@@ -141,7 +132,7 @@ function Question({ field, scope }: { field: QuoteField; scope: string }) {
               defaultValue=""
               name={field.key}
             >
-              <option value="">{WORDS.choose}</option>
+              <option value="">{WORDS.quoteChoose}</option>
               {field.options?.map((option) => (
                 <option key={option}>{option}</option>
               ))}
@@ -162,7 +153,7 @@ function Question({ field, scope }: { field: QuoteField; scope: string }) {
                 className="text-muted-foreground text-xs"
                 htmlFor={`${id}-links`}
               >
-                {WORDS.photoLinks}
+                {WORDS.quotePhotoLinks}
               </label>
               <textarea
                 className={cn(TEXTAREA, "min-h-14")}
@@ -256,17 +247,17 @@ function QuoteFormPreview({
           >
             <Group
               fields={CONTACT}
-              legend={WORDS.details}
+              legend={WORDS.quoteContactLegend}
               scope={`${scope}-c`}
             />
             <Group
               fields={fields}
-              legend={WORDS.request}
+              legend={WORDS.quoteRequestLegend}
               scope={`${scope}-q`}
             />
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <Button disabled type="submit">
-                {WORDS.submit}
+                {WORDS.quoteSubmit}
               </Button>
               <p className="text-muted-foreground text-xs">
                 This is a preview, so nothing is sent or saved.
@@ -274,13 +265,6 @@ function QuoteFormPreview({
             </div>
           </form>
           <div className="flex flex-wrap justify-end gap-2 border-border border-t px-5 py-4">
-            <Button
-              onClick={() => setOpen(false)}
-              type="button"
-              variant="outline"
-            >
-              Close preview
-            </Button>
             <Button
               onClick={() => {
                 setOpen(false)
