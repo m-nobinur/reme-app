@@ -10,6 +10,7 @@ import {
   ONBOARDING_STATUS,
   type OnboardingStatus,
   PERSONA_CARD,
+  RECAP_REPLY,
   StaffDirectory,
 } from "@workspace/contracts"
 import {
@@ -384,8 +385,12 @@ const DAY_TO_DAY: FactValue[] = [
   { key: "business.enquiries", value: { text: "Calls and texts." } },
 ]
 
-/** What the owner types for the steps asked in words: what the business does, then what a quote needs. */
-const IN_WORDS = ["Regular cleaning, Deep cleans", "The address and how often"]
+/** What the owner types for the steps asked in words: what the business does, what a quote needs, then the recap's pill. */
+const IN_WORDS = [
+  "Regular cleaning, Deep cleans",
+  "The address and how often",
+  RECAP_REPLY,
+]
 
 /** Every fact before the quote question, as `/facts` takes them. */
 const UP_TO_PHOTOS: FactValue[] = [
@@ -1171,8 +1176,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
       expect(step?.parentId).toBe("reply_offerings")
       expect(pendingCall(done.after)).toMatchObject({
-        type: "tool-ask_details",
-        input: { step: "assistant" },
+        type: "tool-ask_open",
+        input: { about: "recap" },
       })
 
       const again = await me.send({ conversation_id: id, mode: "act", turn })
@@ -1292,18 +1297,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         },
       ])
       const fixed = await talk.say(id, "u_3", "+44 1632 960001")
-      // The number is held; the card asks again for the email, filled in.
+      // The number is held; the card asks again for the email, which the
+      // sign-in email never fills.
       expect(pendingCall(fixed.after)).toMatchObject({
-        input: {
-          step: "contact",
-          prefill: [
-            PHONE,
-            {
-              key: "business.email",
-              value: { address: "owner@chat-probe.invalid" },
-            },
-          ],
-        },
+        input: { step: "contact", prefill: [PHONE] },
       })
     })
 
@@ -3283,8 +3280,16 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           ],
         }),
       })
+      // The recap comes first, then the assistant card once it is confirmed.
+      const recap = planner([
+        plan({
+          say: "Here is the business.",
+          next: { kind: "ask_open", about: "recap" },
+        }),
+      ])
       const ask = planner([
         plan({
+          pending_card: "answered",
           say: "What should I be called?",
           next: { kind: "ask_details", step: "assistant" },
         }),
@@ -3308,8 +3313,11 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         }),
       ])
       const id = await talker(who).onboarding()
-      await talker(who, undefined, { planner: ask.model }).turn(id, {
+      await talker(who, undefined, { planner: recap.model }).turn(id, {
         turn: { kind: "message", message_id: "u_persona_0", text: "Hello" },
+      })
+      await talker(who, undefined, { planner: ask.model }).turn(id, {
+        turn: { kind: "message", message_id: "u_persona_r", text: RECAP_REPLY },
       })
       const done = await talker(who, undefined, { planner: man.model }).turn(
         id,
