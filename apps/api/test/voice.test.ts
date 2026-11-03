@@ -12,6 +12,7 @@ describe("voiceProblems", () => {
     "Reme, reporting for duty! Let's make our partnership official.",
     "Offering eco-friendly products will certainly give clients peace of mind!",
     "Build ead99cb0 is ready for your review.",
+    "Your site is live — spark.mnobinur.dev",
     "It's an honour to officially be on the team.",
     "Great question! I'd be happy to help.",
     "All done. Let me know if you need anything else.",

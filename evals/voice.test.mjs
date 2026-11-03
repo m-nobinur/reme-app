@@ -4,13 +4,13 @@ import { check, verdict } from "./voice.mjs"
 
 const sample = (text, named = true) => ({ id: "t", source: "cos", text, named })
 
-test("a clean line has no hit and a planted dash is a hard hit", () => {
+test("a clean line has no hit and a planted dash is a soft hit", () => {
   const [clean, dash] = check([
     sample("Your website is live at spark.example."),
     sample("Your website is live — have a look."),
   ])
   assert.deepEqual([clean.hard, clean.soft], [[], []])
-  assert.equal(dash.hard.length, 1)
+  assert.deepEqual([dash.hard.length, dash.soft.length], [0, 1])
 })
 
 test("an id is hard, a chatbot opener is soft, Reme is hard only once the assistant is named", () => {
@@ -29,7 +29,7 @@ test("an id is hard, a chatbot opener is soft, Reme is hard only once the assist
 test("the bar: a hard hit fails, three soft hits fail, two pass, a weak judge fails", () => {
   const soft = (n) =>
     check(Array.from({ length: n }, () => sample("Great question.")))
-  assert.equal(verdict(check([sample("a — b")])).pass, false)
+  assert.equal(verdict(check([sample("Build ead99cb0 is ready.")])).pass, false)
   assert.equal(verdict(soft(2)).pass, true)
   assert.equal(verdict(soft(3)).pass, false)
   const clean = check([sample("Done.")])
