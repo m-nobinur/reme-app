@@ -2,6 +2,7 @@ import {
   AskChoiceInput,
   AskDesignInput,
   AskDetailsInput,
+  BuildQuestions,
   CALM_PALETTES,
   type FactValue,
   FONT_PAIRS,
@@ -17,6 +18,7 @@ import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it } from "vitest"
 import type { ToolPart } from "../src/chat.ts"
 import {
+  addressOffer,
   again,
   applied,
   built,
@@ -547,6 +549,69 @@ describe("the onboarding steps", () => {
       error: { class: "validation", code: "change.build_busy", message: "x" },
     })
     expect((refused[2] as { text: string }).text).toMatch(/couldn't start/)
+    expect(refused).toHaveLength(3)
+  })
+
+  it("goes on to the web address offer and its card in the same reply, once the build started", () => {
+    const o = start({
+      facts: [
+        {
+          key: "business.industry",
+          value: { name: "Tree surgery and garden care", category: "trades" },
+        },
+        {
+          key: "service_area.text",
+          value: { text: "Leeds and about 20 miles out" },
+        },
+      ],
+    })
+    const offer = addressOffer(o)
+    expect(offer).toContain("**tree surgery in Leeds**")
+    const pending: ToolPart = {
+      type: "tool-request_change",
+      toolCallId: "c1",
+      state: "input-available",
+      input: { text: ONBOARDING_GOAL },
+    }
+    const parts = built(
+      o,
+      pending,
+      {
+        outcome: "started",
+        build: {
+          assignment_id: ORG,
+          kind: "site.build",
+          state: "queued",
+          goal: ONBOARDING_GOAL,
+          revision: null,
+          created_at: "2026-09-26T09:30:00.000Z",
+          updated_at: "2026-09-26T09:30:00.000Z",
+        },
+      },
+      undefined,
+      offer
+    )
+    expect(parts.slice(3).map((p) => p.type)).toEqual([
+      "step-start",
+      "text",
+      "data-build_questions",
+    ])
+    expect((parts[4] as { text: string }).text).toBe(offer)
+    const stack = BuildQuestions.parse((parts[5] as { data: unknown }).data)
+    expect(stack.kind).toBe("address")
+  })
+
+  it("leaves the address to the orchestrator when the email is on the business's own domain", () => {
+    const own = start({
+      facts: [
+        { key: "business.email", value: { address: "sam@pruningco.co.uk" } },
+      ],
+    })
+    const free = start({
+      facts: [{ key: "business.email", value: { address: "sam@gmail.com" } }],
+    })
+    expect(addressOffer(own)).toBeNull()
+    expect(addressOffer(free)).toContain("**a business like yours**")
   })
 })
 

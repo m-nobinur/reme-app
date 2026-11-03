@@ -11,6 +11,8 @@ import {
   AskOpenOutput,
   AskUploadOutput,
   AVATARS,
+  addressOfferText,
+  addressQuestions,
   CALM_PALETTES,
   type ChoiceStep,
   DETAILS_KEYS,
@@ -24,6 +26,7 @@ import {
   INDUSTRIES,
   type LogoPath,
   ONBOARDING_GOAL,
+  ownDomain,
   PAGES,
   PALETTES,
   type PaletteFromImage,
@@ -1370,23 +1373,49 @@ export const buildCall = (parts: Part[]) =>
   )
 
 /**
+ * The web address offer the build's reply goes on to, from the facts, or
+ * null when the business email is on a domain of its own: the orchestrator
+ * offers that name, with its Connect button, once it has looked it up.
+ */
+export function addressOffer(o: Onboarding): string | null {
+  const email = factValue(o.facts, "business.email")?.address
+  if (email && ownDomain(email)) return null
+  return addressOfferText({
+    trade: factValue(o.facts, "business.industry")?.name,
+    area:
+      factValue(o.facts, "service_area.radius")?.centre ??
+      factValue(o.facts, "service_area.text")?.text,
+  })
+}
+
+/** The address offer as the build reply's last step: its words, then the question's pills. */
+export const offerParts = (offer: string): Part[] => [
+  { type: "step-start" },
+  text(offer),
+  { type: "data-build_questions", data: addressQuestions() },
+]
+
+/**
  * The build step once the change answered: the call resolved as the
  * request_change card shows it, then the closing line in a step of its own,
- * so no client reads a finished call as the last step and sends again.
+ * so no client reads a finished call as the last step and sends again. A
+ * build that started goes on to `offer`, the web address, in the same reply.
  */
 export function built(
   o: Onboarding,
   pending: ToolPart,
   output: RequestChangeOutput,
   /** The planner's own words for a build that started. */
-  said?: string
+  said?: string,
+  offer?: string | null
 ): Part[] {
   const v = voiceOf(o)
+  const begun = output.outcome === "started"
   return [
     { ...pending, state: "output-available", output },
     { type: "step-start" },
     text(
-      output.outcome === "started"
+      begun
         ? (said ??
             started(
               v,
@@ -1394,6 +1423,7 @@ export function built(
             ))
         : notStarted(v)
     ),
+    ...(begun && offer ? offerParts(offer) : []),
   ]
 }
 
