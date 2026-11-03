@@ -384,11 +384,11 @@ describe("addressReply", () => {
     expect(addressReply(ADDRESS_ASK.yes, "sparkle.co.uk")).toBe(
       "Yes, it's sparkle.co.uk"
     )
-    expect(addressReply(ADDRESS_ASK.yes)).toBe("Yes, I have a web address")
+    expect(addressReply(ADDRESS_ASK.yes)).toBe(ADDRESS_ASK.yes)
     expect(addressReply(ADDRESS_ASK.no)).toBe(ADDRESS_ASK.no)
   })
 
-  it("says nothing for Not now", () => {
+  it("says nothing for Skip for now", () => {
     expect(addressReply(ADDRESS_ASK.later)).toBeNull()
   })
 })

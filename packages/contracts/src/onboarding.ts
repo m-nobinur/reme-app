@@ -98,10 +98,17 @@ export const TONES = [
 export const ToneId = z.enum(ids(TONES))
 
 /**
- * The message the Skip this one pill sends while an optional question
- * waits. The api reads it as a skip of that question, never as its answer.
+ * The Skip this one pill's label, and the message it sends while an optional
+ * question waits. The api reads it as a skip of that question, never as its
+ * answer.
  */
-export const SKIP_REPLY = "I'd like to skip this question."
+export const SKIP_REPLY = "Skip this one"
+
+/**
+ * The assistant's name ideas when none were written for this business. Reme
+ * first, so Pick for me without written names keeps the product's own.
+ */
+export const NAME_IDEAS = ["Reme", "Ava", "Grace"] as const
 
 /**
  * The message the confirm pill under the business recap sends. The api reads
