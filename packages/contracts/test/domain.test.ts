@@ -45,7 +45,7 @@ describe("DomainName", () => {
     ["a scheme", "https://brightclean.co.uk"],
     ["a path", "brightclean.co.uk/x"],
     ["a port", "brightclean.co.uk:8080"],
-    ["over 253 characters", `${"a".repeat(60)}.`.repeat(5) + "example"],
+    ["over 253 characters", `${`${"a".repeat(60)}.`.repeat(5)}example`],
   ])("refuses %s", (_name, name) => {
     expect(DomainName.safeParse(name).success).toBe(false)
   })

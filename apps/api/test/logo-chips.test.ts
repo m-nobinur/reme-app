@@ -10,7 +10,7 @@ import {
   SEEN,
 } from "../src/logo-chips.ts"
 
-const fit = (score: number) => ({ score, confidence: 1 })
+const reading = (score: number) => ({ score, confidence: 1 })
 const palette = PALETTES[0] as (typeof PALETTES)[number]
 const PRUNING = [
   { type: "lockup", style: "hand_drawn" },
@@ -21,16 +21,16 @@ const PRUNING = [
 describe("redesign chips for one design", () => {
   // Jev's answers on Pruning Co's retro emblem, measured on 2026-11-04.
   const emblem = {
-    finer: fit(0.87),
-    fewer_details: fit(0.73),
-    bolder: fit(0.09),
-    style_minimal: fit(0.55),
-    style_hand_drawn: fit(0.31),
-    style_geometric: fit(0.16),
-    style_retro: fit(0.56),
-    type_lockup: fit(0.66),
-    type_icon: fit(0.59),
-    type_emblem: fit(0.94),
+    finer: reading(0.87),
+    fewer_details: reading(0.73),
+    bolder: reading(0.09),
+    style_minimal: reading(0.55),
+    style_hand_drawn: reading(0.31),
+    style_geometric: reading(0.16),
+    style_retro: reading(0.56),
+    type_lockup: reading(0.66),
+    type_icon: reading(0.59),
+    type_emblem: reading(0.94),
   }
 
   it("keeps one of each kind: what Jev sees, another suggested style and type, and code's colour", () => {
@@ -56,7 +56,7 @@ describe("redesign chips for one design", () => {
 
   it("never offers the design's own style or type, nor a detail Jev does not see", () => {
     const chips = chipsFrom(
-      { ...emblem, finer: fit(SEEN - 0.1), fewer_details: fit(0.2) },
+      { ...emblem, finer: reading(SEEN - 0.1), fewer_details: reading(0.2) },
       { type: "lockup", style: "hand_drawn" },
       [palette.primary],
       PRUNING
@@ -68,7 +68,7 @@ describe("redesign chips for one design", () => {
 
   it("suggests from every style and type when the round drew no directions", () => {
     const chips = chipsFrom(
-      { ...emblem, style_luxury: fit(0.99), type_monogram: fit(0.99) },
+      { ...emblem, style_luxury: reading(0.99), type_monogram: reading(0.99) },
       { type: "wordmark", style: "minimal" },
       [palette.primary]
     )
@@ -126,19 +126,22 @@ describe("typed changes read against the brief", () => {
     // "more old-school" and "put it in a round badge", measured on 2026-11-04.
     expect(
       changeSetsFrom({
-        style_retro: fit(0.65),
-        type_emblem: fit(0.25),
-        style_hand_drawn: fit(0.25),
+        style_retro: reading(0.65),
+        type_emblem: reading(0.25),
+        style_hand_drawn: reading(0.25),
       })
     ).toEqual({ style: "retro" })
     expect(
-      changeSetsFrom({ type_emblem: fit(0.9), type_icon: fit(0.17) })
+      changeSetsFrom({ type_emblem: reading(0.9), type_icon: reading(0.17) })
     ).toEqual({ type: "emblem" })
     // "a leaf instead of a tree": icon at 0.44 is not enough.
-    expect(changeSetsFrom({ type_icon: fit(0.44) })).toEqual({})
+    expect(changeSetsFrom({ type_icon: reading(0.44) })).toEqual({})
     // Two close together are not a reading.
     expect(
-      changeSetsFrom({ style_minimal: fit(0.7), style_luxury: fit(0.6) })
+      changeSetsFrom({
+        style_minimal: reading(0.7),
+        style_luxury: reading(0.6),
+      })
     ).toEqual({})
   })
 })

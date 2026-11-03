@@ -169,8 +169,8 @@ const NATURAL: Record<LogoType, readonly LogoStyle[]> = {
 }
 const NATURAL_BONUS = 0.5
 
-const ranked = <T extends string>(ids: readonly T[], fit: (id: T) => number) =>
-  [...ids].sort((a, b) => fit(b) - fit(a))
+const ranked = <T extends string>(ids: readonly T[], rate: (id: T) => number) =>
+  [...ids].sort((a, b) => rate(b) - rate(a))
 
 /**
  * Three directions from the scores: three different types, the safe lockup

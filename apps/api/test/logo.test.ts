@@ -337,9 +337,9 @@ function images(
     /** The attached picture's url, when there is one. */
     url?: string
   }[] = []
-  vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+  vi.stubGlobal("fetch", async (input: string, init: RequestInit) => {
     // The chips' reading is its own test: here it fails, as Jev may.
-    if (url === JEV.url) return new Response("{}", { status: 503 })
+    if (input === JEV.url) return new Response("{}", { status: 503 })
     const body = JSON.parse(String(init.body))
     asked.push({
       model: body.model,
@@ -561,8 +561,8 @@ describe("drawing a round in the queue", () => {
       suggested: directions,
     })
     const prompts: string[] = []
-    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
-      if (url === JEV.url) {
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit) => {
+      if (input === JEV.url) {
         return Response.json({ answers: { finer: { noul: 0.9 } } })
       }
       prompts.push(JSON.parse(String(init.body)).prompt)
