@@ -33,6 +33,7 @@ import {
   type Thumbnail,
   UpNext,
   WaitingOnYou,
+  WebAddress,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
 import { DoneIcon } from "@workspace/ui/components/status-line"
@@ -43,8 +44,9 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
 import { Hint } from "@workspace/ui/components/tooltip"
+import { pageAction } from "@workspace/ui/lib/activity-copy"
 import { useSiteName } from "@workspace/ui/lib/site-name"
-import { cn } from "@workspace/ui/lib/utils"
+import { cn, META } from "@workspace/ui/lib/utils"
 import { browserZone } from "@workspace/ui/lib/zone"
 import {
   type ReactNode,
@@ -252,20 +254,37 @@ function Website({
   url,
   live,
   thumbnail,
+  connect,
 }: {
   host: string | null
   url: string | null
   live: number | null
   thumbnail: Thumbnail
+  connect: ReactNode
 }) {
   return (
     <YourWebsite
+      connect={connect}
       host={host}
       live={live}
       onRequestChanges={useRequestChanges()}
       url={url}
       thumbnail={thumbnail}
     />
+  )
+}
+
+/** Connect, which asks the assistant for help with a web address, as any other message would. */
+function ConnectAddress() {
+  const { label, ask } = pageAction("own")
+  return (
+    <Link
+      className={NEXT_STEP}
+      state={() => ({ chat: crypto.randomUUID(), ask })}
+      to="/app"
+    >
+      {label}
+    </Link>
   )
 }
 
@@ -357,7 +376,9 @@ function Segment({
       <PanelSegment
         icon={segment.icon}
         line={segment.line}
+        quiet={segment.quiet}
         state={segment.state}
+        status={segment.status}
         steps={stepsOf(segment)}
         title={segment.title}
         working={segment.working}
@@ -508,6 +529,45 @@ function useFocusAfterDone(notes: Reminder[]) {
 
 type Tab = "activity" | "reminders" | "website"
 
+/** How long a piece of work that finished on screen shows its tick in Now before it moves to Completed. */
+const SETTLE_MS = 3000
+
+/**
+ * The finished work still shown in Now: each piece that was at work on an
+ * earlier read and has finished since, for `SETTLE_MS`. Work already done
+ * when the panel first reads it goes straight to Completed.
+ */
+export function useSettling(panel: Panel | null): ReadonlySet<string> {
+  const key = panel
+    ? [...panel.journey, ...panel.now, ...panel.blocked]
+        .map((each) => each.id)
+        .join(" ")
+    : ""
+  const before = useRef(key)
+  const [settling, setSettling] = useState<{ id: string; until: number }[]>([])
+  useEffect(() => {
+    const still = key.split(" ")
+    const gone = before.current
+      .split(" ")
+      .filter((id) => id && !still.includes(id))
+    before.current = key
+    if (gone.length) {
+      const until = Date.now() + SETTLE_MS
+      setSettling((was) => [...was, ...gone.map((id) => ({ id, until }))])
+    }
+  }, [key])
+  useEffect(() => {
+    const [next] = settling
+    if (!next) return
+    const timer = setTimeout(
+      () => setSettling((was) => was.filter((each) => each.until > Date.now())),
+      Math.max(0, next.until - Date.now())
+    )
+    return () => clearTimeout(timer)
+  }, [settling])
+  return new Set(settling.map((each) => each.id))
+}
+
 /**
  * What the panel says on the page the owner is on, from reads the frame
  * already holds. Null when there is nothing worth a panel there, or when the
@@ -569,6 +629,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const tabList = useFocusAfterDone(upcoming)
   const activityTab = useRef<HTMLDivElement>(null)
   useFollowStep(activityTab)
+  const settling = useSettling(panel)
   const stale = failed ? "Couldn't refresh. Trying again in a minute." : null
 
   if (!workspace || !panel) {
@@ -581,8 +642,6 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   }
   const { live, host } = workspace
   const website = live !== null || host !== null
-  const upNextAsk =
-    panel.upNext && "ask" in panel.upNext ? panel.upNext.ask : undefined
   // A tab that has emptied (its last reminder done) hands back to Activity.
   const shown =
     (tab === "reminders" && upcoming.length) || (tab === "website" && website)
@@ -623,6 +682,8 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       {segment(each)}
     </div>
   )
+  // Not listed twice: a piece showing its tick in Now joins Completed after.
+  const done = panel.done.filter((each) => !settling.has(each.id))
   const activity = (
     <>
       {/* One list: the header already says what waits, so no group repeats
@@ -640,7 +701,10 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
         status={status}
         title="Now"
       >
-        {panel.journey.map(row)}
+        {[
+          ...panel.finished.filter((each) => settling.has(each.id)),
+          ...panel.journey,
+        ].map(row)}
         {panel.waiting.map((item) =>
           item.kind === "approval" ? (
             <div
@@ -665,26 +729,21 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
         {panel.blocked.map(row)}
         {panel.now.map(row)}
       </WaitingOnYou>
+      {panel.connect ? (
+        <WebAddress>
+          <ConnectAddress />
+        </WebAddress>
+      ) : null}
       {panel.upNext ? (
         <UpNext text={panel.upNext.text}>
-          {"href" in panel.upNext ? (
-            // A document load: the route answers with a redirect to Google,
-            // and the result is said in the owner's current conversation.
-            <a
-              className={NEXT_STEP}
-              href={`${panel.upNext.href}${chat ? `?returnTo=/app/c/${chat.id}` : ""}`}
-            >
-              {panel.upNext.label}
-            </a>
-          ) : (
-            <Link
-              className={NEXT_STEP}
-              state={() => ({ chat: crypto.randomUUID(), ask: upNextAsk })}
-              to="/app"
-            >
-              {panel.upNext.label}
-            </Link>
-          )}
+          {/* A document load: the route answers with a redirect to Google,
+              and the result is said in the owner's current conversation. */}
+          <a
+            className={NEXT_STEP}
+            href={`${panel.upNext.href}${chat ? `?returnTo=/app/c/${chat.id}` : ""}`}
+          >
+            {panel.upNext.label}
+          </a>
         </UpNext>
       ) : null}
       <ComingUp
@@ -701,19 +760,20 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       />
       <ComingUp
         action={
-          panel.done.length > SHOWN.done ? (
+          done.length > SHOWN.done ? (
             <Link className={SECTION_ACTION} hash="completed" to="/app/tasks">
               View all
             </Link>
           ) : null
         }
         ahead={false}
-        count={panel.done.length}
+        count={done.length}
         icon={<DoneIcon />}
-        items={panel.done.slice(0, SHOWN.done)}
+        items={done.slice(0, SHOWN.done)}
         title="Completed"
         zone={zone}
       />
+      {panel.checkIn ? <p className={META}>{panel.checkIn}</p> : null}
       <NextSteps>
         {panel.suggestions.map((suggestion) => (
           <Suggested key={suggestion.kind} suggestion={suggestion} />
@@ -724,22 +784,25 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
 
   return (
     <Tabs onValueChange={(value: Tab) => setTab(value)} value={shown}>
-      {/* Reaches up over the scroller's 1rem padding, so nothing scrolls through the gap above it. */}
-      <TabsList
-        className="sticky -top-4 z-10 -mt-4 bg-popover pt-4"
-        ref={tabList}
-      >
-        <TabsTrigger value="activity">Activity</TabsTrigger>
-        {upcoming.length ? (
-          <TabsTrigger value="reminders">
-            Reminders
-            <span className="text-muted-foreground tabular-nums">
-              {upcoming.length}
-            </span>
-          </TabsTrigger>
-        ) : null}
-        {website ? <TabsTrigger value="website">Website</TabsTrigger> : null}
-      </TabsList>
+      {/* One tab is no choice, so no bar. It reaches up over the scroller's
+          1rem padding, so nothing scrolls through the gap above it. */}
+      {upcoming.length || website ? (
+        <TabsList
+          className="sticky -top-4 z-10 -mt-4 bg-popover pt-4"
+          ref={tabList}
+        >
+          <TabsTrigger value="activity">Activity</TabsTrigger>
+          {upcoming.length ? (
+            <TabsTrigger value="reminders">
+              Reminders
+              <span className="text-muted-foreground tabular-nums">
+                {upcoming.length}
+              </span>
+            </TabsTrigger>
+          ) : null}
+          {website ? <TabsTrigger value="website">Website</TabsTrigger> : null}
+        </TabsList>
+      ) : null}
       {/* Kept mounted, so a half-written answer or an open Stop question
           survives a look at another tab. */}
       <TabsContent
@@ -758,6 +821,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       {website ? (
         <TabsContent value="website">
           <Website
+            connect={panel.connect ? <ConnectAddress /> : null}
             host={host}
             live={live}
             thumbnail={thumbnail}
@@ -781,7 +845,6 @@ export function WorkspacePanelLine({
     <LiveLine
       {...(panel?.line ?? { tone: "idle", lead: "This panel did not load" })}
       avatar={avatar}
-      lines={panel?.lines}
     />
   )
 }

@@ -19,6 +19,7 @@ import {
   StopBuild,
   UpNext,
   WaitingOnYou,
+  WebAddress,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
 import { DoneIcon } from "@workspace/ui/components/status-line"
@@ -29,11 +30,15 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
 import {
+  domainStep,
   segmentKind,
   segmentLine,
+  segmentStatus,
   segmentTitle,
+  setupTitle,
   stepKind,
-  stepLabel,
+  stepName,
+  WAITING_HINT,
 } from "@workspace/ui/lib/activity-copy"
 import { paletteStops } from "@workspace/ui/lib/blueprint"
 import type { ReactNode } from "react"
@@ -89,6 +94,18 @@ const PICTURES = {
 
 /** A next step as `apps/web` draws it: an outline button, link or not. */
 const STEP = buttonVariants({ variant: "outline", size: "sm" })
+
+/** Connect, as `apps/web` draws it: a message to the assistant. */
+const connectButton = (
+  <a className={STEP} href="#connect">
+    Connect
+  </a>
+)
+
+/** The lane's usual and late times, as the api sends them for a build at work. */
+const TIMES = { usual_seconds: 360, late_seconds: 600 }
+
+const PULSE = <PulseIcon aria-hidden className="size-4 text-muted-foreground" />
 
 /** A read that takes a moment, so the retry's pending state shows. */
 const retry = () => new Promise<void>((done) => setTimeout(done, 400))
@@ -245,37 +262,89 @@ const WEBSITE = [
   "ready",
 ]
 
-/** A segment as `apps/web` draws it, worded by the copy table, at the panel's width. */
+/** The steps that are the business's own while setting up, as `apps/web` groups them. */
+const BUSINESS_STEPS = [
+  "work",
+  "area",
+  "customers",
+  "proof",
+  "quote_form",
+  "contact",
+]
+
+/**
+ * A segment as `apps/web` draws it, worded by the copy table, at the panel's
+ * width: setting up as its business part, a domain as its one step, a build
+ * `elapsed` seconds in, `quiet` while something else waits on the owner.
+ */
 const segment = (
   s: Omit<ActivitySegment, "at"> & { at?: string },
   extra: {
     children?: ReactNode
     details?: Record<string, ReactNode>
+    elapsed?: number
+    quiet?: boolean
   } = {}
 ) => {
   const full: ActivitySegment = { at: STARTED, ...s }
+  const setup = full.kind === "onboarding"
+  const domain = full.kind === "address" || full.kind === "domain"
+  const shown = setup
+    ? full.steps.filter((step) => BUSINESS_STEPS.includes(step.id))
+    : full.steps.filter(
+        (step) => step.state !== "skipped" || full.kind === "website"
+      )
+  const current = shown
+    .filter((step) => step.state === "now" || step.state === "waiting")
+    .at(-1)
+  const said = domain ? domainStep(full, CTX) : null
+  const done = full.state === "done"
   return (
     <div className="max-w-[22rem]">
       <PanelSegment
         icon={segmentKind(full)}
-        line={segmentLine(full, CTX, { elapsedSeconds: 250, until: "11:50" })}
+        line={segmentLine(full, CTX, { until: "11:50" })}
+        quiet={extra.quiet ?? false}
         state={full.state}
-        steps={full.steps.flatMap((step) => {
-          const label = stepLabel(full, step)
-          return label
-            ? [
-                {
-                  id: step.id,
-                  label,
-                  state: step.state,
-                  kind: stepKind(full, step),
-                  detail: extra.details?.[step.id],
-                },
-              ]
-            : []
-        })}
-        title={segmentTitle(full, CTX) ?? ""}
-        working={segmentTitle({ ...full, state: "now" }, CTX) ?? ""}
+        status={segmentStatus(full, extra.elapsed ?? 250)}
+        steps={
+          domain
+            ? current && said
+              ? [
+                  {
+                    id: current.id,
+                    label: said,
+                    state: current.state,
+                    kind: stepKind(full, current),
+                  },
+                ]
+              : []
+            : shown.flatMap((step) => {
+                const label = stepName(full, step)
+                return label
+                  ? [
+                      {
+                        id: step.id,
+                        label,
+                        state: step.state,
+                        kind: stepKind(full, step),
+                        detail: extra.details?.[step.id],
+                        ...(step.state === "waiting" && { hint: WAITING_HINT }),
+                      },
+                    ]
+                  : []
+              })
+        }
+        title={
+          setup
+            ? setupTitle("business", shown, done, CTX)
+            : (segmentTitle(full, CTX) ?? "")
+        }
+        working={
+          setup
+            ? setupTitle("business", shown, false, CTX)
+            : (segmentTitle({ ...full, state: "now" }, CTX) ?? "")
+        }
       >
         {extra.children}
       </PanelSegment>
@@ -289,15 +358,16 @@ const ONBOARDING_STEPS = (last: "now" | "waiting" | "done") => [
   stepAt("work", "done", { value: "Regular cleans, end of tenancy" }),
   stepAt("area", "done", { value: "South Manchester, 10 miles" }),
   stepAt("customers", "skipped"),
-  stepAt("contact", "done", { value: "0161 496 0000, hello@brightclean.test" }),
-  stepAt("assistant", "done", { value: "Reme" }),
+  stepAt("proof", "done", { value: "Insured, ten years local" }),
   stepAt("quote_form", "done", { value: "6 questions" }),
-  stepAt("photos", last === "done" ? "done" : last, {
-    ...(last === "done" ? { value: "4 photos" } : {}),
+  stepAt("contact", last === "done" ? "done" : last, {
+    ...(last === "done"
+      ? { value: "0161 496 0000, hello@brightclean.test" }
+      : {}),
   }),
-  stepAt("look", last === "done" ? "done" : "next", {
-    ...(last === "done" ? { value: "Mint, Classic" } : {}),
-  }),
+  stepAt("assistant", "next"),
+  stepAt("website", "next"),
+  stepAt("look", "next"),
 ]
 
 /** The website's stages with what each decided or made, as the panel draws them under the steps. */
@@ -458,9 +528,9 @@ const panelCatalog: Entry[] = [
     name: "UpNext",
     render: () => (
       <div className="max-w-88">
-        <UpNext text="Your own web address comes next">
+        <UpNext text="Get found on Google">
           <a className={STEP} href="#up-next">
-            Use your own domain
+            Connect Google
           </a>
         </UpNext>
       </div>
@@ -498,8 +568,12 @@ const panelCatalog: Entry[] = [
           icon={<DoneIcon />}
           items={[
             { id: "sam", text: "Reminder: call Sam", at: fromNow(-20) },
-            { id: "live", text: "Website published", at: fromNow(-108) },
-            { id: "setup", text: "Brightclean set up", at: fromNow(-20 * 60) },
+            { id: "live", text: "Your website is live", at: fromNow(-108) },
+            {
+              id: "setup",
+              text: "About the business · 6 of 6",
+              at: fromNow(-20 * 60),
+            },
           ]}
           now={TIMELINE_NOW}
           title="Completed"
@@ -523,7 +597,7 @@ const panelCatalog: Entry[] = [
           items={[
             {
               id: "golive",
-              text: "Website published",
+              text: "Your website is live",
               at: STARTED,
             },
           ]}
@@ -556,6 +630,7 @@ const panelCatalog: Entry[] = [
                 stepAt("writing", "now", { count: { done: 3, total: 6 } }),
                 ...along(WEBSITE, 2).slice(3),
               ],
+              ...TIMES,
             },
             {
               details: stageDetails(steps("writing", { pages: 3 })),
@@ -583,7 +658,14 @@ const panelCatalog: Entry[] = [
               View all
             </a>
           }
-          items={[{ id: "setup", text: "Brightclean set up", at: STARTED }]}
+          items={[
+            { id: "setup", text: "About the business · 6 of 6", at: STARTED },
+            {
+              id: "assistant",
+              text: "Reme set up, she/her, friendly",
+              at: STARTED,
+            },
+          ]}
           ahead={false}
           icon={<DoneIcon />}
           title="Completed"
@@ -768,13 +850,162 @@ const panelCatalog: Entry[] = [
       }),
   },
   {
+    // Setting up: one header line for the whole run, the business as one
+    // row, the step waiting on the owner hinted, the skipped one said.
+    name: "Panel getting to know the business",
+    render: () => (
+      <div className="flex max-w-88 flex-col gap-4">
+        <LiveLine lead="Reme is getting to know Brightclean" tone="working" />
+        <WaitingOnYou icon={PULSE} title="Now">
+          {segment({
+            id: "onboarding",
+            kind: "onboarding",
+            state: "waiting",
+            steps: [
+              stepAt("work", "done"),
+              stepAt("area", "done"),
+              stepAt("customers", "done"),
+              stepAt("proof", "skipped"),
+              stepAt("quote_form", "waiting"),
+              ...along(["contact", "assistant", "website", "look"], -1),
+            ],
+            names: BUSINESS,
+          })}
+        </WaitingOnYou>
+      </div>
+    ),
+  },
+  {
+    // The owner is wanted: the header says so, the build folds to one line
+    // and the web address question stays open. Coming up and Completed are
+    // their heading lines; the last routine check-in is one quiet line.
+    name: "Panel waiting on the owner",
+    render: () => (
+      <div className="flex max-w-88 flex-col gap-4">
+        <LiveLine lead="Reme needs your answer" tone="idle" />
+        <WaitingOnYou icon={PULSE} title="Now">
+          {/* Each row padded as `apps/web` pads it, so the hairlines sit between them. */}
+          <div className="py-3" key="website">
+            {segment(
+              {
+                id: "website",
+                kind: "website",
+                state: "now",
+                steps: along(WEBSITE, 2),
+                ...TIMES,
+              },
+              { quiet: true }
+            )}
+          </div>
+          <div className="py-3" key="address">
+            {segment({
+              id: "address",
+              kind: "address",
+              state: "waiting",
+              steps: along(
+                ["find_out", "choose", "purchase", "records", "certificate"],
+                0,
+                "waiting"
+              ),
+            })}
+          </div>
+        </WaitingOnYou>
+        <ComingUp
+          items={[
+            { id: "quote", text: "Quote for Mrs Patel", at: fromNow(40) },
+          ]}
+          now={TIMELINE_NOW}
+          zone="Europe/London"
+        />
+        <ComingUp
+          ahead={false}
+          icon={<DoneIcon />}
+          items={[
+            {
+              id: "assistant",
+              text: "Reme set up, she/her, friendly",
+              at: fromNow(-80),
+            },
+            {
+              id: "setup",
+              text: "About the business · 6 of 6",
+              at: fromNow(-95),
+            },
+          ]}
+          now={TIMELINE_NOW}
+          title="Completed"
+          zone="Europe/London"
+        />
+        <p className="text-[0.8125rem] text-muted-foreground">
+          Last check-in 10:00 AM, all clear
+        </p>
+      </div>
+    ),
+  },
+  {
+    // Past its usual range the build says so, never a new number.
+    name: "PanelSegment build running late",
+    render: () =>
+      segment(
+        {
+          id: "website",
+          kind: "website",
+          state: "now",
+          steps: along(WEBSITE, 3),
+          ...TIMES,
+        },
+        { elapsed: 900 }
+      ),
+  },
+  {
+    name: "PanelSegment build restarted",
+    render: () =>
+      segment({
+        id: "website",
+        kind: "website",
+        state: "now",
+        steps: along(WEBSITE, 2),
+        ...TIMES,
+        restarted: true,
+      }),
+  },
+  {
+    // After the owner says they have one: one step, what they do now.
+    name: "PanelSegment connecting your domain",
+    render: () =>
+      segment({
+        id: "address",
+        kind: "address",
+        state: "waiting",
+        steps: [
+          stepAt("find_out", "done"),
+          stepAt("choose", "done"),
+          stepAt("purchase", "skipped"),
+          stepAt("records", "waiting", { count: { done: 0, total: 1 } }),
+          ...along(["certificate", "loads"], -1),
+        ],
+        names: {
+          domain: "brightclean.example.invalid",
+          provider: "Cloudflare",
+        },
+      }),
+  },
+  {
+    name: "WebAddress",
+    render: () => (
+      <div className="max-w-88">
+        <WebAddress>{connectButton}</WebAddress>
+      </div>
+    ),
+  },
+  {
     name: "ComingUp completed",
     render: () => (
       <ComingUp
         items={[
           {
             id: "checkin",
-            text: "Reme checked in, all clear",
+            text: "Reme checked in and left you a message",
             at: NOW_ISO,
           },
           {
@@ -941,19 +1172,11 @@ const panelCatalog: Entry[] = [
     ),
   },
   {
-    name: "LiveLine several jobs",
+    // Something waits on the owner: the header says so and holds it.
+    name: "LiveLine needs the owner",
     render: () => (
       <div className="w-72">
-        <LiveLine
-          lead="Reme is building your website"
-          lines={[
-            { lead: "Reme is building your website" },
-            { lead: "Reme is replying to a new enquiry" },
-            { lead: "Reme is drafting a quote" },
-            { lead: "Your changes", detail: "are ready to publish" },
-          ]}
-          tone="working"
-        />
+        <LiveLine lead="Reme needs your answer" tone="idle" />
       </div>
     ),
   },
@@ -973,8 +1196,7 @@ const panelCatalog: Entry[] = [
     render: () => (
       <div className="w-64">
         <LiveLine
-          detail="has a question for you"
-          lead="Brightclean End of Tenancy and Carpet Specialists"
+          lead="Reme is getting to know Brightclean End of Tenancy and Carpet Specialists"
           tone="live"
         />
       </div>
@@ -1017,6 +1239,19 @@ const panelCatalog: Entry[] = [
     name: "YourWebsite unpublished",
     render: () => (
       <YourWebsite host={null} live={null} onRequestChanges={noop} />
+    ),
+  },
+  {
+    // Live on its own address, with no web address of the owner's own yet.
+    name: "YourWebsite no web address",
+    render: () => (
+      <YourWebsite
+        connect={connectButton}
+        host="brightclean-demo.example.invalid"
+        live={3}
+        onRequestChanges={noop}
+        thumbnail={THUMBNAIL}
+      />
     ),
   },
 ]

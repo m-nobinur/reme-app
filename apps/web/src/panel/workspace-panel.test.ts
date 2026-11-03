@@ -161,33 +161,50 @@ it('reads the workspace again on "Try again"', async () => {
   expect(refresh).toHaveBeenCalledOnce()
 })
 
-it("says what finished, and no Now list when nothing waits", async () => {
+it("says what finished folded to its heading, and no Now list when nothing waits", async () => {
+  const checkin = (message: "done" | "skipped") => ({
+    id: "checkin:last",
+    kind: "checkin" as const,
+    state: "done" as const,
+    steps: [{ id: "message", state: message }],
+    at: new Date().toISOString(),
+  })
+  const activity = (done: ReturnType<typeof checkin>[]) => ({
+    journey: [],
+    now: [],
+    waiting: [],
+    upcoming: [],
+    done,
+  })
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 2,
     host: "fixture.example.invalid",
-    activity: {
-      journey: [],
-      now: [],
-      waiting: [],
-      upcoming: [],
-      done: [
-        {
-          id: "checkin:last",
-          kind: "checkin",
-          state: "done",
-          steps: [{ id: "message", state: "skipped" }],
-          at: new Date().toISOString(),
-        },
-      ],
-    },
+    activity: activity([checkin("done")]),
   }
   await render()
-  expect(container.textContent).toContain("Completed")
-  expect(container.textContent).toContain(
-    "Your assistant checked in, all clear"
+  const completed = section("Completed")
+  const heading = completed?.querySelector("h2 button")
+  expect(heading?.getAttribute("aria-expanded")).toBe("false")
+  expect(completed?.querySelector("[hidden]")?.textContent).toContain(
+    "Your assistant checked in and left you a message"
   )
+  await act(async () => (heading as HTMLButtonElement).click())
+  expect(heading?.getAttribute("aria-expanded")).toBe("true")
+  expect(completed?.querySelector("[hidden]")).toBeNull()
   expect(container.textContent).not.toContain("Now")
+  await act(async () => root.unmount())
+
+  // A check-in that found nothing is no row, only one quiet line.
+  live.workspace = {
+    ...live.workspace,
+    activity: activity([checkin("skipped")]),
+  }
+  await render()
+  expect(section("Completed")).toBeUndefined()
+  expect(container.textContent).toMatch(
+    /Last check-in \d+:\d+ [AP]M, all clear/
+  )
 })
 
 it("shows a time in the reader's zone, not the business's", async () => {
@@ -244,11 +261,11 @@ it("puts a job waiting on the owner first under Now, with no group of its own", 
   }
   await render()
   // The header already says what waits, so no heading says it again.
-  expect(section("Now")?.textContent).toContain("Your website is ready")
+  expect(section("Now")?.textContent).toContain("Going live")
   expect(section("Waiting on you")).toBeUndefined()
 })
 
-it("offers the next task not started as Up next, with its button into the chat", async () => {
+it("offers to connect a web address, as a message into the chat", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 2,
@@ -270,9 +287,70 @@ it("offers the next task not started as Up next, with its button into the chat",
     },
   }
   await render()
-  expect(section("Up next")?.textContent).toMatch(/address/i)
-  expect(link("Use your own domain")?.dataset.to).toBe("/app")
+  expect(container.textContent).toContain("Web address · Not connected")
+  expect(section("Up next")).toBeUndefined()
+  expect(link("Connect")?.dataset.to).toBe("/app")
   expect(section("Coming up")).toBeUndefined()
+  // The Website tab offers it too.
+  const tab = [...container.querySelectorAll('[role="tab"]')].find(
+    (each) => each.textContent === "Website"
+  )
+  await act(async () => (tab as HTMLElement).click())
+  expect(
+    container.querySelector('[data-slot="your-website"]')?.textContent
+  ).toContain("Web address · Not connected")
+})
+
+it("draws no tab bar for one tab", async () => {
+  await render()
+  expect(container.querySelector('[role="tablist"]')).toBeNull()
+})
+
+it("shows a part that finishes on screen ticked in Now, then moves it to Completed", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+  const steps = (contact: "now" | "done") =>
+    ["work", "area", "customers", "proof", "quote_form"]
+      .map((id) => ({ id, state: "done" as const }))
+      .concat([
+        { id: "contact", state: contact },
+        { id: "assistant", state: contact === "done" ? "now" : "next" },
+      ] as never[])
+  const onboarding = (contact: "now" | "done") => ({
+    ...EMPTY_WORKSPACE,
+    activity: {
+      journey: [
+        {
+          id: "onboarding",
+          kind: "onboarding" as const,
+          state: "now" as const,
+          steps: steps(contact),
+          at: new Date().toISOString(),
+        },
+      ],
+      now: [],
+      waiting: [],
+      upcoming: [],
+      done: [],
+    },
+  })
+  try {
+    live.workspace = onboarding("now")
+    await render()
+    expect(section("Now")?.textContent).toContain("About the business")
+    live.workspace = onboarding("done")
+    await act(async () => root.render(createElement(Frame)))
+    // Its tick in Now, and not twice: Completed waits for it.
+    expect(section("Now")?.textContent).toContain("About the business")
+    expect(section("Now")?.textContent).toContain("Your assistant")
+    expect(section("Completed")).toBeUndefined()
+    await act(async () => vi.advanceTimersByTime(3000))
+    expect(section("Now")?.textContent).not.toContain("About the business")
+    expect(section("Completed")?.textContent).toContain(
+      "About the business · 6 of 6"
+    )
+  } finally {
+    vi.useRealTimers()
+  }
 })
 
 const note = (id: string, title: string, due_at: string | null): Reminder => ({
