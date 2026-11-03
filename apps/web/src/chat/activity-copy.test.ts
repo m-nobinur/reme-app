@@ -844,6 +844,17 @@ describe("page lines", () => {
     expect(proofOf(done("records", "certificate"), ctx)?.text).toBe(
       "spark.co.uk secured"
     )
+    expect(proofOf(done("records", "ownership"), ctx)?.text).toBe(
+      "spark.co.uk ownership confirmed"
+    )
+    expect(
+      proofOf(
+        segment("google", "now", {
+          steps: [{ id: "verify", state: "done" as const, at: STAMP }],
+        }),
+        ctx
+      )?.text
+    ).toBe("Site ownership confirmed")
     expect(
       proofOf(segment("golive", "done", { steps: done("loads").steps }), ctx)
     ).toBeNull()

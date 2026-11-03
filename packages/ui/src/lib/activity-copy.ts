@@ -1275,8 +1275,7 @@ const SETUP_TOPIC: Record<SetupPart, string> = {
 
 /**
  * A part of setting up: its topic while it runs, and once done the line it
- * keeps in Completed. The business counts what is settled, skips included;
- * the assistant says who she is ("Ava set up, she/her, professional").
+ * keeps in Completed.
  */
 export function setupTitle(
   part: SetupPart,
@@ -1287,15 +1286,9 @@ export function setupTitle(
   if (!done) return SETUP_TOPIC[part]
   switch (part) {
     case "business":
-      return `${SETUP_TOPIC.business} · ${steps.length} of ${steps.length}`
-    case "assistant": {
-      const [name, ...rest] = (
-        steps.find((s) => s.id === "assistant")?.value ??
-        named(ctx.assistant) ??
-        "Your assistant"
-      ).split(", ")
-      return [`${name} set up`, ...rest].join(", ")
-    }
+      return "Business details saved"
+    case "assistant":
+      return `${named(ctx.assistant) ?? "Your assistant"} set up`
     case "website":
       return steps.some((s) => s.id === "website" && s.state === "skipped")
         ? "Website left for later"
@@ -1605,7 +1598,7 @@ const STEP_LABELS: Partial<
     proof: "What sets you apart",
     contact: "Contact details",
     assistant: "Name, pronouns and tone",
-    website: "Whether to build one",
+    website: "Website",
     quote_form: "Quote questions",
     photos: "Photos",
     look: "Look and feel",
@@ -1652,7 +1645,7 @@ const STEP_LABELS: Partial<
   google: {
     sign_in: "Sign in",
     permissions: "Permissions",
-    verify: "Proof the site is yours",
+    verify: "Site ownership",
     sitemap: "Your pages sent to Google",
     first_data: "Your first search numbers",
   },
@@ -1731,12 +1724,12 @@ export const notStarted = (segment: ActivitySegment) =>
 const PROVED: Readonly<Record<string, (n: Names) => string>> = {
   purchase: (n) => `${startDomain(n)} registered in your name`,
   records: (n) => `Record for ${domain(n)} found`,
-  ownership: (n) => `${startDomain(n)} confirmed as yours`,
+  ownership: (n) => `${startDomain(n)} ownership confirmed`,
   certificate: (n) => `${startDomain(n)} secured`,
   loads: (n) => `Your website opens at ${domain(n)}`,
   sign_in: () => "Signed in to Google",
   permissions: () => "Google search data shared",
-  verify: () => "Google confirmed the site is yours",
+  verify: () => "Site ownership confirmed",
   sitemap: () => "Your pages sent to Google",
   first_data: () => "First search numbers in from Google",
 }

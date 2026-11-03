@@ -340,13 +340,13 @@ it("shows a part that finishes on screen ticked in Now, then moves it to Complet
     live.workspace = onboarding("done")
     await act(async () => root.render(createElement(Frame)))
     // Its tick in Now, and not twice: Completed waits for it.
-    expect(section("Now")?.textContent).toContain("About the business")
+    expect(section("Now")?.textContent).toContain("Business details saved")
     expect(section("Now")?.textContent).toContain("Your assistant")
     expect(section("Completed")).toBeUndefined()
     await act(async () => vi.advanceTimersByTime(3000))
-    expect(section("Now")?.textContent).not.toContain("About the business")
+    expect(section("Now")?.textContent).not.toContain("Business details saved")
     expect(section("Completed")?.textContent).toContain(
-      "About the business · 6 of 6"
+      "Business details saved"
     )
   } finally {
     vi.useRealTimers()

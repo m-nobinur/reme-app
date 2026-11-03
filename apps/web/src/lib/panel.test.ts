@@ -304,10 +304,10 @@ describe("the first run", () => {
     ])
     // Finished, it is ready to tick in Now and is in Completed under the same words.
     expect(panel?.finished.map((each) => [each.id, each.title])).toEqual([
-      ["onboarding", "About the business · 6 of 6"],
+      ["onboarding", "Business details saved"],
     ])
     expect(panel?.done.map((each) => [each.id, each.text])).toEqual([
-      ["onboarding", "About the business · 6 of 6"],
+      ["onboarding", "Business details saved"],
     ])
 
     const website = firstRun([onboarding(8, "waiting")])
@@ -319,7 +319,7 @@ describe("the first run", () => {
       "waiting",
     ])
     expect(website?.done.map((each) => each.text)).toEqual([
-      "About the business · 6 of 6",
+      "Business details saved",
       "Reme set up",
     ])
   })
@@ -333,25 +333,17 @@ describe("the first run", () => {
           }
         : each
     )
-    const assistant = { ...steps[6], value: "Ava, she/her, professional" }
-    const panel = firstRun([
-      segment(
-        "onboarding",
-        "now",
-        steps.map((each, i) => (i === 6 ? (assistant as ActivityStep) : each)),
-        BUSINESS
-      ),
-    ])
+    const panel = firstRun([segment("onboarding", "now", steps, BUSINESS)])
     expect(panel?.done).toEqual([
       {
         id: "onboarding:assistant",
-        text: "Ava set up, she/her, professional",
+        text: "Reme set up",
         at: "2026-10-01T08:16:00.000Z",
         brief: null,
       },
       {
         id: "onboarding",
-        text: "About the business · 6 of 6",
+        text: "Business details saved",
         at: "2026-10-01T08:15:00.000Z",
         brief: null,
       },
@@ -422,7 +414,7 @@ describe("the first run", () => {
     // Going live is not shown before the website is done.
     expect(rest).toEqual([])
     expect(panel?.done.map((each) => each.text)).toEqual([
-      "About the business · 6 of 6",
+      "Business details saved",
       "Reme set up",
       "Website choices saved",
     ])
@@ -624,7 +616,7 @@ describe("later jobs", () => {
     expect(google?.icon).toBe("google")
     expect(google?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Sign in", "done"],
-      ["Proof the site is yours", "now"],
+      ["Site ownership", "now"],
       ["Your pages sent to Google", "next"],
     ])
     // Something waits on the owner, so the work folds to one line.

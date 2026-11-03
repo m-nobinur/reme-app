@@ -571,7 +571,7 @@ const panelCatalog: Entry[] = [
             { id: "live", text: "Your website is live", at: fromNow(-108) },
             {
               id: "setup",
-              text: "About the business · 6 of 6",
+              text: "Business details saved",
               at: fromNow(-20 * 60),
             },
           ]}
@@ -659,10 +659,10 @@ const panelCatalog: Entry[] = [
             </a>
           }
           items={[
-            { id: "setup", text: "About the business · 6 of 6", at: STARTED },
+            { id: "setup", text: "Business details saved", at: STARTED },
             {
               id: "assistant",
-              text: "Reme set up, she/her, friendly",
+              text: "Reme set up",
               at: STARTED,
             },
           ]}
@@ -923,12 +923,12 @@ const panelCatalog: Entry[] = [
           items={[
             {
               id: "assistant",
-              text: "Reme set up, she/her, friendly",
+              text: "Reme set up",
               at: fromNow(-80),
             },
             {
               id: "setup",
-              text: "About the business · 6 of 6",
+              text: "Business details saved",
               at: fromNow(-95),
             },
           ]}
