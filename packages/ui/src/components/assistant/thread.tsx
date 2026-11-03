@@ -46,6 +46,7 @@ import {
   ReasoningGroup as DefaultReasoningGroup,
   Reasoning,
 } from "@workspace/ui/components/assistant/reasoning"
+import { ReplyPill } from "@workspace/ui/components/assistant/reply-pill"
 import { ThreadHistorySkeleton } from "@workspace/ui/components/assistant/thread-pending"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { ToolGroup as DefaultToolGroup } from "@workspace/ui/components/assistant/tool-group"
@@ -81,7 +82,6 @@ import {
 import { cn } from "@workspace/ui/lib/utils"
 import { localMidnight } from "@workspace/ui/lib/zone"
 import {
-  type ComponentProps,
   type ComponentType,
   createContext,
   type FC,
@@ -1033,24 +1033,10 @@ const SkipThisOne: FC = () => {
       data-slot="skip-this-one"
       onClick={() => aui.thread().append(SKIP_REPLY)}
     >
-      Skip this one
+      {SKIP_REPLY}
     </ReplyPill>
   )
 }
-
-/** A quick reply above the composer. */
-const ReplyPill: FC<ComponentProps<typeof Button>> = ({
-  className,
-  ...props
-}) => (
-  <Button
-    className={cn("rounded-full text-muted-foreground", className)}
-    size="sm"
-    type="button"
-    variant="outline"
-    {...props}
-  />
-)
 
 /**
  * Under the business recap: one pill confirms it as the owner's message; the

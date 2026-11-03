@@ -16,7 +16,7 @@ test("a choice is a native group, with Other opening the owner's own words", asy
   page,
 }) => {
   await open(page, "AskChoice")
-  await expect(pending(page)).toHaveCount(6)
+  await expect(pending(page)).toHaveCount(5)
   const industry = pending(page).nth(0)
   await expect(industry.getByRole("radio")).toHaveCount(7)
   await industry.getByRole("button", { name: "Done" }).click()
@@ -64,18 +64,22 @@ const shownIds = (card: ReturnType<typeof pending>) =>
         .filter((value) => value !== "__other__")
     )
 
-test("a choice of two answers on one tap, with no Submit", async ({ page }) => {
+test("a choice of two short answers is quick replies above the composer", async ({
+  page,
+}) => {
   await open(page, "AskChoice")
-  const build = pending(page).nth(5)
-  await expect(build.getByRole("button", { name: "Done" })).toHaveCount(0)
-  await expect(build.getByRole("radio")).toHaveCount(0)
+  const build = page
+    .locator('[data-slot="ask-choice"]')
+    .getByRole("group", { name: "Would you like me to build your website?" })
+  await expect(build.getByRole("button")).toHaveText([
+    "Yes, build my website",
+    "No, I already have one",
+  ])
   await expect(
-    build.getByRole("button", { name: "Yes, build it for me" })
-  ).toBeVisible()
-  // The card's frame is the region the question names.
-  await expect(build.getByRole("region")).toHaveAccessibleName(
-    "You'll see it before it goes live"
-  )
+    page.locator('[data-slot="ask-choice"]').getByRole("region", {
+      name: "Would you like me to build your website?",
+    })
+  ).toHaveCount(0)
 })
 
 test("a colour card shows four, brings in four others, and takes a picked colour", async ({
@@ -134,7 +138,7 @@ test("an answered choice reads back as the owner's reply", async ({ page }) => {
   ])
   const done = page
     .locator('[data-slot="ask-choice"]')
-    .filter({ hasNot: page.locator("form") })
+    .filter({ hasNot: page.locator("form, [data-slot=reply-pills]") })
   // One overtaken by a typed message leaves nothing; a broken one says so.
   await expect(done).toHaveCount(1)
   await expect(done.nth(0)).toContainText("did not come through")

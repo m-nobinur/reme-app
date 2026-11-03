@@ -6,6 +6,7 @@ import {
 } from "@assistant-ui/react"
 import { CopyIcon } from "@phosphor-icons/react"
 import {
+  ADDRESS_ASK,
   type AskChoiceInput,
   type DomainPurchaseStatus,
   FONTS,
@@ -844,8 +845,8 @@ const ASK_CHOICE_OPEN: ThreadMessageLike[] = [
         "Your website turns visitors into enquiries. Shall I build it for you?"
       ),
       askChoice("build_for_me", [
-        { id: "yes", label: "Yes, build it for me" },
-        { id: "skip", label: "Skip" },
+        { id: "yes", label: "Yes, build my website" },
+        { id: "skip", label: "No, I already have one" },
       ]),
     ],
     role: "assistant",
@@ -1919,6 +1920,44 @@ const BUILD_QUESTIONS: ThreadMessageLike[] = [
               id: "00000000-0000-4000-8000-0000000000c3",
               text: "Is there anywhere customers should park?",
               input: { kind: "text", maxLength: 200, email: false },
+              skippable: true,
+            },
+          ],
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
+/** The web address stack: a quick choice, then the name after Yes. */
+const ADDRESS_QUESTIONS: ThreadMessageLike[] = [
+  {
+    content: [
+      {
+        text: "While I build the site in the background, let's sort out your web address.",
+        type: "text",
+      },
+      {
+        type: "data",
+        name: "build_questions",
+        data: {
+          kind: "address",
+          questions: [
+            {
+              id: "00000000-0000-4000-8000-0000000000d1",
+              text: ADDRESS_ASK.have,
+              input: {
+                kind: "choice",
+                options: [ADDRESS_ASK.yes, ADDRESS_ASK.no, ADDRESS_ASK.later],
+              },
+              skippable: false,
+            },
+            {
+              id: "00000000-0000-4000-8000-0000000000d2",
+              text: ADDRESS_ASK.name,
+              input: { kind: "text", maxLength: 253, email: false },
               skippable: true,
             },
           ],
@@ -3009,6 +3048,20 @@ const assistantCatalog = [
       <FixtureThread height="h-[46rem]" messages={POSTED}>
         <ServerButtonUI />
       </FixtureThread>
+    ),
+  },
+  {
+    name: "BuildQuestionsAddress",
+    render: () => (
+      <AnswerBuildQuestionProvider value={answerSlowly}>
+        <OwnerThread
+          height="h-[32rem]"
+          messages={ADDRESS_QUESTIONS}
+          stored="00000000-0000-4000-8000-0000000000a2"
+        >
+          <BuildQuestionsUI />
+        </OwnerThread>
+      </AnswerBuildQuestionProvider>
     ),
   },
   // The question stack and the provider that gives it the app's answer call.

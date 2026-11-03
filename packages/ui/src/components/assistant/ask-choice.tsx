@@ -7,6 +7,11 @@ import {
   TrayNote,
   useTabDraft,
 } from "@workspace/ui/components/assistant/question-tray"
+import {
+  isQuick,
+  ReplyPill,
+  ReplyPills,
+} from "@workspace/ui/components/assistant/reply-pill"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { DoneIcon } from "@workspace/ui/components/status-line"
@@ -36,8 +41,10 @@ import { type FormEvent, useId, useState } from "react"
  * reader know the group. Colour, type and template options show what they
  * are, drawn from the option's own data. A long list shows the call's
  * `initial` few and brings in others on Show others; a colour card's Other is
- * a colour picker. Nothing is sent until the owner presses Submit, except on
+ * a colour picker. Nothing is sent until the owner presses Done, except on
  * a list of exactly two with no Other, where tapping an option is the answer.
+ * Two to four short words with no picture are quick replies above the
+ * composer instead of a card.
  * Once answered or skipped it shows nothing: the owner's reply after it says
  * what they picked.
  */
@@ -47,8 +54,7 @@ const STEP_ASK: Record<AskChoiceInput["step"], string> = {
   industry: "What kind of work do you do?",
   pronouns: "Which pronouns should your assistant use?",
   tone: "How should your assistant sound?",
-  // The message asks the question; the title says what it does not.
-  build_for_me: "You'll see it before it goes live",
+  build_for_me: "Would you like me to build your website?",
   manual_builder: "Would you rather build it yourself?",
   template: "Which layout do you like?",
   palette: "Which colours feel right?",
@@ -375,9 +381,17 @@ function ColourField({
  */
 type Start = { shown?: string[]; other?: string }
 
-/** Two options and nothing else to type: a tap is the answer, with no Submit. */
+/** Two options and nothing else to type: a tap is the answer, with no Done. */
 const oneTapOf = (input: AskChoiceInput) =>
   !input.multiple && !input.other && input.options.length === 2
+
+/** Short words with no picture or line under them: quick replies above the composer. */
+const quickOf = (input: AskChoiceInput) =>
+  !input.multiple &&
+  !input.other &&
+  !input.skippable &&
+  input.options.every((o) => !o.visual && !o.hint) &&
+  isQuick(input.options.map((o) => o.label))
 
 /**
  * The tray's body: the options as a native group, Other and its field. The
@@ -645,6 +659,29 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
     )
   }
   const { input } = view
+
+  if (quickOf(input)) {
+    return (
+      <Docked name="ask-choice">
+        <ReplyPills label={STEP_ASK[input.step]}>
+          {input.options.map((option) => (
+            <ReplyPill
+              key={option.id}
+              onClick={() =>
+                props.addResult({
+                  answer: "chosen",
+                  ids: [option.id],
+                  other: null,
+                })
+              }
+            >
+              {option.label}
+            </ReplyPill>
+          ))}
+        </ReplyPills>
+      </Docked>
+    )
+  }
 
   return (
     <Docked name="ask-choice">
