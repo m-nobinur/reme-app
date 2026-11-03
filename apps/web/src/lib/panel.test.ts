@@ -441,6 +441,53 @@ describe("the first run", () => {
     })
   })
 
+  it("gives the phone's panel button the build's minutes, an answer waiting over them, and nothing idle", () => {
+    const building = [
+      onboarding(9, "done"),
+      {
+        ...segment("website", "now", along(WEBSITE_STEPS, 2), BUSINESS),
+        usual_seconds: 360,
+        late_seconds: 600,
+      },
+    ]
+    expect(firstRun(building)?.badge).toEqual({ kind: "working", minutes: 6 })
+    expect(
+      firstRun(building, { attention: [question("Alex")] })?.badge
+    ).toEqual({ kind: "answer", count: 1 })
+    // Late: the half circle stays, with no minutes to promise.
+    expect(
+      firstRun([
+        onboarding(9, "done"),
+        {
+          ...segment("website", "now", along(WEBSITE_STEPS, 2), BUSINESS),
+          usual_seconds: 60,
+          late_seconds: 90,
+        },
+      ])?.badge
+    ).toEqual({ kind: "working", minutes: null })
+    // Getting to know the business is the chat itself: the plain face.
+    expect(firstRun([onboarding(2, "waiting")])?.badge).toBeNull()
+    expect(panelFor(input({ workspace: live() }))?.badge).toBeNull()
+  })
+
+  it("shows the design tray's logo round as its own row while it draws, then while it waits on a pick", () => {
+    const tray = (logo: ActivitySegment["logo"]) =>
+      firstRun([{ ...onboarding(8, "waiting"), logo }])?.journey.at(-1)
+    expect(tray({ status: "drawing", options: 3 })).toMatchObject({
+      id: "logo",
+      title: "Your logo",
+      line: "Designing 3 options",
+      state: "now",
+      quiet: true,
+    })
+    expect(tray({ status: "ready", options: 3 })).toMatchObject({
+      title: "Your logo",
+      line: "Waiting for your pick",
+      state: "waiting",
+    })
+    expect(tray(undefined)?.id).not.toBe("logo")
+  })
+
   it("puts the review in going live, not in Waiting on you", () => {
     const review = approval("build-first")
     const panel = firstRun(

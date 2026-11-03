@@ -381,10 +381,12 @@ function stepsOf({ kind, steps, build }: SegmentView): SegmentStep[] {
 function Segment({
   segment,
   refresh,
+  fresh,
   children,
 }: {
   segment: SegmentView
   refresh: Refresh
+  fresh: boolean
   children?: ReactNode
 }) {
   const { build } = segment
@@ -395,6 +397,7 @@ function Segment({
       tabIndex={build ? -1 : undefined}
     >
       <PanelSegment
+        fresh={fresh}
         icon={segment.icon}
         line={segment.line}
         quiet={segment.quiet}
@@ -590,6 +593,26 @@ export function useSettling(panel: Panel | null): ReadonlySet<string> {
 }
 
 /**
+ * The work that opened while the panel was on screen: each piece absent from
+ * its first read, which glows once as it appears. None with less motion.
+ */
+export function useArrived(panel: Panel | null): ReadonlySet<string> {
+  const ids = panel
+    ? [...panel.journey, ...panel.now, ...panel.blocked].map((each) => each.id)
+    : []
+  const first = useRef<ReadonlySet<string> | null>(null)
+  if (panel && !first.current) first.current = new Set(ids)
+  const seen = first.current
+  const arrived = seen ? ids.filter((id) => !seen.has(id)) : []
+  return arrived.length &&
+    !matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? new Set(arrived)
+    : NONE
+}
+
+const NONE: ReadonlySet<string> = new Set()
+
+/**
  * What the panel says on the page the owner is on, from reads the frame
  * already holds. Null when there is nothing worth a panel there, or when the
  * workspace could not be read, which the panel says on its own.
@@ -651,6 +674,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const activityTab = useRef<HTMLDivElement>(null)
   useFollowStep(activityTab)
   const settling = useSettling(panel)
+  const arrived = useArrived(panel)
   const stale = failed ? "Couldn't refresh. Trying again in a minute." : null
 
   if (!workspace || !panel) {
@@ -670,7 +694,12 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       : "activity"
 
   const segment = (each: SegmentView) => (
-    <Segment key={each.id} refresh={refresh} segment={each}>
+    <Segment
+      fresh={arrived.has(each.id)}
+      key={each.id}
+      refresh={refresh}
+      segment={each}
+    >
       {/* The first version's review is the going-live segment's first step. */}
       {each.kind === "golive" && panel.review ? (
         <div
@@ -866,6 +895,7 @@ export function WorkspacePanelLine({
     <LiveLine
       {...(panel?.line ?? { tone: "idle", lead: "This panel did not load" })}
       avatar={avatar}
+      badge={panel?.badge ?? null}
     />
   )
 }
