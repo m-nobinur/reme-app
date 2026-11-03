@@ -27,6 +27,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 const USER_ROW = 40
 const REPLY_ROW = 200
+/** Where the owner's message rests: just above the view, the reply's first line at its top. */
+const TOP = -USER_ROW
 
 /** What the model lays out; a test changes it, then runs frames. */
 let layout: {
@@ -499,7 +501,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
-/** The owner sends, the reply streams in and ends: their message at the top. */
+/** The owner sends, the reply streams in and ends: its first line at the top. */
 async function sendAndReply(id: string, reply = `${id}-reply`, height = 260) {
   await setState({
     messages: [
@@ -519,10 +521,10 @@ async function sendAndReply(id: string, reply = `${id}-reply`, height = 260) {
     isRunning: false,
   })
   await frames()
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 }
 
-it("the owner's message stays at the top when the docked tray leaves", async () => {
+it("the reply's first line stays at the top when the docked tray leaves", async () => {
   layout.footer = 421
   await frames()
   await sendAndReply("u1")
@@ -531,10 +533,10 @@ it("the owner's message stays at the top when the docked tray leaves", async () 
   layout.footer = 80
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
-it("the owner's message stays at the top through each step the tray swaps", async () => {
+it("the reply's first line stays at the top through each step the tray swaps", async () => {
   layout.footer = 421
   await frames()
   await sendAndReply("u1")
@@ -544,10 +546,10 @@ it("the owner's message stays at the top through each step the tray swaps", asyn
     await frames()
   }
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
-it("the owner's message stays at the top when the viewport resizes after the reply", async () => {
+it("the reply's first line stays at the top when the viewport resizes after the reply", async () => {
   await sendAndReply("u1")
   const from = painted.length
   // 23:47:24: the viewport 41 px taller, no input, no new message.
@@ -558,10 +560,10 @@ it("the owner's message stays at the top when the viewport resizes after the rep
   vi.stubGlobal("innerHeight", window.innerHeight - 41)
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
-it("the owner's message stays at the top when the tray leaves as they send", async () => {
+it("the reply's first line stays at the top when the tray leaves as they send", async () => {
   layout.footer = 421
   await frames()
   // Pick for me on the persona tray: the turn starts as the tray goes.
@@ -590,7 +592,7 @@ it("the owner's message stays at the top when the tray leaves as they send", asy
   })
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
 it("a card in the slot that fits the held space moves nothing", async () => {
@@ -599,27 +601,27 @@ it("a card in the slot that fits the held space moves nothing", async () => {
   layout.slot = 180
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
-it("the owner's message stays at the top through the history refresh after a turn", async () => {
+it("the reply's first line stays at the top through the history refresh after a turn", async () => {
   await sendAndReply("u1")
   const from = painted.length
   // The rows read back after the turn: the same messages, new objects.
   await setState({ messages: state.messages.map((each) => ({ ...each })) })
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
-it("the owner's message stays at the top when the reply's id changes as the turn ends", async () => {
+it("the reply's first line stays at the top when the reply's id changes as the turn ends", async () => {
   // The placeholder reply gives way to the stored one in the update that ends the run.
   await sendAndReply("u1", "row-7")
   const from = painted.length
   layout.footer = 300
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
 it("a tray docking under a reply that fills the view keeps the reader at its end", async () => {
@@ -635,6 +637,13 @@ it("a tray docking under a reply that fills the view keeps the reader at its end
   expect(
     viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
   ).toBeLessThanOrEqual(1)
+})
+
+it("a tray docking under a reply that fills the view keeps its first line at the top", async () => {
+  await sendAndReply("u1", "u1-reply", 1200)
+  layout.footer = 421
+  await frames()
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
 it("the persona card waits for the words above it to finish typing in", async () => {
@@ -709,7 +718,7 @@ const SENDS = [
   { what: "Skip this one", footer: 124, leavesFirst: false },
 ]
 for (const { what, footer, leavesFirst } of SENDS) {
-  it(`${what} glides the owner's message to the top`, async () => {
+  it(`${what} glides the new turn up until the reply's first line is at the top`, async () => {
     layout.footer = footer
     await frames()
     await sendAndReply("u1")
@@ -730,8 +739,8 @@ for (const { what, footer, leavesFirst } of SENDS) {
     // the composer was, with nothing above it moved, then rises.
     const path = painted.slice(from + (leavesFirst ? 1 : 0))
     const trace = path.join(" ")
-    expect(path[0], trace).toBe(USER_ROW + 260)
-    expect(path.at(-1), trace).toBe(0)
+    expect(path[0], trace).toBe(TOP + USER_ROW + 260)
+    expect(path.at(-1), trace).toBe(TOP)
     expect(
       path.every((top, i) => i === 0 || top <= (path[i - 1] ?? top)),
       trace

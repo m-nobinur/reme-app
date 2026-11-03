@@ -472,8 +472,9 @@ const KeepTurnAnchor: FC = () => {
 }
 
 /**
- * Keeps the owner's message at the top until their next send, and the end of
- * the thread in view. assistant-ui follows the bottom by itself only when the
+ * Keeps the reply's first line at the top until the owner's next send (the
+ * viewport scrolls their own message just out of view), and the end of the
+ * thread in view. assistant-ui follows the bottom by itself only when the
  * viewport is not anchored to a turn.
  *
  * - The space assistant-ui holds below a pinned reply is measured here as
@@ -483,7 +484,8 @@ const KeepTurnAnchor: FC = () => {
  *   assistant-ui measured again a frame later: the owner's message dropped by
  *   the tray's height, and the drop stayed.
  * - A footer that appears or grows (the tray) under a reply that already
- *   fills the view covers its last lines, so a reader at its end stays there.
+ *   fills the view covers its last lines: a reader at its end stays there,
+ *   and one still at its first line stays there too.
  * - The after slot sits in the message group ahead of that space, so a card
  *   landing in it fills the space rather than landing below it.
  * - Between turns, what lands with no turn of the owner's (a message the
@@ -624,6 +626,7 @@ const FollowBottom: FC<{
       const held = hold()
       const shrank = footer.offsetHeight < height
       const grew = footer.offsetHeight > height
+      const growth = footer.offsetHeight - height
       height = footer.offsetHeight
       const next = `${viewport.clientWidth}x${viewport.clientHeight}`
       const resized = next !== size
@@ -643,7 +646,15 @@ const FollowBottom: FC<{
       // A tray growing over that space leaves the message where it is; one
       // docking under a reply that already filled the view keeps the reader
       // at its end.
-      if (grew && !held && pinned) {
+      // Only a reader already at the end: one still at a long reply's first
+      // line stays there, the tray over its last lines.
+      const wasAtEnd =
+        viewport.scrollHeight -
+          growth -
+          viewport.clientHeight -
+          viewport.scrollTop <=
+        1
+      if (grew && !held && pinned && wasAtEnd) {
         viewport.scrollTo({ top: viewport.scrollHeight, behavior: "instant" })
       }
       // assistant-ui reads `isAtBottom` on a scroll, or on a resize that
@@ -725,6 +736,9 @@ const ThreadRoot: FC<{
         }}
       >
         <ThreadPrimitive.Viewport
+          // The owner's message scrolls just out of view, so the reply's
+          // first line sits at the top.
+          topAnchorMessageClamp={{ tallerThan: "0px", visibleHeight: "0px" }}
           turnAnchor="top"
           data-slot="aui_thread-viewport"
           // Clear of the workspace's floating panel, where there is one; the
