@@ -10697,7 +10697,8 @@
               "site.font",
               "site.direction",
               "site.pages",
-              "quote.form"
+              "quote.form",
+              "recap"
             ]
           },
           "skippable": {
