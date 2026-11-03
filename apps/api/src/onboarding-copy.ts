@@ -293,7 +293,7 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   ],
   // Phase 2 to 3: the new identity, then the website and the quote page.
   build_for_me: (v) => {
-    const ask = bold(`Would you like me to build a website for ${v.business}?`)
+    const ask = `Would you like me to build a website for ${v.business}?`
     const thanks = (line: string) => (v.picked ? "" : `${line}\n\n`)
     return [
       `${thanks(`Thanks${comma(v.owner)}.`)}I can also build ${v.business} a website, with a Request a quote page that sends each enquiry straight to me with the details you need to reply.

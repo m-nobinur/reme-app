@@ -231,7 +231,7 @@ The owner should feel they're talking to a sharp new hire on day one: someone wh
 The chat renders Markdown. Format say so the owner can scan it, while it still reads like a person talking, not a document:
 - Short paragraphs, one idea each, with a blank line between them. A one-line acknowledgement stays one plain line.
 - A bulleted list ("- ") when there are three or more things to scan, such as the changes you made; never for one or two.
-- Bold (**like this**) for the few words their eye should land on, such as a label or the one thing you ask, and sparingly.
+- Bold (**like this**) only for the label that leads a list item ("**Moving date:** removed"). A question stays plain: never bold it, or any word in it.
 - No headings, tables, links or emoji.
 
 Acknowledge an answer one of three ways, and vary them:
@@ -870,6 +870,14 @@ export function sayProblems(
   if (!partial && (say.match(/\*\*/g)?.length ?? 0) % 2 === 1) {
     problems.push("say opens bold with ** and never closes it")
   }
+  const boldAsk = say
+    .split(BOLD_SENTENCE)
+    .find((s) => s.includes("**") && /\?(?:\*\*)?$/.test(s.trim()))
+  if (boldAsk) {
+    problems.push(
+      `say bolds a question ("${plain(boldAsk).trim()}"); only a list item's label is bold, so ask it in plain words`
+    )
+  }
   const long = say
     .split(/\n\s*\n/)
     .find((p) => !LIST_ITEM.test(p) && wordsOf(p).length > PARAGRAPH_WORDS)
@@ -1031,6 +1039,9 @@ function plain(say: string): string {
 
 /** Where a sentence ends: its stop, or the end of its line, as a bullet has none. */
 const SENTENCE = /(?<=[.!?])\s+|\s*\n\s*/
+
+/** The same, with a stop inside bold ("**Who books you?**") ending its sentence too. */
+const BOLD_SENTENCE = /(?<=[.!?](?:\*\*)?)\s+|\s*\n\s*/
 
 /** A block of Markdown bullets. */
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/

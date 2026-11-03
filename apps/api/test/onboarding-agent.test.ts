@@ -2688,6 +2688,27 @@ describe("the owner's words in say", () => {
     ).toEqual([])
   })
 
+  it("keeps bold to a list's labels: a question stays plain", () => {
+    for (const say of [
+      "Bristol and 15 miles out.\n\n**Who usually books you?**",
+      "Got that. **Where do you work?** A town and a radius is plenty.",
+      "Who usually books you, **homeowners** or agents?",
+    ]) {
+      expect(sayProblems(say), say).toContainEqual(
+        expect.stringMatching(/^say bolds a question/)
+      )
+    }
+    // Streamed whole sentence by sentence, the start is refused too.
+    expect(sayProblems("**Who usually books you?", {}, true)).toContainEqual(
+      expect.stringMatching(/^say bolds a question/)
+    )
+    expect(
+      sayProblems(
+        "Done:\n\n- **Moving date:** removed\n- **Photos:** now required\n\nAnything else to change?"
+      )
+    ).toEqual([])
+  })
+
   it("names every change made to the quote form or the recap", () => {
     const field = (
       key: string,
