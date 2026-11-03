@@ -181,6 +181,57 @@
     }
   },
   {
+    "id": "openai/gpt-6-luna",
+    "name": "OpenAI: GPT-6 Luna",
+    "api": "openai-completions",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "provider": "openrouter",
+    "reasoning": true,
+    "input": ["image", "text"],
+    "cost": {
+      "input": 0.21,
+      "output": 1.05,
+      "cacheRead": 0.04,
+      "cacheWrite": 0.5,
+      "tiers": [
+        {
+          "inputTokensAbove": 271999,
+          "input": 0.42,
+          "output": 1.575,
+          "cacheRead": 0.042,
+          "cacheWrite": 0.525
+        }
+      ]
+    },
+    "contextWindow": 1050000,
+    "maxTokens": 128000,
+    "compat": {
+      "thinkingFormat": "openrouter",
+      "openRouterRouting": {
+        "max_price": {
+          "prompt": 0.21,
+          "completion": 1.05
+        },
+        "ignore": [
+          "alibaba",
+          "baidu",
+          "deepseek",
+          "minimax",
+          "moonshotai",
+          "nex-agi",
+          "seed",
+          "siliconflow",
+          "stepfun",
+          "streamlake",
+          "tencent",
+          "xiaomi",
+          "z-ai"
+        ],
+        "data_collection": "deny"
+      }
+    }
+  },
+  {
     "id": "openai/gpt-6.1-sol",
     "name": "OpenAI: GPT-6.1 Sol",
     "api": "openai-completions",
