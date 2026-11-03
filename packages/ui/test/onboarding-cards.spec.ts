@@ -306,3 +306,23 @@ test("a choice pill opens its options and hint, and a cut label shows whole on h
     "Anything else we should know before we quote"
   )
 })
+
+test("a finished design tray reads back as chips: the logo, colours, a pair in its own face", async ({
+  page,
+}) => {
+  await open(page, "DesignReply")
+  const bubble = page.locator('[data-slot="aui_user-message-root"]')
+  await expect(bubble.locator("img")).toHaveCount(1)
+  await expect(bubble.getByText("Outfit and Figtree")).toHaveCSS(
+    "font-family",
+    /^"?Outfit"?,/
+  )
+  for (const words of [
+    "Logo",
+    "Text left, photo in an arch",
+    "Photos made for me",
+    "Services, About",
+  ]) {
+    await expect(bubble.getByText(words, { exact: true })).toBeVisible()
+  }
+})

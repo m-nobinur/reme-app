@@ -55,6 +55,7 @@ import {
   ThreadPending,
 } from "@workspace/ui/components/assistant/thread-pending"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
+import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
 import {
   UpdateDeck,
   UpdateKindIcon,
@@ -76,10 +77,14 @@ import {
 } from "@workspace/ui/components/tooltip"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
-import { BROKEN } from "@workspace/ui/lib/tool-state"
+import { BROKEN, designText } from "@workspace/ui/lib/tool-state"
 import { type ReactNode, useState } from "react"
 import { ICON } from "./panel-entries"
-import { INPUT as ASK_DESIGN_INPUT } from "./tray-entries"
+import {
+  INPUT as ASK_DESIGN_INPUT,
+  DESIGN_ANSWERS,
+  TRAY_SERVICES,
+} from "./tray-entries"
 
 /**
  * The chat surface's catalog entries. They live apart from the rest because
@@ -2806,6 +2811,34 @@ const assistantCatalog = [
       </SaveDesignAnswerProvider>
     ),
   })),
+  {
+    // The owner's reply to a finished design tray, as chips.
+    name: "DesignReply",
+    render: () => (
+      <TrayServicesProvider value={TRAY_SERVICES}>
+        <FixtureThread
+          height="h-[22rem]"
+          messages={[
+            {
+              content: [
+                question("Let's choose how your website looks."),
+                {
+                  args: ASK_DESIGN_INPUT,
+                  result: DESIGN_ANSWERS,
+                  toolCallId: "design_done",
+                  toolName: "ask_design",
+                  type: "tool-call" as const,
+                },
+              ],
+              role: "assistant",
+              status: DONE,
+            },
+            reply(designText(ASK_DESIGN_INPUT, DESIGN_ANSWERS)),
+          ]}
+        />
+      </TrayServicesProvider>
+    ),
+  },
   {
     name: "SitePictures",
     render: () => (

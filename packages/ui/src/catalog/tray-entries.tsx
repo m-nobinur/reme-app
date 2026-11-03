@@ -1,6 +1,7 @@
 import {
   type AskChoiceInput,
   type AskDesignInput,
+  type AskDesignOutput,
   type Asset,
   CALM_PALETTES,
   FIXED_PAGES,
@@ -662,4 +663,20 @@ const trayCatalog: CatalogEntry[] = [
   },
 ]
 
-export { trayCatalog }
+/** A finished tray: the logo kept, a preset palette, a pair, a layout, photos made, two pages. */
+const DESIGN_ANSWERS: AskDesignOutput = {
+  answers: {
+    logo: { logo: KEPT },
+    palette: { choice: OFFERED[0]?.id ?? "" },
+    lettering: { choice: PAIRS[0][0] },
+    arrangement: { choice: LAYOUTS[0][0] },
+    photos: { photos: [], create: true },
+    pages: { choices: ["services", "about"] },
+  },
+  skip_all: false,
+}
+
+/** The services the catalog's trays read, with no rounds started. */
+const SERVICES = fakes()
+
+export { DESIGN_ANSWERS, SERVICES as TRAY_SERVICES, trayCatalog }

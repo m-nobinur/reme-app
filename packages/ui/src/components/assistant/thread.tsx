@@ -30,6 +30,8 @@ import {
   XIcon,
 } from "@phosphor-icons/react"
 import {
+  AskDesignInput,
+  AskDesignOutput,
   RECAP_REPLY,
   type ServerButton,
   SKIP_REPLY,
@@ -40,6 +42,7 @@ import {
   waitsToSkip,
 } from "@workspace/ui/components/assistant/ask-open"
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
+import { DesignReply } from "@workspace/ui/components/assistant/design-reply"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
 import {
@@ -74,6 +77,7 @@ import {
 import { formatTime } from "@workspace/ui/lib/format"
 import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
+  designText,
   SESSION_ENDED,
   SKIPPED,
   showsProgress,
@@ -1748,12 +1752,44 @@ const UserText: FC = () => (
 
 const USER_PARTS = { Text: UserText }
 
+/**
+ * The design tray this message is the owner's reply to, when it reads as
+ * that tray's answers: the bubble then draws them as chips.
+ */
+function useDesignReply() {
+  const text = useAuiState((s) => {
+    const [only, ...rest] = s.message.parts
+    return rest.length === 0 && only?.type === "text" ? only.text : null
+  })
+  const card = useAuiState((s) => {
+    const at = s.thread.messages.findIndex((m) => m.id === s.message.id)
+    return [...(s.thread.messages[at - 1]?.parts ?? [])]
+      .reverse()
+      .find(
+        (part) =>
+          part.type === "tool-call" &&
+          part.toolName === "ask_design" &&
+          part.result !== undefined
+      )
+  })
+  if (text === null || card?.type !== "tool-call") return null
+  const input = AskDesignInput.safeParse(card.args)
+  const output = AskDesignOutput.safeParse(card.result)
+  return input.success &&
+    output.success &&
+    !output.data.skip_all &&
+    designText(input.data, output.data) === text
+    ? { input: input.data, output: output.data }
+    : null
+}
+
 const UserMessage: FC = () => {
   // A skipped question's reply is a note in the thread, not words the owner said.
   const skipped = useAuiState((s) => {
     const [only, ...rest] = s.message.parts
     return rest.length === 0 && only?.type === "text" && only.text === SKIPPED
   })
+  const design = useDesignReply()
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
@@ -1764,10 +1800,15 @@ const UserMessage: FC = () => {
         <div
           className={cn(
             "aui-user-message-content wrap-break-word relative rounded-3xl bg-muted px-4 py-2.5 text-chat empty:hidden sm:px-5 sm:py-3",
-            skipped ? "text-muted-foreground" : "text-chat-foreground"
+            skipped ? "text-muted-foreground" : "text-chat-foreground",
+            design && "p-2 sm:p-2"
           )}
         >
-          <MessagePrimitive.Parts components={USER_PARTS} />
+          {design ? (
+            <DesignReply {...design} />
+          ) : (
+            <MessagePrimitive.Parts components={USER_PARTS} />
+          )}
         </div>
         <span
           data-slot="aui_user-message-meta"
