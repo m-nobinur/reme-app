@@ -77,3 +77,33 @@ export function useTabBadge(face: string | undefined, badge: TabBadge) {
     }
   }, [face, badge])
 }
+
+/** What a background tab says while something waits on the owner. */
+export const waitingTitle = (assistant: string | null) =>
+  `${assistant || "Reme"} needs your answer · Reme`
+
+/**
+ * While something waits on the owner, a hidden tab's title says so in the
+ * assistant's name; the page's own title is back the moment the tab shows.
+ */
+export function useTabTitle(assistant: string | null, badge: TabBadge) {
+  useEffect(() => {
+    if (badge !== "waiting") return
+    let own: string | null = null
+    const sync = () => {
+      if (document.hidden) {
+        own ??= document.title
+        document.title = waitingTitle(assistant)
+      } else if (own !== null) {
+        document.title = own
+        own = null
+      }
+    }
+    sync()
+    document.addEventListener("visibilitychange", sync)
+    return () => {
+      document.removeEventListener("visibilitychange", sync)
+      if (own !== null) document.title = own
+    }
+  }, [assistant, badge])
+}
