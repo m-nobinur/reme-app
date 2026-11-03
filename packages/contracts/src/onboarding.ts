@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { Timestamp, Uuid } from "./common.ts"
+import colours from "./logo-colours.json" with { type: "json" }
 import palettes from "./palettes.json" with { type: "json" }
 import { Text } from "./text.ts"
 
@@ -470,6 +471,21 @@ export const LOGO_STYLES = [
 ] as const
 export const LogoStyle = z.enum(LOGO_STYLES)
 
+const COLOUR_NAMES = Object.entries(colours.names)
+
+/**
+ * The nearest plain name for a `#rrggbb`, by distance in RGB. The logo
+ * maker's prompt and the tray's status line name colours the same way.
+ */
+export function colourName(hex: string): string {
+  const rgb = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16))
+  const distance = (channels: number[]) =>
+    channels.reduce((sum, c, i) => sum + (c - (rgb[i] as number)) ** 2, 0)
+  return COLOUR_NAMES.reduce((best, each) =>
+    distance(each[1]) < distance(best[1]) ? each : best
+  )[0]
+}
+
 /** What the owner asks the logo maker for. */
 export const LogoBrief = z.strictObject({
   /** How they want it to look, in their words; may be empty. */
@@ -482,6 +498,62 @@ export const LogoBrief = z.strictObject({
 
 /** The variants one round draws. */
 export const LOGO_VARIANTS = 3
+
+/**
+ * Seconds from asking for a round to seeing it, which the tray says while
+ * it waits. Drawing took 25 s at the median and 29 s at p95 over ten
+ * rounds (eight local on 2026-11-04, two on staging); the queue's batch
+ * wait adds up to 5 s and the tray's poll up to 2.5 s.
+ */
+export const LOGO_ROUND_SECONDS = 30
+
+/** One logo type drawn in one style. */
+export const LogoDirection = z.strictObject({
+  type: LogoType,
+  style: LogoStyle,
+})
+
+/**
+ * Where a business's logo starts, chosen for it before the tray opens
+ * (`design-start.ts`): three directions of different types, the first round
+ * drawing one design in each, and the look in the owner's own words. The
+ * tray shows each part as a suggestion, and every part stays editable.
+ */
+export const LogoSuggestion = z.strictObject({
+  directions: z
+    .array(LogoDirection)
+    .length(LOGO_VARIANTS)
+    .refine((each) => new Set(each.map((d) => d.type)).size === each.length, {
+      message: "each direction is its own type",
+    }),
+  description: Text(120).or(z.literal("")),
+})
+
+/** What a redesign chip changes: a detail inside the design, its style, its type or its colours. */
+export const LOGO_CHIP_KINDS = ["detail", "style", "type", "colour"] as const
+
+/**
+ * A redesign idea for one drawn design. `change` is added to the owner's
+ * "What should change?" words; `set` changes brief options too, never to the
+ * design's own, with colours only from sets the api works out from the
+ * brand colour, the owner's photos or their logo. A design has at most one
+ * chip of each kind.
+ */
+export const LogoChip = z.strictObject({
+  kind: z.enum(LOGO_CHIP_KINDS),
+  /** At most three plain words, such as "Bigger leaf". */
+  label: Text(30).refine((label) => label.split(/\s+/).length <= 3, {
+    message: "at most three words",
+  }),
+  change: Text(80),
+  set: z
+    .strictObject({
+      type: LogoType.optional(),
+      style: LogoStyle.optional(),
+      colors: z.array(HexColour).min(1).max(5).optional(),
+    })
+    .optional(),
+})
 /** The most rounds one logo question may draw: a first draft and changes. */
 export const LOGO_ROUNDS_MAX = 10
 /**
@@ -500,12 +572,22 @@ export const LOGO_ROUND_WAITS = [0, 0, 60, 300, 600, 3600, 86_400] as const
  * answers 202 with the round as it starts; the drawing runs on after the
  * response, so a reload loses nothing.
  */
-export const DrawLogosRequest = z.strictObject({
-  tool_call_id: Text(80),
-  brief: LogoBrief,
-  changes: Text(300).optional(),
-  base: Uuid.optional(),
-})
+export const DrawLogosRequest = z
+  .strictObject({
+    tool_call_id: Text(80),
+    brief: LogoBrief,
+    changes: Text(300).optional(),
+    base: Uuid.optional(),
+    /**
+     * One design per direction, in place of the brief's type and style: the
+     * first round, from the tray's suggestion.
+     */
+    directions: LogoSuggestion.shape.directions.optional(),
+  })
+  .refine((request) => !(request.directions && request.base), {
+    path: ["directions"],
+    message: "directions draw a fresh round, never changes to one design",
+  })
 
 /**
  * One round of logos. Each variant's picture is `GET /photos/{id}`, a PNG
@@ -516,7 +598,26 @@ export const DrawLogosRequest = z.strictObject({
 export const LogoRound = z.strictObject({
   round: z.int().min(1).max(LOGO_ROUNDS_MAX),
   status: z.enum(["drawing", "ready", "failed"]),
-  variants: z.array(z.strictObject({ id: Uuid })).max(LOGO_VARIANTS),
+  /** When it started, so the tray can say how long is left. */
+  started_at: Timestamp,
+  variants: z
+    .array(
+      z.strictObject({
+        id: Uuid,
+        /** The type and style this design was drawn in. */
+        direction: LogoDirection,
+        /** Redesign ideas read from the picture, once ready; absent until then, or when none could be read. */
+        chips: z
+          .array(LogoChip)
+          .max(LOGO_CHIP_KINDS.length)
+          .refine(
+            (chips) => new Set(chips.map((c) => c.kind)).size === chips.length,
+            { message: "one chip of each kind" }
+          )
+          .optional(),
+      })
+    )
+    .max(LOGO_VARIANTS),
   /** What the round was drawn from, so the tray can tell when the owner has changed it since. */
   brief: LogoBrief,
 })
@@ -659,6 +760,9 @@ export type LogoPalettes = z.infer<typeof LogoPalettes>
 export type LogoType = z.infer<typeof LogoType>
 export type LogoStyle = z.infer<typeof LogoStyle>
 export type LogoBrief = z.infer<typeof LogoBrief>
+export type LogoDirection = z.infer<typeof LogoDirection>
+export type LogoSuggestion = z.infer<typeof LogoSuggestion>
+export type LogoChip = z.infer<typeof LogoChip>
 export type DrawLogosRequest = z.infer<typeof DrawLogosRequest>
 export type LogoRound = z.infer<typeof LogoRound>
 export type LogoRounds = z.infer<typeof LogoRounds>

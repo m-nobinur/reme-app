@@ -1,5 +1,6 @@
 import {
   type Asset,
+  colourName,
   ErrorEnvelope,
   FactList,
   KeptLogo,
@@ -30,6 +31,7 @@ import {
   settleSpend,
   withinCap,
 } from "../src/cos/turns.ts"
+import { JEV } from "../src/jev.ts"
 import {
   DRAW_DEADLINE_MS,
   DRAW_RESERVE_USD,
@@ -48,7 +50,6 @@ import {
 import { logoReference } from "../src/logo-references.ts"
 import {
   changesPrompt,
-  colourName,
   initialsOf,
   LOGO_STYLE_WORDS,
   logoPrompt,
@@ -336,7 +337,9 @@ function images(
     /** The attached picture's url, when there is one. */
     url?: string
   }[] = []
-  vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+  vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+    // The chips' reading is its own test: here it fails, as Jev may.
+    if (url === JEV.url) return new Response("{}", { status: 503 })
     const body = JSON.parse(String(init.body))
     asked.push({
       model: body.model,
@@ -546,6 +549,48 @@ describe("drawing a round in the queue", () => {
     expect((await read()).status).toBe("failed")
   })
 
+  it("draws a round of directions each in its own type and style, and keeps the chips Jev reads for each", async () => {
+    const directions = [
+      { type: "lockup", style: "hand_drawn" },
+      { type: "icon", style: "geometric" },
+      { type: "emblem", style: "retro" },
+    ] as const
+    const { env, read } = await setup({
+      types: directions.map((d) => d.type),
+      styles: directions.map((d) => d.style),
+      suggested: directions,
+    })
+    const prompts: string[] = []
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      if (url === JEV.url) {
+        return Response.json({ answers: { finer: { noul: 0.9 } } })
+      }
+      prompts.push(JSON.parse(String(init.body)).prompt)
+      return Response.json({
+        data: [{ b64_json: btoa(String.fromCharCode(...PNG)) }],
+        usage: { cost: 0.01 },
+      })
+    })
+    await drawRound(env, ledger().kit, job, { director: null })
+    const view = LogoRound.parse(roundView(await read()))
+    expect(view.status).toBe("ready")
+    expect(view.variants.map((v) => v.direction)).toEqual(directions)
+    expect(prompts.some((p) => p.includes("an emblem / badge"))).toBe(true)
+    expect(prompts.some((p) => p.includes("an icon-only symbol"))).toBe(true)
+    for (const variant of view.variants) {
+      expect(variant.chips?.[0]).toMatchObject({
+        kind: "detail",
+        label: "Finer lines",
+      })
+      // The icon's style chip comes from the business's other directions.
+      if (variant.direction.type === "icon") {
+        expect(
+          variant.chips?.find((c) => c.kind === "style")?.set?.style
+        ).toMatch(/hand_drawn|retro/)
+      }
+    }
+  })
+
   it("counts the director's call at its billed cost", async () => {
     const { env } = await setup()
     images()
@@ -605,7 +650,13 @@ describe("a round as the owner sees it", () => {
       LogoRound.parse({
         round: 1,
         status: "ready",
-        variants: [{ id: empty.planned[0] }],
+        started_at: empty.started_at,
+        variants: [
+          {
+            id: empty.planned[0],
+            direction: { type: "lockup", style: "minimal" },
+          },
+        ],
         brief,
       })
     )

@@ -111,6 +111,7 @@ import {
   withinCap,
   writeAsTurn,
 } from "./cos/turns.ts"
+import { decideDesignStart, readDesignStart } from "./design-start.ts"
 import { isOrgOwner } from "./domain-buy.ts"
 import {
   failure,
@@ -572,11 +573,12 @@ async function onboardingOf(
   const progress = await readScript(db, id)
   if (scriptEnded(progress)) return null
   // Issued together, so postgres.js pipelines them on the one connection.
-  const [facts, [org], asked, prepared] = await Promise.all([
+  const [facts, [org], asked, prepared, designStart] = await Promise.all([
     readFacts(db),
     db.select({ name: orgs.name }).from(orgs).limit(1),
     askedOf(db, id),
     readPrepared(db, id),
+    readDesignStart(db, id),
   ])
   return {
     ...progress,
@@ -587,6 +589,7 @@ async function onboardingOf(
     ownerEmail: owner.session.email,
     asked,
     prepared,
+    designStart,
   }
 }
 
@@ -983,11 +986,14 @@ export async function chat(
       zoneFromArea(env, kit, owner.orgId, stored.area).catch(() => undefined)
     )
   }
-  // After an onboarding turn commits, the background copy call, which runs
-  // once per conversation and only once the business is known.
+  // After an onboarding turn commits, the background copy call and the
+  // design's start, each once per conversation and once the business is known.
   const prepareLater = (response: Response) => {
     if (onboardingTurn && response.ok && preparer && planPrice) {
       waitUntil(prepare(kit, owner.orgId, id, preparer, plannerId, planPrice))
+    }
+    if (onboardingTurn && response.ok && env.OPENROUTER_API_KEY) {
+      waitUntil(decideDesignStart(kit, owner.orgId, id, env.OPENROUTER_API_KEY))
     }
     return response
   }

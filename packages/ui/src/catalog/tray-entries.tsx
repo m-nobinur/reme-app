@@ -5,8 +5,10 @@ import {
   type Asset,
   CALM_PALETTES,
   FIXED_PAGES,
+  FONT_PAIRS,
   LOGO_VARIANTS,
   type LogoBrief,
+  type LogoChip,
   type LogoRound,
   PAGES,
   PALETTES,
@@ -60,26 +62,65 @@ const LOGOS = [
     `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 96">${drawing}</svg>`)}`
 )
 
+/** The three directions chosen for a cleaning business, one design each in a first round. */
+const DIRECTIONS = [
+  { type: "lockup", style: "minimal" },
+  { type: "emblem", style: "retro" },
+  { type: "icon", style: "geometric" },
+] as const
+
+/** The first design's own ideas for a redesign, as Jev reads them from its picture. */
+const IDEAS: LogoChip[] = [
+  {
+    kind: "detail",
+    label: "Name on one line",
+    change: "the whole name on one line",
+  },
+  {
+    kind: "style",
+    label: "Old-school feel",
+    change: "an old-school, heritage feel",
+    set: { style: "retro" },
+  },
+  {
+    kind: "type",
+    label: "Badge shape",
+    change: "the name inside a badge",
+    set: { type: "emblem" },
+  },
+  {
+    kind: "colour",
+    label: "Darker teal",
+    change: "a darker teal",
+    set: { colors: [ink.toLowerCase()] },
+  },
+]
+
 const variant = (at: number) => ({
   id: `00000000-0000-4000-8000-00000000000${at}`,
+  direction: DIRECTIONS[at % DIRECTIONS.length] ?? DIRECTIONS[0],
+  ...(at === 0 ? { chips: IDEAS } : {}),
 })
+/** When a round started: long enough ago that a ready one is done. */
+const STARTED = "2026-11-04T09:00:00Z"
 /** A brief set to the colours of the made-up logos, and what the api holds for it. */
 const PICKED = {
-  description: "",
+  description: "A mop and bucket, clean and friendly",
   colours: { custom: [primary, ink] },
-  type: "emblem" as const,
-  style: "hand_drawn" as const,
+  type: "lockup" as const,
+  style: "minimal" as const,
 }
 const DRAWN: LogoBrief = {
-  description: "",
+  description: "A mop and bucket, clean and friendly",
   colors: [primary.toLowerCase(), ink.toLowerCase()],
-  type: "emblem",
-  style: "hand_drawn",
+  type: "lockup",
+  style: "minimal",
 }
 const ROUND: LogoRound = {
   round: 1,
   status: "ready",
-  variants: [0, 1, 2, 3].map(variant),
+  started_at: STARTED,
+  variants: [0, 1, 2].map(variant),
   brief: DRAWN,
 }
 const KEPT: Asset = {
@@ -116,6 +157,7 @@ const fakes = (
       const round: LogoRound = {
         round: rounds.length + 1,
         status: "drawing",
+        started_at: new Date().toISOString(),
         variants: [],
         brief,
       }
@@ -163,9 +205,6 @@ const refused = {
 
 /** A brief filled in up to each section; the rest unset, as the owner cleared it. */
 const UNSET = { colours: null, type: null, style: null }
-const COLOURED = { ...UNSET, colours: { palette: 0 } }
-const TYPED = { ...COLOURED, type: "emblem" } as const
-const STYLED = { ...TYPED, style: "hand_drawn" } as const
 
 const card = (
   step: AskChoiceInput["step"],
@@ -181,17 +220,18 @@ const card = (
   ...extra,
 })
 
+/** The four pairs fitted to a cleaning business, one a mood, then the other four. */
+const SUGGESTED_PAIR = "outfit_figtree"
+const FITTED = [
+  SUGGESTED_PAIR,
+  "fraunces_figtree",
+  "newsreader_inter",
+  "syne_jakarta",
+]
 const PAIRS = [
-  ["outfit_figtree", "Outfit and Figtree", "Outfit", "Figtree"],
-  ["sora_manrope", "Sora and Manrope", "Sora", "Manrope"],
-  [
-    "instrument_worksans",
-    "Bodoni Moda and Work Sans",
-    "Bodoni Moda",
-    "Work Sans",
-  ],
-  ["syne_jakarta", "Syne and Plus Jakarta Sans", "Syne", "Plus Jakarta Sans"],
-] as const
+  ...FITTED.flatMap((id) => FONT_PAIRS.filter((pair) => pair.id === id)),
+  ...FONT_PAIRS.filter((pair) => !FITTED.includes(pair.id)),
+]
 
 const LAYOUTS = [
   ["arch_cards", "Arch and photo cards", "split_arch", "photo_cards"],
@@ -230,6 +270,10 @@ export const INPUT: AskDesignInput = {
         max_bytes: UPLOAD_MAX_BYTES,
         skippable: false,
       },
+      start: {
+        directions: [...DIRECTIONS],
+        description: "A mop and bucket, clean and friendly",
+      },
     },
     {
       id: "palette",
@@ -252,14 +296,19 @@ export const INPUT: AskDesignInput = {
       visual: "font_pair",
       card: card(
         "font",
-        PAIRS.map(([id, label, display, body]) => ({
+        PAIRS.map(({ id, label, display, body }) => ({
           id,
           label,
           hint: null,
-          visual: { kind: "font_pair", display, body },
+          visual: {
+            kind: "font_pair",
+            display: display.family,
+            body: body.family,
+          },
         })),
-        { skippable: true }
+        { skippable: true, initial: FITTED, preselected: [SUGGESTED_PAIR] }
       ),
+      suggested: SUGGESTED_PAIR,
     },
     {
       id: "arrangement",
@@ -320,15 +369,6 @@ export const INPUT: AskDesignInput = {
   ],
 }
 
-/** The tray as the api opens it with no logo held: create ticked, so a round draws as it opens. */
-const create: AskDesignInput = {
-  questions: INPUT.questions.map((each) =>
-    each.visual === "logo"
-      ? { ...each, card: { ...each.card, preselected: ["create"] } }
-      : each
-  ),
-}
-
 /** The logo's two pages, whether they have one and then its designs or upload. */
 const LOGO = 0
 const DESIGNS = 1
@@ -353,7 +393,7 @@ type State = {
 
 const STATES: State[] = [
   // No start: designs draw behind the question; No shows them, the first picked.
-  { title: "Logo, nothing chosen", input: create },
+  { title: "Logo, nothing chosen" },
   {
     title: "Logo, back on the question, No picked",
     start: { index: LOGO, logo: { path: "create", brief: PICKED } },
@@ -369,46 +409,29 @@ const STATES: State[] = [
     },
   },
   {
-    title: "Logo, no logo: the first design picked",
+    title: "Logo, drawing, nothing yet",
     start: { logo: { path: "create", brief: PICKED } },
-    rounds: [ROUND],
-  },
-  {
-    title: "Logo, create: how it should look and colours",
-    start: { logo: { path: "create", brief: UNSET } },
-  },
-  {
-    title: "Logo, create: own colours",
-    start: {
-      logo: {
-        path: "create",
-        brief: { ...UNSET, colours: { custom: [primary] } },
+    rounds: [
+      {
+        round: 1,
+        status: "drawing",
+        started_at: new Date().toISOString(),
+        variants: [],
+        brief: DRAWN,
       },
-    },
-  },
-  {
-    title: "Logo, create: colours picked, logo type next",
-    start: { logo: { path: "create", brief: COLOURED } },
-  },
-  {
-    title: "Logo, create: type picked, style next",
-    start: { logo: { path: "create", brief: TYPED } },
-  },
-  {
-    title: "Logo, create: ready to design",
-    start: { logo: { path: "create", brief: STYLED } },
-  },
-  {
-    title: "Logo, create: surprise me picked",
-    start: {
-      logo: { path: "create", brief: { ...TYPED, style: "surprise" } },
-    },
+    ],
   },
   {
     title: "Logo, drawing",
     start: { logo: { path: "create", brief: PICKED } },
     rounds: [
-      { round: 1, status: "drawing", variants: [variant(0)], brief: DRAWN },
+      {
+        round: 1,
+        status: "drawing",
+        started_at: new Date(Date.now() - 20_000).toISOString(),
+        variants: [variant(0)],
+        brief: DRAWN,
+      },
     ],
   },
   {
@@ -421,13 +444,53 @@ const STATES: State[] = [
     rounds: [ROUND],
   },
   {
-    title: "Logo, a setting changed: Redesign my logo",
+    title: "Logo, its ideas late: the fixed ones",
+    start: {
+      index: DESIGNS,
+      answers: { logo: { logo: { ...KEPT, id: variant(1).id } } },
+      logo: { path: "create", brief: { ...PICKED, ...DIRECTIONS[1] } },
+    },
+    rounds: [ROUND],
+  },
+  {
+    title: "Logo, an idea picked: Redesign my logo",
     start: {
       index: DESIGNS,
       answers: { logo: { logo: KEPT } },
-      logo: { path: "create", brief: { ...PICKED, style: "retro" } },
+      logo: {
+        path: "create",
+        brief: {
+          ...PICKED,
+          style: "retro",
+          changes: "an old-school, heritage feel",
+        },
+        editing: true,
+      },
     },
     rounds: [ROUND],
+  },
+  {
+    title: "Logo, before a round: the brief to fill in",
+    start: { logo: { path: "create", brief: UNSET } },
+  },
+  {
+    title: "Logo, before a round: own colours",
+    start: {
+      logo: {
+        path: "create",
+        brief: { ...UNSET, colours: { custom: [primary] } },
+      },
+    },
+  },
+  {
+    title: "Logo, the brief open: surprise me picked",
+    start: {
+      logo: {
+        path: "create",
+        brief: { ...PICKED, style: "surprise" },
+        editing: true,
+      },
+    },
   },
   {
     title: "Logo, a setting changed while the next round waits",
@@ -450,7 +513,16 @@ const STATES: State[] = [
   {
     title: "Logo, a second round failed",
     start: { logo: { path: "create", brief: PICKED } },
-    rounds: [ROUND, { round: 2, status: "failed", variants: [], brief: DRAWN }],
+    rounds: [
+      ROUND,
+      {
+        round: 2,
+        status: "failed",
+        started_at: STARTED,
+        variants: [],
+        brief: DRAWN,
+      },
+    ],
   },
   { title: "Palette, nothing picked", start: { index: PALETTE } },
   {
@@ -546,18 +618,22 @@ const STATES: State[] = [
   { title: "Collapsed", start: { index: LETTERING, collapsed: true } },
   { title: "Phone width, logo", width: PHONE },
   {
-    title: "Phone width, logo type",
-    start: { logo: { path: "create", brief: COLOURED } },
-    width: PHONE,
-  },
-  {
-    title: "Phone width, logo style",
-    start: { logo: { path: "create", brief: STYLED } },
+    title: "Phone width, the brief open",
+    start: {
+      index: DESIGNS,
+      answers: { logo: { logo: KEPT } },
+      logo: { path: "create", brief: PICKED, editing: true },
+    },
+    rounds: [ROUND],
     width: PHONE,
   },
   {
     title: "Phone width, logo designs",
-    start: { index: DESIGNS, logo: { path: "create", brief: PICKED } },
+    start: {
+      index: DESIGNS,
+      answers: { logo: { logo: KEPT } },
+      logo: { path: "create", brief: PICKED },
+    },
     rounds: [ROUND],
     width: PHONE,
   },
@@ -652,6 +728,19 @@ const trayCatalog: CatalogEntry[] = [
     })
   ),
   {
+    // The tag on what was chosen for the business: a lettering, a logo type and style.
+    name: "Suggested",
+    render: () => (
+      <States
+        name="Suggested"
+        states={only(
+          "Lettering, may be skipped",
+          "Logo, the brief open: surprise me picked"
+        )}
+      />
+    ),
+  },
+  {
     // Only there while a tray is folded, as the waiting line and the panel show it.
     name: "ShowFoldedQuestion",
     render: () => (
@@ -668,7 +757,7 @@ const DESIGN_ANSWERS: AskDesignOutput = {
   answers: {
     logo: { logo: KEPT },
     palette: { choice: OFFERED[0]?.id ?? "" },
-    lettering: { choice: PAIRS[0][0] },
+    lettering: { choice: SUGGESTED_PAIR },
     arrangement: { choice: LAYOUTS[0][0] },
     photos: { photos: [], create: true },
     pages: { choices: ["services", "about"] },

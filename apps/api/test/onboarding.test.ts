@@ -18,6 +18,7 @@ import {
 import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it } from "vitest"
 import type { ToolPart } from "../src/chat.ts"
+import { tableStart } from "../src/design-start.ts"
 import {
   addressOffer,
   again,
@@ -1857,9 +1858,12 @@ describe("the design tray", () => {
       for (const id of ids(input, "arrangement")) {
         expect(fit.map((d) => d.id)).toContain(id)
       }
-      for (const id of ids(input, "lettering")) {
-        expect(fit.map((d) => d.fonts)).toContain(id)
-      }
+      // Lettering: the industry's four fitted pairs first, then all eight.
+      const lettering = input.questions.find((q) => q.id === "lettering")
+      expect(lettering?.card.initial).toEqual(
+        tableStart(category as never).fonts
+      )
+      expect(ids(input, "lettering")).toHaveLength(FONT_PAIRS.length)
       // Every palette is offered; calm ones lead, four shown.
       const palette = input.questions.find((q) => q.id === "palette")?.card
       expect(palette?.initial).toHaveLength(4)
@@ -1910,10 +1914,43 @@ describe("the design tray", () => {
     }
   })
 
-  it("seeds by org: the same lettering on every call, other orgs others", () => {
-    const first = (org: string) => ids(tray({ orgId: org }), "lettering").join()
-    expect(first(ORG)).toBe(first(ORG))
-    expect(new Set(ORGS.map(first)).size).toBeGreaterThan(1)
+  it("opens on the start chosen for the business, its look in the owner's words", () => {
+    const designStart = {
+      directions: [
+        { type: "emblem", style: "retro" },
+        { type: "lockup", style: "hand_drawn" },
+        { type: "icon", style: "geometric" },
+      ],
+      fonts: [
+        "syne_jakarta",
+        "newsreader_inter",
+        "dmsans_fraunces",
+        "outfit_figtree",
+      ],
+    } as const
+    const input = tray({
+      designStart: {
+        directions: [...designStart.directions],
+        fonts: [...designStart.fonts],
+      },
+      prepared: {
+        services_phrase: "your tree work",
+        logo_look: "a neatly pruned tree",
+      },
+    })
+    expect(input.questions[0]?.start).toEqual({
+      directions: designStart.directions,
+      description: "a neatly pruned tree",
+    })
+    const lettering = input.questions.find((q) => q.id === "lettering")
+    expect(lettering?.card.initial).toEqual(designStart.fonts)
+    expect(lettering?.suggested).toBe("syne_jakarta")
+    expect(lettering?.card.preselected).toEqual(["syne_jakarta"])
+    // Without one stored, the industry's table, and no look.
+    expect(tray().questions[0]?.start).toEqual({
+      directions: tableStart("cleaning").directions,
+      description: "",
+    })
   })
 
   it("opens ticked where the org already answered", () => {
@@ -1929,8 +1966,9 @@ describe("the design tray", () => {
     expect(input.questions[2]?.card.preselected).toEqual(
       ids(input, "lettering").slice(0, 1)
     )
-    // With no logo or photos held, both open on making them.
-    expect(input.questions[0]?.card.preselected).toEqual(["create"])
+    // The logo's two ways are quick answers, neither picked; photos with
+    // none held open on making them.
+    expect(input.questions[0]?.card.preselected).toEqual([])
     expect(input.questions[4]?.card.preselected).toEqual(["create"])
   })
 
@@ -2043,17 +2081,16 @@ describe("the design tray", () => {
     })
   })
 
-  it("never offers two letterings with the same title font", () => {
-    for (let n = 0; n < 20; n++) {
-      const orgId = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`
-      const offered = tray({ orgId })
-        .questions.find((q) => q.id === "lettering")
-        ?.card.options.map((o) => o.id)
-        .filter((id) => id !== "custom")
-      const families = offered?.map(
-        (id) => FONT_PAIRS.find((pair) => pair.id === id)?.display.family
-      )
-      expect(new Set(families).size).toBe(families?.length)
+  it("shows four letterings first from four moods, never two title fonts alike", () => {
+    for (const category of [...INDUSTRIES.map((i) => i.id), null]) {
+      const shown =
+        tray({ facts: heldBefore(category) }).questions.find(
+          (q) => q.id === "lettering"
+        )?.card.initial ?? []
+      const pairs = shown.map((id) => FONT_PAIRS.find((p) => p.id === id))
+      expect(shown).toHaveLength(4)
+      expect(new Set(pairs.map((p) => p?.mood)).size).toBe(4)
+      expect(new Set(pairs.map((p) => p?.display.family)).size).toBe(4)
     }
   })
 

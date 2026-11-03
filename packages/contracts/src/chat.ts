@@ -7,6 +7,7 @@ import {
   Asset,
   AvatarId,
   HexColour,
+  LogoSuggestion,
   PaletteFromImage,
   PronounId,
   QuoteFields,
@@ -363,6 +364,10 @@ export const AskDesignInput = z.strictObject({
          * is only the default.
          */
         path: LogoPath.optional(),
+        /** Where a logo question's designs start, chosen for this business. */
+        start: LogoSuggestion.optional(),
+        /** The option chosen for this business on a choice question, which the tray tags. */
+        suggested: Text(40).optional(),
       })
     )
     .min(1)
@@ -383,6 +388,20 @@ export const AskDesignInput = z.strictObject({
       (questions) =>
         questions.every((q) => q.path === undefined || q.visual === "logo"),
       { message: "path belongs to a logo question" }
+    )
+    .refine(
+      (questions) =>
+        questions.every((q) => q.start === undefined || q.visual === "logo"),
+      { message: "start belongs to a logo question" }
+    )
+    .refine(
+      (questions) =>
+        questions.every(
+          (q) =>
+            q.suggested === undefined ||
+            q.card.options.some((option) => option.id === q.suggested)
+        ),
+      { message: "suggested names an offered option" }
     ),
 })
 
