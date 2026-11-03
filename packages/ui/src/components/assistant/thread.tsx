@@ -49,7 +49,12 @@ import {
   ReasoningGroup as DefaultReasoningGroup,
   Reasoning,
 } from "@workspace/ui/components/assistant/reasoning"
-import { ReplyPill } from "@workspace/ui/components/assistant/reply-pill"
+import {
+  pillsIn,
+  ReplyPill,
+  ReplyPills,
+  useWordsIn,
+} from "@workspace/ui/components/assistant/reply-pill"
 import { ThreadHistorySkeleton } from "@workspace/ui/components/assistant/thread-pending"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { ToolGroup as DefaultToolGroup } from "@workspace/ui/components/assistant/tool-group"
@@ -1064,11 +1069,19 @@ const SkipThisOne: FC = () => {
     (s) => !s.thread.isRunning && waitsToSkip(s.thread.messages.at(-1)?.parts)
   )
   if (!waiting || !sendable) return null
+  return <SkipPill onSkip={() => aui.thread().append(SKIP_REPLY)} />
+}
+
+/** Fades in with the words above it, and leaves the focus where it is: the answer is typed. */
+const SkipPill: FC<{ onSkip: () => void }> = ({ onSkip }) => {
+  const ref = useRef<HTMLButtonElement>(null)
+  const words = useWordsIn(ref)
   return (
     <ReplyPill
-      className="self-start"
+      className={cn("self-start", pillsIn(words))}
       data-slot="skip-this-one"
-      onClick={() => aui.thread().append(SKIP_REPLY)}
+      onClick={onSkip}
+      ref={ref}
     >
       {SKIP_REPLY}
     </ReplyPill>
@@ -1089,7 +1102,7 @@ const RecapReplies: FC = () => {
   )
   if (!waiting || !sendable) return null
   return (
-    <div className="flex flex-wrap gap-2" data-slot="recap-replies">
+    <ReplyPills label="Have I got that right?">
       <ReplyPill onClick={() => aui.thread().append(RECAP_REPLY)}>
         {RECAP_REPLY}
       </ReplyPill>
@@ -1104,7 +1117,7 @@ const RecapReplies: FC = () => {
       >
         Change something
       </ReplyPill>
-    </div>
+    </ReplyPills>
   )
 }
 

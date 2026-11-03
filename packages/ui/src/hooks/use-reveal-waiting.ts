@@ -40,12 +40,7 @@ export function useFocusWhenIdle(
   useEffect(() => {
     if (running || !waiting) return
     const timer = setTimeout(() => {
-      const held = document.activeElement
-      const idle =
-        !held ||
-        held === document.body ||
-        (held instanceof HTMLTextAreaElement && held.value === "")
-      if (idle) {
+      if (composerIdle()) {
         card.current
           ?.querySelector<HTMLElement>("input")
           ?.focus({ preventScroll: true })
@@ -53,4 +48,14 @@ export function useFocusWhenIdle(
     })
     return () => clearTimeout(timer)
   }, [running, waiting, card])
+}
+
+/** Focus is nowhere, or in an empty composer: the owner is not typing. */
+export function composerIdle(): boolean {
+  const held = document.activeElement
+  return (
+    !held ||
+    held === document.body ||
+    (held instanceof HTMLTextAreaElement && held.value === "")
+  )
 }
