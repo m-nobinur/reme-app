@@ -270,6 +270,7 @@ const BUSINESS_STEPS = [
   "proof",
   "quote_form",
   "contact",
+  "recap",
 ]
 
 /**
@@ -360,11 +361,8 @@ const ONBOARDING_STEPS = (last: "now" | "waiting" | "done") => [
   stepAt("customers", "skipped"),
   stepAt("proof", "done", { value: "Insured, ten years local" }),
   stepAt("quote_form", "done", { value: "6 questions" }),
-  stepAt("contact", last === "done" ? "done" : last, {
-    ...(last === "done"
-      ? { value: "0161 496 0000, hello@brightclean.test" }
-      : {}),
-  }),
+  stepAt("contact", "done", { value: "0161 496 0000, hello@brightclean.test" }),
+  stepAt("recap", last),
   stepAt("assistant", "next"),
   stepAt("website", "next"),
   stepAt("look", "next"),
@@ -709,6 +707,7 @@ const panelCatalog: Entry[] = [
             "area",
             "customers",
             "contact",
+            "recap",
             "assistant",
             "quote_form",
             "photos",
@@ -867,7 +866,10 @@ const panelCatalog: Entry[] = [
               stepAt("customers", "done"),
               stepAt("proof", "skipped"),
               stepAt("quote_form", "waiting"),
-              ...along(["contact", "assistant", "website", "look"], -1),
+              ...along(
+                ["contact", "recap", "assistant", "website", "look"],
+                -1
+              ),
             ],
             names: BUSINESS,
           })}

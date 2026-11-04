@@ -75,7 +75,7 @@ const states = (o: Onboarding, asked = {}, waiting = false, asking?: string) =>
   )
 
 describe("onboardingSteps", () => {
-  it("lists the same nine steps from the first moment, in the panel's order", () => {
+  it("lists the same ten steps from the first moment, in the panel's order", () => {
     for (const o of [at([]), at([...WORK, AREA, ...CONTACT, ...ASSISTANT])]) {
       expect(onboardingSteps(o).map((s) => s.id)).toEqual([...ONBOARDING_STEPS])
     }
@@ -86,6 +86,7 @@ describe("onboardingSteps", () => {
       proof: "next",
       quote_form: "next",
       contact: "next",
+      recap: "next",
       assistant: "next",
       website: "next",
       look: "next",
@@ -158,8 +159,19 @@ describe("onboardingSteps", () => {
 
   it("marks the open step waiting while a question is open in the chat", () => {
     const o = at([...WORK, AREA, ...CONTACT], { closed: ["quote_form"] })
-    expect(states(o).assistant).toBe("now")
-    expect(states(o, {}, true, "assistant").assistant).toBe("waiting")
+    expect(states(o).recap).toBe("now")
+    // The recap waits as the business's last step; the assistant's starts once the owner replies.
+    expect(states(o, {}, true, "recap")).toMatchObject({
+      recap: "waiting",
+      assistant: "next",
+    })
+    const replied = at([...WORK, AREA, ...CONTACT], {
+      closed: ["quote_form", "recap"],
+    })
+    expect(states(replied, {}, true, "assistant")).toMatchObject({
+      recap: "done",
+      assistant: "waiting",
+    })
   })
 
   it("always shows the question being asked: its own step, else the first open one", () => {
