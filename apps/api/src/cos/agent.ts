@@ -21,6 +21,7 @@ import {
   type FactRecord,
   FactValue,
   type GrantKind,
+  PALETTES,
   PRONOUNS,
   type ProfileLine,
   type PronounId,
@@ -1013,6 +1014,45 @@ const DIGEST_CHARS = 160
 /** Facts the digest shows whole: the owner's prices are what a quote is drafted from. */
 const WHOLE = new Set(["business.prices"])
 
+/** A fact's value as words: lists of objects by what a reader names them by. */
+export function factText(fact: FactValue): string {
+  switch (fact.key) {
+    case "quote.form":
+      return fact.value.fields
+        .map((field) => {
+          const about = [
+            field.required ? "required" : null,
+            field.options?.join(", "),
+          ].filter(Boolean)
+          return about.length > 0
+            ? `${field.label} (${about.join(": ")})`
+            : field.label
+        })
+        .join(", ")
+    case "media.uploads":
+      return fact.value.items
+        .map((item) => (item.use ? `${item.name} (${item.use})` : item.name))
+        .join(", ")
+    case "site.palette": {
+      const { id, custom, brand, roles } = fact.value
+      const preset = PALETTES.find((p) => p.id === id)
+      const name = preset?.label ?? custom ?? "Custom"
+      const colours = new Set(
+        [
+          brand,
+          ...(roles ? Object.values(roles) : (preset?.swatches ?? [])),
+        ].filter(Boolean)
+      )
+      return colours.size > 0 ? `${name} (${[...colours].join(", ")})` : name
+    }
+    case "site.content":
+      return fact.value.items.map((item) => item.title).join(", ")
+  }
+  return Object.values(fact.value as Record<string, unknown>)
+    .map((v) => (Array.isArray(v) ? v.join(", ") : String(v)))
+    .join(", ")
+}
+
 /**
  * The business facts as one line each, `key: value`, every value cut to
  * `DIGEST_CHARS` but those in `WHOLE`, so a question about the business or a
@@ -1023,9 +1063,7 @@ function factLines(facts: readonly FactRecord[]): string[] {
   const held = facts.flatMap((f) => {
     const parsed = FactValue.safeParse({ key: f.key, value: f.value })
     if (!parsed.success) return []
-    const text = Object.values(parsed.data.value as Record<string, unknown>)
-      .map((v) => (Array.isArray(v) ? v.join(", ") : String(v)))
-      .join(", ")
+    const text = factText(parsed.data)
     return [
       `${f.key}: ${text.length > DIGEST_CHARS && !WHOLE.has(f.key) ? `${text.slice(0, DIGEST_CHARS)}… (cut)` : text}`,
     ]

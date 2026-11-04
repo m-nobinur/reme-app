@@ -13,6 +13,7 @@ import {
   type FactRecord,
   ONBOARDING_STATUS,
   type OnboardingStatus,
+  PALETTES,
   TOOL_CALL_CANCELLED,
   TOOL_FAILED,
   TOOL_UNKNOWN,
@@ -81,6 +82,7 @@ import {
   costOf,
   DEFAULT_MODEL,
   DESCRIPTIONS,
+  factText,
   firstCall,
   GOOGLE_FIRST_LINE,
   GOOGLE_NOW_LINE,
@@ -911,6 +913,105 @@ describe("the CoS's model and price", () => {
     expect(text).toContain(`business.prices: ${prices}\n`)
     expect(text).toContain(`business.disclaimer: ${"x".repeat(160)}… (cut)`)
     expect(INSTRUCTIONS).toMatch(/business\.prices in the facts[^\n]*quote/)
+  })
+
+  it("prints facts that hold objects as words, never [object Object]", () => {
+    const held = [
+      {
+        key: "quote.form",
+        value: {
+          fields: [
+            {
+              key: "clean_type",
+              label: "Type of clean",
+              type: "select",
+              required: true,
+              hint: null,
+              options: ["Regular weekly clean", "Deep clean"],
+            },
+            {
+              key: "postcode",
+              label: "Postcode",
+              type: "text",
+              required: true,
+              hint: null,
+              options: null,
+            },
+            {
+              key: "notes",
+              label: "Anything else",
+              type: "textarea",
+              required: false,
+              hint: null,
+              options: null,
+            },
+          ],
+        },
+      },
+      {
+        key: "media.uploads",
+        value: {
+          items: [
+            {
+              id: "0f1e2d3c-4b5a-4968-8776-655443322110",
+              name: "Logo.png",
+              content_type: "image/png",
+              bytes: 2048,
+              use: "logo",
+            },
+          ],
+        },
+      },
+      { key: "site.palette", value: { id: "ocean" } },
+    ] as unknown as FactRecord[]
+    const { text } = contextOf(
+      "act",
+      EMPTY,
+      null,
+      new Date(),
+      undefined,
+      undefined,
+      false,
+      null,
+      held
+    )
+    expect(text).not.toContain("[object Object]")
+    expect(text).toContain(
+      "quote.form: Type of clean (required: Regular weekly clean, Deep clean), Postcode (required), Anything else\n"
+    )
+    expect(text).toContain("media.uploads: Logo.png (logo)\n")
+    const ocean = PALETTES.find((p) => p.id === "ocean")
+    expect(text).toContain(
+      `site.palette: Ocean (${ocean?.swatches.join(", ")})\n`
+    )
+    // The cut still holds for a long form.
+    const form = {
+      key: "quote.form" as const,
+      value: {
+        fields: Array.from({ length: 8 }, (_, i) => ({
+          key: `question_${i}`,
+          label: `A long question number ${i}`,
+          type: "text" as const,
+          required: true,
+          hint: null,
+          options: null,
+        })),
+      },
+    }
+    const long = factText(form)
+    expect(long.length).toBeGreaterThan(160)
+    const cut = contextOf(
+      "act",
+      EMPTY,
+      null,
+      new Date(),
+      undefined,
+      undefined,
+      false,
+      null,
+      [form] as unknown as FactRecord[]
+    )
+    expect(cut.text).toContain(`quote.form: ${long.slice(0, 160)}… (cut)`)
   })
 
   it("names no business kind and no assistant in the cached instructions", () => {
