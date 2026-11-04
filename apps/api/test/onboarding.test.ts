@@ -55,6 +55,7 @@ import {
 import {
   back,
   chose,
+  firstName,
   manualEnd,
   opener,
   question,
@@ -1648,6 +1649,30 @@ const lines = (v: Voice): [string, string][] => [
 
 /** The lines that name the business in every wording. */
 const NAMED = ["opener", "industry", "assistant", "started"]
+
+describe("the owner's first name", () => {
+  it("skips leading titles, and gives no name for a title alone", () => {
+    expect(firstName("Sir Don")).toBe("Don")
+    expect(firstName("dr. Amara Okafor")).toBe("Amara")
+    expect(firstName("Mrs Prof Jane Smith")).toBe("Jane")
+    expect(firstName("  Ms. Lee ")).toBe("Lee")
+    expect(firstName("Sir")).toBe("")
+    expect(firstName("Lady.")).toBe("")
+    expect(firstName("")).toBe("")
+    // A name that only starts like a title is a name.
+    expect(firstName("Missy Elliott")).toBe("Missy")
+    expect(firstName("Drew Barrymore")).toBe("Drew")
+  })
+
+  it("greets with no name when the account's name is only a title", () => {
+    expect(opener(voice({ owner: firstName("Sir") }))).toMatch(
+      /^Hi, good to meet you\./
+    )
+    expect(opener(voice({ owner: firstName("Sir Don") }))).toMatch(
+      /^Hi Don, good to meet you\./
+    )
+  })
+})
 
 describe("the onboarding copy", () => {
   it("never uses an em dash, a price, a currency or a tier, and names the business where it should", {

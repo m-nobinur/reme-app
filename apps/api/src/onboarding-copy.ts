@@ -115,7 +115,15 @@ export function say(v: Pick<Voice, "tone">, text: string): string {
 }
 
 /** The first word of the owner's name, or "" when the sign-in gave none. */
-export const firstName = (owner: string) => owner.trim().split(/\s+/)[0] ?? ""
+/** A word before a name that is not one: "Sir Don" is called Don (2026-11-04). */
+const TITLE = /^(sir|mr|mrs|ms|miss|mx|dr|prof|rev|lord|lady)\.?$/i
+
+/** The first word of a name that is not a title, or "" when there is none. */
+export const firstName = (owner: string) =>
+  owner
+    .trim()
+    .split(/\s+/)
+    .find((word) => !TITLE.test(word)) ?? ""
 
 /**
  * The first message, written at sign-up with no model: the owner's new
