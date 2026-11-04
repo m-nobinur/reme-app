@@ -75,34 +75,13 @@ const md = (text: string) => text.replace(/[\\`*_]/g, "\\$&")
 const comma = (name: string) => (name ? `, ${name}` : "")
 
 /**
- * What each tone changes in the friendly copy. Professional drops
- * exclamation marks and contractions; casual goes the other way and trims a
- * few stiff openings. A small table, not three copies of every line.
+ * What each tone changes in the friendly copy. Professional only turns
+ * exclamation marks into full stops; casual goes further and trims a few
+ * stiff openings. A small table, not three copies of every line.
  */
 const TONE: Record<ToneId, [RegExp, string][]> = {
   friendly: [],
-  professional: [
-    [/!/g, "."],
-    [/\bno worries at all\b/gi, "that is fine"],
-    [/\bI'm\b/g, "I am"],
-    [/\bI'll\b/g, "I will"],
-    [/\bI'd\b/g, "I would"],
-    [/\bI've\b/g, "I have"],
-    [/\bwe'll\b/gi, "we will"],
-    [/\byou'll\b/gi, "you will"],
-    [/\byou'd\b/gi, "you would"],
-    [/\byou're\b/gi, "you are"],
-    [/\bdon't\b/gi, "do not"],
-    [/\bcouldn't\b/gi, "could not"],
-    [/\bshouldn't\b/gi, "should not"],
-    [/\bcan't\b/gi, "cannot"],
-    [/\bisn't\b/gi, "is not"],
-    [/\bit's\b/gi, "it is"],
-    [/\bthat's\b/gi, "that is"],
-    [/\bwhat's\b/gi, "what is"],
-    [/\bthere's\b/gi, "there is"],
-    [/\bhere's\b/gi, "here is"],
-  ],
+  professional: [[/!/g, "."]],
   casual: [
     [/\bWould you like\b/g, "Want"],
     [/\bthank you\b/gi, "thanks"],

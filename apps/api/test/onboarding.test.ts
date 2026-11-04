@@ -13,7 +13,6 @@ import {
   RECAP_REPLY,
   SKIP_REPLY,
   TONES,
-  type ToneId,
 } from "@workspace/contracts"
 import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it } from "vitest"
@@ -1302,8 +1301,8 @@ describe("Pick for me, answered by the script", () => {
       )
       const line = (picked.parts[0] as { text: string }).text
       expect(line).toMatch(/gone with|Leave it with me|Happy to choose/)
-      // The professional tone keeps no contraction, "Here's" included.
-      expect(line).not.toMatch(/'s\b|I'm|I'll|I've/)
+      // The professional tone keeps contractions and ends no sentence on an exclamation mark.
+      expect(line).not.toContain("!")
       // Maya, set by the owner before Pick for me, stays and is not claimed.
       const kept = persona({ answer: "stated", facts, skip_all: true }, orgId)
       const said = (kept.parts[0] as { text: string }).text
@@ -1766,14 +1765,14 @@ describe("the onboarding copy", () => {
     }
   })
 
-  it("adjusts the tone: no exclamation marks when professional, contractions when casual", () => {
-    const at = (tone: ToneId) =>
-      ORGS.map((org) => question("build_for_me", voice({ org, tone }))).join(
-        "\n"
-      )
+  it("adjusts the tone: professional only drops exclamation marks, casual contracts", () => {
     expect(say(voice({ tone: "friendly" }), "Lovely!")).toBe("Lovely!")
-    expect(say(voice({ tone: "professional" }), "Lovely!")).toBe("Lovely.")
-    expect(at("professional")).not.toMatch(/\bI'm\b|\bit's\b/i)
+    expect(
+      say(voice({ tone: "professional" }), "Lovely! I'll check it's there.")
+    ).toBe("Lovely. I'll check it's there.")
+    expect(
+      say(voice({ tone: "casual" }), "Would you like me to build it?")
+    ).toBe("Want me to build it?")
   })
 
   it("contracts a model's words in the casual tone, and only before a past participle for I have", () => {
