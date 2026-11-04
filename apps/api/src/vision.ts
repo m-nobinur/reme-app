@@ -519,6 +519,7 @@ export async function logoPalettes(
   env: Env,
   kit: Tenancy,
   owner: Owner,
+  waitUntil: (promise: Promise<unknown>) => void,
   deps: Deps = {}
 ): Promise<Response> {
   const parsed = LogoPalettesRequest.safeParse(await readBody(request))
@@ -538,7 +539,16 @@ export async function logoPalettes(
   if (held) {
     return asLines(lines(((await held.json()) as LogoPalettes).palettes))
   }
-  return readLogoPalettes(env, kit, orgId, logo, facts, request.signal, deps)
+  return readLogoPalettes(
+    env,
+    kit,
+    orgId,
+    logo,
+    facts,
+    request.signal,
+    waitUntil,
+    deps
+  )
 }
 
 async function readLogoPalettes(
@@ -548,6 +558,7 @@ async function readLogoPalettes(
   logo: Asset,
   facts: Awaited<ReturnType<typeof readFacts>>,
   gone: AbortSignal,
+  waitUntil: (promise: Promise<unknown>) => void,
   deps: Deps
 ): Promise<Response> {
   const model = modelOf(env, deps)
@@ -624,6 +635,8 @@ async function readLogoPalettes(
     await out.abort(error).catch(() => undefined)
     return unavailable()
   })
+  // The rest streams, is held and is costed after the response has gone.
+  waitUntil(finished)
   // Headers wait for the first palette, so a refusal is still a status.
   const refusal = await Promise.race([opened, finished])
   return refusal ?? asLines(readable.pipeThrough(new TextEncoderStream()))

@@ -40,6 +40,8 @@ export type Voice = {
   ownColour: string | null
   /** The services as a short phrase written in the background, such as "your wedding cars". */
   services: string | null
+  /** Where the business works, in the owner's words. */
+  area: string | null
   /** The assistant just said what it picked or introduced its persona, so a line leaves out its acknowledgement. */
   picked?: boolean
 }
@@ -73,34 +75,13 @@ const md = (text: string) => text.replace(/[\\`*_]/g, "\\$&")
 const comma = (name: string) => (name ? `, ${name}` : "")
 
 /**
- * What each tone changes in the friendly copy. Professional drops
- * exclamation marks and contractions; casual goes the other way and trims a
- * few stiff openings. A small table, not three copies of every line.
+ * What each tone changes in the friendly copy. Professional only turns
+ * exclamation marks into full stops; casual goes further and trims a few
+ * stiff openings. A small table, not three copies of every line.
  */
 const TONE: Record<ToneId, [RegExp, string][]> = {
   friendly: [],
-  professional: [
-    [/!/g, "."],
-    [/\bno worries at all\b/gi, "that is fine"],
-    [/\bI'm\b/g, "I am"],
-    [/\bI'll\b/g, "I will"],
-    [/\bI'd\b/g, "I would"],
-    [/\bI've\b/g, "I have"],
-    [/\bwe'll\b/gi, "we will"],
-    [/\byou'll\b/gi, "you will"],
-    [/\byou'd\b/gi, "you would"],
-    [/\byou're\b/gi, "you are"],
-    [/\bdon't\b/gi, "do not"],
-    [/\bcouldn't\b/gi, "could not"],
-    [/\bshouldn't\b/gi, "should not"],
-    [/\bcan't\b/gi, "cannot"],
-    [/\bisn't\b/gi, "is not"],
-    [/\bit's\b/gi, "it is"],
-    [/\bthat's\b/gi, "that is"],
-    [/\bwhat's\b/gi, "what is"],
-    [/\bthere's\b/gi, "there is"],
-    [/\bhere's\b/gi, "here is"],
-  ],
+  professional: [[/!/g, "."]],
   casual: [
     [/\bWould you like\b/g, "Want"],
     [/\bthank you\b/gi, "thanks"],
@@ -184,6 +165,33 @@ const bare = (text: string) =>
       ""
     )
 
+/** The owner's "we" and "our" as the assistant says them back: "you" and "your". */
+const yours = (text: string) =>
+  text.replace(
+    /\b(we|our|ours|us)(?:'(ll|re|ve|d))?\b/gi,
+    (found, word: string, tail?: string) => {
+      const to = { we: "you", our: "your", ours: "yours", us: "you" }[
+        word.toLowerCase()
+      ] as string
+      const said = tail ? `${to}'${tail}` : to
+      return found.charAt(0) === found.charAt(0).toUpperCase()
+        ? capital(said)
+        : said
+    }
+  )
+
+/** What the business does not take on, as a list item reads: no lead-in, no closing stop. */
+const notTakenOn = (text: string) =>
+  lower(
+    yours(text)
+      .trim()
+      .replace(/[.!]+$/, "")
+      .replace(
+        /^(?:(?:you|i) (?:don'?t|do not|never|won'?t) (?:do|take on|cover|offer)|no|not)\s+/i,
+        ""
+      )
+  )
+
 /**
  * The business read back before the assistant's own setup, from the facts
  * exactly as held, one labelled bullet each, so the owner sees what was
@@ -193,16 +201,20 @@ export function recap(
   v: Voice,
   held: {
     services: readonly string[]
+    excluded: string | null
     area: string | null
     customers: string | null
+    questions: number | null
     phone: string | null
     email: string | null
   }
 ): string {
   const rows = [
     ["Services", listed(held.services.map(lower))],
-    ["Area", held.area && bare(held.area)],
+    ["Not taken on", held.excluded && notTakenOn(held.excluded)],
+    ["Area", held.area && yours(bare(held.area))],
     ["Customers", held.customers && lower(bare(held.customers))],
+    ["Quote form", held.questions ? `${held.questions} questions` : null],
     ["Contact", [held.phone, held.email].filter(Boolean).join(", ")],
   ].flatMap(([label, value]) => (value ? [`- **${label}:** ${md(value)}`] : []))
   return say(
@@ -215,6 +227,29 @@ type Asked = Exclude<StepId, "upload" | "build" | "manual_builder" | "recap">
 
 /** "your services", or the phrase written for this business. */
 const services = (v: Voice) => v.services ?? "your services"
+
+/** "a cleaning company" from the trade's name, or null without one. */
+const tradeOf = (v: Voice) => {
+  const name = v.industry?.name.trim().toLowerCase()
+  return name ? `${/^[aeiou]/.test(name) ? "an" : "a"} ${name}` : null
+}
+
+/** Capitalised words that start an area but name no place. */
+const NOT_A_TOWN =
+  /^(?:Within|Anywhere|All|Around|Across|Based|Mainly|Mostly|Most|The|Up|Our|My|We|I|Any|North|South|East|West|Central)$/
+
+/**
+ * The first place in the owner's area, such as "Leeds" from "Leeds and about
+ * 15 miles", or null when the words do not start with one that reads cleanly.
+ */
+export function townOf(area: string | null): string | null {
+  const found = area
+    ?.trim()
+    .match(
+      /^([A-Z][\p{L}'-]*(?: (?:upon |on |under )?[A-Z][\p{L}'-]*)*)(?=\s+and\b|\s*,|\s*\d|\s*[.!]?$)/u
+    )?.[1]
+  return found && !NOT_A_TOWN.test(found.split(" ")[0] ?? "") ? found : null
+}
 
 const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   "business.name": () => [
@@ -289,16 +324,16 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   ],
   // Phase 2 to 3: the new identity, then the website and the quote page.
   build_for_me: (v) => {
-    const ask = `Would you like me to build a website for ${v.business}?`
-    const thanks = (line: string) => (v.picked ? "" : `${line}\n\n`)
+    const thanks = v.picked ? "" : `Thanks${comma(v.owner)}.\n\n`
+    const trade = tradeOf(v)
+    const town = townOf(v.area)
+    const where = town ? ` in ${town}` : ""
+    const ask = "Shall I build a website?"
     return [
-      `${thanks(`Thanks${comma(v.owner)}.`)}I can also build ${v.business} a website, with a Request a quote page that sends each enquiry straight to me with the details you need to reply.
+      `${thanks}People who can't find you online often go to someone they can. A website puts ${v.business} in front of ${trade ? `people looking for ${trade}${where}` : "people searching online"}, and every quote request comes straight to me with the details you need.
 
 ${ask}`,
-      `${thanks(`Thanks${comma(v.owner)}.`)}One more thing I can do: build a website for ${v.business}. Every page would point visitors to Request a quote, and each enquiry would reach me with what you need to quote the job.
-
-${ask}`,
-      `${thanks(`Thanks${comma(v.owner)}.`)}If ${v.business} needs a website, I can build it. It would have a Request a quote page, so customers describe the job and the enquiry comes to me ready for a quote. If you already have one, say so and I'll stick to enquiries and quotes.
+      `${thanks}${trade ? `When people look for ${trade}${where}` : "When people search online"}, a website is how they find ${v.business}. Every quote request comes straight to me with the details you need.
 
 ${ask}`,
     ]
@@ -467,6 +502,14 @@ export function chose(v: Voice, what: string): string {
       `Leave it with me. I've picked ${what}, and it's easy to change later.`,
       `No problem, I've chosen ${what}. You can always change it later.`,
     ])
+  )
+}
+
+/** An optional question the owner skipped, said before the next one. */
+export function skipped(v: Voice): string {
+  return say(
+    v,
+    pick(v, "skipped", ["Leaving that one.", "We can come back to that."])
   )
 }
 

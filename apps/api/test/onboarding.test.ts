@@ -13,7 +13,6 @@ import {
   RECAP_REPLY,
   SKIP_REPLY,
   TONES,
-  type ToneId,
 } from "@workspace/contracts"
 import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it } from "vitest"
@@ -36,6 +35,7 @@ import {
   detailsCard,
   ended,
   factCard,
+  factValue,
   firstPalettes,
   ONBOARDING_GOAL,
   type Onboarding,
@@ -64,6 +64,7 @@ import {
   retry,
   say,
   started,
+  townOf,
   type Voice,
 } from "../src/onboarding-copy.ts"
 import { voiceProblems } from "../src/voice.ts"
@@ -379,15 +380,22 @@ describe("the onboarding steps", () => {
       { key: "business.audience", value: { text: "Mostly families." } },
       {
         key: "service_area.text",
-        value: { text: "We cover Bristol and Bath." },
+        value: {
+          text: "We cover Bristol and Bath, and we'll go to Wells for our regulars.",
+        },
+      },
+      {
+        key: "business.disclaimer",
+        value: { text: "No offices or commercial sites." },
       },
       PHONE,
       EMAIL,
     ]
     const [said, card, ...rest] = onboardingStep(start({ facts }), counter())
     expect(rest).toEqual([])
+    const questions = factValue(facts, "quote.form")?.fields.length
     expect((said as { text: string }).text).toBe(
-      `Here's what I have for ${BUSINESS}:\n\n- **Services:** end of tenancy cleans, oven cleaning and MOT tests\n- **Area:** Bristol and Bath\n- **Customers:** mostly families\n- **Contact:** 01632 960001, hello@brightclean.invalid\n\nHave I got that right?`
+      `Here's what I have for ${BUSINESS}:\n\n- **Services:** end of tenancy cleans, oven cleaning and MOT tests\n- **Not taken on:** offices or commercial sites\n- **Area:** Bristol and Bath, and you'll go to Wells for your regulars\n- **Customers:** mostly families\n- **Quote form:** ${questions} questions\n- **Contact:** 01632 960001, hello@brightclean.invalid\n\nHave I got that right?`
     )
     expect(card).toMatchObject({
       type: "tool-ask_open",
@@ -404,10 +412,12 @@ describe("the onboarding steps", () => {
     expect((plain[0] as { text: string }).text).not.toContain("Customers")
     // A yes settles it; without a model a correction cannot be read.
     const asked = card as ToolPart
-    expect(typedAnswer(asked, RECAP_REPLY)).toEqual({
-      kind: "passed",
-      step: "recap",
-    })
+    for (const words of [RECAP_REPLY, "Yes, all correct"]) {
+      expect(typedAnswer(asked, words)).toEqual({
+        kind: "passed",
+        step: "recap",
+      })
+    }
     expect(typedAnswer(asked, "Yes, that's right")).toMatchObject({
       kind: "passed",
     })
@@ -1228,6 +1238,29 @@ describe("a reply Jev read", () => {
       expect(decided(cardFor(step), { kind: "defer" }, start())).toBeNull()
     }
   })
+
+  it("leads the next question with a short line after a skip, and nothing after a confirmed recap", () => {
+    const next = [
+      { type: "text" as const, text: "Next question?", state: "done" as const },
+    ]
+    const lines = new Set<string>()
+    for (const orgId of ORGS) {
+      const parts = withChoice(
+        { kind: "passed", step: "business.proof" },
+        start({ orgId }),
+        next
+      )
+      const said = (parts[0] as { text: string }).text
+      expect(said).toMatch(
+        /^(Leaving that one\.|We can come back to that\.)\n\nNext question\?$/
+      )
+      lines.add(said)
+    }
+    expect(lines.size).toBe(2)
+    expect(
+      withChoice({ kind: "passed", step: "recap" }, start(), next)
+    ).toEqual(next)
+  })
 })
 
 describe("Pick for me, answered by the script", () => {
@@ -1269,7 +1302,7 @@ describe("Pick for me, answered by the script", () => {
       expect(rest).toEqual(step.slice(1))
       leads.add(next)
     }
-    expect(leads.size).toBe(3)
+    expect(leads.size).toBe(2)
     // The owner's own answer: Maya introduces herself, the persona, then the question with no thanks.
     const intros = new Set<string>()
     for (const orgId of ORGS) {
@@ -1301,8 +1334,8 @@ describe("Pick for me, answered by the script", () => {
       )
       const line = (picked.parts[0] as { text: string }).text
       expect(line).toMatch(/gone with|Leave it with me|Happy to choose/)
-      // The professional tone keeps no contraction, "Here's" included.
-      expect(line).not.toMatch(/'s\b|I'm|I'll|I've/)
+      // The professional tone keeps contractions and ends no sentence on an exclamation mark.
+      expect(line).not.toContain("!")
       // Maya, set by the owner before Pick for me, stays and is not claimed.
       const kept = persona({ answer: "stated", facts, skip_all: true }, orgId)
       const said = (kept.parts[0] as { text: string }).text
@@ -1557,6 +1590,7 @@ const voice = (over: Partial<Voice> = {}): Voice => ({
   ownLook: null,
   ownColour: null,
   services: null,
+  area: "Leeds and about 15 miles around it",
   ...over,
 })
 
@@ -1581,8 +1615,10 @@ const lines = (v: Voice): [string, string][] => [
     "recap",
     recap(v, {
       services: ["End of tenancy cleans", "Oven cleaning", "Regular cleans"],
+      excluded: "We don't take on commercial work.",
       area: "Bristol and about 15 miles out.",
       customers: "Mostly families, plus two letting agents",
+      questions: 6,
       phone: "0117 496 0321",
       email: "hello@freshstart.invalid",
     }),
@@ -1683,8 +1719,10 @@ describe("the onboarding copy", () => {
     expect(
       recap(voice({ business: "Sparkle_Clean" }), {
         services: ["*Deep* cleans", "Ovens"],
+        excluded: null,
         area: null,
         customers: "Mostly families — and two letting agents",
+        questions: null,
         phone: null,
         email: "first_last@sparkle.invalid",
       })
@@ -1701,15 +1739,48 @@ describe("the onboarding copy", () => {
     }
   })
 
-  it("offers the website, with its quote page, as one thing it can do", () => {
-    for (const org of ORGS) {
-      expect(question("build_for_me", voice({ org }))).toContain(
-        "Request a quote"
+  it("offers the website with what it does for the business, then asks", () => {
+    const offers = (over: Partial<Voice>) =>
+      new Set(
+        ORGS.map((org) => question("build_for_me", voice({ org, ...over })))
       )
-      expect(question("build_for_me", voice({ org }))).toContain(
-        `Would you like me to build a website for ${BUSINESS}?`
-      )
+    const biopeck = {
+      business: "BioPeck Clean",
+      owner: "",
+      industry: { name: "Cleaning company", category: null },
+      area: "Leeds and 15 miles around it, we'll go as far as York",
     }
+    expect([...offers(biopeck)]).toEqual(
+      expect.arrayContaining([
+        "Thanks.\n\nPeople who can't find you online often go to someone they can. A website puts BioPeck Clean in front of people looking for a cleaning company in Leeds, and every quote request comes straight to me with the details you need.\n\nShall I build a website?",
+        "Thanks.\n\nWhen people look for a cleaning company in Leeds, a website is how they find BioPeck Clean. Every quote request comes straight to me with the details you need.\n\nShall I build a website?",
+      ])
+    )
+    expect([
+      ...offers({ ...biopeck, area: "Within 20 miles of home" }),
+    ]).toContain(
+      "Thanks.\n\nPeople who can't find you online often go to someone they can. A website puts BioPeck Clean in front of people looking for a cleaning company, and every quote request comes straight to me with the details you need.\n\nShall I build a website?"
+    )
+    expect([...offers({ ...biopeck, industry: null, picked: true })]).toEqual(
+      expect.arrayContaining([
+        "People who can't find you online often go to someone they can. A website puts BioPeck Clean in front of people searching online, and every quote request comes straight to me with the details you need.\n\nShall I build a website?",
+        "When people search online, a website is how they find BioPeck Clean. Every quote request comes straight to me with the details you need.\n\nShall I build a website?",
+      ])
+    )
+    expect(
+      [...offers({ industry: { name: "Electrician", category: null } })].join()
+    ).toContain("people looking for an electrician in Leeds")
+  })
+
+  it("reads the town from the start of the owner's area, or none", () => {
+    expect(townOf("Leeds and about 15 miles")).toBe("Leeds")
+    expect(townOf("Milton Keynes, Bedford and Luton")).toBe("Milton Keynes")
+    expect(townOf("Newcastle upon Tyne 10 miles")).toBe("Newcastle upon Tyne")
+    expect(townOf("Bristol.")).toBe("Bristol")
+    expect(townOf("Within 20 miles of Leeds")).toBeNull()
+    expect(townOf("anywhere in Yorkshire")).toBeNull()
+    expect(townOf("Leeds plus Bradford")).toBeNull()
+    expect(townOf(null)).toBeNull()
   })
 
   it("asks what a quote needs in words, without the website", () => {
@@ -1725,21 +1796,20 @@ describe("the onboarding copy", () => {
     for (const org of ORGS) {
       for (const pronouns of ["he_him", "she_her", "they_them"] as const) {
         const text = question("build_for_me", voice({ org, pronouns }))
-        expect(text).toContain("Would you like me to build")
+        expect(text).toContain("Shall I build a website?")
         expect(text).not.toMatch(/\b(He|She|They) can have\b/)
       }
     }
   })
 
-  it("adjusts the tone: no exclamation marks when professional, contractions when casual", () => {
-    const at = (tone: ToneId) =>
-      ORGS.map((org) => question("build_for_me", voice({ org, tone }))).join(
-        "\n"
-      )
+  it("adjusts the tone: professional only drops exclamation marks, casual contracts", () => {
     expect(say(voice({ tone: "friendly" }), "Lovely!")).toBe("Lovely!")
-    expect(say(voice({ tone: "professional" }), "Lovely!")).toBe("Lovely.")
-    expect(at("professional")).not.toMatch(/\bI'm\b|\bit's\b/i)
-    expect(at("casual")).toMatch(/\bWant me to build\b/)
+    expect(
+      say(voice({ tone: "professional" }), "Lovely! I'll check it's there.")
+    ).toBe("Lovely. I'll check it's there.")
+    expect(
+      say(voice({ tone: "casual" }), "Would you like me to build it?")
+    ).toBe("Want me to build it?")
   })
 
   it("contracts a model's words in the casual tone, and only before a past participle for I have", () => {

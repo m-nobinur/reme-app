@@ -304,7 +304,7 @@ export async function ownerRoute(
     return paletteFromImage(request, env, kit, owner)
   }
   if (pathname === "/palettes/from-logo" && method === "POST") {
-    return logoPalettes(request, env, kit, owner)
+    return logoPalettes(request, env, kit, owner, waitUntil)
   }
   if (pathname === "/changes" && method === "POST") {
     return requestChange(request, env, kit, owner)

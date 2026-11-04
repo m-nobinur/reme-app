@@ -115,7 +115,7 @@ export const NAME_IDEAS = ["Reme", "Ava", "Grace"] as const
  * The message the confirm pill under the business recap sends. The api reads
  * it as the owner confirming the recap; a correction is typed instead.
  */
-export const RECAP_REPLY = "All correct"
+export const RECAP_REPLY = "Yes, all correct"
 
 export const TEMPLATES = [
   {

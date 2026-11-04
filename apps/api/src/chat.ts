@@ -23,6 +23,7 @@ import {
   PERSONA_CARD,
   type PersonaCard,
   RequestChangeOutput,
+  SKIP_REPLY,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import {
@@ -779,6 +780,16 @@ function plannerReads({ turn }: ChatRequest): boolean {
   )
 }
 
+/** The Skip this one pill's message over the optional question it skips: the script's, with no model. */
+function tappedSkip(card: ToolPart | undefined, { turn }: ChatRequest) {
+  return turn.kind === "message" && skips(card, turn.text)
+}
+
+const skips = (card: ToolPart | undefined, text: string): card is ToolPart =>
+  text.trim() === SKIP_REPLY &&
+  card !== undefined &&
+  typedAnswer(card, text).kind === "passed"
+
 /** A Jev decision taken before the lock, for the card it was taken on. */
 type Gate = { callId: string; decision: JevDecision }
 
@@ -1044,6 +1055,7 @@ export async function chat(
         const job =
           !given &&
           plannerReads(parsed.data) &&
+          !tappedSkip(waitingCard(held.tail), parsed.data) &&
           session &&
           log &&
           !log.frozen &&
@@ -1899,12 +1911,19 @@ const messageExists = () =>
   })
 
 /** `parts` with every pending call cancelled, as assistant-ui shows it. */
-function cancelParts<P extends { type: string }>(parts: P[]): P[] {
+function cancelParts<P extends { type: string }>(
+  parts: P[],
+  skipped?: string
+): P[] {
   return parts.map((part) => {
     const p = part as unknown as ToolPart
     if (!isTool(p) || !pending(p)) return part
     const { approval: _, ...rest } = p
-    return { ...rest, state: "output-error", errorText: CANCELLED } as never
+    return (
+      p.toolCallId === skipped
+        ? { ...rest, state: "output-available", output: { answer: "skipped" } }
+        : { ...rest, state: "output-error", errorText: CANCELLED }
+    ) as never
   })
 }
 
@@ -1937,7 +1956,9 @@ const shown = <P extends { type: string }>(parts: P[]): P[] =>
 async function cancelPending(
   db: OrgScopedDb,
   id: string,
-  tail: Tail | null
+  tail: Tail | null,
+  /** The call the Skip this one pill skipped, stored as skipped rather than cancelled. */
+  skipped?: string
 ): Promise<Content | null> {
   if (
     tail?.content.role !== "assistant" ||
@@ -1949,7 +1970,7 @@ async function cancelPending(
   // stripped loses it here too.
   const content = {
     ...tail.content,
-    parts: shown(cancelParts(tail.content.parts)),
+    parts: shown(cancelParts(tail.content.parts, skipped)),
   }
   if (!(await swapTail(db, id, tail, content))) throw new Refusal(stale())
   return content
@@ -1986,8 +2007,13 @@ async function typed(
   const card = onboarding
     ? (waitingCard(tail) ?? openCard(onboarding, () => "open"))
     : undefined
-  await cancelPending(db, id, held.card)
   const reply = given?.answer ?? (card && typedAnswer(card, message.text))
+  await cancelPending(
+    db,
+    id,
+    held.card,
+    skips(card, message.text) ? card.toolCallId : undefined
+  )
   const step =
     onboarding && card && reply?.kind === "retry"
       ? again(card, reply.reason, onboarding, newId)

@@ -2342,11 +2342,11 @@ describe("the recap", () => {
       "tool-ask_open",
     ])
     expect((parts[1] as { text: string }).text).toBe(
-      "Here's what I have for Regal Rides:\n\n- **Services:** wedding cars\n- **Area:** Greater Manchester\n- **Customers:** couples getting married\n- **Contact:** 07700 900412, bookings@regal.invalid\n\nHave I got that right?"
+      `Here's what I have for Regal Rides:\n\n- **Services:** wedding cars\n- **Area:** Greater Manchester\n- **Customers:** couples getting married\n- **Quote form:** ${FIELDS.length} questions\n- **Contact:** 07700 900412, bookings@regal.invalid\n\nHave I got that right?`
     )
   })
 
-  it("moves on once the owner confirms or corrects it", () => {
+  it("moves on once the owner confirms it, and reads it back once more after a correction", () => {
     const o = beforeRecap()
     const confirmed = typed(RECAP_REPLY, o, recapCard())
     const next = {
@@ -2370,18 +2370,34 @@ describe("the recap", () => {
       o,
       recapCard()
     )
-    expect(
-      errorsOf(
-        plan({
-          ...next,
-          facts: {
-            "service_area.text": { text: "Greater Manchester and Cheshire" },
-          },
-          say: "Added Cheshire. Now a bit about me, since I'll be the one answering for Regal Rides.",
-        }),
-        corrected
-      )
-    ).toEqual([])
+    const change = {
+      ...next,
+      facts: {
+        "service_area.text": { text: "Greater Manchester and Cheshire" },
+      },
+      say: "Added Cheshire. Now a bit about me, since I'll be the one answering for Regal Rides.",
+    }
+    expect(errorsOf(plan(change), corrected)).toContain(
+      "the owner corrected the recap: name each change in one short line and set next ask_open recap, so they see it once more"
+    )
+    const again = checkPlan(
+      plan({
+        ...change,
+        next: { kind: "ask_open", about: "recap" },
+        say: "Added Cheshire.",
+      }),
+      corrected
+    )
+    if (!again.ok) throw new Error(again.errors.join("; "))
+    const parts = planParts(again.checked, corrected, counter())
+    expect(parts.map((part) => part.type)).toEqual([
+      "text",
+      "text",
+      "tool-ask_open",
+    ])
+    expect((parts[1] as { text: string }).text).toContain(
+      "- **Area:** Greater Manchester and Cheshire"
+    )
   })
 })
 
