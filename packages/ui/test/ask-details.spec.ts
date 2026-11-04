@@ -39,6 +39,9 @@ test("the contact tray checks the phone, then offers the sign-in email on the la
   // The field to fix takes the focus.
   const phone = contact.getByRole("textbox", { name: "Phone number" })
   await expect(phone).toBeFocused()
+  await expect(
+    contact.getByText("A UK number. We add the +44 for you.")
+  ).toBeVisible()
   await phone.fill("07700 900123")
   // Enter in the field moves on, as Next does.
   await page.keyboard.press("Enter")

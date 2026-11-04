@@ -77,6 +77,7 @@ const isPick = (key: string): key is PickKey => key in PICKS
 
 /** A line under a field that says what happens to the answer. */
 const HINT: Partial<Record<string, string>> = {
+  "business.phone": "A UK number. We add the +44 for you.",
   "business.email":
     "Shown on your website. Use a business address if you have one.",
 }
