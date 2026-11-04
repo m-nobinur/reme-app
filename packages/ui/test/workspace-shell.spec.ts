@@ -33,14 +33,13 @@ async function settle(page: Page) {
   // is left running.
   await page.evaluate(async () => {
     for (;;) {
-      const running = document
-        .getAnimations()
-        .filter(
-          (animation) =>
-            animation.playState === "running" &&
-            animation.effect?.getTiming().iterations !==
-              Number.POSITIVE_INFINITY
-        )
+      const running = document.getAnimations().filter(
+        (animation) =>
+          animation.playState === "running" &&
+          // The scroll fade follows the scroll position and never ends.
+          animation.timeline instanceof DocumentTimeline &&
+          animation.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY
+      )
       if (running.length === 0) return
       await Promise.all(
         running.map((animation) => animation.finished.catch(() => undefined))
@@ -296,10 +295,9 @@ test("the panel minimises to one line and remembers it in a cookie", async ({
   await toggle.click()
   await expect(body).toBeVisible()
   expect(await cookie(page, "reme-panel")).toBe("open")
-  // Open, it stops at half the viewport and scrolls past that.
-  expect((await panel(page).boundingBox())?.height).toBeLessThanOrEqual(
-    HEIGHT / 2 + 48
-  )
+  // Open, it stops inside the window and scrolls past that.
+  const box = await panel(page).boundingBox()
+  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(HEIGHT)
 })
 
 test("an open sheet closes when the viewport grows past its breakpoint", async ({

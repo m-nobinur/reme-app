@@ -15,6 +15,7 @@ import {
   type PaletteStops,
 } from "@workspace/contracts"
 import {
+  type LogoHeading,
   type LogoPath,
   type LogoStart,
   TrayLogo,
@@ -31,6 +32,7 @@ import {
   heldPhotosAnswer,
   TrayPhotos,
 } from "@workspace/ui/components/assistant/tray-photos"
+import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
@@ -69,9 +71,9 @@ import { createPortal } from "react-dom"
  * the composer at its width and radius, with a gap between the two. The
  * call sits in the transcript like any card and draws itself in the slot the
  * thread keeps there (`Docked`), so it stays put while the owner scrolls or
- * types. One page shows at a time: a header with the question and a
- * collapse toggle, the body, and a footer with back and forward, Skip and
- * the primary button. Collapsed it is one row, the question and "2 of 4".
+ * types. One page shows at a time: the question as its title with a
+ * collapse toggle, the body, and a footer with back, Skip and the primary
+ * button. Collapsed it is one row, the question and "2 of 4".
  * The tray never touches the composer, so a message typed while it is open
  * is an ordinary turn. On a phone it stays in the flow above the composer,
  * at most 60svh with its own scroll, so the composer stays reachable.
@@ -391,6 +393,14 @@ const TRAY_TILE = cn(
   "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:checked]:bg-card"
 )
 
+/** A tile that answers on a tap, its answer shown pressed: the tray tile as a button. */
+const QUICK_TILE = cn(
+  OPTION,
+  OPTION_TILE,
+  "rounded-xl text-left outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary",
+  "aria-pressed:inset-ring-1 aria-pressed:inset-ring-foreground aria-pressed:border-foreground"
+)
+
 /** A field in the tray: the option tiles' radius, border and focus ring. */
 const TRAY_FIELD = cn(
   "rounded-xl border-border bg-card focus-visible:ring-3",
@@ -551,13 +561,18 @@ function RadioTile({
   )
 }
 
-/** A yes-or-no page's answers, as a pair of tiles with a line under each. */
+/**
+ * A yes-or-no page's answers, as a pair of tiles with a line under each.
+ * `quick` makes them quick replies: buttons a tap answers and moves past,
+ * the one chosen shown pressed, so arrow keys never answer for the owner.
+ */
 function Ways<Way extends string>({
   label,
   ways,
   picked,
   onPick,
   onRepick,
+  quick = false,
 }: {
   label: string
   ways: readonly { way: Way; label: string; hint: string; icon: ReactNode }[]
@@ -565,31 +580,61 @@ function Ways<Way extends string>({
   onPick: (way: Way) => void
   /** A tap on the answer already picked. */
   onRepick: (way: Way) => void
+  quick?: boolean
 }) {
   const name = useId()
-  return (
-    <div
-      aria-label={label}
-      className="grid @sm:grid-cols-2 grid-cols-1 gap-2"
-      role="radiogroup"
-    >
-      {ways.map((each) => (
-        <RadioTile
-          checked={picked === each.way}
-          className={TRAY_TILE}
-          key={each.way}
-          name={name}
-          onClick={() => picked === each.way && onRepick(each.way)}
-          onPick={() => onPick(each.way)}
-        >
-          <span className="flex items-center gap-2 font-medium text-sm [&_svg]:size-5 [&_svg]:text-primary">
-            {each.icon}
-            {each.label}
-          </span>
-          <span className="text-muted-foreground text-xs">{each.hint}</span>
-        </RadioTile>
-      ))}
+  const tileFace = (each: (typeof ways)[number]) => (
+    <>
+      <span className="flex items-center gap-2 font-medium text-sm [&_svg]:size-5 [&_svg]:text-primary">
+        {each.icon}
+        {each.label}
+      </span>
+      <span className="text-muted-foreground text-xs">{each.hint}</span>
+    </>
+  )
+  const tiles = ways.map((each) =>
+    quick ? (
+      <button
+        aria-pressed={picked === each.way}
+        className={QUICK_TILE}
+        key={each.way}
+        onClick={() => onPick(each.way)}
+        type="button"
+      >
+        {tileFace(each)}
+      </button>
+    ) : (
+      <RadioTile
+        checked={picked === each.way}
+        className={TRAY_TILE}
+        key={each.way}
+        name={name}
+        onClick={() => picked === each.way && onRepick(each.way)}
+        onPick={() => onPick(each.way)}
+      >
+        {tileFace(each)}
+      </RadioTile>
+    )
+  )
+  const grid = "grid @sm:grid-cols-2 grid-cols-1 gap-2"
+  return quick ? (
+    <fieldset className="min-w-0">
+      <legend className="sr-only">{label}</legend>
+      <div className={grid}>{tiles}</div>
+    </fieldset>
+  ) : (
+    <div aria-label={label} className={grid} role="radiogroup">
+      {tiles}
     </div>
+  )
+}
+
+/** The tag on an option chosen for this business. */
+function Suggested({ name }: { name: string }) {
+  return (
+    <Badge className="max-w-full truncate" variant="secondary">
+      Suggested for {name}
+    </Badge>
   )
 }
 
@@ -1019,20 +1064,20 @@ type TrayFrameProps = {
   page?: { index: number; total: number } | undefined
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
-  /** Back and forward; without one its arrow is disabled. */
+  /** Back a page; without it the arrow is disabled. Forward is the primary button. */
   onBack?: (() => void) | undefined
-  onForward?: (() => void) | undefined
   skip?: { label: string; onSkip: () => void; disabled?: boolean } | undefined
   /** Pick for me: the tray finishes at once, on its defaults for what is left. Another label makes it any second action. */
   pick?: { onPick: () => void; disabled?: boolean; label?: string } | undefined
   /**
    * The primary button. With `form` it submits that form, so Enter in a
-   * field submits too; without, Enter in a field presses it. A step that
-   * acts differently passes its own label and action here.
+   * field submits too; without, Enter in a field presses it. It reads Next
+   * on each page and Done on the last; a step that acts differently, such
+   * as an upload, passes its own label.
    */
   submit?:
     | {
-        label: ReactNode
+        label?: ReactNode
         onSubmit?: () => void
         form?: string
         disabled?: boolean
@@ -1045,7 +1090,11 @@ type TrayFrameProps = {
   children: ReactNode
 }
 
-/** The tray's frame: header, scrolling body and footer, or the one collapsed row. */
+/**
+ * Every card's frame, so they cannot drift apart: one surface with the
+ * question as its title, the scrolling body, and a footer under a thin rule.
+ * Or the one collapsed row.
+ */
 function TrayFrame({
   question,
   hint,
@@ -1053,7 +1102,6 @@ function TrayFrame({
   collapsed,
   onCollapsedChange,
   onBack,
-  onForward,
   skip,
   pick,
   submit,
@@ -1072,6 +1120,7 @@ function TrayFrame({
   const focusComposer = useFocusComposer()
   const paged = page !== undefined && page.total > 1
   const count = paged ? `${page.index + 1} of ${page.total}` : null
+  const forward = paged && page.index < page.total - 1 ? "Next" : "Done"
   // A one-tap question has nothing under its options: no empty footer band,
   // and the body takes the card's own corners.
   const footed = paged || status != null || skip || pick || submit
@@ -1203,7 +1252,7 @@ function TrayFrame({
         </button>
       ) : (
         <>
-          <div className="flex items-center gap-2 border-border border-b py-3 pr-4 pl-5">
+          <div className="flex items-center gap-2 pt-3 pr-4 pl-5">
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <h2 className="font-medium text-base" id={`${id}-question`}>
                 {question}
@@ -1235,7 +1284,7 @@ function TrayFrame({
               <CaretDownIcon aria-hidden />
             </Button>
           </div>
-          <div className="relative flex min-h-0 flex-col [--body:var(--muted)] dark:[--body:var(--background)]">
+          <div className="relative flex min-h-0 flex-col [--body:var(--card)]">
             {/* relative: the visually hidden radios inside are placed against
                 this scroller, so it clips them. Placed against the frame
                 instead, the ones in a folded section stretched the thread
@@ -1249,7 +1298,7 @@ function TrayFrame({
               onScroll={measure}
               ref={bodyRef}
             >
-              <div className="flex flex-col gap-3 p-3" ref={contentRef}>
+              <div className="flex flex-col gap-3 px-5 py-3" ref={contentRef}>
                 {children}
               </div>
             </div>
@@ -1265,32 +1314,19 @@ function TrayFrame({
             ) : null}
           </div>
           {footed ? (
-            <div className="flex flex-wrap items-center gap-1 p-4">
+            <div className="flex flex-wrap items-center gap-1 border-border border-t px-4 py-3">
               {paged ? (
-                <>
-                  <Button
-                    aria-label="Previous question"
-                    className={ACCENT_RING}
-                    disabled={!onBack}
-                    onClick={onBack}
-                    size="icon"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <CaretLeftIcon aria-hidden />
-                  </Button>
-                  <Button
-                    aria-label="Next question"
-                    className={ACCENT_RING}
-                    disabled={!onForward}
-                    onClick={onForward}
-                    size="icon"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <CaretRightIcon aria-hidden />
-                  </Button>
-                </>
+                <Button
+                  aria-label="Previous question"
+                  className={ACCENT_RING}
+                  disabled={!onBack}
+                  onClick={onBack}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                >
+                  <CaretLeftIcon aria-hidden />
+                </Button>
               ) : null}
               <span
                 className="min-w-0 flex-1 px-1 text-muted-foreground text-xs"
@@ -1332,7 +1368,7 @@ function TrayFrame({
                   onClick={submit.form ? undefined : submit.onSubmit}
                   type={submit.form ? "submit" : "button"}
                 >
-                  {submit.label}
+                  {submit.label ?? forward}
                 </Button>
               ) : null}
             </div>
@@ -1361,7 +1397,7 @@ type QuestionTrayProps = {
   toolCallId: string
   /** An answer, as the owner leaves its question. Store it; a reload resumes after it. */
   onAnswer?: (id: string, answer: Answer) => void
-  /** Looks good or Pick for me. */
+  /** Done or Pick for me. */
   onFinish: (output: AskDesignOutput) => void
   start?: Start
   /** The business's name, which the lettering previews are set in. */
@@ -1373,10 +1409,10 @@ type QuestionTrayProps = {
  * The design questions of a build, one page each, and two for the logo:
  * whether they have one, then the upload or the designs. A page shows the
  * options as a native radio group, or checkboxes on a question that takes
- * several, Write your own, and Next, which reads Looks good on the last.
+ * several, Write your own, and Next, which reads Done on the last.
  * Answers are code's:
  * `onAnswer` gets each one as the owner leaves its question, `onFinish` the
- * `AskDesignOutput` on Looks good or Pick for me.
+ * `AskDesignOutput` on Done or Pick for me.
  */
 function QuestionTray({
   input,
@@ -1469,6 +1505,12 @@ function QuestionTray({
   )
   // The logo page's own primary button (Redesign my logo), while it has one.
   const [logoSubmit, setLogoSubmit] = useState<TrayFrameProps["submit"]>()
+  // The designs page's title and line, which say what the drawing is doing.
+  const [logoHeading, setLogoHeading] = useState<LogoHeading | undefined>(
+    undefined
+  )
+  // Every lettering, past the four that fit the business.
+  const [allPairs, setAllPairs] = useState(false)
   const focusComposer = useFocusComposer()
 
   const step = pages[index]
@@ -1564,7 +1606,10 @@ function QuestionTray({
     if (given && ownPage) onAnswer?.(question.id, given)
   }
   const page = { question, toolCallId, stops, businessName: name }
-  const shown = shownOptions(question, answer)
+  const shown =
+    allPairs && question.visual === "font_pair"
+      ? question.card.options
+      : shownOptions(question, answer)
   // Any palette but the one picked, from every one offered, not only those shown.
   const surprise = () => {
     const rest = question.card.options.filter(
@@ -1604,22 +1649,25 @@ function QuestionTray({
     <TrayFrame
       className={className}
       collapsed={collapsed}
-      hint={multiple ? "Pick any that fit" : null}
+      hint={
+        logo && !choice
+          ? logoHeading?.hint
+          : multiple
+            ? "Pick any that fit"
+            : null
+      }
       onBack={index === 0 ? undefined : () => go(index - 1, false)}
       onCollapsedChange={setCollapsed}
-      onForward={
-        designsSubmit
-          ? designsSubmit.disabled
-            ? undefined
-            : designsSubmit.onSubmit
-          : last || !ready
-            ? undefined
-            : () => go(index + 1, true)
-      }
       page={{ index, total }}
-      pick={{ onPick: () => finish(true), disabled: finishing && !ready }}
+      pick={
+        answer === undefined
+          ? { onPick: () => finish(true), disabled: finishing && !ready }
+          : undefined
+      }
       question={
-        logo && !choice ? "Your logo" : (question.question ?? "Choose one")
+        logo && !choice
+          ? (logoHeading?.title ?? "Your logo")
+          : (question.question ?? "Choose one")
       }
       status={
         finishing && !ready
@@ -1628,12 +1676,15 @@ function QuestionTray({
             ? "I'll build your site with these"
             : null
       }
+      // The logo's first page answers on a tap, so it has no forward button.
       submit={
-        designsSubmit || {
-          label: last || finishing ? "Looks good" : "Next",
-          onSubmit: next,
-          disabled: !ready,
-        }
+        logo && choice
+          ? undefined
+          : designsSubmit || {
+              label: finishing ? "Done" : undefined,
+              onSubmit: next,
+              disabled: !ready,
+            }
       }
     >
       {question.visual === "font_pair" && <PreviewFaces />}
@@ -1653,6 +1704,7 @@ function QuestionTray({
             path={logoPath}
             picking={finishing}
             question={logoQuestion}
+            setHeading={setLogoHeading}
             setSubmit={setLogoSubmit}
             start={start?.logo}
             step={choice ? "choice" : "designs"}
@@ -1771,10 +1823,24 @@ function QuestionTray({
                     {option.hint}
                   </span>
                 ) : null}
+                {option.id === question.suggested ? (
+                  <Suggested name={name} />
+                ) : null}
               </label>
             )
           })}
         </div>
+      ) : null}
+      {question.visual === "font_pair" &&
+      !allPairs &&
+      shown.length < question.card.options.length ? (
+        <button
+          className="self-start rounded-sm text-muted-foreground text-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-primary"
+          onClick={() => setAllPairs(true)}
+          type="button"
+        >
+          More styles
+        </button>
       ) : null}
       {question.visual === "palette" ? (
         <>
@@ -1829,6 +1895,7 @@ export {
   Fold,
   QuestionTray,
   RadioTile,
+  Suggested,
   Summary,
   Swatches,
   sentence,

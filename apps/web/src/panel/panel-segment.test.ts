@@ -99,7 +99,7 @@ it("offers no link from a waiting step: the answer goes in the chat", async () =
   expect(container.querySelectorAll("li button")).toHaveLength(0)
 })
 
-it("lists what is done and the step at work, and only hints at the rest", async () => {
+it("lists what is done and the step at work, with no rail under the last", async () => {
   await show({
     steps: [
       ...steps("now"),
@@ -113,10 +113,8 @@ it("lists what is done and the step at work, and only hints at the rest", async 
   })
   expect(container.textContent).toContain("Where you work")
   expect(container.textContent).not.toContain("Your customers")
-  expect(container.querySelectorAll("ol > li")).toHaveLength(3)
-  expect(
-    container.querySelector("ol > li:last-child")?.getAttribute("aria-hidden")
-  ).toBe("true")
+  expect(container.querySelectorAll("ol > li")).toHaveLength(2)
+  expect(container.querySelector("ol > li[aria-hidden]")).toBeNull()
 })
 
 it("draws no details under a finished step", async () => {
@@ -162,4 +160,39 @@ it("draws nothing under a job not begun, and only its action when it has one", a
   })
   expect(container.querySelector("ol")).toBeNull()
   expect(container.textContent).toContain("Create my website")
+})
+
+it("hints the step waiting on the owner beside its name, which stays the same", async () => {
+  await show({
+    state: "waiting",
+    steps: [
+      {
+        id: "area",
+        label: "Service area",
+        state: "waiting",
+        kind: "waiting",
+        hint: "Waiting for your answer",
+      },
+    ],
+  })
+  expect(container.querySelector("ol > li")?.textContent).toBe(
+    "Service area · Waiting for your answer"
+  )
+})
+
+it("folds to one line with how it is going while the owner is wanted elsewhere", async () => {
+  const build = {
+    title: "Your website",
+    line: "Step 3 of 6: writing your pages",
+    status: "About 5 min left",
+  }
+  await show({ ...build, quiet: true })
+  expect(title()).toBe("Your website · About 5 min left")
+  expect(caret()?.getAttribute("aria-expanded")).toBe("false")
+  expect(container.querySelector("[inert]")).not.toBeNull()
+  // Nothing waits any more: it opens again, its lines under the title.
+  await show(build)
+  expect(title()).toBe("Your website")
+  expect(container.textContent).toContain("Step 3 of 6: writing your pages")
+  expect(container.textContent).toContain("About 5 min left")
 })

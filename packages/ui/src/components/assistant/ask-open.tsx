@@ -47,4 +47,13 @@ const waitsToSkip = (parts: readonly object[] | undefined) =>
     )
   })
 
-export { AskOpen, waitsToSkip }
+/** Whether these parts, a message's, wait on the owner's reply to the business recap. */
+const waitsOnRecap = (parts: readonly object[] | undefined) =>
+  (parts ?? []).some((part) => {
+    const p = part as ToolPartView & { type?: string; toolName?: string }
+    if (p.type !== "tool-call" || p.toolName !== "ask_open") return false
+    const view = askOpenView(p)
+    return view.state === "pending" && view.input.about === "recap"
+  })
+
+export { AskOpen, waitsOnRecap, waitsToSkip }

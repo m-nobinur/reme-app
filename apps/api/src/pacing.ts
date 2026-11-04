@@ -16,6 +16,15 @@ const MS_PER_CHAR = [4, 6] as const
 /** A message adds at most this much, however long it is. */
 const TEXT_MAX_MS = 2500
 const CARD_MS = [300, 500] as const
+/** The pause between two messages of one reply, typing dots and all. */
+const NEXT_MS = [1200, 1600] as const
+
+/**
+ * Shown during that pause. The thread draws its typing dots while the last
+ * part is not text, and a data part with no renderer draws nothing else; the
+ * stored reply never holds it.
+ */
+export const TYPING: UIMessageChunk = { type: "data-typing", data: {} }
 
 const between = ([low, high]: readonly [number, number]) =>
   low + Math.random() * (high - low)
@@ -38,8 +47,9 @@ export function wordsOf(text: string): string[] {
 /**
  * Writes scripted chunks as a model would stream them: a reading beat
  * before the first word, the words a word or two at a time, and a short beat
- * before a card that follows text. Every chunk is passed on in order and
- * the text is unchanged. `said` means words already streamed before these
+ * before a card that follows text, and a typing pause before a step that
+ * follows text, which is a second message. Every chunk is passed on in order
+ * and the text is unchanged. `said` means words already streamed before these
  * chunks, so there is no reading beat and the first card gets its beat.
  */
 export async function pace(
@@ -55,6 +65,8 @@ export async function pace(
   const squeeze = Math.min(1, TEXT_MAX_MS / (chars * MS_PER_CHAR[1] || 1))
   let read = said
   let afterText = said
+  // Words in these chunks: a step after words said before them is not a second message.
+  let worded = false
   for (const chunk of chunks) {
     if (chunk.type === "text-start" && !read) {
       read = true
@@ -66,7 +78,13 @@ export async function pace(
         emit({ ...chunk, delta })
       }
       afterText = true
+      worded = true
       continue
+    }
+    if (chunk.type === "start-step" && afterText && worded) {
+      afterText = false
+      emit(TYPING)
+      await clock.sleep(between(NEXT_MS))
     }
     if (chunk.type === "tool-input-available" && afterText) {
       afterText = false

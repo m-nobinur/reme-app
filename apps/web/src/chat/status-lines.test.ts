@@ -361,8 +361,10 @@ describe("what waits on the owner", () => {
         { id: "records", state: "waiting" },
       ],
     }
-    expect(pillLine(stale, ctx)).toBe("Wren is waiting for your domain setting")
-    expect(segmentTitle(stale, ctx)).toMatch(/pebblewick\.bnwise\.tech/)
+    expect(pillLine(stale, ctx)).toBe(
+      "Wren needs a record added at your DNS provider"
+    )
+    expect(segmentTitle(stale, ctx)).toBe("Connecting your domain")
     const choosing: ActivitySegment = {
       ...stale,
       state: "now",
@@ -373,9 +375,7 @@ describe("what waits on the owner", () => {
         { id: "records", state: "next" },
       ],
     }
-    expect(segmentTitle(choosing, ctx)).toMatch(
-      /^(Choosing your web address|Picking a name for your website)$/
-    )
+    expect(segmentTitle(choosing, ctx)).toBe("Your web address")
   })
 
   it("says what else waits in the tray", () => {

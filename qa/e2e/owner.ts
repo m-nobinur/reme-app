@@ -190,7 +190,7 @@ const reply = (asked: string) =>
   REPLIES.find(([pattern]) => pattern.test(asked))?.[1] ?? "You choose."
 
 /** The option a choice card is answered with, when it offers it; else its first. */
-const PICKS = ["Cleaning and home services", "Yes, build it for me"]
+const PICKS = ["Cleaning and home services", "Yes, build my website"]
 
 /**
  * The onboarding conversation played as an owner would, until the first
@@ -292,9 +292,8 @@ export async function answerOnboarding(page: Page): Promise<void> {
       await step(() => card.getByRole("button", { name: "Looks good" }).click())
     } else if (slot === "ask-details") {
       // One field a page: an empty text field from the sheet, by its label,
-      // a prefilled email stays, and a set of chips takes its first option.
-      // Next until the last page, which reads Submit, or Looks good on a
-      // tray that opened filled.
+      // and a set of chips takes its first option.
+      // Next until the last page, which reads Done.
       for (;;) {
         for (const field of await card.getByRole("textbox").all()) {
           if (!(await field.isVisible()) || (await field.inputValue())) continue
@@ -314,13 +313,15 @@ export async function answerOnboarding(page: Page): Promise<void> {
         await next.click()
       }
       await step(() =>
-        card.getByRole("button", { name: /^(Submit|Looks good)$/ }).click()
+        card.getByRole("button", { name: "Done", exact: true }).click()
       )
     } else if (slot === "ask-choice") {
-      // A choice of two answers on its tap, with no Submit.
-      const submit = card.getByRole("button", { name: "Submit" })
+      // Quick replies, or a choice of two, answer on a tap with no Done.
+      const submit = card.getByRole("button", { name: "Done", exact: true })
       if (!(await submit.count())) {
-        const options = card.locator("form button")
+        const options = card.locator(
+          "form button, [data-slot=reply-pills] button"
+        )
         let pick = options.first()
         for (const name of PICKS) {
           const offered = options.filter({ hasText: name })
@@ -352,7 +353,7 @@ export async function answerOnboarding(page: Page): Promise<void> {
       const field = card.getByLabel(label, { exact: true })
       // The owner's name opens with the one they signed in with.
       if (!(await field.inputValue())) await field.fill(reply(label))
-      await step(() => card.getByRole("button", { name: "Submit" }).click())
+      await step(() => card.getByRole("button", { name: "Done" }).click())
     }
   }
   await expect(

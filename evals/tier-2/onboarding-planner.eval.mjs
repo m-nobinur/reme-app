@@ -1,6 +1,6 @@
 import { appendFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { DETAILS_KEYS } from "@workspace/contracts"
+import { DETAILS_KEYS, RECAP_REPLY } from "@workspace/contracts"
 import { priceOf } from "../../apps/api/src/cos/agent.ts"
 import {
   again,
@@ -37,9 +37,11 @@ import {
   CORRECTS_TWICE,
   MISLEADING,
   PERSONAS,
+  PRUNING_CO,
   SKIPPER,
   SKIPS_EVERYTHING,
 } from "../onboarding-personas.mjs"
+import { PATTERNS, styleContext, styleHits } from "./planner-style.mjs"
 
 /**
  * Tier 2 (§16.3), live: the onboarding planner against the real model, over
@@ -59,15 +61,16 @@ import {
  * checklist allowed it, the quote form asks business-specific questions and
  * never the contact details, and it took at most `MAX_TURNS` owner turns.
  * The twelve conversations (`ONBOARDING_EVAL_PERSONAS=conversations`) also
- * hold four assertions each: no fact asked twice, no `voiceProblems` hit in
- * any line the owner reads, no question about a fact already held, and the
+ * hold four assertions each: no fact asked twice, no hard `voiceProblems`
+ * hit in any line the owner reads, no question about a fact already held, and the
  * build starts within one turn of the design tray's last answer. Every
  * question the planner can ask is answered: the design tray (picked or
  * skipped), an open question (stated or skipped), a fact, details, a choice,
  * the photo upload (skipped) and the quote form (accepted).
  * It prints every transcript so a person can read the tone, and a table per
  * model: owners passed, fallbacks, first plans refused, cost per onboarding
- * and call latency.
+ * and call latency, then the share of planner replies holding each style
+ * pattern the checks no longer refuse (`planner-style.mjs`).
  *
  *   node --env-file=.env.local --import ./evals/json-imports.mjs \
  *     --experimental-transform-types evals/tier-2/onboarding-planner.eval.mjs
@@ -182,7 +185,7 @@ function scriptRows(rows) {
       .map((p) => ({
         type: p.type,
         state: p.state,
-        step: p.input?.key ?? p.input?.step ?? null,
+        step: p.input?.key ?? p.input?.step ?? p.input?.about ?? null,
         answer: p.output?.answer ?? null,
         choice: p.output?.ids?.[0] ?? null,
         reply: p.state === "output-error" ? reply : null,
@@ -222,7 +225,7 @@ const factOf = (facts, key) => facts.find((f) => f.key === key)?.value
 
 /** One owner, onboarded by one model. */
 async function onboard(persona, spec) {
-  // `model@effort` sets the reasoning effort; the api's default is low.
+  // `model@effort` sets the reasoning effort; the api's default is medium.
   const [modelId, effort] = spec.split("@")
   const model = plannerModel(KEY, modelId, effort)
   const price = priceOf(modelId)
@@ -273,11 +276,13 @@ async function onboard(persona, spec) {
   const plans = []
   const problems = []
   const says = []
+  const styled = []
   let fallbacks = 0
   let refusedFirst = 0
   const refusals = []
   let turns = 0
   let quoteChanged = false
+  let reviews = 0
   let trayTurn = null
   let buildTurn = null
   const asks = {}
@@ -312,8 +317,8 @@ async function onboard(persona, spec) {
     for (const part of parts) {
       if (part.type !== "text") continue
       heard.push({ text: part.text, named: assistantNamed })
-      const { hard, soft } = voiceProblems(part.text, { assistantNamed })
-      for (const problem of [...hard, ...soft]) flag(`say: ${problem}`)
+      const { hard } = voiceProblems(part.text, { assistantNamed })
+      for (const problem of hard) flag(`say: ${problem}`)
     }
   }
   const heard = []
@@ -378,6 +383,7 @@ async function onboard(persona, spec) {
     const parts = planParts(checked, s, newId)
     put([...checked.stated, ...checked.chosen])
     says.push(checked.plan.say)
+    styled.push(styleHits(checked.plan.say, styleContext(checked.plan, s)))
     plans.push(checked.plan)
     for (const problem of sayProblems(
       checked.plan.say,
@@ -490,7 +496,8 @@ async function onboard(persona, spec) {
       await typed(scripted)
       continue
     }
-    let act = card ? cardAction(persona, card, { quoteChanged }) : null
+    let act = card ? cardAction(persona, card, { quoteChanged, reviews }) : null
+    if (card?.type === "tool-review_quote_form") reviews += 1
     if (act?.kind === "open") {
       act = {
         kind: "answer",
@@ -553,6 +560,9 @@ async function onboard(persona, spec) {
       `no build after ${turns} owner turns; missing ${buildMissing(end).join(", ")}`
     )
   }
+  const area = factOf(sim.facts, "service_area.text")?.text ?? ""
+  if (persona.areaAfter && !persona.areaAfter.test(area))
+    problems.push(`the recap's correction was not kept: ${area}`)
   const missing = REQUIRED.filter((k) => !sim.facts.some((f) => f.key === k))
   if (missing.length > 0)
     problems.push(`required facts missing: ${missing.join(", ")}`)
@@ -580,9 +590,16 @@ async function onboard(persona, spec) {
     const name = (factOf(sim.facts, "business.name")?.name ?? "")
       .replace(/\s*\(.*\)$/, "")
       .toLowerCase()
-    const wrong = says.filter((s) =>
-      persona.notTrade.test(s.toLowerCase().split(name).join(""))
-    )
+    // Once the owner names the trade they don't do ("we don't do any
+    // cleaning"), a reply may say it back: the word is then theirs.
+    let theirs = false
+    const wrong = lines().flatMap(({ from, text }) => {
+      const named = persona.notTrade.test(
+        text.toLowerCase().split(name).join("")
+      )
+      if (from === "Owner") theirs ||= named
+      return from === "Assistant" && named && !theirs ? [text] : []
+    })
     if (wrong.length > 0) problems.push(`said the wrong trade: ${wrong[0]}`)
   }
   // An optional detail the owner deferred is asked at most twice in all.
@@ -638,6 +655,7 @@ async function onboard(persona, spec) {
     fallbacks,
     refusedFirst,
     refusals,
+    styled,
     turns,
     transcript: lines(),
     heard,
@@ -689,7 +707,7 @@ const LOGO = {
 }
 
 /** What the owner does with a card, by the sheet's rules, or null to type. */
-function cardAction(persona, card, { quoteChanged }) {
+function cardAction(persona, card, { quoteChanged, reviews }) {
   const input = card.input
   const typed = (rule) =>
     rule?.startsWith("type:") ? { kind: "type", text: rule.slice(5) } : null
@@ -724,6 +742,11 @@ function cardAction(persona, card, { quoteChanged }) {
     return { kind: "answer", output: { answers, skip_all: false } }
   }
   if (card.type === "tool-ask_open") {
+    // The recap's confirm pill sends its words; an owner may type a correction.
+    if (input.about === "recap")
+      return { kind: "type", text: persona.recap ?? RECAP_REPLY }
+    const answer = persona.answers?.[input.about]
+    if (answer) return { kind: "type", text: answer }
     return input.skippable && (persona.cards.open === "skip" || persona.skipAll)
       ? { kind: "answer", output: { answer: "skipped" } }
       : { kind: "open" }
@@ -805,7 +828,9 @@ function cardAction(persona, card, { quoteChanged }) {
     )
   }
   if (card.type === "tool-review_quote_form") {
-    const rule = persona.quote ?? "confirm"
+    // A list answers each proposal in turn, the last one every proposal after.
+    const rules = [persona.quote ?? "confirm"].flat()
+    const rule = rules[Math.min(reviews, rules.length - 1)]
     if (rule.startsWith("change:") && !quoteChanged) {
       return {
         kind: "answer",
@@ -839,6 +864,7 @@ export default async function run() {
     SKIPPER,
     SKIPS_EVERYTHING,
     CORRECTS_TWICE,
+    PRUNING_CO,
   ].filter((p) => !only || only.includes(p.id))
   const results = []
   for (const modelId of ids) {
@@ -858,7 +884,7 @@ export default async function run() {
           console.log(`${line.from}: ${line.text}`)
         if (r.form)
           console.log(
-            `Quote form: ${r.form.map((f) => `${f.label} [${f.type}${f.required ? "*" : ""}]`).join("; ")}`
+            `Quote form: ${r.form.map((f) => `${f.label} [${f.type}${f.required ? "*" : ""}${f.options ? `: ${f.options.join(" / ")}` : ""}]`).join("; ")}`
           )
         for (const problem of r.problems) console.log(`  problem: ${problem}`)
       }
@@ -883,6 +909,25 @@ export default async function run() {
         mine.map((r) => r.turns),
         50
       )} |`
+    )
+  }
+  table.push(
+    "",
+    "Planner replies holding each style pattern the checks no longer refuse:",
+    "",
+    `| Model | Replies | ${PATTERNS.join(" | ")} |`,
+    `| --- | --- |${" --- |".repeat(PATTERNS.length)}`
+  )
+  for (const modelId of ids) {
+    const replies = results
+      .filter((r) => r.modelId === modelId)
+      .flatMap((r) => r.styled)
+    const share = (name) => {
+      const n = replies.filter((hits) => hits.includes(name)).length
+      return `${n} (${Math.round((100 * n) / Math.max(1, replies.length))}%)`
+    }
+    table.push(
+      `| ${modelId} | ${replies.length} | ${PATTERNS.map(share).join(" | ")} |`
     )
   }
   table.push(

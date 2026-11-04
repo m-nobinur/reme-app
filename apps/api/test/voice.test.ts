@@ -45,8 +45,7 @@ describe("voiceProblems", () => {
     for (const line of AFTER) expect(hits(line), line).toBe(0)
   })
 
-  it("treats dashes and internals as hard, ceremony and praise as soft", () => {
-    expect(voiceProblems("One thing – then another.").hard).toHaveLength(1)
+  it("treats internals as hard, ceremony and praise as soft", () => {
     expect(voiceProblems("Build ead99cb0 is ready.").hard).toHaveLength(1)
     expect(
       voiceProblems("Run 0f8f8431-aaaa-4bbb-8ccc-123456789abc").hard

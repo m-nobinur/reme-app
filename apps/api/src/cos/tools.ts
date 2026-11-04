@@ -110,7 +110,7 @@ import {
 } from "../changes.ts"
 import { emailFromOwner, phoneFromOwner } from "../contact.ts"
 import {
-  buyConfigured,
+  buyOffered,
   buyUnavailable,
   isOrgOwner,
   notOwner,
@@ -500,7 +500,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       title: n.title,
       due: n.due_at && zonedIso(new Date(n.due_at), zone),
     })),
-    buying: buyConfigured(env),
+    buying: buyOffered(env),
     expected_seconds: status.expected_seconds,
     expected_range: {
       quick: rangeOf(status.expected_seconds, "quick"),
@@ -1781,16 +1781,24 @@ export const connectProposed = (messages: readonly ModelMessage[]) =>
         )
     )
 
-/** Whether the org already has `name` live: connecting it again moves live DNS. */
+/**
+ * Whether the org already has `name` live: connecting it again moves live
+ * DNS. Without a name, whether any domain is live, which a new one replaces.
+ */
 export async function isLive(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
-  name: string
+  name?: string
 ): Promise<boolean> {
   const [active] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
     db
       .select({ id: domains.id })
       .from(domains)
-      .where(sql`${eq(domains.name, name)} and ${domains.state} = 'active'`)
+      .where(
+        name
+          ? sql`${eq(domains.name, name)} and ${domains.state} = 'active'`
+          : sql`${domains.state} = 'active'`
+      )
+      .limit(1)
   )
   return Boolean(active)
 }
@@ -1959,19 +1967,35 @@ export async function removeDomain(
 }
 
 /**
- * Names free to register now, at the price table's price: the
- * orchestrator's registrar search, which keeps only what the configured
- * registrar reports registrable under the table's cost cap. It costs
+ * Names free to register now: the orchestrator's registrar search, each
+ * ending free or taken with the registrar's own price. Reme's price stays
+ * on only while buying here is offered (`buy_here`); otherwise the owner
+ * buys from a provider, so no price of ours is shown or quoted. It costs
  * nothing and reserves nothing, so it needs no approval.
  */
 export async function findDomain(
   { env, owner }: ToolContext,
   input: FindDomainInput
 ): Promise<FindDomainOutput> {
-  return domainAnswer(
+  const found = await domainAnswer(
     await bridge(env, owner, "/domains/find", { body: input }),
     FindDomainOutput.parse
   )
+  if (found.outcome !== "found" || !("rows" in found)) return found
+  if (buyOffered(env)) return { ...found, buy_here: true }
+  return {
+    ...found,
+    rows: found.rows.map((row) => ({
+      ...row,
+      endings: Object.fromEntries(
+        Object.entries(row.endings).map(([tld, ending]) => {
+          if (ending?.state !== "free") return [tld, ending]
+          const { price_gbp_year: _, ...rest } = ending
+          return [tld, rest]
+        })
+      ),
+    })),
+  }
 }
 
 /**
@@ -1985,7 +2009,7 @@ export async function buyDomain(
   { env, kit, owner }: ToolContext,
   { name }: BuyDomainInput
 ): Promise<BuyDomainOutput> {
-  if (!buyConfigured(env)) return refused(buyUnavailable())
+  if (!buyOffered(env)) return refused(buyUnavailable())
   // The owner only, and a name the registrar sells, as the page asks it.
   const prefill = await registrantPrefill(kit, owner, name)
   if (!prefill.ok) return refused(prefill)

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   ADDRESS_ASK,
   AttentionItem,
+  addressOfferText,
   addressReply,
   BUY_REFUSALS,
   BuyDomainInput,
@@ -44,7 +45,7 @@ describe("DomainName", () => {
     ["a scheme", "https://brightclean.co.uk"],
     ["a path", "brightclean.co.uk/x"],
     ["a port", "brightclean.co.uk:8080"],
-    ["over 253 characters", `${"a".repeat(60)}.`.repeat(5) + "example"],
+    ["over 253 characters", `${`${"a".repeat(60)}.`.repeat(5)}example`],
   ])("refuses %s", (_name, name) => {
     expect(DomainName.safeParse(name).success).toBe(false)
   })
@@ -384,12 +385,47 @@ describe("addressReply", () => {
     expect(addressReply(ADDRESS_ASK.yes, "sparkle.co.uk")).toBe(
       "Yes, it's sparkle.co.uk"
     )
-    expect(addressReply(ADDRESS_ASK.yes)).toBe("Yes, I have a web address")
+    expect(addressReply(ADDRESS_ASK.yes)).toBe(ADDRESS_ASK.yes)
     expect(addressReply(ADDRESS_ASK.no)).toBe(ADDRESS_ASK.no)
   })
 
-  it("says nothing for Not now", () => {
+  it("says nothing for Skip for now", () => {
     expect(addressReply(ADDRESS_ASK.later)).toBeNull()
+  })
+})
+
+describe("addressOfferText", () => {
+  const offer = (searched: string) =>
+    `Your website is coming along nicely. While it builds, let's sort out its address.\n\nI'd recommend your own domain. It looks more professional, is easier for customers to remember, and gives Google one address to show when people search for **${searched}**. The more people find you there, the stronger it gets.`
+
+  it("names the trade in the owner's words and the town they are based in", () => {
+    expect(
+      addressOfferText({
+        trade: "Tree surgery and garden care",
+        area: "Leeds and about 20 miles out, including Bradford",
+      })
+    ).toBe(offer("tree surgery in Leeds"))
+    expect(
+      addressOfferText({ trade: "Cleaning", area: "Stoke-on-Trent" })
+    ).toBe(offer("cleaning in Stoke-on-Trent"))
+  })
+
+  it("says near you without a town, and a business like yours without a trade", () => {
+    expect(addressOfferText({ trade: "Tree surgery" })).toBe(
+      offer("tree surgery near you")
+    )
+    expect(
+      addressOfferText({ trade: "Dog grooming", area: "within 10 miles" })
+    ).toBe(offer("dog grooming near you"))
+    expect(
+      addressOfferText({
+        trade: "Dog grooming",
+        area: "Within 10 miles of York",
+      })
+    ).toBe(offer("dog grooming near you"))
+    expect(addressOfferText({ area: "Leeds" })).toBe(
+      offer("a business like yours")
+    )
   })
 })
 

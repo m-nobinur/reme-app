@@ -27,6 +27,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 const USER_ROW = 40
 const REPLY_ROW = 200
+/** Where the owner's message rests: at the top of the view, the reply below it. */
+const TOP = 0
 
 /** What the model lays out; a test changes it, then runs frames. */
 let layout: {
@@ -500,7 +502,12 @@ afterEach(async () => {
 })
 
 /** The owner sends, the reply streams in and ends: their message at the top. */
-async function sendAndReply(id: string, reply = `${id}-reply`, height = 260) {
+async function sendAndReply(
+  id: string,
+  reply = `${id}-reply`,
+  height = 260,
+  top = TOP
+) {
   await setState({
     messages: [
       ...state.messages,
@@ -519,8 +526,20 @@ async function sendAndReply(id: string, reply = `${id}-reply`, height = 260) {
     isRunning: false,
   })
   await frames()
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(top)
 }
+
+/** A tall message keeps this much of its end in view: the library's default, 6em. */
+const VISIBLE = 96
+
+it("a message up to the clamp stays whole at the top, a taller one keeps its last lines", async () => {
+  // A long message folded to six lines is about 220 px, and eight lines whole
+  // about 270; the clamp is 20rem.
+  layout.rows.set("u1", 290)
+  await sendAndReply("u1")
+  layout.rows.set("u2", 500)
+  await sendAndReply("u2", undefined, undefined, -(500 - VISIBLE))
+})
 
 it("the owner's message stays at the top when the docked tray leaves", async () => {
   layout.footer = 421
@@ -531,7 +550,7 @@ it("the owner's message stays at the top when the docked tray leaves", async () 
   layout.footer = 80
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
 it("the owner's message stays at the top through each step the tray swaps", async () => {
@@ -544,7 +563,7 @@ it("the owner's message stays at the top through each step the tray swaps", asyn
     await frames()
   }
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
 it("the owner's message stays at the top when the viewport resizes after the reply", async () => {
@@ -558,7 +577,7 @@ it("the owner's message stays at the top when the viewport resizes after the rep
   vi.stubGlobal("innerHeight", window.innerHeight - 41)
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
 it("the owner's message stays at the top when the tray leaves as they send", async () => {
@@ -590,7 +609,7 @@ it("the owner's message stays at the top when the tray leaves as they send", asy
   })
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
 it("a card in the slot that fits the held space moves nothing", async () => {
@@ -599,7 +618,7 @@ it("a card in the slot that fits the held space moves nothing", async () => {
   layout.slot = 180
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
 it("the owner's message stays at the top through the history refresh after a turn", async () => {
@@ -609,7 +628,7 @@ it("the owner's message stays at the top through the history refresh after a tur
   await setState({ messages: state.messages.map((each) => ({ ...each })) })
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
 it("the owner's message stays at the top when the reply's id changes as the turn ends", async () => {
@@ -619,7 +638,7 @@ it("the owner's message stays at the top when the reply's id changes as the turn
   layout.footer = 300
   await frames()
   expect(worstMove(from)).toBeLessThanOrEqual(1)
-  expect(ownerMessageTop()).toBe(0)
+  expect(ownerMessageTop()).toBe(TOP)
 })
 
 it("a tray docking under a reply that fills the view keeps the reader at its end", async () => {
@@ -635,6 +654,51 @@ it("a tray docking under a reply that fills the view keeps the reader at its end
   expect(
     viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
   ).toBeLessThanOrEqual(1)
+})
+
+it("a tray docking under a reply that fills the view keeps the owner's message at the top", async () => {
+  await sendAndReply("u1", "u1-reply", 1200)
+  layout.footer = 421
+  await frames()
+  expect(ownerMessageTop()).toBe(TOP)
+})
+
+it("a reply that starts while the owner reads further up moves nothing and says New message", async () => {
+  await sendAndReply("u1")
+  const viewport = chat.querySelector<HTMLElement>(
+    '[data-slot="aui_thread-viewport"]'
+  )
+  if (!viewport) throw new Error("no viewport")
+  const reply = (text: string, running = true): ThreadMessageLike => ({
+    ...said("u2-reply", "assistant", text),
+    ...(running ? { status: { type: "running" } } : {}),
+  })
+  await setState({
+    messages: [
+      ...state.messages,
+      said("u2", "user", "Something else"),
+      { ...reply(""), content: [] },
+    ],
+    isRunning: true,
+  })
+  await frames()
+  viewport.scrollTop -= 150
+  await frames()
+  const reading = ownerMessageTop()
+  const button = () =>
+    chat.querySelector(".aui-thread-scroll-to-bottom")?.textContent
+  expect(button()).not.toContain("New message")
+  layout.rows.set("u2-reply", 600)
+  await setState({ messages: [...state.messages.slice(0, -1), reply("Here")] })
+  await frames()
+  expect(ownerMessageTop()).toBe(reading)
+  expect(button()).toContain("New message")
+  await setState({
+    messages: [...state.messages.slice(0, -1), reply("Here it is.", false)],
+    isRunning: false,
+  })
+  await frames()
+  expect(ownerMessageTop()).toBe(reading)
 })
 
 it("the persona card waits for the words above it to finish typing in", async () => {
@@ -709,7 +773,7 @@ const SENDS = [
   { what: "Skip this one", footer: 124, leavesFirst: false },
 ]
 for (const { what, footer, leavesFirst } of SENDS) {
-  it(`${what} glides the owner's message to the top`, async () => {
+  it(`${what} glides the new turn up until their message is at the top`, async () => {
     layout.footer = footer
     await frames()
     await sendAndReply("u1")
@@ -730,8 +794,8 @@ for (const { what, footer, leavesFirst } of SENDS) {
     // the composer was, with nothing above it moved, then rises.
     const path = painted.slice(from + (leavesFirst ? 1 : 0))
     const trace = path.join(" ")
-    expect(path[0], trace).toBe(USER_ROW + 260)
-    expect(path.at(-1), trace).toBe(0)
+    expect(path[0], trace).toBe(TOP + USER_ROW + 260)
+    expect(path.at(-1), trace).toBe(TOP)
     expect(
       path.every((top, i) => i === 0 || top <= (path[i - 1] ?? top)),
       trace
@@ -792,7 +856,6 @@ async function showTray(index: number, content: number) {
         collapsed: false,
         onCollapsedChange: () => undefined,
         onBack: () => undefined,
-        onForward: () => undefined,
         // biome-ignore lint/correctness/noChildrenProp: the frame requires children as a prop, which createElement's rest argument does not satisfy
         children: createElement("div", { key: index }, `Page ${index + 1}`),
       })

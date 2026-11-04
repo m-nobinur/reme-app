@@ -3,13 +3,14 @@ import {
   useAui,
   useAuiState,
 } from "@assistant-ui/react"
-import { ArrowSquareOutIcon, CopyIcon } from "@phosphor-icons/react"
+import { ArrowSquareOutIcon, CloudIcon, CopyIcon } from "@phosphor-icons/react"
 import {
   BoughtElsewhereOutput,
   type CheckDomainOutput,
   ConnectDomainInput,
   ConnectDomainOutput,
   DEFAULT_LABELS,
+  type DnsProviderEntry,
   type DnsRecord,
   DomainBoughtInput,
   dnsProvider,
@@ -21,6 +22,7 @@ import {
   Done,
   Problem,
 } from "@workspace/ui/components/assistant/decision"
+import { ReplyPill } from "@workspace/ui/components/assistant/reply-pill"
 import { BrandMark } from "@workspace/ui/components/brand-mark"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConnectRow } from "@workspace/ui/components/connect-row"
@@ -29,34 +31,27 @@ import {
   StatusLine,
   ToolStatus,
 } from "@workspace/ui/components/status-line"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@workspace/ui/components/table"
 import { useCopyToClipboard } from "@workspace/ui/hooks/use-copy-to-clipboard"
 import { useLiveCards } from "@workspace/ui/lib/live-cards"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { decisionView, readView } from "@workspace/ui/lib/tool-state"
 import { META } from "@workspace/ui/lib/utils"
-import { type ReactNode, useState } from "react"
+import { Fragment, type ReactNode, useState } from "react"
 
 /**
- * Connecting a domain the owner already has. The yes is the owner's approval;
- * what follows is two steps: sign in where the domain's settings live (our
- * own link to the provider's DNS page when we know it, else where to look),
- * then a record table with a copy button per cell. Copy all hands the whole
- * setting to whoever manages the domain. "OK" answers in the owner's voice
- * through the thread, and the assistant watches the domain either way.
+ * Connecting a domain the owner already has. A name the owner typed runs
+ * with no card; one already live asks first. What follows is two steps: open
+ * where the domain's settings live (our own link to the provider's DNS page
+ * when we know it, else where to look), then each record as a small grid
+ * with a copy button per value. "I've added it" answers in the owner's
+ * voice through the thread, and the assistant watches the domain either way.
+ * Once the owner moves on to another domain, the card folds to one line.
  */
 
 type Connecting = Extract<ConnectDomainOutput, { outcome: "connecting" }>
 
-/** The message the wait button sends as the owner. */
-export const DONE_WAITING = "Done, I'll wait."
+/** The message the added pill sends as the owner. */
+export const DONE_WAITING = "I've added it"
 
 /** One value with a button that copies it; the button says what it copies. */
 function CopyValue({ value }: { value: string }) {
@@ -64,7 +59,14 @@ function CopyValue({ value }: { value: string }) {
   return (
     <span className="inline-flex max-w-full items-center gap-1">
       <code className="min-w-0 break-words rounded-md bg-muted px-1.5 py-0.5 text-[0.8125rem]">
-        {value}
+        {/* A long name wraps after a dot, never inside a label. */}
+        {value.split(/(?<=\.)/).map((part, at) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: the parts of one fixed string
+          <Fragment key={at}>
+            {at ? <wbr /> : null}
+            {part}
+          </Fragment>
+        ))}
       </code>
       <Button
         aria-label={`Copy ${value}`}
@@ -87,54 +89,25 @@ const forwardText = (name: string) =>
   `Then forward ${name} to https://www.${name} as permanent, so the address without www works too.`
 
 /**
- * The whole setting as plain text, for the owner to send to whoever manages
- * the domain: the domain, what the records are for, and each record.
+ * The owner's own message, once, while this is the last thing in the chat.
+ * Drawn as the quick replies above the composer are.
  */
-export function copyAllText(name: string, output: Connecting): string {
-  return [
-    `Website settings for ${name}`,
-    `These point ${name} at its new website.${output.email_affected ? " Check them with whoever set up the email first." : " Email is not affected."}`,
-    "",
-    ...(output.steps ?? []).map(
-      (r) => `${r.type} record · Name: ${r.name} · Value: ${r.value}`
-    ),
-    ...(output.apex === "forward" ? ["", forwardText(name)] : []),
-  ].join("\n")
-}
-
-function CopyAll({ text }: { text: string }) {
-  const { isCopied, copyToClipboard } = useCopyToClipboard()
-  return (
-    <Button
-      onClick={() => copyToClipboard(text)}
-      size="sm"
-      type="button"
-      variant="outline"
-    >
-      {isCopied ? <DoneIcon /> : <CopyIcon aria-hidden />}
-      {isCopied ? "Copied" : "Copy all"}
-    </Button>
-  )
-}
-
-/** The owner's own message, once, while this is the last thing in the chat. */
-function WaitButton() {
+function AddedPill() {
   const aui = useAui()
   const [sent, setSent] = useState(false)
   const last = useAuiState((s) => s.message.isLast && !s.thread.isRunning)
   if (!last) return null
   return (
-    <Button
+    <ReplyPill
+      className="self-start"
       disabled={sent}
       onClick={() => {
         setSent(true)
         aui.thread().append(DONE_WAITING)
       }}
-      size="sm"
-      type="button"
     >
-      OK
-    </Button>
+      {DONE_WAITING}
+    </ReplyPill>
   )
 }
 
@@ -189,55 +162,77 @@ function SettingsHint({ name, host }: { name?: string; host?: string }) {
   )
 }
 
+/** One field of a record: what the provider's screen calls it, then its value. */
+function Cell({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 bg-card p-3">
+      <span className={META}>{label}</span>
+      {children}
+    </div>
+  )
+}
+
 /**
- * The records as the provider's screen names their fields, each cell
- * copyable. In a narrow card each record stacks its fields, each led by its
- * label, in the same table, so nothing scrolls sideways on a phone.
+ * Proxy status as Cloudflare's own screen draws it, off: a grey switch, a
+ * grey cloud and "DNS only". A picture of the setting, not a control.
  */
-function RecordTable({
+function ProxyOff() {
+  return (
+    <span className="inline-flex items-center gap-2 text-sm">
+      <span
+        aria-hidden
+        className="flex h-4 w-7 shrink-0 items-center rounded-full bg-muted-foreground/30 p-0.5"
+      >
+        <span className="size-3 rounded-full bg-background" />
+      </span>
+      <CloudIcon aria-hidden className="size-5 text-muted-foreground" />
+      <span>
+        DNS only<span className="sr-only">, proxy off</span>
+      </span>
+    </span>
+  )
+}
+
+/**
+ * Each record as a 2 by 2 grid in the provider's field names, each value
+ * with its copy button: Type and Name, then the target and, where the
+ * provider has a proxy switch, Proxy status. Without one the target takes
+ * the whole row.
+ */
+function RecordGrid({
   steps,
-  labels,
+  entry,
 }: {
   steps: DnsRecord[]
-  labels: { name: string; value: string }
+  entry: DnsProviderEntry | undefined
 }) {
-  const heads = ["Type", labels.name, labels.value]
+  const labels = entry?.labels ?? DEFAULT_LABELS
   return (
-    <div className="@container">
-      <Table className="@max-lg:block rounded-xl border border-border">
-        <TableHeader className="@max-lg:sr-only">
-          <TableRow>
-            {heads.map((head) => (
-              <TableHead className="h-9" key={head}>
-                {head}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody className="@max-lg:block">
-          {steps.map((record) => (
-            <TableRow
-              className="@max-lg:block @max-lg:py-1.5"
-              key={`${record.type}|${record.name}|${record.value}`}
-            >
-              {[record.type, record.name, record.value].map((value, i) => (
-                <TableCell
-                  className="@max-lg:flex @max-lg:items-center @max-lg:gap-3 @max-lg:whitespace-normal @max-lg:py-1"
-                  key={heads[i]}
-                >
-                  <span
-                    aria-hidden
-                    className="@lg:hidden w-16 shrink-0 text-muted-foreground text-xs"
-                  >
-                    {heads[i]}
-                  </span>
-                  <CopyValue value={value} />
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+    <div className="flex flex-col gap-2">
+      {steps.map((record) => (
+        <div
+          className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border"
+          data-slot="dns-record"
+          key={`${record.type}|${record.name}|${record.value}`}
+        >
+          <Cell label="Type">
+            <CopyValue value={record.type} />
+          </Cell>
+          <Cell label={labels.name}>
+            <CopyValue value={record.name} />
+          </Cell>
+          <div className={entry?.proxy ? "contents" : "col-span-2 grid"}>
+            <Cell label={labels.value}>
+              <CopyValue value={record.value} />
+            </Cell>
+          </div>
+          {entry?.proxy ? (
+            <Cell label="Proxy status">
+              <ProxyOff />
+            </Cell>
+          ) : null}
+        </div>
+      ))}
     </div>
   )
 }
@@ -254,11 +249,9 @@ function Records({
 }) {
   const { provider, apply_url: applyUrl } = output
   const entry = dnsProvider(provider?.id)
-  const email = output.email_affected
-    ? "This may touch your email, so ask whoever set it up before you change anything."
-    : "Your email is not affected."
   return (
     <div className="flex flex-col gap-4" data-slot="domain-records">
+      {/* Only behind the orchestrator's DOMAIN_CONNECT flag, off while our template is not live. */}
       {applyUrl ? (
         <div className="flex flex-col items-start gap-1.5">
           <a
@@ -281,7 +274,7 @@ function Records({
           n={1}
           title={
             provider
-              ? `Sign in to ${provider.name}`
+              ? `Open ${provider.name}, sign in if asked`
               : "Open your domain's settings"
           }
         >
@@ -301,7 +294,7 @@ function Records({
           n={2}
           title={steps.length === 1 ? "Add this record" : "Add these records"}
         >
-          <RecordTable labels={entry?.labels ?? DEFAULT_LABELS} steps={steps} />
+          <RecordGrid entry={entry} steps={steps} />
           {entry?.note ? <p className={META}>{entry.note}</p> : null}
           {output.apex === "forward" ? (
             <p className="text-sm">{forwardText(name)}</p>
@@ -309,31 +302,96 @@ function Records({
         </Step>
       </ol>
       <p className={META}>
-        {`${email} That's all. I'll keep an eye on it and tell you the moment it's working.`}
+        I'll keep checking and tell you the moment it works.
       </p>
-      <div className="flex flex-wrap gap-2">
-        <CopyAll text={copyAllText(name, output)} />
-        <WaitButton />
-      </div>
+      <AddedPill />
     </div>
   )
+}
+
+/** The domain tools whose cards a later message's card takes over from. */
+const DOMAIN_CARDS = new Set([
+  "connect_domain",
+  "domain_bought",
+  "find_domain",
+  "buy_domain",
+])
+
+/**
+ * Whether a later message holds another domain card, or the address
+ * question: the owner changed course, so this one gives way.
+ */
+function useSuperseded(): boolean {
+  return useAuiState((s) => {
+    const at = s.thread.messages.findIndex((m) => m.id === s.message.id)
+    return s.thread.messages
+      .slice(at + 1)
+      .some((m) =>
+        m.content.some(
+          (p) =>
+            (p.type === "tool-call" && DOMAIN_CARDS.has(p.toolName)) ||
+            (p.type === "data" &&
+              p.name === "build_questions" &&
+              (p.data as { kind?: unknown } | undefined)?.kind === "address")
+        )
+      )
+  })
+}
+
+/** An earlier connect once the owner moved on: one quiet line, and Resume to show it again. */
+function Paused({ name, onResume }: { name: string; onResume: () => void }) {
+  return (
+    <p
+      className="my-3 text-muted-foreground text-sm"
+      data-slot="connect-paused"
+    >
+      {`Connecting ${name} · paused `}
+      <button
+        className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+        onClick={onResume}
+        type="button"
+      >
+        Resume
+        <span className="sr-only"> connecting {name}</span>
+      </button>
+    </p>
+  )
+}
+
+/**
+ * Whether this card gives way to a later one, and how to bring it back.
+ * Never once the website is live on the domain: that line stays.
+ */
+function useFold(name: string) {
+  const superseded = useSuperseded()
+  const live = useLiveCards()?.domainLive(name) ?? false
+  const [resumed, setResumed] = useState(false)
+  return {
+    folded: superseded && !resumed && !live,
+    resume: () => setResumed(true),
+  }
 }
 
 /**
  * A connect under way: the records to add, or that it needs none from the
  * owner. Once the website is live on the domain, only that, so an old card
- * never offers the records again.
+ * never offers the records again. Once the owner has moved on to another
+ * domain, one quiet line, unless the card holding it folds itself (`fold`).
  */
 export function ConnectSteps({
   name,
   output,
+  fold = true,
 }: {
   name: string
   output: Connecting
+  fold?: boolean
 }) {
+  const { folded, resume } = useFold(name)
   if (useLiveCards()?.domainLive(name)) {
     return <Done>{`Your website is live on ${name}.`}</Done>
   }
+  if (fold && folded) return <Paused name={name} onResume={resume} />
   return output.steps?.length ? (
     <Records name={name} output={output} steps={output.steps} />
   ) : (
@@ -343,10 +401,15 @@ export function ConnectSteps({
 
 const NOT_CONNECTED = "The domain could not be connected."
 
-const titleOf = (name: string) => `Use ${name} for your website`
+const titleOf = (name: string) => `Connect ${name} to your website`
 
 export const ConnectDomain: ToolCallMessagePartComponent = (props) => {
   const view = decisionView(props, ConnectDomainInput, ConnectDomainOutput)
+  const name = ConnectDomainInput.safeParse(props.args).data?.name ?? ""
+  const { folded, resume } = useFold(name)
+  if (folded && view.state === "done") {
+    return <Paused name={name} onResume={resume} />
+  }
   if (view.state === "refused") {
     // Refused before the owner was asked: the assistant says why in its own words.
     if (props.approval?.approved !== true) return null
@@ -366,14 +429,11 @@ export const ConnectDomain: ToolCallMessagePartComponent = (props) => {
       cancelled="Not connected."
       refused={NOT_CONNECTED}
       detail={() =>
-        "Only your website's address changes. Your email is not affected. Next I'll show you what to change where your domain is managed."
+        "Only your website's address changes. Next I'll show you what to change where your domain is managed."
       }
       done={(output) =>
         output?.outcome === "connecting" ? (
-          <ConnectSteps
-            name={ConnectDomainInput.safeParse(props.args).data?.name ?? ""}
-            output={output}
-          />
+          <ConnectSteps fold={false} name={name} output={output} />
         ) : (
           <p className="text-sm">
             Connecting. I'll message you when it's live.

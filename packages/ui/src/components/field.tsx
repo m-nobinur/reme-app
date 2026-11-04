@@ -32,7 +32,7 @@ function Field({
   // intersection with `ReactNode` would leave the render-prop branch below
   // unassignable.
 }: Omit<ComponentProps<typeof Input>, "id" | "children"> & {
-  label: string
+  label: ReactNode
   hint?: ReactNode
   error?: string
   id: string

@@ -58,7 +58,7 @@ import {
 import { onboardingFor, settingUp } from "@/lib/onboarding"
 import { OwnerSettings } from "@/lib/owner-settings"
 import { anchorOf } from "@/lib/reminders"
-import { tabBadge, useTabBadge } from "@/lib/tab-icon"
+import { tabBadge, useTabBadge, useTabTitle } from "@/lib/tab-icon"
 import { requireOwner } from "@/lib/tenant"
 import { useSyncTimeZone } from "@/lib/time-zone"
 import { LiveWorkspaceProvider, useLiveWorkspaceState } from "@/lib/workspace"
@@ -203,10 +203,9 @@ function AppLayout() {
   } = Route.useLoaderData()
   const live = useLiveWorkspaceState(workspace, readWorkspace)
   useSyncTimeZone(active !== null)
-  useTabBadge(
-    avatarIcons(live.workspace?.assistantAvatar)?.large,
-    tabBadge(live.workspace)
-  )
+  const badge = tabBadge(live.workspace)
+  useTabBadge(avatarIcons(live.workspace?.assistantAvatar)?.large, badge)
+  useTabTitle(live.workspace?.assistantName ?? null, badge)
   // What the panel says on this page; with nothing to say there is no panel.
   // A workspace that did not load still shows one, which says so.
   const panel = usePanel(live.workspace)

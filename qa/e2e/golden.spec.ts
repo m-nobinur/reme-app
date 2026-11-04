@@ -194,28 +194,33 @@ async function answer(page: Page, item: Locator) {
   await item.getByText("Answer", { exact: true }).click()
   const stack = page.locator('[data-slot="build-questions"]')
   const card = stack.locator('[data-slot="question-tray"]')
-  const send = card.getByRole("button", { name: "Send", exact: true })
+  const send = card.getByRole("button", { name: /^(Next|Done)$/ })
+  const pills = stack.locator('[data-slot="reply-pills"] button:enabled')
   const folded = stack.getByText("Thanks, that's everything I needed.")
-  await expect(send).toBeVisible({ timeout: WAIT.chat })
+  await expect(send.or(pills.first())).toBeVisible({ timeout: WAIT.chat })
   // A guard against a stack that never folds: at most ten questions.
-  for (let left = 10; left > 0 && (await send.isVisible()); left--) {
-    const text = card.locator(
-      'input[name="answer"]:not([type="radio"]):visible'
-    )
-    if (await text.count()) {
-      await text.fill("Keep everything else as it is.")
+  for (
+    let left = 10;
+    left > 0 && ((await send.isVisible()) || (await pills.count()) > 0);
+    left--
+  ) {
+    if (await pills.count()) {
+      // Skip for now leaves the web address question for later.
+      const later = pills.filter({ hasText: "Skip for now" })
+      await ((await later.count()) ? later : pills).first().click()
     } else {
-      // Not now leaves the web address question for later.
-      const later = card.getByRole("radio", { name: "Not now" })
-      await ((await later.isVisible())
-        ? later
-        : card.locator('input[type="radio"]:visible').first()
-      ).check()
+      const text = card.locator(
+        'input[name="answer"]:not([type="radio"]):visible'
+      )
+      await ((await text.count())
+        ? text.first().fill("Keep everything else as it is.")
+        : card.locator('input[type="radio"]:visible').first().check())
+      await send.click()
     }
-    await send.click()
     // The tick, then the next question on its own, or the fold.
-    await expect(send).toHaveCount(0, { timeout: WAIT.chat })
-    await expect(send.or(folded)).toBeVisible({ timeout: WAIT.chat })
+    await expect(send.or(pills.first()).or(folded)).toBeVisible({
+      timeout: WAIT.chat,
+    })
   }
   await expect(stack).toHaveCount(0, { timeout: WAIT.chat })
 }

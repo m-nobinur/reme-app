@@ -12,11 +12,15 @@ import {
 import {
   type Asset,
   CALM_PALETTES,
+  colourName,
+  LOGO_ROUND_SECONDS,
   LOGO_ROUNDS_MAX,
   LOGO_STYLES,
   LOGO_TYPES,
   LOGO_VARIANTS,
   type LogoBrief,
+  type LogoChip,
+  type LogoDirection,
   type LogoRound,
   type LogoStyle,
   type LogoType,
@@ -29,7 +33,7 @@ import {
   type OfferedPalette,
   RadioTile,
   type Stops,
-  Summary,
+  Suggested,
   Swatches,
   sentence,
   TRAY_FIELD,
@@ -38,6 +42,10 @@ import {
   useTabDraft,
   Ways,
 } from "@workspace/ui/components/assistant/question-tray"
+import {
+  ReplyPill,
+  ReplyPills,
+} from "@workspace/ui/components/assistant/reply-pill"
 import {
   type TrayPageProps,
   useTrayServices,
@@ -48,21 +56,28 @@ import { StateIcon } from "@workspace/ui/components/status-line"
 import { FIELD_ERROR } from "@workspace/ui/lib/card"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 
 /**
  * The logo question's two pages in the design tray, the first question and
- * one that cannot be skipped. The first asks whether they have a logo,
- * nothing picked; a pick moves on to the second, so going back is how the
- * owner changes it. Yes there is the upload. With no logo held, a round of
- * three is drawn from the filled brief as the first page opens, so No shows
- * its designs with the first picked, at the top; under them the brief folds
- * into summary rows (a few words on the look, the colours, the logo type and
- * a style) that reopen it. Changing the brief turns the tray's primary and
- * its forward arrow into Redesign my logo, which draws a round from it.
- * Rounds are saved by the api, so a reload reads them back. Picking a design
- * keeps it as the logo and answers the question; another round comes after
- * the wait the api sets between rounds.
+ * one that cannot be skipped. The first asks whether they have a logo: two
+ * quick answers, nothing picked, a tap moving on to the second. Yes there is
+ * the upload. With no logo held, a first round draws as the tray opens, one
+ * design in each of the three directions chosen for the business, so No
+ * has designs at once, the first picked; each says what its kind of logo is
+ * for. Under them sit ideas for a redesign read from the picked design, and
+ * the brief as one line that opens it to edit. An idea, or the owner's own
+ * words, turns the tray's primary into Redesign my logo, which draws a round
+ * from the picked design. Rounds are saved by the api, so a reload reads
+ * them back. Picking a design keeps it as the logo and answers the
+ * question; another round comes after the wait the api sets between rounds.
  */
 
 /** The logo question's answer: the logo kept. */
@@ -70,6 +85,9 @@ export type LogoAnswer = { logo: Asset }
 
 /** Whether they have a logo: Yes is the upload, No the designs. */
 export type LogoPath = "upload" | "create"
+
+/** The designs page's title and the line under it, as the tray shows them. */
+export type LogoHeading = { title: string; hint: string | null }
 
 const TYPE_LABELS: Record<LogoType, string> = {
   lockup: "Icon + name",
@@ -91,9 +109,6 @@ const STYLE_LABELS: Record<LogoStyle, string> = {
   three_d: "3D",
 }
 
-const styleLabel = (style: LogoBrief["style"]) =>
-  style === "surprise" ? "Surprise me" : STYLE_LABELS[style]
-
 /** The pictures a type or style tile cycles through on hover, `<name>-<n>`, frame 0 at rest. */
 const FRAMES = import.meta.glob<string>(
   ["../../assets/logo-types/*.webp", "../../assets/logo-styles/*.webp"],
@@ -113,15 +128,6 @@ const PICK_TILE =
   "group flex cursor-pointer rounded-xl border border-border bg-card transition-all duration-150 hover:border-foreground/25 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-card has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20"
 const PICK_LABEL =
   "font-medium text-muted-foreground transition-colors group-has-[:checked]:text-foreground"
-
-/** What the status line says while a round draws, a step every few seconds. */
-const drawingLines = (name: string) => [
-  `Sketching ideas for ${name}`,
-  "Trying three different ideas",
-  "Putting in your colours",
-  "Tidying the edges",
-  "Nearly there",
-]
 
 const NO_SERVICES = "Logos cannot be uploaded or made here."
 
@@ -191,27 +197,94 @@ type Brief = {
   colours: Colours | null
   type: LogoType | null
   style: LogoBrief["style"] | null
+  /** What should change in the picked design, for the next redesign. */
+  changes?: string
 }
 
 /** Where the catalog opens the page. */
 export type LogoStart = {
   path?: LogoPath
   brief?: Partial<Brief>
+  /** The brief opened to edit. */
+  editing?: boolean
 }
 
-const BRIEF_PARTS = ["look", "colours", "type", "style"] as const
-type Part = (typeof BRIEF_PARTS)[number] | "end"
-const order = (part: Part) =>
-  part === "end" ? BRIEF_PARTS.length : BRIEF_PARTS.indexOf(part)
+/** The line under each design of a round of directions: code's words for its kind, never a model's. */
+const CAPTIONS: Record<LogoType, string> = {
+  lockup: "Your symbol and name, clear at any size",
+  icon: "A symbol that stands on its own",
+  wordmark: "Your name as the logo, simple and confident",
+  monogram: "Your initials as a mark",
+  emblem: "A badge for vans, signs and uniforms",
+  abstract: "A shape that stands for the business",
+}
 
-/** A few colours as overlapping dots, for a summary row. */
+/** Each type as the brief's line says it. */
+const TYPE_WORDS: Record<LogoType, string> = {
+  lockup: "symbol and name",
+  icon: "symbol only",
+  wordmark: "name only",
+  monogram: "initials",
+  emblem: "badge",
+  abstract: "abstract mark",
+}
+
+const styleWords = (style: LogoBrief["style"]) =>
+  style === "surprise"
+    ? "mixed styles"
+    : style === "three_d"
+      ? "3D"
+      : STYLE_LABELS[style].toLowerCase()
+
+/** Up to two colours by their plain names, such as "forest green and cream". */
+const colourWords = (colors: readonly string[]) =>
+  [...new Set(colors.map(colourName))].slice(0, 2).join(" and ")
+
+/**
+ * The redesign ideas offered while the picked design's own have not come,
+ * as the owner set them out. Other colours opens the colours.
+ */
+const FALLBACK: (LogoChip | "colours")[] = [
+  { kind: "detail", label: "Bolder", change: "bolder, heavier shapes" },
+  {
+    kind: "style",
+    label: "Simpler",
+    change: "a simpler, more minimal look",
+    set: { style: "minimal" },
+  },
+  { kind: "detail", label: "Different icon", change: "a different symbol" },
+  "colours",
+]
+
+/** How long a picked design's own ideas may take once it shows, one poll, before the fixed ones stand in. */
+const IDEAS_WAIT_MS = 2500
+
+/** The change's words with `phrase` added, or taken out when `has`. */
+const phrased = (words: string, phrase: string, has: boolean) =>
+  has
+    ? words
+        .replace(phrase, "")
+        .replace(/\s*,\s*,\s*/g, ", ")
+        .replace(/^[\s,]+|[\s,]+$/g, "")
+    : [words.trim().replace(/[\s,.]+$/, ""), phrase].filter(Boolean).join(", ")
+
+/** Seconds a round has left, as the line under the title says it: whole fives, never under five. */
+const secondsLeft = (startedAt: string) =>
+  Math.max(
+    5,
+    Math.ceil(
+      (LOGO_ROUND_SECONDS - (Date.now() - Date.parse(startedAt)) / 1000) / 5
+    ) * 5
+  )
+
+/** A few colours as overlapping dots, for the brief's line. */
 function Dots({ colors }: { colors: readonly string[] }) {
   return (
-    <span aria-hidden className="flex shrink-0">
+    <span aria-hidden className="inline-flex shrink-0 align-middle">
       {colors.map((color, at) => (
         <span
           // The outline keeps a colour near the card's own visible in either theme.
-          className="-ml-1 size-4 rounded-full border border-foreground/20 ring-2 ring-card first:ml-0"
+          className="-ml-1 size-3.5 rounded-full border border-foreground/20 ring-2 ring-card first:ml-0"
           // biome-ignore lint/suspicious/noArrayIndexKey: two colours may match
           key={at}
           style={{ backgroundColor: color }}
@@ -230,6 +303,7 @@ function TrayLogo({
   businessName,
   palettes,
   setSubmit,
+  setHeading,
   start,
   path,
   onPath,
@@ -240,6 +314,8 @@ function TrayLogo({
   palettes: readonly OfferedPalette[]
   /** Sets the tray's primary button while this page has its own; undefined hands it back. */
   setSubmit: (submit: TrayFrameProps["submit"]) => void
+  /** Sets the tray's title and line while the designs say more than "Your logo"; undefined hands them back. */
+  setHeading: (heading: LogoHeading | undefined) => void
   start?: LogoStart | undefined
   /** The way picked on the first page, held by the tray. */
   path: LogoPath | null
@@ -251,20 +327,22 @@ function TrayLogo({
 }) {
   const id = useId()
   const services = useTrayServices()
-  const [first] = question.card.preselected
+  // The directions chosen for the business, the first opening the brief.
+  const suggestion = question.start
+  const [lead] = suggestion?.directions ?? []
   const { draft: brief, keep: setBrief } = useTabDraft<Brief>(
     `logo-brief:${toolCallId}`,
-    // Opened filled, the site's own colours first, so the first round needs
-    // no answer; every part still changes.
+    // Opened filled, so the first round needs no answer; every part still changes.
     {
-      description: "",
+      description: suggestion?.description ?? "",
       colours: { palette: 0 },
-      type: "lockup",
-      style: "minimal",
+      type: lead?.type ?? "lockup",
+      style: lead?.style ?? "minimal",
+      changes: "",
       ...start?.brief,
     }
   )
-  const [focus, setFocus] = useState<Part | null>(null)
+  const [editing, setEditing] = useState(start?.editing ?? false)
   const [rounds, setRounds] = useState<LogoRound[]>([])
   // Whether the rounds drawn before have been read, so none is drawn twice.
   const [loaded, setLoaded] = useState(false)
@@ -275,6 +353,13 @@ function TrayLogo({
   const [file, setFile] = useState<{ file: File; url: string } | null>(null)
   const [, tick] = useState(0)
   const replace = useRef<HTMLInputElement>(null)
+  const field = useRef<HTMLTextAreaElement>(null)
+  // Edit asks for the field to take focus once its section has opened.
+  const focusField = useRef<boolean>(false)
+  // The colours an idea replaced, so a second tap puts them back.
+  const coloursBefore = useRef<Colours | null>(null)
+  // When each design was first shown, so its own ideas get a moment.
+  const shownSince = useRef(new Map<string, number>())
 
   const latest = rounds.at(-1)
   const drawing = latest?.status === "drawing"
@@ -324,14 +409,21 @@ function TrayLogo({
   // A kept design or upload says which way was taken before a reload, once
   // the rounds are read; nothing is picked for the owner otherwise.
   const kept = answer?.logo.id ?? null
-  const keptDrawn = rounds.some((each) =>
-    each.variants.some((variant) => variant.id === kept)
-  )
+  // The kept design, and the round it came from.
+  const picked = rounds
+    .flatMap((each) =>
+      each.variants
+        .filter((variant) => variant.id === kept)
+        .map((variant) => ({ round: each, variant }))
+    )
+    .at(0)
+  const keptDrawn = picked !== undefined
   const held = loaded ? (keptDrawn ? "create" : "upload") : null
   const shownPath = path ?? (answer ? held : null)
   const round = at === null ? latest : rounds[at]
   const shownAt = at ?? rounds.length - 1
   const [uploadOption, createOption] = question.card.options
+  const create = shownPath === "create"
 
   const colours = brief.colours
   const colors = !colours
@@ -341,13 +433,11 @@ function TrayLogo({
       : "random" in colours
         ? logoColors(colours.random.stops)
         : colours.custom.flatMap((each) => hex(each) ?? [])
-  const settled = {
-    look: true,
-    colours: colors.length > 0,
-    type: brief.type !== null,
-    style: brief.style !== null,
-  }
-  const briefReady = settled.colours && settled.type && settled.style
+  // The site's own palette is the default, not a choice the owner made.
+  const coloursChosen =
+    colours !== null && !("palette" in colours && colours.palette === 0)
+  const briefReady =
+    colors.length > 0 && brief.type !== null && brief.style !== null
   // The brief as the api takes it, once every part is set.
   const wanted: LogoBrief | null =
     brief.type && brief.style && colors.length > 0
@@ -358,29 +448,17 @@ function TrayLogo({
           style: brief.style,
         }
       : null
-  // Changed since the newest round was drawn, so that round no longer shows it.
+  const words = (brief.changes ?? "").trim()
+  // What the kept design was drawn from: its round's brief, in its own type and style.
+  const own: LogoBrief | undefined = picked
+    ? { ...picked.round.brief, ...picked.variant.direction }
+    : latest?.brief
   const changed =
-    wanted !== null && latest !== undefined && !sameBrief(wanted, latest.brief)
-  // The first brief section still to answer, or the last.
-  const limit = Math.max(
-    BRIEF_PARTS.findIndex((part) => !settled[part]),
-    briefReady ? BRIEF_PARTS.length - 1 : 0
-  )
-  // The top section open: the one the owner last settled or reopened.
-  const top: Part =
-    focus ??
-    (shownPath !== "create"
-      ? "end"
-      : !briefReady
-        ? (BRIEF_PARTS[Math.max(0, limit - 1)] ?? "look")
-        : rounds.length > 0
-          ? "end"
-          : "style")
-  const create = shownPath === "create"
-  const opened = (part: (typeof BRIEF_PARTS)[number]) =>
-    create && order(part) >= order(top) && order(part) <= limit
-  const folded = (part: (typeof BRIEF_PARTS)[number]) =>
-    create && settled[part] && order(part) < order(top)
+    wanted !== null && own !== undefined && !sameBrief(wanted, own)
+  // A round of directions draws a different kind of logo in each design.
+  const directed =
+    round !== undefined &&
+    new Set(round.variants.map((v) => v.direction.type)).size > 1
 
   const send = async (chosen: File) => {
     if (!services) return setError(NO_SERVICES)
@@ -412,7 +490,11 @@ function TrayLogo({
     void send(chosen)
   }
 
-  /** Starts a round from the brief as it stands; true once it has started. */
+  /**
+   * Starts a round from the brief as it stands; true once it has started.
+   * The first round draws the suggested directions, unless the owner moved
+   * the brief off them; one with words for a kept design changes that one.
+   */
   const draw = async () => {
     if (!services) {
       setError(NO_SERVICES)
@@ -421,17 +503,37 @@ function TrayLogo({
     if (!wanted) return false
     setError(null)
     setBusy("draw")
+    const first = !rounds.some((each) => each.status !== "failed")
+    const base = words && keptDrawn && kept ? kept : undefined
+    const directions =
+      first &&
+      !base &&
+      suggestion &&
+      wanted.type === lead?.type &&
+      wanted.style === lead?.style
+        ? suggestion.directions
+        : undefined
     try {
       const started = await services.drawLogos({
         tool_call_id: toolCallId,
         brief: wanted,
+        ...(directions ? { directions } : {}),
+        ...(words ? { changes: words } : {}),
+        ...(base ? { base } : {}),
       })
       setRounds((now) => [
         ...now.filter((each) => each.round !== started.round),
         started,
       ])
       setAt(null)
-      setFocus(null)
+      setEditing(false)
+      // The api may read a type or style in the words; the brief shows it.
+      setBrief({
+        ...brief,
+        type: started.brief.type,
+        style: started.brief.style,
+        changes: "",
+      })
       return true
     } catch (failure) {
       const wait = retryAfter(failure)
@@ -443,13 +545,15 @@ function TrayLogo({
     }
   }
 
-  const keep = async (variant: string) => {
+  /** Keeps a design as the logo; the brief follows its type and style. */
+  const keep = async (variant: { id: string; direction: LogoDirection }) => {
     if (!services) return setError(NO_SERVICES)
     setError(null)
-    setBusy(variant)
+    setBusy(variant.id)
     try {
-      const { asset } = await services.keepLogo(variant)
+      const { asset } = await services.keepLogo(variant.id)
       onAnswer({ logo: asset })
+      setBrief({ ...brief, ...variant.direction })
     } catch (failure) {
       setError(sentence(failure, "That design was not saved. Try again."))
     } finally {
@@ -457,11 +561,11 @@ function TrayLogo({
     }
   }
 
-  // With no logo held (the api ticks create) one round starts as the page
-  // opens, from the filled brief, before the owner says whether they have a
-  // logo, so No has designs at once. A page the catalog opens in a given
-  // state stays in it.
-  const auto = useRef(first === "create" && !answer && !start)
+  // With no logo held one round starts as the page opens, from the
+  // suggested directions, before the owner says whether they have a logo,
+  // so No has designs at once. A page the catalog opens in a given state
+  // stays in it.
+  const auto = useRef(!question.held?.length && !answer && !start)
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, when the rounds drawn before are read
   useEffect(() => {
     if (!loaded || !auto.current) return
@@ -471,19 +575,59 @@ function TrayLogo({
 
   // On No the newest round's first design is the pick, as it lands, until
   // the owner picks another. A failed keep waits for the owner.
-  const [firstDesign] = latest?.status === "ready" ? latest.variants : []
+  const [firstDesign] = latest?.variants ?? []
   // biome-ignore lint/correctness/useExhaustiveDependencies: keep is a fresh closure each render
   useEffect(() => {
     if (create && firstDesign && !keptDrawn && busy === null && !error) {
-      void keep(firstDesign.id)
+      void keep(firstDesign)
     }
   }, [create, firstDesign, keptDrawn, busy, error])
 
-  // Random and Custom stay open to roll again or edit; a palette folds and the type opens.
-  const setColours = (next: Colours, then: Part = "colours") => {
-    setBrief({ ...brief, colours: next })
-    setFocus(then)
+  // The picked design's own ideas, or the fixed ones once they are late.
+  const selected = picked?.variant
+  useEffect(() => {
+    if (!selected || selected.chips) return
+    const since = shownSince.current.get(selected.id) ?? Date.now()
+    shownSince.current.set(selected.id, since)
+    const wait = IDEAS_WAIT_MS - (Date.now() - since)
+    if (wait <= 0) return
+    const timer = setTimeout(() => tick((now) => now + 1), wait)
+    return () => clearTimeout(timer)
+  }, [selected])
+  const since = selected && shownSince.current.get(selected.id)
+  const ideas =
+    selected?.chips ??
+    (since !== undefined && Date.now() - since >= IDEAS_WAIT_MS
+      ? FALLBACK.filter(
+          (each) =>
+            each === "colours" ||
+            !each.set?.style ||
+            each.set.style !== selected?.direction.style
+        )
+      : null)
+  const redesigning = keptDrawn && rounds.length < LOGO_ROUNDS_MAX
+
+  /** An idea's tap: its words join the change and its options are set; again, both come off. */
+  const toggle = (idea: LogoChip) => {
+    if (!selected) return
+    const on = words.includes(idea.change)
+    const next: Brief = {
+      ...brief,
+      changes: phrased(brief.changes ?? "", idea.change, on),
+    }
+    const { type, style, colors: tint } = idea.set ?? {}
+    if (type) next.type = on ? selected.direction.type : type
+    if (style) next.style = on ? selected.direction.style : style
+    if (tint) {
+      if (!on) coloursBefore.current = brief.colours
+      next.colours = on ? coloursBefore.current : { custom: tint }
+    }
+    setBrief(next)
+    setEditing(true)
   }
+
+  // Random and Custom stay open to roll again or edit.
+  const setColours = (next: Colours) => setBrief({ ...brief, colours: next })
   const random = colours && "random" in colours ? colours.random : null
   // A calm palette the tiles do not already show, and not the one drawn last.
   const roll = () => {
@@ -503,28 +647,32 @@ function TrayLogo({
   }
   const custom = colours && "custom" in colours ? colours.custom : null
 
-  // The section that opens comes into view once its fold has eased open.
+  // The brief comes into view once its fold has eased open, and Edit's
+  // field takes the keyboard.
   const page = useRef<HTMLDivElement>(null)
-  const shownTop = useRef(top)
   useEffect(() => {
-    if (shownTop.current === top) return
-    shownTop.current = top
+    if (!editing) return
     const timer = setTimeout(() => {
       const still = window.matchMedia("(prefers-reduced-motion: reduce)")
-      page.current?.querySelector(`[data-part="${top}"]`)?.scrollIntoView({
+      page.current?.querySelector(`[data-part="brief"]`)?.scrollIntoView({
         block: "nearest",
         behavior: still.matches ? "auto" : "smooth",
       })
+      if (focusField.current) field.current?.focus()
+      focusField.current = false
     }, FOLD_MS)
     return () => clearTimeout(timer)
-  }, [top])
+  }, [editing])
 
-  // With no round yet, or a brief changed since the newest, the tray's
-  // primary is Redesign my logo while rounds are left, and moving on draws
-  // first; a layout effect, so the tray never paints Next in its place. Not
+  // With no round yet, a brief changed since the picked design, or words
+  // for a change, the tray's primary is Redesign my logo while rounds are
+  // left; a layout effect, so the tray never paints Next in its place. Not
   // before the rounds are read, so none is drawn twice.
   const designFirst =
-    create && loaded && rounds.length < LOGO_ROUNDS_MAX && (!latest || changed)
+    create &&
+    loaded &&
+    rounds.length < LOGO_ROUNDS_MAX &&
+    (!latest || changed || words !== "")
   const design = useRef(() => undefined as undefined)
   design.current = () => {
     // The pick is set aside once the round starts; its first design follows.
@@ -532,7 +680,7 @@ function TrayLogo({
       if (started && answer) onAnswer(undefined)
     })
   }
-  const designDisabled = !briefReady || busy !== null || left > 0
+  const designDisabled = !briefReady || busy !== null || left > 0 || drawing
   const designBusy = busy === "draw"
   const designLabel =
     left > 0 ? `Redesign ${waitText(left)}` : "Redesign my logo"
@@ -556,20 +704,48 @@ function TrayLogo({
   }, [designFirst, designBusy, designDisabled, designLabel, setSubmit])
   useLayoutEffect(() => () => setSubmit(undefined), [setSubmit])
 
+  // While a round draws the title says so and how long it takes, counted
+  // from when it started; once all three show, it asks for a pick.
+  const eta = useMemo(
+    () => (round?.started_at ? secondsLeft(round.started_at) : null),
+    [round?.started_at]
+  )
+  const landed = round?.variants.length === LOGO_VARIANTS
+  const heading: LogoHeading | undefined =
+    step !== "designs" || !create || !round || round.status === "failed"
+      ? undefined
+      : round.status === "drawing" && !landed
+        ? {
+            title: "Designing your logo",
+            hint: `Three designs for ${businessName}, about ${eta} seconds`,
+          }
+        : {
+            title: "Pick your logo",
+            hint:
+              rounds.length < LOGO_ROUNDS_MAX
+                ? "Or ask for a redesign below."
+                : null,
+          }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the words are the heading
+  useLayoutEffect(
+    () => setHeading(heading),
+    [heading?.title, heading?.hint, setHeading]
+  )
+  useLayoutEffect(() => () => setHeading(undefined), [setHeading])
+
   if (step === "choice") {
     return (
       <Ways
         label={question.question ?? "Your logo"}
         onPick={(way) => {
-          setFocus(null)
           setError(null)
           // Yes sets a drawn design aside: the logo is the one they upload.
           if (way === "upload" && keptDrawn) onAnswer(undefined)
           onPath(way)
         }}
-        // A tap on the one already picked moves on again.
         onRepick={onPath}
         picked={shownPath}
+        quick
         ways={[
           {
             way: "upload",
@@ -588,12 +764,23 @@ function TrayLogo({
     )
   }
 
+  // The parts of the brief that differ from the picked design read darker.
+  const part = (text: string, moved: boolean) => (
+    <span className={cn(moved && "font-medium text-foreground")}>{text}</span>
+  )
+  const suggestedType =
+    brief.type !== null &&
+    (suggestion?.directions ?? []).some((d) => d.type === brief.type)
+  const suggestedStyle =
+    brief.style !== null &&
+    (suggestion?.directions ?? []).some((d) => d.style === brief.style)
+
   return (
     <div className="-my-1.5 flex shrink-0 flex-col" ref={page}>
       {/* The designs, once a round has started: first, so the pick needs no scroll. */}
       <Fold open={create && round !== undefined}>
         {round && services ? (
-          <div className="flex flex-col gap-3" data-part="end">
+          <div className="flex flex-col gap-3">
             {rounds.length > 1 ? (
               <div className="flex items-center gap-1">
                 <Button
@@ -647,17 +834,19 @@ function TrayLogo({
               >
                 {Array.from({ length: LOGO_VARIANTS }, (_, place) => {
                   const variant = round.variants[place]
+                  const caption =
+                    directed && variant
+                      ? CAPTIONS[variant.direction.type]
+                      : null
                   return (
                     <RadioTile
                       checked={variant !== undefined && kept === variant.id}
                       className={cn(TRAY_TILE, "p-1.5")}
-                      disabled={
-                        !variant || round.status !== "ready" || busy !== null
-                      }
+                      disabled={!variant || busy !== null}
                       // biome-ignore lint/suspicious/noArrayIndexKey: a slot stays put while its design lands
                       key={place}
                       name={`${id}-design`}
-                      onPick={() => variant && void keep(variant.id)}
+                      onPick={() => variant && void keep(variant)}
                     >
                       <span className="relative">
                         {variant ? (
@@ -691,15 +880,28 @@ function TrayLogo({
                           </span>
                         ) : null}
                       </span>
+                      {caption ? (
+                        <span className="px-1 pb-0.5 text-muted-foreground text-xs leading-snug">
+                          {caption}
+                        </span>
+                      ) : null}
                     </RadioTile>
                   )
                 })}
               </div>
             )}
 
-            {round.status === "drawing" ? (
-              <DrawingLine key={round.round} name={businessName} />
-            ) : null}
+            {round.status === "drawing" && !landed ? (
+              <DrawingLine
+                colours={coloursChosen ? colourWords(colors) : null}
+                round={round}
+              />
+            ) : (
+              // Said once all three show, as the title turns to the pick.
+              <p className="sr-only" role="status">
+                {round.status === "failed" ? "" : "Your designs are ready"}
+              </p>
+            )}
 
             {round.status === "ready" && rounds.length >= LOGO_ROUNDS_MAX ? (
               <p className="text-muted-foreground text-xs">
@@ -709,6 +911,58 @@ function TrayLogo({
             ) : null}
           </div>
         ) : null}
+      </Fold>
+
+      {/* Ideas for a redesign of the picked design, then the brief as one line. */}
+      <Fold open={create && redesigning && ideas !== null}>
+        <ReplyPills label="Ideas for a redesign">
+          {(ideas ?? []).map((idea) =>
+            idea === "colours" ? (
+              <ReplyPill key="colours" onClick={() => setEditing(true)}>
+                Other colours
+              </ReplyPill>
+            ) : (
+              <ReplyPill
+                aria-pressed={words.includes(idea.change)}
+                key={idea.label}
+                onClick={() => toggle(idea)}
+              >
+                {idea.label}
+              </ReplyPill>
+            )
+          )}
+        </ReplyPills>
+      </Fold>
+      <Fold open={create && briefReady && !editing}>
+        <p className="text-muted-foreground text-sm">
+          Your brief:{" "}
+          {brief.type
+            ? part(TYPE_WORDS[brief.type], brief.type !== own?.type)
+            : null}
+          {", "}
+          {brief.style
+            ? part(styleWords(brief.style), brief.style !== own?.style)
+            : null}
+          {", "}
+          <Dots colors={colors} />{" "}
+          {part(
+            colourWords(colors),
+            own !== undefined && colors.join() !== own.colors.join()
+          )}
+          {" · "}
+          <button
+            aria-controls={`${id}-brief`}
+            aria-expanded={editing}
+            className="rounded-sm text-foreground underline underline-offset-2 outline-none hover:text-primary focus-visible:ring-3 focus-visible:ring-primary"
+            onClick={() => {
+              focusField.current = true
+              setEditing(true)
+            }}
+            type="button"
+          >
+            Edit
+          </button>
+        </p>
       </Fold>
 
       {/* Yes: the upload. */}
@@ -789,208 +1043,207 @@ function TrayLogo({
         )}
       </Fold>
 
-      {/* No: the brief, a section at a time. */}
-      <Fold open={folded("look")}>
-        <Summary label="Look" onOpen={() => setFocus("look")}>
-          <span className="truncate">
-            {brief.description.trim() || "No preference"}
-          </span>
-        </Summary>
-      </Fold>
-      <Fold open={opened("look")}>
-        <div className="flex flex-col gap-2" data-part="look">
-          <label className="font-medium text-sm" htmlFor={`${id}-look`}>
-            How should it look?{" "}
-            <span className="font-normal text-muted-foreground text-xs">
-              Optional
-            </span>
-          </label>
-          <textarea
-            className={cn(
-              // Grows with the words, from two rows to about six.
-              "field-sizing-content max-h-40 min-h-16 w-full resize-none border px-3 py-2 text-base outline-none placeholder:text-muted-foreground md:text-sm",
-              TRAY_FIELD
-            )}
-            id={`${id}-look`}
-            maxLength={300}
-            onChange={(event) =>
-              setBrief({ ...brief, description: event.currentTarget.value })
-            }
-            placeholder="For example: a simple house shape, plain and modern"
-            rows={2}
-            value={brief.description}
-          />
-        </div>
-      </Fold>
-
-      <Fold open={folded("colours")}>
-        <Summary label="Colours" onOpen={() => setFocus("colours")}>
-          <Dots colors={colors} />
-          <span className="truncate">
-            {colours && "palette" in colours
-              ? palettes[colours.palette]?.label
-              : random
-                ? random.label
-                : "Your colours"}
-          </span>
-        </Summary>
-      </Fold>
-      <Fold open={opened("colours")}>
-        <fieldset className="flex flex-col gap-2" data-part="colours">
-          <legend className="mb-2 font-medium text-sm">Colours</legend>
-          <div className="grid @sm:grid-cols-4 grid-cols-2 gap-2">
-            {/* A palette is its colours alone, as on the palette page; the name is for screen readers. */}
-            {palettes.map((each, index) => (
-              <RadioTile
-                checked={
-                  colours !== null &&
-                  "palette" in colours &&
-                  colours.palette === index
-                }
-                className={cn(TRAY_TILE, COLOUR_TILE)}
-                key={each.label}
-                name={`${id}-colours`}
-                onPick={() => setColours({ palette: index }, "type")}
-              >
-                <Swatches colors={each.stops} />
-                <span className="sr-only">{each.label}</span>
-              </RadioTile>
-            ))}
-            {/* The shuffle sits beside the radio, not in its label, so it stays its own button. */}
-            <div className="relative grid">
-              <RadioTile
-                checked={random !== null}
-                className={cn(TRAY_TILE, COLOUR_TILE)}
-                name={`${id}-colours`}
-                // The first tap draws one; a tap on the one drawn picks it.
-                onClick={() => random && setFocus("type")}
-                onPick={roll}
-              >
-                {random ? (
-                  <>
-                    <Swatches colors={random.stops} />
-                    <span className="sr-only">Random, {random.label}</span>
-                  </>
-                ) : (
-                  <span className={NAMED_TILE}>
-                    <ShuffleIcon aria-hidden className="size-4" />
-                    Random
-                  </span>
+      {/* No: the brief to edit, the change first once there is a design to change. */}
+      <Fold open={create && (editing || !briefReady)}>
+        <div
+          className="flex flex-col gap-4"
+          data-part="brief"
+          id={`${id}-brief`}
+        >
+          {redesigning ? (
+            <div className="flex flex-col gap-2">
+              <label className="font-medium text-sm" htmlFor={`${id}-changes`}>
+                What should change?
+              </label>
+              <textarea
+                className={cn(
+                  // Four rows to start, growing with the words to about eight.
+                  "field-sizing-content max-h-48 min-h-28 w-full resize-none border px-3 py-2 text-base outline-none placeholder:text-muted-foreground md:text-sm",
+                  TRAY_FIELD
                 )}
-              </RadioTile>
-              {random ? (
-                <button
-                  aria-label="Another random palette"
-                  className="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-foreground shadow-sm outline-none transition-colors hover:bg-card focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-                  onClick={roll}
-                  type="button"
-                >
-                  <ShuffleIcon aria-hidden className="size-4" />
-                </button>
-              ) : null}
+                id={`${id}-changes`}
+                maxLength={300}
+                onChange={(event) =>
+                  setBrief({ ...brief, changes: event.currentTarget.value })
+                }
+                placeholder="For example: bolder lettering, a leaf instead of a tree, darker green"
+                ref={field}
+                rows={4}
+                value={brief.changes ?? ""}
+              />
             </div>
-            <RadioTile
-              checked={custom !== null}
-              className={cn(TRAY_TILE, COLOUR_TILE)}
-              name={`${id}-colours`}
-              onPick={() => setColours({ custom: [stops[2]] })}
-            >
-              <span className={NAMED_TILE}>
-                <EyedropperIcon aria-hidden className="size-4" />
-                Custom
-              </span>
-            </RadioTile>
-          </div>
-          {custom ? (
-            <CustomColours
-              colours={custom}
-              onChange={(next) => setColours({ custom: next })}
-              onDone={() => setFocus("type")}
-              starts={stops}
-            />
-          ) : null}
-        </fieldset>
-      </Fold>
-
-      <Fold open={folded("type")}>
-        <Summary label="Logo type" onOpen={() => setFocus("type")}>
-          <span className="truncate">
-            {brief.type ? TYPE_LABELS[brief.type] : null}
-          </span>
-        </Summary>
-      </Fold>
-      <Fold open={opened("type")}>
-        <fieldset className="flex flex-col gap-2" data-part="type">
-          <legend className="mb-2 font-medium text-sm">Logo type</legend>
-          {/* As many to a row as fit whole: three on a wide tray, one on the narrowest, so no name wraps. */}
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2">
-            {LOGO_TYPES.map((type) => (
-              <PickTile
-                checked={type === brief.type}
-                className="h-11 flex-row items-center gap-2.5 px-2"
-                frames={framesOf("logo-types", type)}
-                key={type}
-                label={TYPE_LABELS[type]}
-                name={`${id}-type`}
-                // Picked, it folds to a row and the style opens.
-                onPick={() => {
-                  setBrief({ ...brief, type })
-                  setFocus("style")
-                }}
-                labelSize="text-sm"
-                picture="h-7 w-10"
+          ) : (
+            <div className="flex flex-col gap-2">
+              <label className="font-medium text-sm" htmlFor={`${id}-look`}>
+                How should it look?{" "}
+                <span className="font-normal text-muted-foreground text-xs">
+                  Optional
+                </span>
+              </label>
+              <textarea
+                className={cn(
+                  // Grows with the words, from two rows to about six.
+                  "field-sizing-content max-h-40 min-h-16 w-full resize-none border px-3 py-2 text-base outline-none placeholder:text-muted-foreground md:text-sm",
+                  TRAY_FIELD
+                )}
+                id={`${id}-look`}
+                maxLength={300}
+                onChange={(event) =>
+                  setBrief({ ...brief, description: event.currentTarget.value })
+                }
+                placeholder="For example: a simple house shape, plain and modern"
+                ref={field}
+                rows={2}
+                value={brief.description}
               />
-            ))}
-          </div>
-        </fieldset>
-      </Fold>
+            </div>
+          )}
 
-      <Fold open={folded("style")}>
-        <Summary label="Style" onOpen={() => setFocus("style")}>
-          <span className="truncate">
-            {brief.style ? styleLabel(brief.style) : null}
-          </span>
-        </Summary>
-      </Fold>
-      <Fold open={opened("style")}>
-        <fieldset className="flex flex-col gap-2" data-part="style">
-          <legend className="mb-2 font-medium text-sm">Style</legend>
-          <div className="grid @md:grid-cols-4 grid-cols-3 gap-2">
-            {LOGO_STYLES.map((style) => (
-              <PickTile
-                checked={style === brief.style}
-                className="flex-col items-center gap-1.5 px-1.5 py-2"
-                frames={framesOf("logo-styles", style)}
-                key={style}
-                label={STYLE_LABELS[style]}
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-2 font-medium text-sm">Colours</legend>
+            <div className="grid @sm:grid-cols-4 grid-cols-2 gap-2">
+              {/* A palette is its colours alone, as on the palette page; the name is for screen readers. */}
+              {palettes.map((each, index) => (
+                <RadioTile
+                  checked={
+                    colours !== null &&
+                    "palette" in colours &&
+                    colours.palette === index
+                  }
+                  className={cn(TRAY_TILE, COLOUR_TILE)}
+                  key={each.label}
+                  name={`${id}-colours`}
+                  onPick={() => setColours({ palette: index })}
+                >
+                  <Swatches colors={each.stops} />
+                  <span className="sr-only">{each.label}</span>
+                </RadioTile>
+              ))}
+              {/* The shuffle sits beside the radio, not in its label, so it stays its own button. */}
+              <div className="relative grid">
+                <RadioTile
+                  checked={random !== null}
+                  className={cn(TRAY_TILE, COLOUR_TILE)}
+                  name={`${id}-colours`}
+                  onPick={roll}
+                >
+                  {random ? (
+                    <>
+                      <Swatches colors={random.stops} />
+                      <span className="sr-only">Random, {random.label}</span>
+                    </>
+                  ) : (
+                    <span className={NAMED_TILE}>
+                      <ShuffleIcon aria-hidden className="size-4" />
+                      Random
+                    </span>
+                  )}
+                </RadioTile>
+                {random ? (
+                  <button
+                    aria-label="Another random palette"
+                    className="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-foreground shadow-sm outline-none transition-colors hover:bg-card focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+                    onClick={roll}
+                    type="button"
+                  >
+                    <ShuffleIcon aria-hidden className="size-4" />
+                  </button>
+                ) : null}
+              </div>
+              <RadioTile
+                checked={custom !== null}
+                className={cn(TRAY_TILE, COLOUR_TILE)}
+                name={`${id}-colours`}
+                onPick={() => setColours({ custom: [stops[2]] })}
+              >
+                <span className={NAMED_TILE}>
+                  <EyedropperIcon aria-hidden className="size-4" />
+                  Custom
+                </span>
+              </RadioTile>
+            </div>
+            {custom ? (
+              <CustomColours
+                colours={custom}
+                onChange={(next) => setColours({ custom: next })}
+                starts={stops}
+              />
+            ) : null}
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-2 flex flex-wrap items-center gap-2 font-medium text-sm">
+              Logo type
+              {suggestedType ? <Suggested name={businessName} /> : null}
+            </legend>
+            {/* As many to a row as fit whole: three on a wide tray, one on the narrowest, so no name wraps. */}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2">
+              {LOGO_TYPES.map((type) => (
+                <PickTile
+                  checked={type === brief.type}
+                  className="h-11 flex-row items-center gap-2.5 px-2"
+                  frames={framesOf("logo-types", type)}
+                  key={type}
+                  label={TYPE_LABELS[type]}
+                  labelSize="text-sm"
+                  name={`${id}-type`}
+                  onPick={() => setBrief({ ...brief, type })}
+                  picture="h-7 w-10"
+                />
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-2 flex flex-wrap items-center gap-2 font-medium text-sm">
+              Style
+              {suggestedStyle ? <Suggested name={businessName} /> : null}
+            </legend>
+            <div className="grid @md:grid-cols-4 grid-cols-3 gap-2">
+              {LOGO_STYLES.map((style) => (
+                <PickTile
+                  checked={style === brief.style}
+                  className="flex-col items-center gap-1.5 px-1.5 py-2"
+                  frames={framesOf("logo-styles", style)}
+                  key={style}
+                  label={STYLE_LABELS[style]}
+                  name={`${id}-style`}
+                  onPick={() => setBrief({ ...brief, style })}
+                  picture="size-9"
+                />
+              ))}
+              <RadioTile
+                checked={brief.style === "surprise"}
+                className={cn(
+                  PICK_TILE,
+                  "col-span-full h-10 items-center justify-center gap-2 border-dashed has-[:checked]:border-solid"
+                )}
                 name={`${id}-style`}
-                onPick={() => {
-                  setBrief({ ...brief, style })
-                  setFocus("style")
-                }}
-                picture="size-9"
-              />
-            ))}
-            <RadioTile
-              checked={brief.style === "surprise"}
-              className={cn(
-                PICK_TILE,
-                "col-span-full h-10 items-center justify-center gap-2 border-dashed has-[:checked]:border-solid"
-              )}
-              name={`${id}-style`}
-              onPick={() => {
-                setBrief({ ...brief, style: "surprise" })
-                setFocus("style")
-              }}
+                onPick={() => setBrief({ ...brief, style: "surprise" })}
+              >
+                <ShuffleIcon
+                  aria-hidden
+                  className="size-4 text-muted-foreground transition-colors group-has-[:checked]:text-primary"
+                />
+                <span className={cn(PICK_LABEL, "text-xs")}>Surprise me</span>
+              </RadioTile>
+            </div>
+          </fieldset>
+
+          {briefReady ? (
+            <Button
+              aria-controls={`${id}-brief`}
+              aria-expanded
+              className={cn(ACCENT_RING, "self-start")}
+              onClick={() => setEditing(false)}
+              size="sm"
+              type="button"
+              variant="ghost"
             >
-              <ShuffleIcon
-                aria-hidden
-                className="size-4 text-muted-foreground transition-colors group-has-[:checked]:text-primary"
-              />
-              <span className={cn(PICK_LABEL, "text-xs")}>Surprise me</span>
-            </RadioTile>
-          </div>
-        </fieldset>
+              Close the brief
+            </Button>
+          ) : null}
+        </div>
       </Fold>
 
       {error ? (
@@ -1023,19 +1276,17 @@ const OPEN_COLOUR = "flex-[0_0_11rem]"
  * The owner's own colours as one strip, like a palette, the brand colour
  * first. A colour widens to its picker and code under the pointer or focus;
  * one just added opens with its code focused, and joins the strip again when
- * focus leaves it. Done keeps them and folds the section.
+ * focus leaves it.
  */
 function CustomColours({
   colours,
   starts,
   onChange,
-  onDone,
 }: {
   colours: string[]
   /** The site palette, whose next stop a new colour starts from. */
   starts: Stops
   onChange: (colours: string[]) => void
-  onDone: () => void
 }) {
   const [editing, setEditing] = useState<number | null>(null)
   // The colour just added, whose code takes focus as it mounts.
@@ -1136,16 +1387,6 @@ function CustomColours({
           Add colour
         </Button>
       ) : null}
-      <Button
-        className={ACCENT_RING}
-        disabled={colours.every((each) => hex(each) === null)}
-        onClick={onDone}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        Done
-      </Button>
     </div>
   )
 }
@@ -1248,20 +1489,36 @@ function Cycling({
   )
 }
 
-/** The live line under a round still drawing, a step every few seconds. */
-function DrawingLine({ name }: { name: string }) {
-  const lines = drawingLines(name)
-  const [beat, setBeat] = useState(0)
+/**
+ * The live line under a round still drawing, saying only what is true of
+ * it: the first ideas, the owner's colours when they chose some, then
+ * almost ready once a design shows or most of the time has passed.
+ */
+function DrawingLine({
+  round,
+  colours,
+}: {
+  round: LogoRound
+  /** The colours the owner chose, in words; null when they chose none. */
+  colours: string | null
+}) {
+  const [, tick] = useState(0)
   useEffect(() => {
-    const timer = setInterval(
-      () => setBeat((now) => Math.min(now + 1, lines.length - 1)),
-      3000
-    )
+    const timer = setInterval(() => tick((now) => now + 1), 1000)
     return () => clearInterval(timer)
-  }, [lines.length])
+  }, [])
+  const elapsed = (Date.now() - Date.parse(round.started_at)) / 1000
+  const line =
+    round.variants.length > 0 || elapsed >= LOGO_ROUND_SECONDS * 0.7
+      ? "Almost ready"
+      : colours && elapsed >= 6
+        ? `Adding your ${colours}`
+        : round.round === 1
+          ? "Sketching the first ideas"
+          : "Sketching new ideas"
   return (
     <p className="text-muted-foreground text-sm" role="status">
-      {lines[beat]}
+      {line}
     </p>
   )
 }

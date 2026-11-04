@@ -9,6 +9,7 @@ import {
 import {
   ChatRequest,
   PERSONA_CARD,
+  SKIP_REPLY,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
@@ -24,6 +25,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { conversationList } from "./conversations"
 import { saveDesignAnswer } from "./design"
 import { useConversationRuntime } from "./runtime"
+import { SendAsked } from "./send-asked"
 import { sendsOn } from "./turn"
 
 /** Images in the thread other than Reme's avatar, which is meant to be there. */
@@ -60,6 +62,16 @@ vi.mock("@tanstack/react-start/server", () => ({
   getCookie: (name: string) => (name === "wos-session" ? "sealed" : undefined),
   setCookie: () => undefined,
   getRequestProtocol: () => "https",
+}))
+
+/** The location state a panel action set, as the chat page reads it. */
+const location = vi.hoisted(() => ({
+  state: {} as { send?: { text: string; key: string } },
+}))
+vi.mock("@tanstack/react-router", async (original) => ({
+  ...(await original<typeof import("@tanstack/react-router")>()),
+  useLocation: ({ select }: { select: (l: typeof location) => unknown }) =>
+    select(location),
 }))
 
 // Every time the AI SDK asks whether to send on its own, and what it was
@@ -126,6 +138,7 @@ const refusal = (status: number, code: string, message: string) => () =>
   )
 
 beforeEach(() => {
+  location.state = {}
   vi.mocked(sendsOn).mockClear()
   tools = {
     zone: "Europe/London",
@@ -226,6 +239,7 @@ function Chat() {
   return createElement(
     AssistantRuntimeProvider,
     { runtime },
+    createElement(SendAsked, { conversation: ID }),
     createElement(ServerButtonUI),
     createElement(ChangeAskedUI),
     createElement(PersonaCardUI),
@@ -537,7 +551,7 @@ it("every message keeps the time it was sent, as a reload shows it", async () =>
         ),
       })()
     )
-    await press(chat, "Submit")
+    await press(chat, "Done")
     await vi.waitFor(() =>
       expect(transcript(chat).at(-1)).toContain(
         "Which email address should enquiries go to?"
@@ -603,7 +617,7 @@ it("a stored conversation loading shows a skeleton, never the welcome or a sugge
   await act(async () => release.open?.())
   await vi.waitFor(() =>
     expect(transcript(container)).toEqual([
-      "What number should customers ring?Phone numberSubmit",
+      "What number should customers ring?Phone numberDone",
     ])
   )
 })
@@ -682,7 +696,7 @@ it("a stored conversation sends nothing until it is the thread on screen, then s
   await act(async () => release.open?.())
   await vi.waitFor(() =>
     expect(transcript(container)).toEqual([
-      "What number should customers ring?Phone numberSubmit",
+      "What number should customers ring?Phone numberDone",
     ])
   )
   expect(input?.disabled).toBe(false)
@@ -697,18 +711,58 @@ it("a stored conversation sends nothing until it is the thread on screen, then s
   await matches(container, FIXTURE.histories.typed)
 })
 
+it("sends a panel action into the stored conversation once its history is in, once", async () => {
+  const release: { open?: () => void } = {}
+  hold = new Promise<void>((resolve) => {
+    release.open = resolve
+  })
+  stored = FIXTURE.histories.start
+  location.state = {
+    send: { text: "Help me connect my web address", key: "press-1" },
+  }
+  turns.push(sse(FIXTURE.streams.typed))
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  mounted.push({ root, container })
+  await act(async () => root.render(createElement(Chat)))
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector('[data-slot="aui_thread-history-skeleton"]')
+    ).not.toBeNull()
+  )
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  expect(sent).toEqual([])
+
+  hold = null
+  await act(async () => release.open?.())
+  await vi.waitFor(() => expect(sent).toHaveLength(1))
+  expect(JSON.stringify(sent[0])).toContain("Help me connect my web address")
+  expect(JSON.stringify(sent[0])).toContain(ID)
+  // As a typed message does, it overtakes the open card, and the reply asks again.
+  await vi.waitFor(() =>
+    expect(transcript(container)).toEqual([
+      "Help me connect my web address",
+      "What number should customers ring?Phone numberDone",
+    ])
+  )
+  // A re-render with the same press sends nothing more.
+  await act(async () => root.render(createElement(Chat)))
+  expect(sent).toHaveLength(1)
+})
+
 it("renders a recorded answer turn the way a reload of the stored row does", async () => {
   const chat = await open(FIXTURE.histories.typed)
   // A question overtaken by a typed message leaves nothing; the message, and
   // the question asked again with the phone number filled in.
   expect(transcript(chat)).toEqual([
     "Hello",
-    "What number should customers ring?Phone numberSubmit",
+    "What number should customers ring?Phone numberDone",
   ])
   expect(chat.querySelector("input")?.value).toBe("+447700900123")
 
   turns.push(sse(FIXTURE.streams.phone))
-  await press(chat, "Submit")
+  await press(chat, "Done")
   await vi.waitFor(() =>
     expect(transcript(chat).at(-1)).toContain(
       "Which email address should enquiries go to?"
@@ -738,7 +792,7 @@ it("renders a recorded answer turn the way a reload of the stored row does", asy
   // message of its own, with its own time.
   expect(transcript(chat).slice(-2)).toEqual([
     "07700 900123",
-    "Which email address should enquiries go to?Email addressSubmit",
+    "Which email address should enquiries go to?Email addressDone",
   ])
   expect(
     chat.querySelectorAll('[data-slot="aui_assistant-message-root"]')
@@ -755,7 +809,7 @@ it("offers the build, keeps a not now, and a typed change after it", async () =>
     "+447700900123",
     "hello@example.net",
     "08:00 to 18:00",
-    "Where are you based, and how far do you travel?Town or postcode you work fromDistance you travel, in kmSkipSubmit",
+    "Where are you based, and how far do you travel?Town or postcode you work fromDistance you travel, in kmSkipDone",
   ])
   turns.push(sse(FIXTURE.streams.skip))
   await press(chat, "Skip")
@@ -813,7 +867,7 @@ for (const [failure, answer] of Object.entries(FAILURES)) {
     const chat = await open(FIXTURE.histories.start)
     const before = transcript(chat)
     turns.push(answer)
-    await press(chat, "Submit")
+    await press(chat, "Done")
     // Back to the stored row: the question open again, the error inline.
     await vi.waitFor(() => expect(transcript(chat)).toEqual(before))
     await vi.waitFor(() =>
@@ -824,7 +878,7 @@ for (const [failure, answer] of Object.entries(FAILURES)) {
     expect(
       chat.querySelector('[data-slot="ask-fact"] button[type="submit"]')
         ?.textContent
-    ).toBe("Submit")
+    ).toBe("Done")
     // The answer goes back to the card, never into the composer.
     expect(chat.querySelector("textarea")?.value).toBe("")
 
@@ -1683,7 +1737,11 @@ const PERSONA_TRAY = row(COS, "msg_owner", {
       type: "tool-ask_details",
       toolCallId: "call_persona",
       state: "input-available",
-      input: { step: "assistant", prefill: PERSONA, skippable: false },
+      input: {
+        step: "assistant",
+        prefill: PERSONA.slice(1),
+        skippable: false,
+      },
     },
   ],
 })
@@ -1734,7 +1792,7 @@ it("an optional question asked in words offers Skip this one, which says so as t
   )
   await press(chat, "Skip this one")
   await vi.waitFor(() => expect(sent).toHaveLength(1))
-  expect(JSON.stringify(sent[0])).toContain("I'd like to skip this question.")
+  expect(JSON.stringify(sent[0])).toContain(SKIP_REPLY)
 })
 
 it("a required question asked in words offers no Skip this one", async () => {
@@ -1767,7 +1825,7 @@ it("the design tray's last answer is saved before Looks good is sent, and a refu
     refusal(409, "chat.busy", BUSY)
   )
   await pick(chat, "Everything")
-  await press(chat, "Looks good")
+  await press(chat, "Done")
   await vi.waitFor(() => expect(sent).toHaveLength(1))
   // Both at once is what made the api answer chat.busy.
   await new Promise((resolve) => setTimeout(resolve, 100))
@@ -1801,7 +1859,7 @@ it("the design tray's last answer is saved before Looks good is sent, and a refu
         })
       )
   )
-  await press(chat, "Looks good")
+  await press(chat, "Done")
   // The save of the answer, then the whole tray again, as before.
   await vi.waitFor(() => expect(sent).toHaveLength(4))
   const turn = (n: number) => (sent[n] as { turn: object }).turn
@@ -1811,20 +1869,20 @@ it("the design tray's last answer is saved before Looks good is sent, and a refu
   })
 })
 
-it("the assistant tray opens on the defaults, ticked, says Next before the last page, and Pick for me keeps them", async () => {
+it("the assistant tray opens on the defaults with no name, says Next before the last page, and Pick for me fills the name", async () => {
   const chat = await openTray(PERSONA_TRAY)
   const checked = (value: string) =>
     chat.querySelector<HTMLInputElement>(`input[value="${value}"]`)?.checked
   expect(chat.querySelector<HTMLInputElement>("input[type=text]")?.value).toBe(
-    "Reme"
+    ""
   )
   expect([
     checked("she_her"),
     checked("she_1"),
     checked("professional"),
   ]).toEqual([true, true, true])
-  expect(() => button(chat, "Looks good")).toThrow()
-  await press(chat, "Next")
+  expect(() => button(chat, "Done")).toThrow()
+  expect(button(chat, "Next")).toBeDefined()
   turns.push(() =>
     Promise.resolve(
       new Response(frames({ type: "finish" }), {
@@ -1890,7 +1948,7 @@ it("shows the whole reply when the tab is hidden while it streams", async () => 
     slowReply
   )
   await pick(chat, "Everything")
-  await press(chat, "Looks good")
+  await press(chat, "Done")
   await vi.waitFor(() => expect(sent).toHaveLength(2))
   // The reply streams for about 540 ms; the gate's loaded container needs far more.
   await vi.waitFor(

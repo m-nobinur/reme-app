@@ -2,7 +2,6 @@
 import type { CheckDomainOutput } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import {
-  copyAllText,
   DONE_WAITING,
   domainStatusText,
 } from "@workspace/ui/components/assistant/domain"
@@ -21,13 +20,19 @@ const store = vi.hoisted(() => ({
   isLast: true,
   isRunning: false,
   append: vi.fn(),
+  messages: [] as unknown[],
 }))
 vi.mock("@assistant-ui/react", async (original) => ({
   ...(await original<typeof import("@assistant-ui/react")>()),
   useAuiState: (select: (state: unknown) => unknown) =>
     select({
-      message: { parts: [], isLast: store.isLast, status: undefined },
-      thread: { isRunning: store.isRunning, messages: [] },
+      message: {
+        id: "msg-1",
+        parts: [],
+        isLast: store.isLast,
+        status: undefined,
+      },
+      thread: { isRunning: store.isRunning, messages: store.messages },
     }),
   useAui: () => ({ thread: () => ({ append: store.append }) }),
   useThreadViewport: () => undefined,
@@ -116,46 +121,46 @@ async function answer(card: Awaited<ReturnType<typeof draw>>) {
 afterEach(() => {
   store.isLast = true
   store.isRunning = false
+  store.messages = []
   store.append.mockReset()
 })
 
 it("asks for the owner's yes through the existing approval flow", async () => {
   const card = await draw({ approval: { approved: undefined } })
   expect(card.container.querySelector("h2")?.textContent).toBe(
-    `Use ${NAME} for your website`
+    `Connect ${NAME} to your website`
   )
-  expect(card.container.textContent).toContain("Your email is not affected.")
+  expect(card.container.textContent).not.toContain("email")
   expect(choices(card.container)).toEqual(["Cancel", "Connect"])
   await answer(card)
   await card.unmount()
 })
 
-/** The step titles, then each table row's cells as text. */
+/** The step titles, then each record's cells as label and value. */
 const steps = (container: HTMLElement) =>
   [...container.querySelectorAll("ol > li h3")].map((h) => h.textContent)
 const rows = (container: HTMLElement) =>
-  [...container.querySelectorAll("tr")].map((tr) =>
-    [...tr.children].map(
-      (cell) => (cell.querySelector("code") ?? cell).textContent
+  [...container.querySelectorAll('[data-slot="dns-record"]')].map((record) =>
+    [...record.querySelectorAll("div > span:first-child + span")].flatMap(
+      (value) => [value.previousElementSibling?.textContent, value.textContent]
     )
   )
 
-it("signs in at a known provider, then shows the records as a table with a copy button per cell", async () => {
+it("opens a known provider, then shows each record as a grid with a copy button per value", async () => {
   const card = await draw(done({ ...RECORDS, provider: GODADDY }))
   const text = card.container.textContent ?? ""
   expect(steps(card.container)).toEqual([
-    "Sign in to GoDaddy",
+    "Open GoDaddy, sign in if asked",
     "Add these records",
   ])
+  // No proxy switch at GoDaddy, so no Proxy status cell.
   expect(rows(card.container)).toEqual([
-    ["Type", "Name", "Value"],
-    ["CNAME", "www", "domains.remeai.co.uk"],
-    ["TXT", "_acme-challenge.www", "abc123"],
+    ["Type", "CNAME", "Name", "www", "Value", "domains.remeai.co.uk"],
+    ["Type", "TXT", "Name", "_acme-challenge.www", "Value", "abc123"],
   ])
   expect(text).toContain(`Then forward ${NAME} to https://www.${NAME}`)
-  expect(text).toContain(
-    "Your email is not affected. That's all. I'll keep an eye on it and tell you the moment it's working."
-  )
+  expect(text).toContain("I'll keep checking and tell you the moment it works.")
+  expect(text).not.toContain("email")
   const link = card.container.querySelector("a")
   expect(link?.getAttribute("href")).toBe(GODADDY.settings_url)
   expect(link?.getAttribute("target")).toBe("_blank")
@@ -176,11 +181,11 @@ it("signs in at a known provider, then shows the records as a table with a copy 
     "Copy _acme-challenge.www",
     "Copy abc123",
   ])
-  expect(buttons(card.container)).toContain("Copy all")
+  expect(buttons(card.container)).not.toContain("Copy all")
   await card.unmount()
 })
 
-it("uses the provider's own field names and its one note", async () => {
+it("uses Cloudflare's own field names and draws its proxy switch off, DNS only", async () => {
   const card = await draw(
     done({
       ...RECORDS,
@@ -197,8 +202,17 @@ it("uses the provider's own field names and its one note", async () => {
       ],
     })
   )
-  expect(rows(card.container)[0]).toEqual(["Type", "Name", "Target"])
-  expect(card.container.textContent).toContain("Set Proxy status to DNS only.")
+  expect(rows(card.container)[0]).toEqual([
+    "Type",
+    "CNAME",
+    "Name",
+    "www",
+    "Target",
+    "domains.remeai.co.uk",
+    "Proxy status",
+    "DNS only, proxy off",
+  ])
+  expect(card.container.textContent).not.toContain("Set Proxy status")
   // The bare address is the ALIAS row, so no forward line.
   expect(card.container.textContent).not.toContain("Then forward")
   await card.unmount()
@@ -230,22 +244,22 @@ it("puts Add it for me first when the provider can add the record, with the reco
   expect(first?.getAttribute("target")).toBe("_blank")
   expect(first?.getAttribute("rel")).toContain("noopener")
   expect(settings?.getAttribute("href")).toBe("https://dash.cloudflare.com/")
-  expect(rows(card.container)).toHaveLength(2)
-  expect(buttons(card.container)).toContain("OK")
+  expect(rows(card.container)).toHaveLength(1)
+  expect(buttons(card.container)).toContain(DONE_WAITING)
   await card.unmount()
 })
 
 it("says the website is live, with no records or links, once it is on the domain", async () => {
   const card = await draw(done({ ...RECORDS, provider: GODADDY }), [NAME])
   expect(card.container.textContent).toBe(
-    `Use ${NAME} for your websiteYour website is live on ${NAME}.`
+    `Connect ${NAME} to your websiteYour website is live on ${NAME}.`
   )
   expect(card.container.querySelector("a")).toBeNull()
   expect(buttons(card.container)).toEqual([])
   await card.unmount()
   // Another domain live leaves this one's records in place.
   const other = await draw(done(RECORDS), ["other.co.uk"])
-  expect(rows(other.container)).toHaveLength(3)
+  expect(rows(other.container)).toHaveLength(2)
   await other.unmount()
 })
 
@@ -278,7 +292,7 @@ it("shows a subdomain's one record with no line about the bare address", async (
     "Open your domain's settings",
     "Add this record",
   ])
-  expect(rows(card.container)).toHaveLength(2)
+  expect(rows(card.container)).toHaveLength(1)
   expect(card.container.textContent).not.toContain("without www")
   await card.unmount()
 })
@@ -308,7 +322,7 @@ it("shows where to look, never a link, when the provider is not one we know", as
   const named = await draw(
     done({ ...RECORDS, provider: { name: "Example DNS" } })
   )
-  expect(steps(named.container)[0]).toBe("Sign in to Example DNS")
+  expect(steps(named.container)[0]).toBe("Open Example DNS, sign in if asked")
   expect(hint(named.container)).toBe(
     "Where your domain's settings liveLook for DNS or Manage DNS once you're signed in."
   )
@@ -336,44 +350,16 @@ it("shows where to look, never a link, when the provider is not one we know", as
   await unknown.unmount()
 })
 
-it("copies the domain, every record and what they are for as plain text", async () => {
-  const writeText = vi.fn().mockResolvedValue(undefined)
-  Object.defineProperty(navigator, "clipboard", {
-    value: { writeText },
-    configurable: true,
-  })
-  const expected = [
-    `Website settings for ${NAME}`,
-    `These point ${NAME} at its new website. Email is not affected.`,
-    "",
-    "CNAME record · Name: www · Value: domains.remeai.co.uk",
-    "TXT record · Name: _acme-challenge.www · Value: abc123",
-    "",
-    `Then forward ${NAME} to https://www.${NAME} as permanent, so the address without www works too.`,
-  ].join("\n")
-  expect(copyAllText(NAME, { ...RECORDS, steps: [...RECORDS.steps] })).toBe(
-    expected
-  )
-  const card = await draw(done(RECORDS))
-  const all = [...card.container.querySelectorAll("button")].find(
-    (b) => b.textContent === "Copy all"
-  )
-  await act(async () => all?.click())
-  expect(writeText).toHaveBeenCalledWith(expected)
-  await card.unmount()
-})
-
-it("warns, rather than reassures, when the email may be affected", async () => {
+it("says nothing about email, whatever the connect says of it", async () => {
   const card = await draw(done({ ...RECORDS, email_affected: true }))
-  expect(card.container.textContent).toContain("ask whoever set it up")
-  expect(card.container.textContent).not.toContain("not affected")
+  expect(card.container.textContent).not.toContain("email")
   await card.unmount()
 })
 
-it("sends the wait reply as the owner only while the card is the last message", async () => {
+it("sends I've added it as the owner only while the card is the last message", async () => {
   const card = await draw(done(RECORDS))
   const wait = [...card.container.querySelectorAll("button")].find(
-    (b) => b.textContent === "OK"
+    (b) => b.textContent === DONE_WAITING
   )
   await act(async () => wait?.click())
   expect(store.append).toHaveBeenCalledExactlyOnceWith(DONE_WAITING)
@@ -382,7 +368,7 @@ it("sends the wait reply as the owner only while the card is the last message", 
 
   store.isLast = false
   const later = await draw(done(RECORDS))
-  expect(buttons(later.container).some((b) => b?.includes("Done"))).toBe(false)
+  expect(buttons(later.container)).not.toContain(DONE_WAITING)
   await later.unmount()
 })
 
@@ -508,7 +494,7 @@ it("draws a domain bought elsewhere as the connect's records, or that the regist
     result: { ...RECORDS, provider: GODADDY },
   })
   expect(connected.container.textContent).toContain(`${NAME} is yours.`)
-  expect(rows(connected.container)).toHaveLength(3)
+  expect(rows(connected.container)).toHaveLength(2)
   expect(connected.container.querySelector("a")?.getAttribute("href")).toBe(
     GODADDY.settings_url
   )
@@ -522,4 +508,44 @@ it("draws a domain bought elsewhere as the connect's records, or that the regist
     `I can't see ${NAME} at the registry yet. It can take a few minutes, and I check each day too.`
   )
   await waiting.unmount()
+})
+
+it("folds to one quiet line once a later message holds another domain card, and Resume shows it again", async () => {
+  store.messages = [
+    { id: "msg-1", content: [] },
+    { id: "msg-2", content: [{ type: "tool-call", toolName: "find_domain" }] },
+  ]
+  const card = await draw(done({ ...RECORDS, provider: GODADDY }))
+  expect(card.container.textContent).toBe(
+    `Connecting ${NAME} · paused Resume connecting ${NAME}`
+  )
+  expect(card.container.querySelector("a")).toBeNull()
+  await act(async () =>
+    [...card.container.querySelectorAll("button")]
+      .find((b) => b.textContent?.startsWith("Resume"))
+      ?.click()
+  )
+  expect(rows(card.container)).toHaveLength(2)
+  await card.unmount()
+
+  // The address question asked again folds it too; a later reply in words does not.
+  store.messages = [
+    { id: "msg-1", content: [] },
+    {
+      id: "msg-2",
+      content: [
+        { type: "data", name: "build_questions", data: { kind: "address" } },
+      ],
+    },
+  ]
+  const asked = await draw(done(RECORDS))
+  expect(asked.container.textContent).toContain("· paused")
+  await asked.unmount()
+  store.messages = [
+    { id: "msg-1", content: [] },
+    { id: "msg-2", content: [{ type: "text", text: "Thanks" }] },
+  ]
+  const words = await draw(done(RECORDS))
+  expect(rows(words.container)).toHaveLength(2)
+  await words.unmount()
 })

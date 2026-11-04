@@ -65,6 +65,32 @@ const STEP_OF: Record<string, StepId> = {
   design: "look",
 }
 
+/** The facts that settle each step: the newest one's `valid_from` is when the step was done. */
+const STEP_FACTS: Record<StepId, readonly string[]> = {
+  work: ["business.industry", "business.offerings"],
+  area: ["service_area.text"],
+  customers: ["business.audience"],
+  proof: ["business.proof"],
+  quote_form: ["quote.form"],
+  contact: ["business.phone", "business.email"],
+  assistant: ["assistant.name", "assistant.pronouns", "assistant.tone"],
+  website: ["site.build_mode"],
+  look: [...DESIGN, "site.direction"],
+}
+
+/** When a done step settled, from facts read with their `valid_from`; undefined without one. */
+const settledAt = (facts: Onboarding["facts"], id: StepId) =>
+  facts
+    .flatMap((fact) =>
+      STEP_FACTS[id].includes(fact.key) &&
+      "valid_from" in fact &&
+      typeof fact.valid_from === "string"
+        ? [new Date(fact.valid_from).toISOString()]
+        : []
+    )
+    .sort()
+    .at(-1)
+
 type Settled = { state: "done" | "skipped"; value?: string }
 
 /** What a step shows as its value: one line, the owner's words. */
@@ -164,8 +190,14 @@ export function onboardingSteps(
   const now = over ? undefined : about && open.includes(about) ? about : open[0]
   return ONBOARDING_STEPS.map((id): ActivityStep => {
     const was = have[id]
+    const at = was?.state === "done" ? settledAt(o.facts, id) : undefined
     if (was)
-      return { id, state: was.state, ...(was.value && { value: was.value }) }
+      return {
+        id,
+        state: was.state,
+        ...(was.value && { value: was.value }),
+        ...(at && { at }),
+      }
     if (over) return { id, state: "skipped" }
     return { id, state: id === now ? (waiting ? "waiting" : "now") : "next" }
   })

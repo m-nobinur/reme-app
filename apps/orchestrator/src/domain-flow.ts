@@ -1511,7 +1511,8 @@ export async function applyLink(
 ): Promise<string | undefined> {
   const conversation = z.uuid().safeParse(body.conversation_id)
   const [step, ...more] = steps
-  if (!env.DOMAIN_CONNECT_KEY || !conversation.success) return undefined
+  if (env.DOMAIN_CONNECT !== "on" || !env.DOMAIN_CONNECT_KEY) return undefined
+  if (!conversation.success) return undefined
   if (step?.type !== "CNAME" || more.length > 0) return undefined
   const syncUX = await applyBase(
     inspection.apex,

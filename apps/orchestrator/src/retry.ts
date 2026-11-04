@@ -12,7 +12,6 @@ import {
   CHANGE_REFUSED,
   ChangeChecked,
   CompletionReport,
-  dashesToCommas,
   type GateName,
   PLANNED_PAGES,
   TONES,
@@ -539,7 +538,7 @@ export async function narrate(
     )
     if (!reservation) return template
     const written = await write(key, system, data, NARRATE_TIMEOUT_MS)
-    const text = dashesToCommas(written.text.trim())
+    const text = written.text.trim()
     const kept = narrationOk(text, [
       known.name ?? "",
       known.business ?? "",

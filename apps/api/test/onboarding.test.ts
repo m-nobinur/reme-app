@@ -2,12 +2,15 @@ import {
   AskChoiceInput,
   AskDesignInput,
   AskDetailsInput,
+  BuildQuestions,
   CALM_PALETTES,
   type FactValue,
   FONT_PAIRS,
   INDUSTRIES,
+  NAME_IDEAS,
   PALETTES,
   PaletteId,
+  RECAP_REPLY,
   SKIP_REPLY,
   TONES,
   type ToneId,
@@ -15,7 +18,9 @@ import {
 import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it } from "vitest"
 import type { ToolPart } from "../src/chat.ts"
+import { tableStart } from "../src/design-start.ts"
 import {
+  addressOffer,
   again,
   applied,
   built,
@@ -55,6 +60,7 @@ import {
   question,
   quoteForm,
   quoteUnchanged,
+  recap,
   retry,
   say,
   started,
@@ -158,6 +164,12 @@ function walk(o: Onboarding, answers: (card: ToolPart) => unknown) {
       at = applied(at, { kind: "facts", facts: [QUOTE] })
       continue
     }
+    // The recap is answered in words: its confirm pill sends RECAP_REPLY.
+    if (card && stepOf(card) === "recap") {
+      asked.push("recap")
+      at = applied(at, typedAnswer(card, RECAP_REPLY))
+      continue
+    }
     if (!card) return { asked, at, step }
     const id = card.type === "tool-request_change" ? "build" : stepOf(card)
     asked.push(id as StepId)
@@ -235,6 +247,7 @@ describe("the onboarding steps", () => {
       "industry",
       "quote_form",
       "contact",
+      "recap",
       "assistant",
       "build_for_me",
       "design",
@@ -327,31 +340,102 @@ describe("the onboarding steps", () => {
     const card = cardFor("contact")
     expect(AskDetailsInput.parse(card.input)).toEqual({
       step: "contact",
-      prefill: [
-        {
-          key: "business.email",
-          value: { address: "probe@brightclean.invalid" },
-        },
-      ],
+      prefill: [],
       skippable: false,
+      sign_in_email: "probe@brightclean.invalid",
     })
     const half = start({ facts: [...ALL_BEFORE("contact"), PHONE] })
     expect(currentStep(half)?.id).toBe("contact")
     expect(
       AskDetailsInput.parse(
         (onboardingStep(half, counter())[1] as ToolPart).input
-      ).prefill
-    ).toEqual([
-      PHONE,
-      {
-        key: "business.email",
-        value: { address: "probe@brightclean.invalid" },
-      },
-    ])
+      )
+    ).toMatchObject({
+      prefill: [PHONE],
+      sign_in_email: "probe@brightclean.invalid",
+    })
     expect(
       currentStep(start({ facts: [...ALL_BEFORE("contact"), PHONE, EMAIL] }))
         ?.id
-    ).toBe("assistant")
+    ).toBe("recap")
+  })
+
+  it("reads the business back from its facts before the assistant's setup, and moves on once the owner confirms", () => {
+    const facts = [
+      ...ALL_BEFORE("contact").filter(
+        (f) =>
+          ![
+            "business.offerings",
+            "business.audience",
+            "service_area.text",
+          ].includes(f.key)
+      ),
+      {
+        key: "business.offerings",
+        value: {
+          items: ["End of tenancy cleans", "Oven cleaning", "MOT tests"],
+        },
+      },
+      { key: "business.audience", value: { text: "Mostly families." } },
+      {
+        key: "service_area.text",
+        value: { text: "We cover Bristol and Bath." },
+      },
+      PHONE,
+      EMAIL,
+    ]
+    const [said, card, ...rest] = onboardingStep(start({ facts }), counter())
+    expect(rest).toEqual([])
+    expect((said as { text: string }).text).toBe(
+      `Here's what I've noted for ${BUSINESS}:\n\n- **Services:** end of tenancy cleans, oven cleaning and MOT tests\n- **Area:** Bristol and Bath\n- **Customers:** mostly families\n- **Contact:** 01632 960001, hello@brightclean.invalid\n\nHave I got that right?`
+    )
+    expect(card).toMatchObject({
+      type: "tool-ask_open",
+      input: { about: "recap" },
+    })
+    // A fact not held has no row.
+    const plain = onboardingStep(
+      start({
+        facts: facts.filter((f) => f.key !== "business.audience"),
+        asked: { "business.audience": 1 },
+      }),
+      counter()
+    )
+    expect((plain[0] as { text: string }).text).not.toContain("Customers")
+    // A yes settles it; without a model a correction cannot be read.
+    const asked = card as ToolPart
+    expect(typedAnswer(asked, RECAP_REPLY)).toEqual({
+      kind: "passed",
+      step: "recap",
+    })
+    expect(typedAnswer(asked, "Yes, that's right")).toMatchObject({
+      kind: "passed",
+    })
+    expect(typedAnswer(asked, "Change the area to Bath only")).toEqual({
+      kind: "retry",
+      reason: "unclear",
+    })
+    // Typed over, it closes; shown again, it opens.
+    const over = {
+      type: "tool-ask_open",
+      step: "recap",
+      answer: null,
+      choice: null,
+    }
+    expect(
+      progressOf([{ ...over, state: "output-error", reply: RECAP_REPLY }])
+        .closed
+    ).toEqual(["recap"])
+    expect(
+      progressOf([
+        { ...over, state: "output-error", reply: "Hm, what?" },
+        { ...over, state: "input-available", reply: null },
+      ]).closed
+    ).toEqual([])
+    const confirmed = start({ facts, closed: ["recap"] })
+    const [lead, persona] = onboardingStep(confirmed, counter())
+    expect(persona).toMatchObject({ input: { step: "assistant" } })
+    expect((lead as { text: string }).text).not.toMatch(/\?/)
   })
 
   it("asks the business name after what it does, when sign-up gave none, filled in from the org", () => {
@@ -417,13 +501,16 @@ describe("the onboarding steps", () => {
     ])
   })
 
-  it("labels the build card's no as Skip", () => {
+  it("labels the build card's answers as the owner says them", () => {
     const labels = (at: Onboarding) =>
       AskChoiceInput.parse(
         (onboardingStep(at, counter())[1] as ToolPart).input
       ).options.map((o) => o.label)
     const facts = ALL_BEFORE("build_for_me")
-    expect(labels(start({ facts }))).toEqual(["Yes, build it for me", "Skip"])
+    expect(labels(start({ facts }))).toEqual([
+      "Yes, build my website",
+      "No, I already have one",
+    ])
   })
 
   it("resolves the build card, then closes in a step of its own so no client sends again", () => {
@@ -458,6 +545,69 @@ describe("the onboarding steps", () => {
       error: { class: "validation", code: "change.build_busy", message: "x" },
     })
     expect((refused[2] as { text: string }).text).toMatch(/couldn't start/)
+    expect(refused).toHaveLength(3)
+  })
+
+  it("goes on to the web address offer and its card in the same reply, once the build started", () => {
+    const o = start({
+      facts: [
+        {
+          key: "business.industry",
+          value: { name: "Tree surgery and garden care", category: "trades" },
+        },
+        {
+          key: "service_area.text",
+          value: { text: "Leeds and about 20 miles out" },
+        },
+      ],
+    })
+    const offer = addressOffer(o)
+    expect(offer).toContain("**tree surgery in Leeds**")
+    const pending: ToolPart = {
+      type: "tool-request_change",
+      toolCallId: "c1",
+      state: "input-available",
+      input: { text: ONBOARDING_GOAL },
+    }
+    const parts = built(
+      o,
+      pending,
+      {
+        outcome: "started",
+        build: {
+          assignment_id: ORG,
+          kind: "site.build",
+          state: "queued",
+          goal: ONBOARDING_GOAL,
+          revision: null,
+          created_at: "2026-09-26T09:30:00.000Z",
+          updated_at: "2026-09-26T09:30:00.000Z",
+        },
+      },
+      undefined,
+      offer
+    )
+    expect(parts.slice(3).map((p) => p.type)).toEqual([
+      "step-start",
+      "text",
+      "data-build_questions",
+    ])
+    expect((parts[4] as { text: string }).text).toBe(offer)
+    const stack = BuildQuestions.parse((parts[5] as { data: unknown }).data)
+    expect(stack.kind).toBe("address")
+  })
+
+  it("leaves the address to the orchestrator when the email is on the business's own domain", () => {
+    const own = start({
+      facts: [
+        { key: "business.email", value: { address: "sam@pruningco.co.uk" } },
+      ],
+    })
+    const free = start({
+      facts: [{ key: "business.email", value: { address: "sam@gmail.com" } }],
+    })
+    expect(addressOffer(own)).toBeNull()
+    expect(addressOffer(free)).toContain("**a business like yours**")
   })
 })
 
@@ -516,8 +666,10 @@ function cardFor(step: StepId): ToolPart {
     (f) => step !== "business.name" || f.key !== "business.name"
   )
   // The four cards the tray replaced are asked to an org that was on them.
+  // The recap is confirmed in words, so it is closed rather than held.
   const at = start({
     facts,
+    closed: step === "recap" ? [] : ["recap"],
     ...(["template", "palette", "font", "pages"].includes(step)
       ? { oldDesign: true }
       : {}),
@@ -1055,11 +1207,15 @@ describe("a reply Jev read", () => {
     for (const held of [[], [maya]]) {
       const now = start({ facts: [...ALL_BEFORE("assistant"), ...held] })
       const card = detailsCard("assistant", now, counter())
+      const input = AskDetailsInput.parse(card.input)
+      const name: FactValue[] = held.length
+        ? []
+        : [{ key: "assistant.name", value: { name: input.ideas?.[0] ?? "" } }]
       const button = cardAnswer(
         card,
         {
           answer: "stated",
-          facts: AskDetailsInput.parse(card.input).prefill,
+          facts: [...input.prefill, ...name],
           skip_all: true,
         },
         []
@@ -1414,9 +1570,23 @@ const lines = (v: Voice): [string, string][] => [
   ["opener", opener(v)],
   ...(
     STEPS.map((s) => s.id).filter(
-      (id) => id !== "upload" && id !== "build" && id !== "manual_builder"
-    ) as Exclude<StepId, "upload" | "build" | "manual_builder">[]
+      (id) =>
+        id !== "upload" &&
+        id !== "build" &&
+        id !== "manual_builder" &&
+        id !== "recap"
+    ) as Exclude<StepId, "upload" | "build" | "manual_builder" | "recap">[]
   ).map((id): [string, string] => [id, question(id, v)]),
+  [
+    "recap",
+    recap(v, {
+      services: ["End of tenancy cleans", "Oven cleaning", "Regular cleans"],
+      area: "Bristol and about 15 miles out.",
+      customers: "Mostly families, plus two letting agents",
+      phone: "0117 496 0321",
+      email: "hello@freshstart.invalid",
+    }),
+  ],
   ...STEPS.flatMap(({ id }): [string, string][] => {
     const line = back(id, v)
     return line ? [[`back ${id}`, line]] : []
@@ -1472,6 +1642,16 @@ describe("the onboarding copy", () => {
       expect(text, name).not.toMatch(/\bReme\b/)
       if (NAMED.includes(name)) expect(text, name).toContain(BUSINESS)
       if (tone === "professional") expect(text, name).not.toContain("!")
+      // Easy to scan: short paragraphs, bold that closes, no headings,
+      // tables or emoji.
+      expect(text, name).not.toMatch(/^#|^\s*\||\p{Emoji_Presentation}/mu)
+      expect((text.match(/\*\*/g)?.length ?? 0) % 2, name).toBe(0)
+      // Bold marks list labels only; a question stays plain.
+      expect(text, name).not.toMatch(
+        /\*\*[^*]*\?\s*\*\*|\*\*[^*\n]*\*\*[^.!?\n]*\?/
+      )
+      for (const paragraph of text.split(/\n\s*\n/))
+        expect(paragraph.split(/\s+/).length, name).toBeLessThanOrEqual(50)
       expect(voiceProblems(text, { assistantNamed: true }), name).toEqual({
         hard: [],
         soft: [],
@@ -1497,6 +1677,20 @@ describe("the onboarding copy", () => {
       )
       expect(seen.size, name).toBeGreaterThanOrEqual(2)
     }
+  })
+
+  it("reads the business back as labelled bullets, the owner's own asterisks kept as characters", () => {
+    expect(
+      recap(voice({ business: "Sparkle_Clean" }), {
+        services: ["*Deep* cleans", "Ovens"],
+        area: null,
+        customers: "Mostly families — and two letting agents",
+        phone: null,
+        email: "first_last@sparkle.invalid",
+      })
+    ).toBe(
+      "Here's what I've noted for Sparkle\\_Clean:\n\n- **Services:** \\*Deep\\* cleans and ovens\n- **Customers:** mostly families, and two letting agents\n- **Contact:** first\\_last@sparkle.invalid\n\nHave I got that right?"
+    )
   })
 
   it("asks the quote question with a short example answer", () => {
@@ -1576,14 +1770,20 @@ describe("the onboarding copy", () => {
       expect(text).toContain("Probe")
       expect(text).not.toContain("Probe Owner")
       expect(text).toContain(BUSINESS)
-      expect(text).toMatch(/business assistant/)
-      expect(text).toMatch(/quick questions/)
-      // A business assistant first: the website is one thing it offers.
+      // The owner's new assistant from now on: the website is one thing it offers.
+      expect(text).toMatch(/from now on/i)
       expect(text).toMatch(/quote/)
-      expect(text).not.toMatch(/build you a website|starting with your website/)
-      expect(text.trim()).toMatch(/\?$/)
+      expect(text).toMatch(/website/)
+      expect(text).toMatch(/if you need/)
+      // The first question asks for detail and says why.
+      expect(text).toContain(`What does ${BUSINESS} do?`)
+      expect(text).toMatch(/anything you don't take on/)
+      expect(text).toMatch(/the better I can answer/)
       expect(text).not.toMatch(/[—–]|\bReme\b/)
+      // Short paragraphs, one idea each, the question opening its own.
       expect(text.split("\n\n").length).toBeLessThanOrEqual(3)
+      expect(text).toContain(`\n\nWhat does ${BUSINESS} do?`)
+      expect(text).not.toContain("**")
       seen.add(text)
       // No name from the sign-in: no stray comma or space before it.
       const nameless = (
@@ -1591,7 +1791,7 @@ describe("the onboarding copy", () => {
       ).text
       expect(nameless).not.toMatch(/ ,| {2}/)
     }
-    expect(seen.size).toBeGreaterThanOrEqual(6)
+    expect(seen.size).toBeGreaterThanOrEqual(2)
   })
 })
 
@@ -1658,9 +1858,12 @@ describe("the design tray", () => {
       for (const id of ids(input, "arrangement")) {
         expect(fit.map((d) => d.id)).toContain(id)
       }
-      for (const id of ids(input, "lettering")) {
-        expect(fit.map((d) => d.fonts)).toContain(id)
-      }
+      // Lettering: the industry's four fitted pairs first, then all eight.
+      const lettering = input.questions.find((q) => q.id === "lettering")
+      expect(lettering?.card.initial).toEqual(
+        tableStart(category as never).fonts
+      )
+      expect(ids(input, "lettering")).toHaveLength(FONT_PAIRS.length)
       // Every palette is offered; calm ones lead, four shown.
       const palette = input.questions.find((q) => q.id === "palette")?.card
       expect(palette?.initial).toHaveLength(4)
@@ -1711,10 +1914,43 @@ describe("the design tray", () => {
     }
   })
 
-  it("seeds by org: the same lettering on every call, other orgs others", () => {
-    const first = (org: string) => ids(tray({ orgId: org }), "lettering").join()
-    expect(first(ORG)).toBe(first(ORG))
-    expect(new Set(ORGS.map(first)).size).toBeGreaterThan(1)
+  it("opens on the start chosen for the business, its look in the owner's words", () => {
+    const designStart = {
+      directions: [
+        { type: "emblem", style: "retro" },
+        { type: "lockup", style: "hand_drawn" },
+        { type: "icon", style: "geometric" },
+      ],
+      fonts: [
+        "syne_jakarta",
+        "newsreader_inter",
+        "dmsans_fraunces",
+        "outfit_figtree",
+      ],
+    } as const
+    const input = tray({
+      designStart: {
+        directions: [...designStart.directions],
+        fonts: [...designStart.fonts],
+      },
+      prepared: {
+        services_phrase: "your tree work",
+        logo_look: "a neatly pruned tree",
+      },
+    })
+    expect(input.questions[0]?.start).toEqual({
+      directions: designStart.directions,
+      description: "a neatly pruned tree",
+    })
+    const lettering = input.questions.find((q) => q.id === "lettering")
+    expect(lettering?.card.initial).toEqual(designStart.fonts)
+    expect(lettering?.suggested).toBe("syne_jakarta")
+    expect(lettering?.card.preselected).toEqual(["syne_jakarta"])
+    // Without one stored, the industry's table, and no look.
+    expect(tray().questions[0]?.start).toEqual({
+      directions: tableStart("cleaning").directions,
+      description: "",
+    })
   })
 
   it("opens ticked where the org already answered", () => {
@@ -1730,8 +1966,9 @@ describe("the design tray", () => {
     expect(input.questions[2]?.card.preselected).toEqual(
       ids(input, "lettering").slice(0, 1)
     )
-    // With no logo or photos held, both open on making them.
-    expect(input.questions[0]?.card.preselected).toEqual(["create"])
+    // The logo's two ways are quick answers, neither picked; photos with
+    // none held open on making them.
+    expect(input.questions[0]?.card.preselected).toEqual([])
     expect(input.questions[4]?.card.preselected).toEqual(["create"])
   })
 
@@ -1844,17 +2081,16 @@ describe("the design tray", () => {
     })
   })
 
-  it("never offers two letterings with the same title font", () => {
-    for (let n = 0; n < 20; n++) {
-      const orgId = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`
-      const offered = tray({ orgId })
-        .questions.find((q) => q.id === "lettering")
-        ?.card.options.map((o) => o.id)
-        .filter((id) => id !== "custom")
-      const families = offered?.map(
-        (id) => FONT_PAIRS.find((pair) => pair.id === id)?.display.family
-      )
-      expect(new Set(families).size).toBe(families?.length)
+  it("shows four letterings first from four moods, never two title fonts alike", () => {
+    for (const category of [...INDUSTRIES.map((i) => i.id), null]) {
+      const shown =
+        tray({ facts: heldBefore(category) }).questions.find(
+          (q) => q.id === "lettering"
+        )?.card.initial ?? []
+      const pairs = shown.map((id) => FONT_PAIRS.find((p) => p.id === id))
+      expect(shown).toHaveLength(4)
+      expect(new Set(pairs.map((p) => p?.mood)).size).toBe(4)
+      expect(new Set(pairs.map((p) => p?.display.family)).size).toBe(4)
     }
   })
 
@@ -2178,8 +2414,8 @@ describe("the assistant card's name ideas", () => {
   const ideas = (o: Onboarding) =>
     AskDetailsInput.parse(detailsCard("assistant", o, counter()).input).ideas
 
-  it("carries the names written for the business once they are ready", () => {
-    expect(ideas(start())).toBeUndefined()
+  it("carries the names written for the business once they are ready, the house ones until then", () => {
+    expect(ideas(start())).toEqual([...NAME_IDEAS])
     const prepared = {
       services_phrase: "your cleans",
       assistant_names: ["Poppy", "Theo"],
@@ -2187,12 +2423,11 @@ describe("the assistant card's name ideas", () => {
     expect(ideas(start({ prepared }))).toEqual(["Poppy", "Theo"])
   })
 
-  it("opens filled with Reme, she/her, the first she/her face and professional, the org's own picks first", () => {
+  it("opens on she/her, the first she/her face and professional with no name, the org's own picks first", () => {
     const prefill = (o: Onboarding) =>
       AskDetailsInput.parse(detailsCard("assistant", o, counter()).input)
         .prefill
     expect(prefill(start())).toEqual([
-      { key: "assistant.name", value: { name: "Reme" } },
       { key: "assistant.pronouns", value: { id: "she_her" } },
       { key: "assistant.avatar", value: { id: "she_1" } },
       { key: "assistant.tone", value: { id: "professional" } },

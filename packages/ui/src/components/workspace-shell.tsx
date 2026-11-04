@@ -144,8 +144,8 @@ function RailToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
  * sheet from the left, where the names show beside the icons. A rail label
  * is a `data-slot="rail-label"` span. The panel is a rounded
  * card whose header is always one line of live activity (`panelLine`); open,
- * it grows with its content to half the viewport's height and scrolls past
- * that. It floats over the page rather than taking a column, so the
+ * it grows with its content to the window's height and scrolls past that,
+ * its foot fading while there is more below. It floats over the page rather than taking a column, so the
  * conversation stays centred. From `lg` whether it is open is remembered;
  * below `lg` it starts minimised, since there it covers the conversation.
  * With no `panel` there is no card and no space kept for it.
@@ -403,8 +403,8 @@ function WorkspaceShell({
             className={cn(
               "group/panel absolute right-(--gap) z-20 flex max-w-[calc(100%-var(--gap)*2)] overflow-hidden border border-border bg-popover text-popover-foreground shadow-lg",
               floating
-                ? "motion-safe:fade-in motion-safe:slide-in-from-bottom-2 bottom-(--gap) max-h-[min(70svh,40rem)] flex-col-reverse rounded-full data-[state=open]:w-88 data-[state=open]:rounded-2xl motion-safe:animate-in"
-                : "top-[calc(var(--bar)+var(--gap))] max-h-[calc(50svh+3rem)] w-88 flex-col rounded-2xl md:top-(--gap)"
+                ? "motion-safe:fade-in motion-safe:slide-in-from-bottom-2 bottom-(--gap) max-h-[calc(100svh-var(--gap)*2)] flex-col-reverse rounded-full data-[state=open]:w-88 data-[state=open]:rounded-2xl motion-safe:animate-in"
+                : "top-[calc(var(--bar)+var(--gap))] max-h-[calc(100svh-var(--bar)-var(--gap)*2)] w-88 flex-col rounded-2xl md:top-(--gap) md:max-h-[calc(100svh-var(--gap)*2)]"
             )}
             data-state={expanded ? "open" : "closed"}
             id="workspace-panel"
@@ -462,7 +462,7 @@ function WorkspaceShell({
                       floatOpen ? "flex" : "hidden"
                     )
                   : cn(
-                      "border-t",
+                      "scroll-fade border-t",
                       wide
                         ? panelOpen
                           ? "hidden lg:flex"

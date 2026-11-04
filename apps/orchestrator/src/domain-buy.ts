@@ -12,7 +12,10 @@ import {
   FindDomainInput,
   type FindDomainOutput,
   RegistrantDetails,
+  RowEnding,
   sellableTld,
+  townOf,
+  tradeWords,
   Uuid,
 } from "@workspace/contracts"
 import {
@@ -46,6 +49,7 @@ import {
 } from "./domain-flow.ts"
 import { DomainError, zoneApex } from "./domains.ts"
 import type { Observed } from "./probe.ts"
+import { freshRate } from "./rates.ts"
 import { rdapLookup } from "./rdap.ts"
 import {
   attachHostname,
@@ -56,6 +60,7 @@ import {
   ensureZone,
   getRegistration,
   offeredTlds,
+  type Ranked,
   type Registrant,
   type RegistrationStatus,
   register,
@@ -137,27 +142,69 @@ async function rankFacts(db: OrgScopedDb, query?: string) {
   const text = (v: unknown) => (typeof v === "string" ? v : undefined)
   return {
     name: query || text(value("business.name")?.name) || "",
-    town:
+    town: townOf(
       text(value("service_area.radius")?.centre) ??
-      text(value("service_area.text")?.text),
-    trade: text(value("business.industry")?.name),
+        text(value("service_area.text")?.text)
+    ),
+    trade: tradeWords(text(value("business.industry")?.name)),
     asked: Boolean(query),
   }
 }
 
-/** The endings a row shows, in the order the owner reads them. */
-const ROW_TLDS = ["co.uk", "com", "uk"] as const
-
-/** Rows `find_domain` returns at most: a 2 by 2 grid. */
-const ROWS_MAX = 4
+/** Rows `find_domain` returns at most. */
+const ROWS_MAX = 6
+/** Stems checked at most, so a taken stem leaves another to show. */
+const STEMS_MAX = 10
 
 /**
- * `POST /domains/find`: one row per name stem, best first, each ending this
- * registrar sells free at the price table's price or taken. The ranker's
- * stems from the business facts (or the owner's words), then the registrar's
- * own suggestions for those words, in one authoritative check. A stem with
- * no free ending is left out; up to four rows, so the owner has a choice.
- * The address task's `choose` step then waits on the owner picking. Needs no
+ * The endings a row is checked on: the ones this registrar sells, and `.co`
+ * where the live registrar answers it. The sandbox answers `.com` only.
+ */
+const rowEndings = (env: Env): readonly RowEnding[] =>
+  RowEnding.options.filter(
+    (e) =>
+      (offeredTlds(env) as readonly string[]).includes(e) ||
+      (e === "co" && registrarLive(env))
+  )
+
+/** Names checked in calls of `CHECK_MAX`, all at once. */
+const checkAll = (env: Env, names: string[]) =>
+  Promise.all(
+    Array.from({ length: Math.ceil(names.length / CHECK_MAX) }, (_, i) =>
+      checkDomains(env, names.slice(i * CHECK_MAX, (i + 1) * CHECK_MAX))
+    )
+  ).then((parts) => parts.flat())
+
+/**
+ * One ending as the row shows it: free when the registrar would register it
+ * now at its standard tier, with the price it quoted, and Reme's own price
+ * only where Reme sells it; else taken.
+ */
+function endingOf(checked: Checked | undefined) {
+  if (!checked?.registrable || checked.tier === "premium")
+    return { state: "taken" as const }
+  const tld = sellableTld(checked.name)
+  const usd =
+    checked.pricing?.currency === "USD"
+      ? Number(checked.pricing.registration_cost)
+      : Number.NaN
+  return {
+    state: "free" as const,
+    ...(tld && sellable(checked) !== null
+      ? { price_gbp_year: DOMAIN_PRICES[tld].retail_gbp }
+      : {}),
+    ...(usd > 0 ? { registrar_usd: usd } : {}),
+  }
+}
+
+/**
+ * `POST /domains/find`: one row per name stem, best first, each ending
+ * free or taken by the registrar's own check, the one source that knows
+ * what it would register now. The ranker's stems from the business facts
+ * (or the owner's words) are checked while the registrar's suggestions
+ * arrive, and the suggested stems after, so the search costs no extra
+ * wait. A stem with no free ending is left out; up to six rows. The
+ * address task's `choose` step then waits on the owner picking. Needs no
  * Stripe: finding is free.
  */
 export async function find(
@@ -177,46 +224,43 @@ export async function find(
   const facts = await kit.withOrg({ orgId }, (db) =>
     rankFacts(db, input.data.query)
   )
-  // The registrar fills the rows the ranker's own leave short, for the
-  // owner's words or else the business name.
-  const suggested = facts.name
-    ? await searchDomains(env, facts.name).catch(() => [])
-    : []
-  const offered = ROW_TLDS.filter((tld) => offeredTlds(env).includes(tld))
-  const stems = [...candidates(facts), ...suggestions(facts, suggested)]
-  // Whole stems only, so a row never shows an ending it did not check.
-  const perStem = offered.length
-  const rows = stems
-    .filter((s, i) => stems.findIndex((t) => t.stem === s.stem) === i)
-    .slice(0, Math.floor(CHECK_MAX / perStem))
-  let checked: Checked[]
-  try {
-    checked = await checkDomains(
-      env,
-      rows.flatMap((r) => offered.map((tld) => `${r.stem}.${tld}`))
+  const endings = rowEndings(env)
+  const unique = (stems: Ranked[], seen: readonly Ranked[] = []) =>
+    stems.filter(
+      (s, i) =>
+        stems.findIndex((t) => t.stem === s.stem) === i &&
+        !seen.some((t) => t.stem === s.stem)
     )
+  const names = (stems: Ranked[]) =>
+    stems.flatMap((r) => endings.map((tld) => `${r.stem}.${tld}`))
+  // Whole stems only, so a row never shows an ending it did not check.
+  const own = unique(candidates(facts)).slice(0, STEMS_MAX)
+  let checked: Checked[]
+  let rows: Ranked[]
+  try {
+    const [first, suggested] = await Promise.all([
+      checkAll(env, names(own)),
+      facts.name
+        ? searchDomains(env, facts.name).catch(() => [])
+        : Promise.resolve([]),
+    ])
+    const more = unique(suggestions(facts, suggested), own).slice(
+      0,
+      STEMS_MAX - own.length
+    )
+    checked = [...first, ...(await checkAll(env, names(more)))]
+    rows = [...own, ...more]
   } catch {
     return registrarDown()
   }
   const answer = new Map(checked.map((c) => [c.name, c]))
   const out: DomainStemOffer[] = []
   for (const { stem, why } of rows) {
-    const endings = Object.fromEntries(
-      offered.map((tld) => {
-        const c = answer.get(`${stem}.${tld}`)
-        return [
-          tld,
-          c && sellable(c) !== null
-            ? {
-                state: "free" as const,
-                price_gbp_year: DOMAIN_PRICES[tld].retail_gbp,
-              }
-            : { state: "taken" as const },
-        ]
-      })
+    const row: DomainStemOffer["endings"] = Object.fromEntries(
+      endings.map((tld) => [tld, endingOf(answer.get(`${stem}.${tld}`))])
     )
-    if (!Object.values(endings).some((e) => e.state === "free")) continue
-    out.push({ stem, why, endings })
+    if (!Object.values(row).some((e) => e?.state === "free")) continue
+    out.push({ stem, why, endings: row })
   }
   if (out.length === 0) return fromEnvelope(409, BUY_REFUSALS.unavailable)
   await kit.withOrg({ orgId }, async (db) => {
@@ -227,7 +271,14 @@ export async function find(
       note: "picking a name",
     })
   })
-  return { outcome: "found", rows: out.slice(0, ROWS_MAX) }
+  const usd_gbp = await freshRate(env.SCHEDULE, new Date()).catch(
+    () => undefined
+  )
+  return {
+    outcome: "found",
+    rows: out.slice(0, ROWS_MAX),
+    ...(usd_gbp && { usd_gbp }),
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -27,6 +27,7 @@ vi.mock("@workspace/facade/cloudflare", () => ({
 vi.mock("../src/sandbox.ts", () => ({
   checkpoint: async () => undefined,
   recover: async () => undefined,
+  sandboxFor: () => ({}),
 }))
 vi.mock("../src/tail.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/tail.ts")>()),

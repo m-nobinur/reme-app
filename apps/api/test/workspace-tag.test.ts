@@ -1,3 +1,4 @@
+import { PALETTES } from "@workspace/contracts"
 import {
   conversationMessages,
   conversations,
@@ -6,8 +7,71 @@ import {
   tenancy,
 } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { finishedAt } from "../src/workspace-tag.ts"
+import type { Owner as Caller } from "../src/changes.ts"
+import type { Held } from "../src/onboarding.ts"
+import { finishedAt, logoRound } from "../src/workspace-tag.ts"
 import { type Owner, owner } from "./owner-fixture.ts"
+
+describe("the logo round the panel shows", () => {
+  const caller = { orgId: "org", session: {} } as Caller
+  const ids = ["a", "b", "c"].map(
+    (c) => `${c}0000000-0000-4000-8000-000000000000`
+  )
+  const round = (status: string, variants: string[] = []) => ({
+    round: 1,
+    status,
+    started_at: new Date().toISOString(),
+    brief: {
+      description: "A mark",
+      colors: [PALETTES[0]?.primary],
+      type: "lockup",
+      style: "minimal",
+    },
+    planned: ids,
+    styles: ["minimal", "minimal", "minimal"],
+    variants,
+  })
+  const read = (manifest: object | null, facts: Held[] = []) =>
+    logoRound(
+      {
+        SITES: {
+          list: async () => ({ objects: manifest ? [{ key: "m" }] : [] }),
+          get: async () => ({ etag: "e", json: async () => manifest }),
+        },
+      } as unknown as Env,
+      caller,
+      "call_1",
+      facts
+    )
+  const kept = {
+    key: "media.uploads",
+    value: {
+      items: [
+        {
+          id: ids[1],
+          name: "Logo.png",
+          content_type: "image/png",
+          bytes: 1,
+          use: "logo",
+        },
+      ],
+    },
+  } as unknown as Held
+
+  it("says a round is drawing, then waits on a pick until one is kept", async () => {
+    expect(await read(round("drawing"))).toEqual({
+      status: "drawing",
+      options: 3,
+    })
+    expect(await read(round("ready", ids))).toEqual({
+      status: "ready",
+      options: 3,
+    })
+    expect(await read(round("ready", ids), [kept])).toBeUndefined()
+    expect(await read(round("failed"))).toBeUndefined()
+    expect(await read(null)).toBeUndefined()
+  })
+})
 
 /** The onboarding segment's finish time, on a live connection. */
 

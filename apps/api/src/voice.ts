@@ -1,8 +1,8 @@
 /**
  * How the assistant sounds to the owner, and the code check that holds the
- * model to it. The onboarding planner reads `VOICE` in its instructions and
- * retries on any `voiceProblems` hit; the Chief of Staff streams, so it
- * cannot retry and uses the same check to swap dashes and to log the rest.
+ * model to it. The Chief of Staff reads `VOICE` in its instructions. The
+ * onboarding planner retries on a hard hit, and the Chief of Staff, which
+ * streams and cannot retry, logs every hit.
  */
 
 /** The rules both models' instructions include. */
@@ -11,7 +11,7 @@ export const VOICE = `How you sound, wherever you speak to the owner:
 - Never repeat the owner's words back, never grade their answers, and keep ceremony out: no welcome speeches, no thanks for choosing you, no sign-offs.
 - Never restate what a card shows, and never point at it ("The card shows..."): say nothing, or one line worth reading.
 - Plain words: "your website", not "your digital storefront". British English. Contractions, unless the tone is professional. At most one exclamation mark, and none when the tone is professional.
-- Write hosts and names plain, with no quote marks. No headings or lists in a short reply.
+- Write hosts and names plain, with no quote marks. No headings or lists in a short reply. Use a comma or a full stop, never a dash.
 - Times in the 12-hour form with AM or PM, such as 8:00 AM or 2:30 PM, never 14:00.
 - Never say an id, a ref, a code, a version number or a tool's name.
 - These read as filler and are refused: "feel free to", "let me know if", "don't hesitate to", "peace of mind", "certainly", "absolutely", "of course", "wonderful", "fantastic", "amazing", "as your assistant". To offer a skip, say "You can skip this".`
@@ -31,6 +31,7 @@ const INTERNALS: readonly [RegExp, string][] = [
 
 /** Ceremony, praise, chatbot openers and sign-offs: a hit is a style miss, not a fault. */
 const SOFT: readonly [RegExp, string][] = [
+  [/[—–]/, "a dash"],
   [
     /\b(reporting for duty|partnership|officially|hono(u)?r|than(k you|ks) for (choosing|picking|trusting)|glad you (chose|picked)|digital storefront|peace of mind|wonderful|fantastic|amazing|certainly|lovely (mix|choice))\b/i,
     "ceremony or praise",
@@ -40,7 +41,7 @@ const SOFT: readonly [RegExp, string][] = [
     "a chatbot opener",
   ],
   [
-    /\b(let me know if you (need|have|want)|feel free to|don't hesitate to|i hope this helps)\b/i,
+    /\b(let me know (if|whether)|feel free to|don't hesitate to|i hope this helps)\b/i,
     "a sign-off",
   ],
   [/\bas your (business )?assistant\b/i, '"as your assistant"'],
@@ -51,9 +52,9 @@ const SOFT: readonly [RegExp, string][] = [
 ]
 
 export type VoiceProblems = {
-  /** A fault in any reply: a dash, or a piece of the product's plumbing. */
+  /** A fault in any reply: a piece of the product's plumbing. */
   hard: string[]
-  /** A slip in style, which the planner retries on and the Chief of Staff logs. */
+  /** A slip in style, which the prompt guards against and the Chief of Staff logs. */
   soft: string[]
 }
 
@@ -68,7 +69,6 @@ export function voiceProblems(
   { assistantNamed = false }: { assistantNamed?: boolean } = {}
 ): VoiceProblems {
   const hard: string[] = []
-  if (/[—–]/.test(text)) hard.push("Use a comma or a full stop, never a dash.")
   for (const [pattern, what] of INTERNALS) {
     const found = text.match(pattern)?.[0]
     if (found)

@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test"
 import { PALETTES } from "@workspace/contracts"
-import { open } from "./helpers"
+import { axe, open, settled } from "./helpers"
 
 /**
  * Onboarding's choice and photo questions, in the tray: native groups the
@@ -16,10 +16,10 @@ test("a choice is a native group, with Other opening the owner's own words", asy
   page,
 }) => {
   await open(page, "AskChoice")
-  await expect(pending(page)).toHaveCount(6)
+  await expect(pending(page)).toHaveCount(5)
   const industry = pending(page).nth(0)
   await expect(industry.getByRole("radio")).toHaveCount(7)
-  await industry.getByRole("button", { name: "Submit" }).click()
+  await industry.getByRole("button", { name: "Done" }).click()
   await expect(industry.getByRole("alert")).toHaveText("Pick one first.")
   // Arrow keys move the choice, as in any radio group.
   await industry.getByRole("radio").first().focus()
@@ -31,7 +31,7 @@ test("a choice is a native group, with Other opening the owner's own words", asy
   await industry.getByText("Something else").click()
   const words = industry.getByRole("textbox", { name: "Something else" })
   await expect(words).toHaveAttribute("placeholder", "Your industry")
-  await industry.getByRole("button", { name: "Submit" }).click()
+  await industry.getByRole("button", { name: "Done" }).click()
   await expect(industry.getByRole("alert")).toHaveText(
     "Write your answer first."
   )
@@ -64,18 +64,22 @@ const shownIds = (card: ReturnType<typeof pending>) =>
         .filter((value) => value !== "__other__")
     )
 
-test("a choice of two answers on one tap, with no Submit", async ({ page }) => {
+test("a choice of two short answers is quick replies above the composer", async ({
+  page,
+}) => {
   await open(page, "AskChoice")
-  const build = pending(page).nth(5)
-  await expect(build.getByRole("button", { name: "Submit" })).toHaveCount(0)
-  await expect(build.getByRole("radio")).toHaveCount(0)
+  const build = page
+    .locator('[data-slot="ask-choice"]')
+    .getByRole("group", { name: "Would you like me to build your website?" })
+  await expect(build.getByRole("button")).toHaveText([
+    "Yes, build my website",
+    "No, I already have one",
+  ])
   await expect(
-    build.getByRole("button", { name: "Yes, build it for me" })
-  ).toBeVisible()
-  // The card's frame is the region the question names.
-  await expect(build.getByRole("region")).toHaveAccessibleName(
-    "You'll see it before it goes live"
-  )
+    page.locator('[data-slot="ask-choice"]').getByRole("region", {
+      name: "Would you like me to build your website?",
+    })
+  ).toHaveCount(0)
 })
 
 test("a colour card shows four, brings in four others, and takes a picked colour", async ({
@@ -110,7 +114,7 @@ test("a colour card shows four, brings in four others, and takes a picked colour
   await expect(field).toHaveValue(dark)
   await expect(card.getByText(/reads well/)).toBeVisible()
   await field.fill("#12")
-  await card.getByRole("button", { name: "Submit" }).click()
+  await card.getByRole("button", { name: "Done" }).click()
   await expect(card.getByRole("alert")).toHaveText(
     "A colour code is # and six digits or letters from a to f."
   )
@@ -134,7 +138,7 @@ test("an answered choice reads back as the owner's reply", async ({ page }) => {
   ])
   const done = page
     .locator('[data-slot="ask-choice"]')
-    .filter({ hasNot: page.locator("form") })
+    .filter({ hasNot: page.locator("form, [data-slot=reply-pills]") })
   // One overtaken by a typed message leaves nothing; a broken one says so.
   await expect(done).toHaveCount(1)
   await expect(done.nth(0)).toContainText("did not come through")
@@ -274,4 +278,194 @@ test("a new chat's updates are a deck of three that steps with its arrows", asyn
   await deck.getByRole("button", { name: "Previous update" }).click()
   await expect(deck.getByText("3/3")).toBeVisible()
   await expect(deck.getByText("Call the window supplier")).toBeVisible()
+})
+
+test("a choice pill opens its options and hint, and a cut label shows whole on hover", async ({
+  page,
+}) => {
+  await open(page, "ReviewQuoteForm")
+  await page
+    .getByRole("button", { name: "Vehicle, one choice: show the options" })
+    .first()
+    .click()
+  const options = page.getByRole("dialog", { name: "Vehicle" })
+  await expect(options).toContainText("The minibus seats up to 16")
+  await expect(options.getByRole("listitem")).toHaveText([
+    "Saloon",
+    "Stretch limousine",
+    "Minibus",
+  ])
+  await expect(options).toContainText("Customers pick one.")
+  await page.keyboard.press("Escape")
+  await expect(options).toHaveCount(0)
+  await page
+    .getByText("Anything else we should know before we quote", { exact: true })
+    .first()
+    .hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+    "Anything else we should know before we quote"
+  )
+})
+
+test("a finished design tray reads back as chips: the logo, colours, a pair in its own face", async ({
+  page,
+}) => {
+  await open(page, "DesignReply")
+  const bubble = page.locator('[data-slot="aui_user-message-root"]')
+  await expect(bubble.locator("img")).toHaveCount(1)
+  await expect(bubble.getByText("Outfit and Figtree")).toHaveCSS(
+    "font-family",
+    /^"?Outfit"?,/
+  )
+  for (const words of [
+    "Logo",
+    "Text left, photo in an arch",
+    "Photos made for me",
+    "Services, About",
+  ]) {
+    await expect(bubble.getByText(words, { exact: true })).toBeVisible()
+  }
+})
+
+test("the quote form preview is the customers' form, live but never sent, and confirms like the card", async ({
+  page,
+}) => {
+  await open(page, "QuoteFormPreview")
+  const trigger = page.getByRole("button", { name: "Preview form" })
+  await trigger.click()
+  const modal = page.getByRole("dialog", { name: "Form preview" })
+  await expect(modal).toBeVisible()
+
+  await expect(modal.getByRole("group")).toHaveCount(4)
+  await expect(modal.getByRole("group", { name: "Your details" })).toBeVisible()
+  await expect(modal.getByRole("group", { name: "Your request" })).toBeVisible()
+  for (const label of [
+    "Your name",
+    "Email address",
+    "Phone number optional",
+    "What do you need doing",
+    "Tell us more optional",
+    "Passengers",
+    "Day of the journey",
+    "Date and time of the journey",
+    "Occasion optional",
+    "Photos of the pick-up point optional",
+    "A second number optional",
+    "Email for the invoice optional",
+  ]) {
+    await expect(modal.getByLabel(label, { exact: true })).toBeVisible()
+  }
+  await expect(modal.getByLabel("Passengers")).toHaveAttribute("type", "number")
+  await expect(
+    modal.getByLabel("Date and time of the journey")
+  ).toHaveAttribute("type", "datetime-local")
+  await expect(modal.getByLabel("Day of the journey")).toHaveAttribute(
+    "type",
+    "date"
+  )
+  await expect(
+    modal.getByLabel("Photos of the pick-up point optional")
+  ).toHaveAttribute("type", "file")
+  await expect(modal.getByLabel("A second number optional")).toHaveAttribute(
+    "type",
+    "tel"
+  )
+  await expect(modal).toContainText("The minibus seats up to 16")
+  await expect(modal).toContainText("A line is enough")
+
+  await modal.getByLabel("Your name").fill("Sam")
+  await expect(modal.getByLabel("Your name")).toHaveValue("Sam")
+  await modal.getByLabel("Occasion optional").selectOption("Night out")
+  await expect(modal.getByLabel("Occasion optional")).toHaveValue("Night out")
+  const vehicle = modal.getByRole("group", { name: "Vehicle" })
+  await vehicle.getByRole("radio", { name: "Saloon" }).check()
+  await vehicle.getByRole("radio", { name: "Minibus" }).check()
+  await expect(vehicle.getByRole("radio", { name: "Saloon" })).not.toBeChecked()
+  const extras = modal.getByRole("group", { name: "Extras optional" })
+  await extras.getByRole("checkbox", { name: "Child seat" }).check()
+  await extras.getByRole("checkbox", { name: "Champagne" }).check()
+  await expect(extras.getByRole("checkbox", { checked: true })).toHaveCount(2)
+
+  const send = modal.getByRole("button", { name: "Send quote request" })
+  await expect(send).toBeDisabled()
+  await expect(modal).toContainText(
+    "This is a preview, so nothing is sent or saved."
+  )
+
+  await axe(page, "QuoteFormPreview light")
+
+  // Closing forgets the answers, and focus goes back to the button.
+  await page.keyboard.press("Escape")
+  await expect(modal).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+  await trigger.click()
+  await expect(modal.getByLabel("Your name")).toHaveValue("")
+  await expect(
+    modal.getByRole("button", { name: "Close preview" })
+  ).toHaveCount(0)
+  await modal.getByRole("button", { name: "Close", exact: true }).click()
+  await expect(modal).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+
+  await trigger.click()
+  await modal.getByRole("button", { name: "Looks good" }).click()
+  await expect(modal).toHaveCount(0)
+  await expect(page.getByRole("status")).toHaveText("Confirmed")
+})
+
+test("the quote form preview keeps focus inside, rises from the bottom on a phone and has no violations", async ({
+  page,
+}) => {
+  await open(page, "QuoteFormPreview", 390)
+  await page.getByRole("button", { name: "Preview form" }).click()
+  const modal = page.getByRole("dialog", { name: "Form preview" })
+  await expect(modal).toBeVisible()
+  await settled(page)
+  const box = await modal.boundingBox()
+  expect(box?.x).toBe(0)
+  expect(box?.width).toBe(390)
+  expect((box?.y ?? 0) + (box?.height ?? 0)).toBe(900)
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press("Tab")
+    // Base UI's guards sit at both ends and hand focus back in a tick later.
+    await expect
+      .poll(
+        () =>
+          modal.evaluate(
+            (el) =>
+              el.contains(document.activeElement) &&
+              !document.activeElement?.hasAttribute("data-base-ui-focus-guard")
+          ),
+        { message: `focus left the sheet on Tab ${i + 1}` }
+      )
+      .toBe(true)
+  }
+  await axe(page, "QuoteFormPreview phone")
+
+  await open(page, "QuoteFormPreview", 1024, "dark")
+  await page.getByRole("button", { name: "Preview form" }).click()
+  await expect(page.getByRole("dialog", { name: "Form preview" })).toBeVisible()
+  await axe(page, "QuoteFormPreview dark")
+})
+
+test("the card's Preview form shows the questions as the owner has left them, and Looks good there confirms", async ({
+  page,
+}) => {
+  await open(page, "ReviewQuoteForm")
+  const card = page
+    .locator('[data-slot="review-quote-form"]')
+    .filter({ has: page.getByRole("button", { name: "Looks good" }) })
+    .first()
+  await card.getByRole("button", { name: "Remove Occasion" }).click()
+  await card.getByRole("button", { name: "Preview form" }).click()
+  const modal = page.getByRole("dialog", { name: "Form preview" })
+  await expect(modal.getByRole("group", { name: "Your details" })).toBeVisible()
+  await expect(modal.getByLabel("Pick-up address")).toBeVisible()
+  await expect(modal.getByLabel(/^Occasion/)).toHaveCount(0)
+  // The catalog's runtime takes no tool results, so reaching the card's own
+  // confirm shows as the error it throws.
+  const failed = page.waitForEvent("pageerror")
+  await modal.getByRole("button", { name: "Looks good" }).click()
+  expect((await failed).message).toMatch(/does not support tool results/)
+  await expect(modal).toHaveCount(0)
 })

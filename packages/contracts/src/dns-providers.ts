@@ -27,6 +27,8 @@ export type DnsProviderEntry = {
   apex: ApexSupport
   /** One screen-specific line, when the provider needs one. */
   note?: string
+  /** The record screen has a proxy switch, which must stay off (DNS only). */
+  proxy?: true
   /** The vendored mark's id, or null where no library has the brand. */
   mark: string | null
 }
@@ -57,7 +59,7 @@ export const DNS_PROVIDERS: readonly DnsProviderEntry[] = [
     labels: { name: "Name", value: "Target" },
     apex: "alias",
     // Cloudflare for SaaS advises customers not to proxy the provider's hostname.
-    note: "Set Proxy status to DNS only. For @, choose CNAME and Cloudflare flattens it.",
+    proxy: true,
     mark: "cloudflare",
   },
   {

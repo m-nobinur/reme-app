@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { Timestamp } from "./common.ts"
+import { LOGO_VARIANTS } from "./onboarding.ts"
 import { Text } from "./text.ts"
 
 // The owner's activity view as state, never sentences: the web writes every
@@ -25,7 +26,7 @@ export const ActivityStep = z.strictObject({
     .optional(),
   /** A waiting step's note from its owner task, written by code: shown as data. */
   note: Text(200).optional(),
-  /** An owner task's step: when it last moved, which dates the line a done step earns. */
+  /** A done step: when it settled (an owner task's last move, an onboarding step's last fact), which dates the line it earns. */
   at: Timestamp.optional(),
 })
 
@@ -83,6 +84,16 @@ export const ActivitySegment = z.strictObject({
   late_seconds: z.int().positive().optional(),
   /** A website or change build the pipeline started again mid-build. */
   restarted: z.literal(true).optional(),
+  /**
+   * Onboarding only, while the design tray's logo question waits: its
+   * newest round drawing, or drawn and not picked yet, and how many options.
+   */
+  logo: z
+    .strictObject({
+      status: z.enum(["drawing", "ready"]),
+      options: z.int().min(1).max(LOGO_VARIANTS),
+    })
+    .optional(),
   /** Google only: when Search Console data was last read. */
   synced_at: Timestamp.optional(),
   /** Google only: what the last 28 days of searches brought, once Google has sent any. */

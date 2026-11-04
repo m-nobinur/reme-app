@@ -5,12 +5,18 @@ import {
   type BuildQuestions,
   type QuestionAnswer,
   type QuestionReply,
+  SKIP_REPLY,
 } from "@workspace/contracts"
 import { Done } from "@workspace/ui/components/assistant/decision"
 import {
   Docked,
   TrayFrame,
 } from "@workspace/ui/components/assistant/question-tray"
+import {
+  isQuick,
+  ReplyPill,
+  ReplyPills,
+} from "@workspace/ui/components/assistant/reply-pill"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
 import { answerValue } from "@workspace/ui/lib/answer"
@@ -28,8 +34,9 @@ import {
  * What the assistant asks the owner for their website
  * (`data-build_questions`), in the question tray: one page a question, the
  * question in the assistant's words, its inputs, Skip where it may be
- * skipped. Send sends every answered page at once; a page that cannot go
- * yet is shown with why. Once every one is settled it folds to
+ * skipped; a short choice is quick replies above the composer instead. Next
+ * sends every answered page at once; a page that cannot go yet is shown
+ * with why. Once every one is settled it folds to
  * one row and goes. Typing in the composer is an ordinary turn. The
  * address question is no build's, so once settled the owner's answer goes
  * on as their next message, for the assistant to act on.
@@ -189,17 +196,18 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
     }
   }
 
-  const skip = async () => {
+  const answerWith = async (sent: Given) => {
     if (!send || !conversationId || sending) return
     setSending(true)
     setError(null)
-    const now = await store(question, { kind: "skipped" }, given)
+    const now = await store(question, sent, given)
     setSending(false)
     if (typeof now === "string") setError(now)
     else onward(now, index)
   }
+  const skip = () => answerWith({ kind: "skipped" })
 
-  // One Send sends every open page, in order, and stops at the first that
+  // One Next sends every open page, in order, and stops at the first that
   // cannot go yet. What was sent before it stays sent.
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -249,6 +257,45 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
     setIndex(to)
   }
   const open = !answer && phase === "asking"
+  const { input } = question
+
+  // A short choice is quick replies, kept through the pause after a tap
+  // with the one picked pressed.
+  if (input.kind === "choice" && isQuick(input.options)) {
+    const picked = answer?.kind === "value" ? answer.value : undefined
+    return (
+      <Docked name="build-questions">
+        <ReplyPills label={question.text}>
+          {[
+            ...input.options,
+            ...(question.skippable && open ? [SKIP_REPLY] : []),
+          ].map((option) => (
+            <ReplyPill
+              aria-pressed={
+                picked === undefined ? undefined : picked === option
+              }
+              disabled={!open || sending}
+              key={option}
+              onClick={() =>
+                void answerWith(
+                  option === SKIP_REPLY
+                    ? { kind: "skipped" }
+                    : { kind: "value", value: option }
+                )
+              }
+            >
+              {option}
+            </ReplyPill>
+          ))}
+        </ReplyPills>
+        {error ? (
+          <p className={FIELD_ERROR} role="alert">
+            {error}
+          </p>
+        ) : null}
+      </Docked>
+    )
+  }
 
   return (
     <Docked name="build-questions">
@@ -256,9 +303,6 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
         collapsed={collapsed}
         onBack={index > 0 ? () => go(index - 1) : undefined}
         onCollapsedChange={setCollapsed}
-        onForward={
-          index < questions.length - 1 ? () => go(index + 1) : undefined
-        }
         page={{ index, total: questions.length }}
         question={question.text}
         skip={
@@ -273,7 +317,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
         submit={
           open
             ? {
-                label: sending ? "Sending" : "Send",
+                label: sending ? "Sending" : undefined,
                 form: `${id}-${index}`,
                 disabled: sending,
               }

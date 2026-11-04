@@ -115,7 +115,8 @@
   "triggers": { "crons": ["0 * * * *", "* * * * *"] },
   // The routing cache the router reads (§11.1.3), written by publish.ts and
   // by nothing else in this Worker; a test holds that. `SCHEDULE` holds the
-  // earliest due job (src/schedule.ts), shared with the api, which lowers it.
+  // earliest due job (src/schedule.ts), shared with the api, which lowers it,
+  // and under `fx:usd_gbp` the day's USD to GBP rate (src/rates.ts).
   "kv_namespaces": [
     { "binding": "ROUTES", "id": "1f8dffa950774f3cb41e2b28dac89767" },
     { "binding": "SCHEDULE", "id": "ba285b5477564b44b27ab15fa4bdd957" }

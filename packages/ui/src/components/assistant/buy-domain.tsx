@@ -11,13 +11,13 @@ import {
   type DomainPurchaseStatus,
   type DomainRegistrantPrefill,
   type DomainStemOffer,
-  type DomainTld,
   FindDomainInput,
   FindDomainOutput,
   needsRegistrantType,
   RegistrantDetails,
   type RegistrantField,
   type RegistrantType,
+  RowEnding,
   toE164,
 } from "@workspace/contracts"
 import { Done, Problem } from "@workspace/ui/components/assistant/decision"
@@ -51,16 +51,18 @@ import {
 } from "react"
 
 /**
- * Buying a domain, in the question tray. `find_domain`'s rows open it on
- * Choose: a card for each free full domain with its yearly price, best
- * first, and "Buy directly from a provider" under them. A card goes
- * to Your details, prefilled from what the api holds and asking only for
- * the gaps, and Pay opens the payment dialog on the purchase's Stripe
- * Checkout Session, where paying is the consent. Buying elsewhere opens
- * Cloudflare's or GoDaddy's search and leaves the tray waiting for "I've bought it". `buy_domain`
- * and a posted Pay button open Your details for their name. The price shown
- * is the api's, from the price table, never the model's text. Done, the
- * tray goes and the thread keeps one line.
+ * Choosing and buying a domain, in the question tray. `find_domain`'s rows
+ * open it on Choose: a card for each name, best first and marked
+ * Recommended, with its free endings to pick from. While buying here is off
+ * (no `buy_here`), the picked name shows "Buy it from" Cloudflare and
+ * GoDaddy, each opening its own search, and "I've bought it" connects it.
+ * While it is on, Continue goes to Your details, prefilled from what the api
+ * holds and asking only for the gaps, and Pay opens the payment dialog on
+ * the purchase's Stripe Checkout Session, where paying is the consent.
+ * `buy_domain` and a posted Pay button open Your details for their name. A
+ * price shown is the api's, never the model's text: Reme's own from the
+ * price table, or the registrar's from its check. Done, the tray goes and
+ * the thread keeps one line.
  */
 
 /** Where a paid purchase stands, in the card's words. */
@@ -158,38 +160,38 @@ const ICANN = "https://www.icann.org/resources/pages/benefits-2013-09-16-en"
 
 const pounds = (gbp: number) => `£${gbp}`
 
-/** The endings a row offers, in the order its cards show them. */
-const ENDINGS = ["co.uk", "com", "uk"] as const satisfies DomainTld[]
-
-/** One free full domain, which is one card. */
-type Offer = { name: string; price: number; why: string }
-
 /**
- * Four cards from the rows' free names, best first: the best name in its two
- * leading endings, then each next name once, then any ending left over. Every
- * ending of every row would be twelve cards of the same few names.
+ * Cloudflare's price in the dollars it bills, with a pound estimate to the
+ * nearest pound, at least £1, while a fresh rate came with the names.
  */
-const offersOf = (rows: readonly DomainStemOffer[]): Offer[] => {
-  const free = rows.map((row) =>
-    ENDINGS.flatMap((tld) => {
-      const ending = row.endings[tld]
-      return ending?.state === "free"
-        ? [
-            {
-              name: `${row.stem}.${tld}`,
-              price: ending.price_gbp_year,
-              why: row.why,
-            },
-          ]
-        : []
-    })
-  )
-  const first = [
-    ...(free[0]?.slice(0, 2) ?? []),
-    ...free.slice(1).flatMap((o) => o.slice(0, 1)),
-  ]
-  return [...new Set([...first, ...free.flat()])].slice(0, 4)
+export const registrarPrice = (usd: number, usdGbp?: number) =>
+  `From $${usd.toFixed(2)} a year${
+    usdGbp ? ` (about ${pounds(Math.max(1, Math.round(usd * usdGbp)))})` : ""
+  }`
+
+/** One free full domain: its ending, Reme's yearly price and the registrar's, where known. */
+type Offer = {
+  name: string
+  ending: RowEnding
+  price?: number | undefined
+  usd?: number | undefined
 }
+
+/** A row's free endings, in the order the owner reads them. */
+const offersOf = (row: DomainStemOffer | undefined): Offer[] =>
+  RowEnding.options.flatMap((ending) => {
+    const at = row?.endings[ending]
+    return at?.state === "free"
+      ? [
+          {
+            name: `${row?.stem}.${ending}`,
+            ending,
+            price: at.price_gbp_year,
+            usd: at.registrar_usd,
+          },
+        ]
+      : []
+  })
 
 /** A link out, which says it opens a new tab. */
 function Out({ href, children }: { href: string; children: ReactNode }) {
@@ -238,143 +240,246 @@ function ToolLine({
 /* Choose ------------------------------------------------------------------ */
 
 /**
- * One free domain: its name, then its yearly price. The cards are the radios
- * of the grid's one group, so the arrow keys and the announcing are the
- * browser's. The best one wears a pill on its top edge, which also describes
- * the card to a screen reader with the reason.
+ * One name: its stem, then its free endings as pills. Every pill is a radio
+ * of the tray's one group, so the arrow keys and the announcing are the
+ * browser's. The recommended card wears a pill on its top edge, which also
+ * describes its radios to a screen reader with the reason.
  */
 function NameCard({
-  offer,
-  best,
+  row,
+  recommended,
   group,
   picked,
   onPick,
+  buyHere,
 }: {
-  offer: Offer
-  best: boolean
+  row: DomainStemOffer
+  recommended: boolean
   group: string
   picked: string | null
   onPick: (name: string) => void
+  buyHere: boolean
 }) {
-  const pill = `${group}-best`
+  const pill = `${group}-${row.stem}`
+  const offers = offersOf(row)
+  const price = buyHere ? offers.find((o) => o.name === picked)?.price : null
   return (
-    <label
-      className={cn(
-        OPTION,
-        "group min-w-0 flex-col gap-0.5 rounded-xl p-3 pe-9 has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-primary"
-      )}
-    >
-      <input
-        aria-describedby={best ? pill : undefined}
-        aria-label={`${offer.name}, ${pounds(offer.price)} a year`}
-        checked={picked === offer.name}
-        className="sr-only"
-        name={group}
-        onChange={() => onPick(offer.name)}
-        type="radio"
-        value={offer.name}
-      />
-      {best ? (
+    <fieldset className="relative min-w-0 rounded-xl border border-border bg-card p-2.5 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+      <legend className="sr-only">{row.stem}</legend>
+      {recommended ? (
         <Badge className="absolute end-3 -top-2.5" id={pill}>
-          Best pick
-          <span className="sr-only">. {offer.why}</span>
+          Recommended
+          <span className="sr-only">. {row.why}</span>
         </Badge>
       ) : null}
-      <span className="truncate font-medium" title={offer.name}>
-        {offer.name}
+      {/* The stem and its endings share a line where they fit. */}
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span aria-hidden className="truncate font-medium" title={row.stem}>
+          {row.stem}
+        </span>
+        <span className="flex flex-wrap gap-1.5">
+          {offers.map((offer) => (
+            <label
+              className={cn(
+                OPTION,
+                "min-h-7 items-center rounded-full px-2.5 text-xs tabular-nums has-[:checked]:bg-primary has-[:checked]:text-primary-foreground"
+              )}
+              key={offer.name}
+            >
+              <input
+                aria-describedby={recommended ? pill : undefined}
+                aria-label={
+                  buyHere && offer.price
+                    ? `${offer.name}, ${pounds(offer.price)} a year`
+                    : offer.name
+                }
+                checked={picked === offer.name}
+                className="sr-only"
+                name={group}
+                onChange={() => onPick(offer.name)}
+                type="radio"
+                value={offer.name}
+              />
+              .{offer.ending}
+            </label>
+          ))}
+        </span>
       </span>
-      <span className={cn(META, "tabular-nums")}>
-        {pounds(offer.price)} a year
-      </span>
-      <DoneIcon className="absolute end-3 bottom-3 hidden group-has-[:checked]:block" />
-    </label>
+      {price ? (
+        <span className={cn(META, "mt-1.5 block tabular-nums")}>
+          {pounds(price)} a year
+        </span>
+      ) : null}
+    </fieldset>
   )
 }
 
-/** The links that buy a name elsewhere; following one tells the api. */
+/**
+ * The providers to buy a name from, each opening its own search with the
+ * name filled in. Cloudflare's price is the one its own check returned; there
+ * is no data for GoDaddy's, so none is shown. Following one tells the api.
+ */
 function Elsewhere({
   name,
+  heading,
+  usd,
+  usdGbp,
   onFollow,
 }: {
   name: string
+  heading: string
+  usd?: number | undefined
+  usdGbp?: number | undefined
   onFollow?: () => void
 }) {
   const links = buyElsewhereLinks(name)
   return (
-    <ConnectRows heading={`Search for ${name}`}>
-      <ConnectRow
-        href={links.cloudflare}
-        line="cloudflare.com"
-        mark="cloudflare"
-        name="Cloudflare"
-        newTab
-        onClick={onFollow}
-      />
-      <ConnectRow
-        href={links.godaddy}
-        line="godaddy.com"
-        mark="godaddy"
-        name="GoDaddy"
-        newTab
-        onClick={onFollow}
-      />
+    <ConnectRows heading={heading}>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <ConnectRow
+          href={links.cloudflare}
+          line={usd ? registrarPrice(usd, usdGbp) : "cloudflare.com"}
+          mark="cloudflare"
+          name="Cloudflare"
+          newTab
+          onClick={onFollow}
+        />
+        <ConnectRow
+          href={links.godaddy}
+          line="godaddy.com"
+          mark="godaddy"
+          name="GoDaddy"
+          newTab
+          onClick={onFollow}
+        />
+      </div>
     </ConnectRows>
   )
 }
 
+/**
+ * The owner saying they bought `name` themselves: the registry is asked, and
+ * once it shows the name the connect's records take over.
+ */
+function useBought(name: string, onBought: (output: Connecting) => void) {
+  const purchase = useContext(DomainPurchaseContext)
+  const [sending, setSending] = useState(false)
+  const [said, setSaid] = useState<string | null>(null)
+  const done = async () => {
+    if (!purchase || !name) return
+    setSending(true)
+    setSaid(null)
+    const answer = await purchase.bought(name).catch(() => ({ refused: null }))
+    setSending(false)
+    if ("refused" in answer) {
+      setSaid(refusalText(answer.refused, "That didn't go through. Try again."))
+    } else if (answer.outcome === "connecting") {
+      onBought(answer)
+    } else if (answer.outcome === "not_registered_yet") {
+      setSaid(
+        `I can't see ${name} at the registry yet. It can take a few minutes, and I check each day too.`
+      )
+    } else {
+      setSaid(refusalText(answer.error.code, "I couldn't connect it just now."))
+    }
+  }
+  return { sending, said, done }
+}
+
 function ChoosePage({
   rows,
+  buyHere,
+  usdGbp,
   frame,
   onPick,
   onElsewhere,
+  onFollow,
+  onBought,
   onNotNow,
 }: {
   rows: readonly DomainStemOffer[]
+  buyHere: boolean
+  usdGbp?: number | undefined
   frame: Frame
   onPick: (name: string) => void
   onElsewhere: (name: string) => void
+  onFollow: (name: string) => void
+  onBought: (name: string, output: Connecting) => void
   onNotNow: () => void
 }) {
   const [away, setAway] = useState(false)
-  const offers = offersOf(rows)
-  const best = offers[0]?.name ?? null
+  const best = offersOf(rows[0])[0]?.name ?? null
   const [picked, setPicked] = useState(best)
+  const offer = rows.flatMap(offersOf).find((o) => o.name === picked)
+  const bought = useBought(picked ?? "", (output) =>
+    picked ? onBought(picked, output) : undefined
+  )
   const group = useId()
-  // The rows open under the list, so they are brought into view.
+  // Where to buy opens under the list, so it is brought into view once the
+  // owner picks a name or opens it.
   const places = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (away) places.current?.scrollIntoView({ block: "nearest" })
   }, [away])
+  const pick = (name: string) => {
+    setPicked(name)
+    places.current?.scrollIntoView({ block: "nearest" })
+  }
   return (
     <TrayFrame
       {...frame}
-      hint="We register it in your business's name, renew it every year and handle the settings."
+      hint={
+        buyHere
+          ? "We register it in your business's name, renew it every year and handle the settings."
+          : "Pick a name and buy it from either site, then I'll connect it."
+      }
       question="Choose your web address"
-      skip={{ label: "Not now", onSkip: onNotNow }}
-      submit={{
-        label: "Continue",
-        onSubmit: () => picked && onPick(picked),
-        disabled: !picked,
-      }}
+      skip={{ label: "Skip for now", onSkip: onNotNow }}
+      status={buyHere ? undefined : bought.said}
+      submit={
+        buyHere
+          ? {
+              label: "Continue",
+              onSubmit: () => picked && onPick(picked),
+              disabled: !picked,
+            }
+          : {
+              label: bought.sending ? "Checking" : "I've bought it",
+              onSubmit: () => void bought.done(),
+              disabled: !picked || bought.sending,
+            }
+      }
     >
-      {/* Two to a row at any width: three would strand the fourth name. The top padding clears the best card's pill. */}
+      {/* The top padding clears the recommended card's pill. */}
       <div
         aria-label="Web address"
-        className="grid grid-cols-2 gap-2 px-2 pt-2"
+        className="grid grid-cols-1 gap-2 px-2 pt-3 sm:grid-cols-2"
         role="radiogroup"
       >
-        {offers.map((offer, at) => (
+        {rows.map((row, at) => (
           <NameCard
-            best={at === 0}
+            buyHere={buyHere}
             group={group}
-            key={offer.name}
-            offer={offer}
-            onPick={setPicked}
+            key={row.stem}
+            onPick={pick}
             picked={picked}
+            recommended={at === 0}
+            row={row}
           />
         ))}
       </div>
-      {best ? (
+      {picked && !buyHere ? (
+        <div className="flex flex-col gap-2 px-2 pb-1" ref={places}>
+          <Elsewhere
+            heading="Buy it from"
+            name={picked}
+            onFollow={() => onFollow(picked)}
+            usd={offer?.usd}
+            usdGbp={usdGbp}
+          />
+        </div>
+      ) : null}
+      {picked && buyHere ? (
         <div className="flex flex-col gap-2 px-2 pb-1">
           <button
             aria-expanded={away}
@@ -393,7 +498,13 @@ function ChoosePage({
           </button>
           {away ? (
             <div className="flex flex-col gap-2" ref={places}>
-              <Elsewhere name={best} onFollow={() => onElsewhere(best)} />
+              <Elsewhere
+                heading={`Search for ${picked}`}
+                name={picked}
+                onFollow={() => onElsewhere(picked)}
+                usd={offer?.usd}
+                usdGbp={usdGbp}
+              />
             </div>
           ) : null}
         </div>
@@ -940,27 +1051,7 @@ function WaitingPage({
   onBack: () => void
   onBought: (output: Connecting) => void
 }) {
-  const purchase = useContext(DomainPurchaseContext)
-  const [sending, setSending] = useState(false)
-  const [said, setSaid] = useState<string | null>(null)
-  const done = async () => {
-    if (!purchase) return
-    setSending(true)
-    setSaid(null)
-    const answer = await purchase.bought(name).catch(() => ({ refused: null }))
-    setSending(false)
-    if ("refused" in answer) {
-      setSaid(refusalText(answer.refused, "That didn't go through. Try again."))
-    } else if (answer.outcome === "connecting") {
-      onBought(answer)
-    } else if (answer.outcome === "not_registered_yet") {
-      setSaid(
-        `I can't see ${name} at the registry yet. It can take a few minutes, and I check each day too.`
-      )
-    } else {
-      setSaid(refusalText(answer.error.code, "I couldn't connect it just now."))
-    }
-  }
+  const { sending, said, done } = useBought(name, onBought)
   return (
     <TrayFrame
       {...frame}
@@ -974,7 +1065,7 @@ function WaitingPage({
       }}
     >
       <div className="flex flex-col gap-2 px-2 pb-1">
-        <Elsewhere name={name} />
+        <Elsewhere heading={`Search for ${name}`} name={name} />
         <p className={META}>
           Your email and anything else there stay as they are.
         </p>
@@ -1022,12 +1113,18 @@ function BoughtLine({ name, paid }: { name: string; paid: boolean }) {
 export function BuyTray({
   draftId,
   rows,
+  buyHere = false,
+  usdGbp,
   name,
   prefill,
 }: {
   draftId: string
   /** The names to choose from; without them it opens on Your details for `name`. */
   rows?: readonly DomainStemOffer[] | undefined
+  /** Buying here is on, so a name goes on to Your details. */
+  buyHere?: boolean
+  /** Pounds per dollar, for the pound estimate beside Cloudflare's price. */
+  usdGbp?: number | undefined
   name?: string | undefined
   /** Your details for `name` as `buy_domain` prefilled them. */
   prefill?: DomainRegistrantPrefill | undefined
@@ -1043,6 +1140,10 @@ export function BuyTray({
   const { draft, keep } = useTabDraft<Draft>(`buy:${draftId}`, start)
   const [collapsed, setCollapsed] = useState(false)
   const frame = { collapsed, onCollapsedChange: setCollapsed }
+  // A lost note only skips the daily registry look: "I've bought it" asks
+  // the registry itself.
+  const follow = (picked: string) =>
+    void purchase?.elsewhere(picked).catch(() => undefined)
 
   switch (draft.at) {
     case "bought":
@@ -1058,10 +1159,14 @@ export function BuyTray({
         </section>
       )
     case "not_now":
-      return <Line text="You said not now." />
+      return <Line text="You skipped this for now." />
   }
   if (!last) {
-    const offered = rows ? offersOf(rows).map((o) => o.name) : []
+    const offered = (rows ?? []).flatMap((r) =>
+      offersOf(r)
+        .slice(0, 1)
+        .map((o) => o.name)
+    )
     return offered.length ? (
       <Line text={`Names I offered: ${offered.join(", ")}.`} />
     ) : null
@@ -1071,13 +1176,17 @@ export function BuyTray({
     <Docked name="buy-domain">
       {draft.at === "choose" && rows ? (
         <ChoosePage
+          buyHere={buyHere}
           frame={frame}
+          usdGbp={usdGbp}
+          onBought={(picked, output) =>
+            keep({ at: "connecting", name: picked, output })
+          }
           onElsewhere={(picked) => {
             keep({ at: "elsewhere", name: picked })
-            // A lost note only skips the daily registry look: "Done, I
-            // bought it" asks the registry itself.
-            void purchase?.elsewhere(picked).catch(() => undefined)
+            follow(picked)
           }}
+          onFollow={follow}
           onNotNow={() => keep({ at: "not_now" })}
           onPick={(picked) => keep({ at: "details", name: picked })}
           rows={rows}
@@ -1149,7 +1258,22 @@ export const FindDomain: ToolCallMessagePartComponent = (props) => {
       </div>
     )
   }
-  return <BuyTray draftId={props.toolCallId} rows={view.output.rows} />
+  return (
+    <>
+      <ToolStatus
+        args={{ count: view.output.rows.length }}
+        className="flex px-1 py-1.5 text-sm"
+        state="done"
+        tool="find_domain"
+      />
+      <BuyTray
+        buyHere={view.output.buy_here === true}
+        draftId={props.toolCallId}
+        rows={view.output.rows}
+        usdGbp={view.output.usd_gbp}
+      />
+    </>
+  )
 }
 FindDomain.displayName = "FindDomain"
 

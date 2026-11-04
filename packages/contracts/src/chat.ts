@@ -7,6 +7,7 @@ import {
   Asset,
   AvatarId,
   HexColour,
+  LogoSuggestion,
   PaletteFromImage,
   PronounId,
   QuoteFields,
@@ -159,9 +160,11 @@ export const AskFactOutput = z.discriminatedUnion("answer", [
 
 /**
  * `ask_open`'s input: a question the owner answers in their own words, by the
- * fact it is after or "quote.form". The assistant's message asks it; the
- * tray's title is the web's copy for `about`. `skippable` marks a question
- * the owner may pass on; a call without it, as stored before it, is required.
+ * fact it is after, "quote.form", or "recap": the business read back from its
+ * facts, which the owner confirms or corrects. The assistant's message asks
+ * it; the tray's title is the web's copy for `about`. `skippable` marks a
+ * question the owner may pass on; a call without it, as stored before it, is
+ * required.
  */
 type OpenKey = Exclude<
   FactValueKey,
@@ -169,16 +172,17 @@ type OpenKey = Exclude<
 >
 
 export const AskOpenInput = z.strictObject({
-  about: z.enum(
-    FactValue.options
+  about: z.enum([
+    ...(FactValue.options
       .map((o) => o.shape.key.value)
       .filter(
         (key) =>
           key !== "media.uploads" &&
           !(REVIEW_FACT_KEYS as readonly string[]).includes(key) &&
           !(CONTENT_FACT_KEYS as readonly string[]).includes(key)
-      ) as [OpenKey, ...OpenKey[]]
-  ),
+      ) as OpenKey[]),
+    "recap",
+  ] as unknown as [OpenKey | "recap", ...(OpenKey | "recap")[]]),
   skippable: z.boolean().optional(),
 })
 
@@ -360,6 +364,10 @@ export const AskDesignInput = z.strictObject({
          * is only the default.
          */
         path: LogoPath.optional(),
+        /** Where a logo question's designs start, chosen for this business. */
+        start: LogoSuggestion.optional(),
+        /** The option chosen for this business on a choice question, which the tray tags. */
+        suggested: Text(40).optional(),
       })
     )
     .min(1)
@@ -380,6 +388,20 @@ export const AskDesignInput = z.strictObject({
       (questions) =>
         questions.every((q) => q.path === undefined || q.visual === "logo"),
       { message: "path belongs to a logo question" }
+    )
+    .refine(
+      (questions) =>
+        questions.every((q) => q.start === undefined || q.visual === "logo"),
+      { message: "start belongs to a logo question" }
+    )
+    .refine(
+      (questions) =>
+        questions.every(
+          (q) =>
+            q.suggested === undefined ||
+            q.card.options.some((option) => option.id === q.suggested)
+        ),
+      { message: "suggested names an offered option" }
     ),
 })
 
@@ -451,8 +473,9 @@ export const DETAILS_KEYS = {
 
 /**
  * `ask_details`'s input: one card for a few related facts, such as the phone
- * and email together. `prefill` holds the values to start from, such as the
- * sign-in email, only for the step's own keys. The copy, the inputs and the
+ * and email together. `prefill` holds the values to start from, only for the
+ * step's own keys. The sign-in email is never one: `sign_in_email` offers it
+ * as a chip under the business email field. The copy, the inputs and the
  * pronoun and tone options are the web's, by key, as for `ask_fact`.
  */
 export const AskDetailsInput = z
@@ -462,6 +485,8 @@ export const AskDetailsInput = z
     skippable: z.boolean(),
     /** Names written for this business's assistant, offered after Reme. The assistant step only. */
     ideas: z.array(z.string().trim().min(1).max(40)).max(3).optional(),
+    /** The owner's sign-in email, offered for the business email. The contact step only. */
+    sign_in_email: z.email().max(254).optional(),
   })
   .refine(
     (card) =>

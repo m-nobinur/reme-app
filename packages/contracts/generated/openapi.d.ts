@@ -56,6 +56,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -111,6 +116,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -166,6 +176,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -221,6 +236,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -276,6 +296,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -331,6 +356,11 @@ export interface components {
         late_seconds?: number
         /** @constant */
         restarted?: true
+        logo?: {
+          /** @enum {string} */
+          status: "drawing" | "ready"
+          options: number
+        }
         /** Format: date-time */
         synced_at?: string
         numbers?: {
@@ -961,13 +991,13 @@ export interface components {
     }
     ApprovalGrantSwitch: {
       /** @enum {string} */
-      kind: "create_reminder" | "record_review" | "connect_domain"
+      kind: "create_reminder" | "record_review"
       on: boolean
     }
     ApprovalGrants: {
       grants: {
         /** @enum {string} */
-        kind: "create_reminder" | "record_review" | "connect_domain"
+        kind: "create_reminder" | "record_review"
         on: boolean
         granted_at: string | null
       }[]
@@ -1273,6 +1303,30 @@ export interface components {
         }[]
         /** @enum {string} */
         path?: "upload" | "create"
+        start?: {
+          directions: {
+            /** @enum {string} */
+            type:
+              | "lockup"
+              | "icon"
+              | "wordmark"
+              | "monogram"
+              | "emblem"
+              | "abstract"
+            /** @enum {string} */
+            style:
+              | "minimal"
+              | "geometric"
+              | "gradient"
+              | "mascot"
+              | "hand_drawn"
+              | "luxury"
+              | "retro"
+              | "three_d"
+          }[]
+          description: string | ""
+        }
+        suggested?: string
       }[]
     }
     AskDesignOutput: {
@@ -1731,6 +1785,8 @@ export interface components {
       )[]
       skippable: boolean
       ideas?: string[]
+      /** Format: email */
+      sign_in_email?: string
     }
     AskDetailsOutput:
       | {
@@ -3056,6 +3112,7 @@ export interface components {
         | "site.direction"
         | "site.pages"
         | "quote.form"
+        | "recap"
       skippable?: boolean
     }
     AskOpenOutput:
@@ -8780,7 +8837,8 @@ export interface components {
                           | {
                               /** @constant */
                               state: "free"
-                              price_gbp_year: number
+                              price_gbp_year?: number
+                              registrar_usd?: number
                             }
                           | {
                               /** @constant */
@@ -8790,7 +8848,8 @@ export interface components {
                           | {
                               /** @constant */
                               state: "free"
-                              price_gbp_year: number
+                              price_gbp_year?: number
+                              registrar_usd?: number
                             }
                           | {
                               /** @constant */
@@ -8800,7 +8859,19 @@ export interface components {
                           | {
                               /** @constant */
                               state: "free"
-                              price_gbp_year: number
+                              price_gbp_year?: number
+                              registrar_usd?: number
+                            }
+                          | {
+                              /** @constant */
+                              state: "taken"
+                            }
+                        co?:
+                          | {
+                              /** @constant */
+                              state: "free"
+                              price_gbp_year?: number
+                              registrar_usd?: number
                             }
                           | {
                               /** @constant */
@@ -8808,6 +8879,9 @@ export interface components {
                             }
                       }
                     }[]
+                    /** @constant */
+                    buy_here?: true
+                    usd_gbp?: number
                   }
                 | {
                     /** @constant */
@@ -9261,7 +9335,7 @@ export interface components {
                 /** @constant */
                 outcome: "granted"
                 /** @enum {string} */
-                kind: "create_reminder" | "record_review" | "connect_domain"
+                kind: "create_reminder" | "record_review"
               }
             | {
                 /** @constant */
@@ -12700,7 +12774,8 @@ export interface components {
           | {
               /** @constant */
               state: "free"
-              price_gbp_year: number
+              price_gbp_year?: number
+              registrar_usd?: number
             }
           | {
               /** @constant */
@@ -12710,7 +12785,8 @@ export interface components {
           | {
               /** @constant */
               state: "free"
-              price_gbp_year: number
+              price_gbp_year?: number
+              registrar_usd?: number
             }
           | {
               /** @constant */
@@ -12720,7 +12796,19 @@ export interface components {
           | {
               /** @constant */
               state: "free"
-              price_gbp_year: number
+              price_gbp_year?: number
+              registrar_usd?: number
+            }
+          | {
+              /** @constant */
+              state: "taken"
+            }
+        co?:
+          | {
+              /** @constant */
+              state: "free"
+              price_gbp_year?: number
+              registrar_usd?: number
             }
           | {
               /** @constant */
@@ -12762,6 +12850,26 @@ export interface components {
       changes?: string
       /** Format: uuid */
       base?: string
+      directions?: {
+        /** @enum {string} */
+        type:
+          | "lockup"
+          | "icon"
+          | "wordmark"
+          | "monogram"
+          | "emblem"
+          | "abstract"
+        /** @enum {string} */
+        style:
+          | "minimal"
+          | "geometric"
+          | "gradient"
+          | "mascot"
+          | "hand_drawn"
+          | "luxury"
+          | "retro"
+          | "three_d"
+      }[]
     }
     ErrorEnvelope: {
       /** @enum {string} */
@@ -13330,7 +13438,8 @@ export interface components {
                     | {
                         /** @constant */
                         state: "free"
-                        price_gbp_year: number
+                        price_gbp_year?: number
+                        registrar_usd?: number
                       }
                     | {
                         /** @constant */
@@ -13340,7 +13449,8 @@ export interface components {
                     | {
                         /** @constant */
                         state: "free"
-                        price_gbp_year: number
+                        price_gbp_year?: number
+                        registrar_usd?: number
                       }
                     | {
                         /** @constant */
@@ -13350,7 +13460,19 @@ export interface components {
                     | {
                         /** @constant */
                         state: "free"
-                        price_gbp_year: number
+                        price_gbp_year?: number
+                        registrar_usd?: number
+                      }
+                    | {
+                        /** @constant */
+                        state: "taken"
+                      }
+                  co?:
+                    | {
+                        /** @constant */
+                        state: "free"
+                        price_gbp_year?: number
+                        registrar_usd?: number
                       }
                     | {
                         /** @constant */
@@ -13358,6 +13480,9 @@ export interface components {
                       }
                 }
               }[]
+              /** @constant */
+              buy_here?: true
+              usd_gbp?: number
             }
           | {
               /** @constant */
@@ -13404,6 +13529,9 @@ export interface components {
         | "cormorant_manrope"
         | "fraunces_figtree"
       label: string
+      /** @enum {string} */
+      mood: "modern" | "warm" | "elegant" | "classic" | "bold"
+      feel: string
       display: {
         family: string
         weights: (100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900)[]
@@ -13935,9 +14063,58 @@ export interface components {
         round: number
         /** @enum {string} */
         status: "drawing" | "ready" | "failed"
+        /** Format: date-time */
+        started_at: string
         variants: {
           /** Format: uuid */
           id: string
+          direction: {
+            /** @enum {string} */
+            type:
+              | "lockup"
+              | "icon"
+              | "wordmark"
+              | "monogram"
+              | "emblem"
+              | "abstract"
+            /** @enum {string} */
+            style:
+              | "minimal"
+              | "geometric"
+              | "gradient"
+              | "mascot"
+              | "hand_drawn"
+              | "luxury"
+              | "retro"
+              | "three_d"
+          }
+          chips?: {
+            /** @enum {string} */
+            kind: "detail" | "style" | "type" | "colour"
+            label: string
+            change: string
+            set?: {
+              /** @enum {string} */
+              type?:
+                | "lockup"
+                | "icon"
+                | "wordmark"
+                | "monogram"
+                | "emblem"
+                | "abstract"
+              /** @enum {string} */
+              style?:
+                | "minimal"
+                | "geometric"
+                | "gradient"
+                | "mascot"
+                | "hand_drawn"
+                | "luxury"
+                | "retro"
+                | "three_d"
+              colors?: string[]
+            }
+          }[]
         }[]
         brief: {
           description: string | ""
@@ -14058,14 +14235,14 @@ export interface components {
     }
     OfferGrantInput: {
       /** @enum {string} */
-      kind: "create_reminder" | "record_review" | "connect_domain"
+      kind: "create_reminder" | "record_review"
     }
     OfferGrantOutput:
       | {
           /** @constant */
           outcome: "granted"
           /** @enum {string} */
-          kind: "create_reminder" | "record_review" | "connect_domain"
+          kind: "create_reminder" | "record_review"
         }
       | {
           /** @constant */
@@ -17701,6 +17878,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {
@@ -17756,6 +17938,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {
@@ -17811,6 +17998,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {
@@ -17866,6 +18058,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {
@@ -17921,6 +18118,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {
@@ -17976,6 +18178,11 @@ export interface components {
           late_seconds?: number
           /** @constant */
           restarted?: true
+          logo?: {
+            /** @enum {string} */
+            status: "drawing" | "ready"
+            options: number
+          }
           /** Format: date-time */
           synced_at?: string
           numbers?: {

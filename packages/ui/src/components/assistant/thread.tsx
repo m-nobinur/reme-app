@@ -29,16 +29,32 @@ import {
   ThumbsUpIcon,
   XIcon,
 } from "@phosphor-icons/react"
-import { type ServerButton, SKIP_REPLY } from "@workspace/contracts"
+import {
+  AskDesignInput,
+  AskDesignOutput,
+  RECAP_REPLY,
+  type ServerButton,
+  SKIP_REPLY,
+} from "@workspace/contracts"
 import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
-import { waitsToSkip } from "@workspace/ui/components/assistant/ask-open"
+import {
+  waitsOnRecap,
+  waitsToSkip,
+} from "@workspace/ui/components/assistant/ask-open"
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
+import { DesignReply } from "@workspace/ui/components/assistant/design-reply"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
 import {
   ReasoningGroup as DefaultReasoningGroup,
   Reasoning,
 } from "@workspace/ui/components/assistant/reasoning"
+import {
+  pillsIn,
+  ReplyPill,
+  ReplyPills,
+  useWordsIn,
+} from "@workspace/ui/components/assistant/reply-pill"
 import { ThreadHistorySkeleton } from "@workspace/ui/components/assistant/thread-pending"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { ToolGroup as DefaultToolGroup } from "@workspace/ui/components/assistant/tool-group"
@@ -66,6 +82,7 @@ import {
 import { formatTime } from "@workspace/ui/lib/format"
 import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
+  designText,
   SESSION_ENDED,
   SKIPPED,
   showsProgress,
@@ -82,6 +99,8 @@ import {
   type RefObject,
   useContext,
   useEffect,
+  useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -460,9 +479,9 @@ const KeepTurnAnchor: FC = () => {
 }
 
 /**
- * Keeps the owner's message at the top until their next send, and the end of
- * the thread in view. assistant-ui follows the bottom by itself only when the
- * viewport is not anchored to a turn.
+ * Keeps the owner's message at the top with the reply below it until their
+ * next send, and the end of the thread in view. assistant-ui follows the
+ * bottom by itself only when the viewport is not anchored to a turn.
  *
  * - The space assistant-ui holds below a pinned reply is measured here as
  *   well, the moment anything under the owner's message resizes. The footer
@@ -471,12 +490,15 @@ const KeepTurnAnchor: FC = () => {
  *   assistant-ui measured again a frame later: the owner's message dropped by
  *   the tray's height, and the drop stayed.
  * - A footer that appears or grows (the tray) under a reply that already
- *   fills the view covers its last lines, so a reader at its end stays there.
+ *   fills the view covers its last lines: a reader at its end stays there,
+ *   and one still at the start of the reply stays there too.
  * - The after slot sits in the message group ahead of that space, so a card
  *   landing in it fills the space rather than landing below it.
  * - Between turns, what lands with no turn of the owner's (a message the
  *   assistant posted on its own, or a card in the slot) is followed: a reader
  *   at the bottom glides to it, and one who scrolled up is told instead.
+ * - A reply that starts while the owner scrolled up to read moves nothing:
+ *   they are told, as above.
  */
 const FollowBottom: FC<{
   footer: HTMLElement | null
@@ -487,6 +509,19 @@ const FollowBottom: FC<{
   const store = useThreadViewportStore()
   const aui = useAui()
   const follow = useRef<() => void>(() => undefined)
+  const replied = useRef<() => void>(() => undefined)
+  // The reply's first words in a turn: before them it is only a placeholder.
+  const replying = useAuiState((s) => {
+    const last = s.thread.messages.at(-1)
+    return (
+      s.thread.isRunning &&
+      last?.role === "assistant" &&
+      last.parts.some((part) => part.type !== "text" || part.text !== "")
+    )
+  })
+  useEffect(() => {
+    if (replying) replied.current()
+  }, [replying])
   // A message added to the open thread: never the history loading in, nor
   // another thread opening.
   const count = useAuiState((s) => s.thread.messages.length)
@@ -540,6 +575,9 @@ const FollowBottom: FC<{
       last = { top, height }
       if (pinned) onUnseen(false)
       below()
+    }
+    replied.current = () => {
+      if (!pinned) onUnseen(true)
     }
     // A frame on, once the space below the reply is measured again.
     follow.current = () => {
@@ -612,6 +650,7 @@ const FollowBottom: FC<{
       const held = hold()
       const shrank = footer.offsetHeight < height
       const grew = footer.offsetHeight > height
+      const growth = footer.offsetHeight - height
       height = footer.offsetHeight
       const next = `${viewport.clientWidth}x${viewport.clientHeight}`
       const resized = next !== size
@@ -631,7 +670,15 @@ const FollowBottom: FC<{
       // A tray growing over that space leaves the message where it is; one
       // docking under a reply that already filled the view keeps the reader
       // at its end.
-      if (grew && !held && pinned) {
+      // Only a reader already at the end: one still at a long reply's first
+      // line stays there, the tray over its last lines.
+      const wasAtEnd =
+        viewport.scrollHeight -
+          growth -
+          viewport.clientHeight -
+          viewport.scrollTop <=
+        1
+      if (grew && !held && pinned && wasAtEnd) {
         viewport.scrollTo({ top: viewport.scrollHeight, behavior: "instant" })
       }
       // assistant-ui reads `isAtBottom` on a scroll, or on a resize that
@@ -680,6 +727,7 @@ const FollowBottom: FC<{
       viewport.removeEventListener("scroll", onScroll)
       footer.removeEventListener("input", resume)
       follow.current = () => undefined
+      replied.current = () => undefined
     }
   }, [footer, after, store, aui, onUnseen, onBelow])
   return null
@@ -713,6 +761,10 @@ const ThreadRoot: FC<{
         }}
       >
         <ThreadPrimitive.Viewport
+          // A message of eight lines, and a longer one folded to six, show
+          // whole at the top: the library's 10em would keep only the last
+          // lines of either. The visible height stays its default.
+          topAnchorMessageClamp={{ tallerThan: "20rem" }}
           turnAnchor="top"
           data-slot="aui_thread-viewport"
           // Clear of the workspace's floating panel, where there is one; the
@@ -774,6 +826,7 @@ const ThreadRoot: FC<{
                 <ThreadScrollToBottom below={below} unseen={unseen} />
                 <div className="flex flex-col gap-2">
                   <SkipThisOne />
+                  <RecapReplies />
                   <div className="empty:hidden" ref={setTray} />
                   <Composer autoFocus={autoFocus} expanded={isEmpty} />
                   {/* The same gap as the tray above the composer. */}
@@ -1018,17 +1071,55 @@ const SkipThisOne: FC = () => {
     (s) => !s.thread.isRunning && waitsToSkip(s.thread.messages.at(-1)?.parts)
   )
   if (!waiting || !sendable) return null
+  return <SkipPill onSkip={() => aui.thread().append(SKIP_REPLY)} />
+}
+
+/** Fades in with the words above it, and leaves the focus where it is: the answer is typed. */
+const SkipPill: FC<{ onSkip: () => void }> = ({ onSkip }) => {
+  const ref = useRef<HTMLButtonElement>(null)
+  const words = useWordsIn(ref)
   return (
-    <Button
-      className="self-start rounded-full text-muted-foreground"
+    <ReplyPill
+      className={cn("self-start", pillsIn(words))}
       data-slot="skip-this-one"
-      onClick={() => aui.thread().append(SKIP_REPLY)}
-      size="sm"
-      type="button"
-      variant="outline"
+      onClick={onSkip}
+      ref={ref}
     >
-      Skip this one
-    </Button>
+      {SKIP_REPLY}
+    </ReplyPill>
+  )
+}
+
+/**
+ * Under the business recap: one pill confirms it as the owner's message; the
+ * other starts a correction in the composer for the owner to finish, and
+ * sends nothing.
+ */
+const RecapReplies: FC = () => {
+  const aui = useAui()
+  const input = useContext(ComposerInputContext)
+  const sendable = useSendable()
+  const waiting = useAuiState(
+    (s) => !s.thread.isRunning && waitsOnRecap(s.thread.messages.at(-1)?.parts)
+  )
+  if (!waiting || !sendable) return null
+  return (
+    <ReplyPills label="Have I got that right?">
+      <ReplyPill onClick={() => aui.thread().append(RECAP_REPLY)}>
+        {RECAP_REPLY}
+      </ReplyPill>
+      <ReplyPill
+        onClick={() => {
+          // A draft is the owner's words: keep it, never replace it.
+          if (!aui.composer().getState().text.trim()) {
+            aui.composer().setText("Change ")
+          }
+          input.current?.focus()
+        }}
+      >
+        Change something
+      </ReplyPill>
+    </ReplyPills>
   )
 }
 
@@ -1709,12 +1800,74 @@ const UserText: FC = () => (
 
 const USER_PARTS = { Text: UserText }
 
+/**
+ * The design tray this message is the owner's reply to, when it reads as
+ * that tray's answers: the bubble then draws them as chips.
+ */
+function useDesignReply() {
+  const text = useAuiState((s) => {
+    const [only, ...rest] = s.message.parts
+    return rest.length === 0 && only?.type === "text" ? only.text : null
+  })
+  const card = useAuiState((s) => {
+    const at = s.thread.messages.findIndex((m) => m.id === s.message.id)
+    return [...(s.thread.messages[at - 1]?.parts ?? [])]
+      .reverse()
+      .find(
+        (part) =>
+          part.type === "tool-call" &&
+          part.toolName === "ask_design" &&
+          part.result !== undefined
+      )
+  })
+  if (text === null || card?.type !== "tool-call") return null
+  const input = AskDesignInput.safeParse(card.args)
+  const output = AskDesignOutput.safeParse(card.result)
+  return input.success &&
+    output.success &&
+    !output.data.skip_all &&
+    designText(input.data, output.data) === text
+    ? { input: input.data, output: output.data }
+    : null
+}
+
+/** A typed message of more lines than this shows only the first few behind Show more. */
+const LONG_AFTER_LINES = 8
+const COLLAPSED_LINES = 6
+
+/**
+ * Whether a message's text runs past `LONG_AFTER_LINES`, counted where it
+ * sits so a narrower window counts again, and whether the owner has opened
+ * it. `clip` goes on the element that holds the text.
+ */
+function useLongText() {
+  const [clip, setClip] = useState<HTMLElement | null>(null)
+  const [long, setLong] = useState(false)
+  const [open, setOpen] = useState(false)
+  useLayoutEffect(() => {
+    if (!clip) return
+    const measure = () => {
+      const line = Number.parseFloat(getComputedStyle(clip).lineHeight)
+      setLong(line > 0 && clip.scrollHeight > line * LONG_AFTER_LINES)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(clip)
+    return () => observer.disconnect()
+  }, [clip])
+  return { clip: setClip, long, open, toggle: () => setOpen((was) => !was) }
+}
+
 const UserMessage: FC = () => {
   // A skipped question's reply is a note in the thread, not words the owner said.
   const skipped = useAuiState((s) => {
     const [only, ...rest] = s.message.parts
     return rest.length === 0 && only?.type === "text" && only.text === SKIPPED
   })
+  const design = useDesignReply()
+  const text = useLongText()
+  const textId = useId()
+  const collapsed = text.long && !text.open
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
@@ -1725,18 +1878,54 @@ const UserMessage: FC = () => {
         <div
           className={cn(
             "aui-user-message-content wrap-break-word relative rounded-3xl bg-muted px-4 py-2.5 text-chat empty:hidden sm:px-5 sm:py-3",
-            skipped ? "text-muted-foreground" : "text-chat-foreground"
+            skipped ? "text-muted-foreground" : "text-chat-foreground",
+            design && "p-2 sm:p-2"
           )}
         >
-          <MessagePrimitive.Parts components={USER_PARTS} />
+          {design ? (
+            <DesignReply {...design} />
+          ) : (
+            <div
+              data-slot="aui_user-message-text"
+              id={textId}
+              ref={text.clip}
+              className="relative overflow-hidden"
+              style={
+                collapsed ? { maxHeight: `${COLLAPSED_LINES}lh` } : undefined
+              }
+            >
+              <MessagePrimitive.Parts components={USER_PARTS} />
+              {collapsed && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-muted to-transparent"
+                />
+              )}
+            </div>
+          )}
         </div>
-        <span
-          data-slot="aui_user-message-meta"
-          className="me-2 mt-1 flex items-center justify-end gap-1 text-muted-foreground"
-        >
-          <MessageTime />
-          <DeliveryTick />
-        </span>
+        <div className="mt-1 flex items-center">
+          {text.long && (
+            <Button
+              aria-controls={textId}
+              aria-expanded={text.open}
+              className="-ms-1 text-muted-foreground"
+              onClick={text.toggle}
+              size="xs"
+              type="button"
+              variant="link"
+            >
+              {text.open ? "Show less" : "Show more"}
+            </Button>
+          )}
+          <span
+            data-slot="aui_user-message-meta"
+            className="ms-auto me-2 flex items-center gap-1 text-muted-foreground"
+          >
+            <MessageTime />
+            <DeliveryTick />
+          </span>
+        </div>
       </div>
     </MessagePrimitive.Root>
   )

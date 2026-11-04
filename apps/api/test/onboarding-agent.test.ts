@@ -4,6 +4,7 @@ import {
   OnboardingPlan,
   PERSONA_CARD,
   type OnboardingPlan as Plan,
+  RECAP_REPLY,
   SKIP_REPLY,
 } from "@workspace/contracts"
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
@@ -102,6 +103,8 @@ const QUOTE: FactValue = { key: "quote.form", value: { fields: FIELDS } }
 const without = (...keys: string[]) =>
   EVERYTHING.filter((f) => !keys.includes(f.key))
 
+const PERSONA_KEYS = ["assistant.name", "assistant.pronouns", "assistant.tone"]
+
 const onboarding = (
   facts: FactValue[] = [EVERYTHING[0] as FactValue],
   over: Partial<Onboarding> = {}
@@ -198,7 +201,7 @@ describe("the plan's checks", () => {
     })
   })
 
-  it("keeps every message free of rates, currency, links, markup, dashes and stock images", () => {
+  it("keeps every message free of rates, currency, links, markup and stock images", () => {
     for (const bad of [
       "Our prices start low.",
       "It is £40 an hour.",
@@ -206,8 +209,6 @@ describe("the plan's checks", () => {
       "Pricing tiers are coming.",
       "See https://example.com",
       "See <b>this</b>.",
-      "One thing — then another.",
-      "## Heading",
       "I will handpick stock photos for you.",
       // The replies to "how much does it cost?" on 2026-10-26.
       "Building the website is included as part of our service, so there is no extra charge.",
@@ -216,6 +217,7 @@ describe("the plan's checks", () => {
       "The site comes with your plan at no extra cost.",
       "Our pass rates start at forty pounds.",
       "Our rates are lower than our pass rates.",
+      "Build ead99cb0 is ready.",
       "x".repeat(SAY_MAX + 1),
       "   ",
     ]) {
@@ -469,7 +471,7 @@ describe("the plan's checks", () => {
       )
     // The default is only a default: no way chosen.
     expect(logoOf(tray)?.path).toBeUndefined()
-    expect(logoOf(tray)?.card.preselected).toEqual(["create"])
+    expect(logoOf(tray)?.card.preselected).toEqual([])
     const shown = (words: string, logo?: "upload" | "create") => {
       const s = typed(words, o, tray)
       const checked = checkPlan(
@@ -612,6 +614,7 @@ describe("the plan's checks", () => {
       key: "assistant.avatar",
       value: { id: "he_1" },
     })
+    // The card's name is its first idea, written for she/her.
     expect(
       left({ ...man, "assistant.name": { name: "Reme" } }, chosen)[0]
     ).toMatch(/does not fit the pronouns/)
@@ -1271,10 +1274,13 @@ describe("what the planner reads and how often it asks", () => {
   })
 
   it("keeps to the script's order: each code step's own card next", () => {
-    const o = onboarding([
-      ...without("assistant.name", "assistant.pronouns", "assistant.tone"),
-      QUOTE,
-    ])
+    const o = onboarding(
+      [
+        ...without("assistant.name", "assistant.pronouns", "assistant.tone"),
+        QUOTE,
+      ],
+      { closed: ["recap"] }
+    )
     expect(
       errorsOf(
         plan({
@@ -1449,7 +1455,7 @@ describe("going back to a step", () => {
     const checked = checkPlan(
       plan({
         pending_card: "declined",
-        say: "Rooms are a question of their own now. Does this look right?",
+        say: "Rooms are a question of their own now.",
         next: { kind: "review_quote_form", fields: redrafted, note: null },
       }),
       s
@@ -1460,27 +1466,6 @@ describe("going back to a step", () => {
       state: "input-available",
       input: { fields: redrafted },
     })
-  })
-
-  it("comes back to a step in new words, never a sentence already said", () => {
-    const asked =
-      "I have a good picture of Regal Rides now. How should customers get in touch?"
-    const s: PlanState = {
-      ...typed("Looks good", onboarding(without("business.phone"))),
-      rows: [
-        {
-          role: "assistant",
-          parts: [{ type: "text", text: asked, state: "done" }],
-        },
-      ],
-    }
-    const back = (say: string) =>
-      errorsOf(
-        plan({ say, next: { kind: "ask_details", step: "contact" } }),
-        s
-      ).filter((e) => e.includes("which you already said"))
-    expect(back(asked)).toHaveLength(1)
-    expect(back("Now, back to how customers reach Regal Rides.")).toEqual([])
   })
 
   it("refuses to reopen a step not answered yet", () => {
@@ -1523,7 +1508,7 @@ describe("the plan's parts", () => {
     ])
   })
 
-  it("builds a details card with what is held and the sign-in email filled in", () => {
+  it("builds a details card with what is held and the sign-in email offered", () => {
     const o = onboarding([
       ...without("business.phone", "business.email"),
       QUOTE,
@@ -1531,24 +1516,27 @@ describe("the plan's parts", () => {
     const s = typed("ok", o)
     const checked = checkPlan(
       plan({
-        say: "How should customers reach you?",
+        say: "Last bit on the business side, how customers get hold of you.",
         next: { kind: "ask_details", step: "contact" },
       }),
       s
     )
     if (!checked.ok) throw new Error(checked.errors.join("; "))
     expect(planParts(checked.checked, s, counter())).toEqual([
-      { type: "text", text: "How should customers reach you?", state: "done" },
+      {
+        type: "text",
+        text: "Last bit on the business side, how customers get hold of you.",
+        state: "done",
+      },
       {
         type: "tool-ask_details",
         toolCallId: "id1",
         state: "input-available",
         input: {
           step: "contact",
-          prefill: [
-            { key: "business.email", value: { address: "dave@regal.invalid" } },
-          ],
+          prefill: [],
           skippable: false,
+          sign_in_email: "dave@regal.invalid",
         },
       },
     ])
@@ -1626,8 +1614,7 @@ describe("the plan's parts", () => {
     expect(planParts(checked.checked, s, counter()).slice(0, 2)).toEqual([
       {
         type: "text",
-        // The professional tone it settles drops the model's contraction.
-        text: "I have gone with Reme, she/her, with a professional manner.",
+        text: "I've gone with Reme, she/her, with a professional manner.",
         state: "done",
       },
       {
@@ -1828,7 +1815,7 @@ describe("a planned turn", () => {
           "business.email": { address: "bookings@regal.invalid" },
         },
         pending_card: "answered",
-        say: "Weddings and proms across Greater Manchester, lovely. Who books you most?",
+        say: "Greater Manchester, noted. Who books you most?",
         next: { kind: "ask_open", about: "business.audience" },
       }),
     ])
@@ -1927,7 +1914,7 @@ describe("a planned turn", () => {
   it("keeps a plan refused only for its words, with the script's question after what was read", async () => {
     // Every attempt asks the right thing in a phrase the checks refuse.
     const worded = plan({
-      say: "Glad to have you. It gives you peace of mind.",
+      say: "Glad to have you. Our prices start low.",
       next: { kind: "ask_open", about: "business.offerings" },
     })
     const said: string[] = []
@@ -1942,7 +1929,7 @@ describe("a planned turn", () => {
     expect(kept.calls).toHaveLength(3)
     const whole = said.join("")
     expect(whole.startsWith("Glad to have you.")).toBe(true)
-    expect(whole).not.toContain("peace of mind")
+    expect(whole).not.toContain("prices")
     expect(whole).toContain("?")
     if (kept.ok) expect(kept.checked.plan.say).toBe(whole)
   })
@@ -2156,7 +2143,11 @@ describe("a planned turn", () => {
         plan({
           say: "Added the date.",
           pending_card: "declined",
-          next: { kind: "review_quote_form", fields: dated, note: null },
+          next: {
+            kind: "review_quote_form",
+            fields: [...left, dated[2] as (typeof dated)[number]],
+            note: null,
+          },
         }),
       ]).model,
       PRICE,
@@ -2337,86 +2328,402 @@ describe("a question in words", () => {
 })
 
 describe("the owner's words in say", () => {
-  it("refuses the owner's sentence read back, and passes a detail picked out of it", () => {
-    const owner =
-      "Mostly couples and business travellers, and we now cover both Leeds and Manchester"
-    const context = { typed: owner }
-    expect(
-      sayProblems(
-        "Mostly couples and business travellers, and now across both Leeds and Manchester.",
-        context
-      )
-    ).toContain(
-      "say repeats the owner's own words back to them; acknowledge one detail in your own words instead"
-    )
-    expect(
-      sayProblems(
-        "Couples and business travellers make a good mix for a chauffeur firm. Do you have a slogan?",
-        context
-      )
-    ).toEqual([])
+  // The staging live test of 2026-11-03, a tree surgery in Leeds.
+  const SERVICES =
+    "We're a tree surgery and garden care company in Leeds. Main jobs are tree pruning and crown reductions, tree felling, hedge trimming and stump grinding."
+  const AREA =
+    "Leeds and about 20 miles out, so Bradford, Wakefield, Harrogate and Wetherby. We'll go further for big felling jobs."
+  const asking = (about: string, question: string) => ({
+    card: call("tool-ask_open", { about }, counter()),
+    rows: [{ role: "assistant", parts: [{ type: "text", text: question }] }],
   })
+  /** The checks' findings on `say` for an owner who typed `words` over an open question. */
+  const problemsOf = (
+    words: string,
+    say: string,
+    about = "business.offerings",
+    question = "What does the business do?",
+    facts: Plan["facts"] = {}
+  ) => {
+    const { card, rows } = asking(about, question)
+    const s = { ...typed(words, onboarding(), card), rows } as PlanState
+    return errorsOf(
+      plan({
+        pending_card: "answered",
+        facts,
+        next: { kind: "ask_open", about: "service_area.text" },
+        say,
+      }),
+      s
+    )
+  }
 
-  it("refuses the owner's list read back, and passes a reply that just has it", () => {
-    const listed =
-      "say reads the owner's list back to them; say in a few words that you have it, or pick out one detail, and move on"
-    const owner =
-      "The address, whether it's a house or a shop, roughly how many windows, and if they want gutters or the conservatory done too."
-    // Both seen in local onboarding on 2026-10-29.
-    for (const said of [
-      "Understood, covering the address, property style, window count, and any extras like gutters or conservatories.",
-      "Got it, the address, property style and gutters.",
+  it("refuses a promise of work it does not do", () => {
+    // Seen in the eval on 2026-11-03.
+    for (const say of [
+      "Knowing the vehicle up front means I can check availability across the fleet before quoting.",
+      "I'll book them in for a consultation.",
     ]) {
-      expect(sayProblems(said, { typed: owner }), said).toContain(listed)
+      expect(
+        sayProblems(say).some((p) => p.startsWith("say promises")),
+        say
+      ).toBe(true)
     }
+    for (const say of [
+      "When an airport run comes in, I'll ask for the flight number.",
+      "I'll call myself Reme.",
+    ]) {
+      expect(sayProblems(say), say).toEqual([])
+    }
+  })
+
+  it("refuses no wording the prompt guards: each style it once refused passes", () => {
+    const passes = (say: string, problems: string[]) =>
+      expect(problems, say).toEqual([])
+    for (const say of [
+      "A mix of homeowners and letting agents makes good sense.",
+      "When landlords or letting agents get in touch, I'll ask for the address so their jobs get priority.",
+      "Here is a draft of the questions. Take a look and let me know if you would like any changes.",
+      "Got that. **Where do you work?** A town and a radius is plenty.",
+      "Divorce right through to mediation, noted.\n\nWhere are your clients based?",
+      "Wonderful, it's an honour to be on the team. Feel free to ask anything.",
+      "Photos are mandatory now.",
+      "You can skip this one.",
+      `${Array.from({ length: 52 }, () => "word").join(" ")}.`,
+    ]) {
+      passes(say, sayProblems(say))
+    }
+    for (const say of [
+      "Stump grinding and tree surgery, noted.",
+      "Stump removal on its own, noted.",
+      "Main jobs are tree pruning and crown reductions, tree felling, noted.",
+    ]) {
+      passes(say, problemsOf(SERVICES, say))
+    }
+    const services = [
+      "Tree pruning and crown reductions",
+      "Tree felling",
+      "Hedge trimming",
+      "Stump grinding",
+    ]
+    const readBack =
+      "Tree pruning and crown reductions, felling, hedge trimming and stump grinding, noted."
+    passes(
+      readBack,
+      problemsOf(SERVICES, readBack, "business.offerings", undefined, {
+        "business.offerings": { items: services },
+      })
+    )
+    const question =
+      "Who are your usual customers? For example, homeowners, commercial estates, or local councils."
+    const borrowed = "A mix of homeowners and estates work, noted."
+    passes(
+      borrowed,
+      problemsOf(CUSTOMERS, borrowed, "business.audience", question)
+    )
+
+    const o = onboarding([
+      ...without("business.phone", "business.email", ...PERSONA_KEYS),
+      QUOTE,
+    ])
+    const ask = "Next, what phone number and email should customers use?"
+    passes(
+      ask,
+      errorsOf(
+        plan({ next: { kind: "ask_details", step: "contact" }, say: ask }),
+        {
+          ...typed("That's all for quotes", o),
+          rows: [
+            {
+              role: "assistant",
+              parts: [{ type: "text", text: ask, state: "done" }],
+            },
+          ],
+        }
+      )
+    )
+    const thanks = "Regal Rides it is, thanks for clearing that up."
+    passes(
+      thanks,
+      errorsOf(
+        plan({
+          facts: { "business.name": { name: "Regal Rides" } },
+          say: thanks,
+        }),
+        typed("It's Regal Rides", onboarding(EVERYTHING))
+      )
+    )
+  })
+  const CUSTOMERS =
+    "Mostly homeowners. A few letting agents and landlords who send repeat work, and the odd school or church."
+
+  it("refuses work the business doesn't take on, or a customer status, that the owner never gave", () => {
+    const has = (start: string) => (p: string) => p.startsWith(start)
+    // The eval of 2026-11-03, round 1's replies.
     expect(
-      sayProblems(
-        "Got it, that's everything a quote needs. Here is what I'll ask new enquiries.",
-        { typed: owner }
+      problemsOf(
+        SERVICES,
+        "If someone asks for routine lawn mowing, I'll flag that it falls outside your main services."
+      ).some(has("say claims the business doesn't take something on"))
+    ).toBe(true)
+    expect(
+      problemsOf(
+        AREA,
+        "If an enquiry comes in from beyond 20 miles, I will check the size of the felling work before turning it away.",
+        "service_area.text"
+      ).some(has("say claims the business doesn't take something on"))
+    ).toBe(true)
+    expect(
+      problemsOf(
+        CUSTOMERS,
+        "Letting agents and landlords with repeat work, noted. When they reach out, I'll flag them as existing accounts.",
+        "business.audience"
+      ).some(has('say calls them "existing accounts"'))
+    ).toBe(true)
+    // What the owner did say is theirs to have read back.
+    expect(
+      problemsOf(
+        "Mostly Harrogate and the villages round it. Nothing above two storeys though, no ladders that high.",
+        "Nothing above two storeys, noted. If someone asks about a three-storey house, I'll tell them it isn't one for you.",
+        "service_area.text"
       )
     ).toEqual([])
     expect(
-      sayProblems("Wren it is, they/them, and keeping things casual.", {
-        typed: "Call yourself Wren, they/them, and keep it casual.",
-        persona: {
-          names: ["Wren"],
-          pronouns: ["they_them"],
-          tones: ["casual"],
-        },
-      })
-    ).not.toContain(listed)
-    // The pair the planner's prompt shows.
-    const family = {
-      typed: "Divorce, child arrangements, mediation and prenups, in Leeds.",
-    }
-    expect(
-      sayProblems(
-        "Got it, divorce, child arrangements, mediation and prenups across Leeds.",
-        family
+      problemsOf(
+        CUSTOMERS,
+        "Letting agents and landlords, noted. When they get in touch, I'll treat it as repeat work.",
+        "business.audience"
       )
-    ).toContain(listed)
-    expect(sayProblems("Mediation across Leeds, noted.", family)).toEqual([])
+    ).toEqual([])
   })
 
-  it("thanks for a correction only when the plan changed a held fact", () => {
-    const thanks = "Silverline it is, thanks for clearing that up."
-    expect(sayProblems(thanks, { corrected: false })).toContain(
-      "say thanks the owner for a correction, but nothing they said changed what was held"
+  it("names every change made to the quote form or the recap", () => {
+    const field = (
+      key: string,
+      label: string,
+      type: "radio" | "checkbox" | "photos",
+      required: boolean,
+      options: string[] | null = null
+    ) => ({ key, label, type, required, hint: null, options })
+    const waiting = [
+      field("work", "What needs doing?", "radio", true, [
+        "Pruning",
+        "Felling",
+        "Hedges",
+      ]),
+      field("access", "Garden access", "radio", true, [
+        "Down the side",
+        "Through the house",
+      ]),
+      field("photos", "Photos of the tree or hedge", "photos", false),
+    ]
+    const changed = [
+      {
+        ...(waiting[0] as (typeof waiting)[number]),
+        type: "checkbox" as const,
+      },
+      {
+        ...(waiting[1] as (typeof waiting)[number]),
+        options: ["Down the side", "Through the house", "Not sure"],
+      },
+      { ...(waiting[2] as (typeof waiting)[number]), required: true },
+    ]
+    const form = call(
+      "tool-review_quote_form",
+      { fields: waiting, note: null },
+      counter()
     )
-    expect(sayProblems(thanks, { corrected: true })).toEqual([])
-    const s = typed("It's Silverline", onboarding(EVERYTHING))
-    const same = plan({
-      facts: { "business.name": { name: "Regal Rides" } },
-      say: thanks,
-    })
-    expect(errorsOf(same, s)).toContain(
-      "say thanks the owner for a correction, but nothing they said changed what was held"
+    const asked = typed(
+      'Let people tick more than one job, felling and stump grinding usually go together. Add a "Not sure" option to garden access, and make photos required.',
+      onboarding(EVERYTHING),
+      form
     )
-    const changed = plan({
-      facts: { "business.name": { name: "Silverline" } },
-      say: thanks,
+    const proposed = (say: string) =>
+      errorsOf(
+        plan({
+          pending_card: "declined",
+          next: { kind: "review_quote_form", fields: changed, note: null },
+          say,
+        }),
+        asked
+      )
+    // Round 1's reply to these three changes, 2026-11-03.
+    const round1 = proposed(
+      "I have switched the services so people can tick multiple options, and made photos mandatory."
+    )
+    expect(round1).toContainEqual(
+      expect.stringMatching(
+        /^say names 2 of the 3 changes the owner asked for and leaves out Garden access/
+      )
+    )
+    expect(
+      proposed(
+        "Done, the form now has these changes:\n\n- **What needs doing:** customers can tick more than one\n- **Garden access:** added *Not sure*\n- **Photos:** now required"
+      )
+    ).toEqual([])
+
+    // Only what the owner asked for must be named: not a new key or hint
+    // they can't see changed, nor a label they never mentioned (eval,
+    // 2026-11-03, where demanding it made the turn fall back).
+    const limo = call(
+      "tool-review_quote_form",
+      { fields: FIELDS, note: null },
+      counter()
+    )
+    const car = {
+      key: "vehicle",
+      label: "Which car",
+      type: "radio" as const,
+      required: true,
+      hint: null,
+      options: ["Stretch limo", "Executive saloon"],
+    }
+    const rekeyed = (
+      fields: (Omit<(typeof FIELDS)[number], "hint"> & {
+        hint: string | null
+      })[],
+      say: string
+    ) =>
+      errorsOf(
+        plan({
+          pending_card: "declined",
+          next: {
+            kind: "review_quote_form",
+            fields: [...fields, car],
+            note: null,
+          },
+          say,
+        }),
+        typed(
+          "Can you add which car they want? The stretch or the saloon.",
+          onboarding(EVERYTHING),
+          limo
+        )
+      )
+    const renamed = FIELDS.map((f) => ({
+      ...f,
+      key: `${f.key}_info`,
+      hint: "For example, 4",
+    }))
+    expect(
+      rekeyed(renamed, "Added a question on which car they want.")
+    ).toEqual([])
+    const relabelled = renamed.map((f) =>
+      f.key === "passengers_info" ? { ...f, label: "Number of passengers" } : f
+    )
+    expect(
+      rekeyed(relabelled, "Added a question on which car they want.")
+    ).toEqual([])
+    expect(rekeyed(relabelled, "Done, the form is updated.")).toContainEqual(
+      expect.stringMatching(
+        /^say names 0 of the 1 changes the owner asked for and leaves out Which car; name each one/
+      )
+    )
+
+    const recap = call("tool-ask_open", { about: "recap" }, counter())
+    const corrected = typed(
+      "Change the area, Cheshire too, and the email is now hello@regalrides.invalid",
+      onboarding([...without(...PERSONA_KEYS), QUOTE]),
+      recap
+    )
+    const fixed = (say: string) =>
+      errorsOf(
+        plan({
+          pending_card: "answered",
+          facts: {
+            "service_area.text": { text: "Greater Manchester and Cheshire" },
+            "business.email": { address: "hello@regalrides.invalid" },
+          },
+          next: { kind: "ask_details", step: "assistant" },
+          say,
+        }),
+        corrected
+      )
+    expect(
+      fixed(
+        "Added Cheshire. Now a bit about me, since I'll be the one answering for Regal Rides."
+      )
+    ).toContainEqual(
+      expect.stringMatching(
+        /^say names 1 of the 2 changes the owner asked for and leaves out business\.email/
+      )
+    )
+    expect(
+      fixed(
+        "Added Cheshire, and the email is now the new one.\n\nNow a bit about me, since I'll be the one answering for Regal Rides."
+      )
+    ).toEqual([])
+  })
+})
+
+describe("the recap", () => {
+  const beforeRecap = () => onboarding([...without(...PERSONA_KEYS), QUOTE])
+  const recapCard = () => call("tool-ask_open", { about: "recap" }, counter())
+
+  it("comes after the contact details, and its words are the facts as held", () => {
+    const s = typed("07700 900412 and bookings@regal.invalid", beforeRecap())
+    expect(
+      errorsOf(
+        plan({
+          next: { kind: "ask_details", step: "assistant" },
+          say: "Got the number and email.",
+        }),
+        s
+      )
+    ).toContain("the next step is ask_open recap; ask that, or answer_only")
+    const p = plan({
+      next: { kind: "ask_open", about: "recap" },
+      say: "Got the number and email.",
     })
-    expect(errorsOf(changed, s)).toEqual([])
+    const checked = checkPlan(p, s)
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    const parts = planParts(checked.checked, s, counter())
+    expect(parts.map((part) => part.type)).toEqual([
+      "text",
+      "text",
+      "tool-ask_open",
+    ])
+    expect((parts[1] as { text: string }).text).toBe(
+      "Here's what I've noted for Regal Rides:\n\n- **Services:** wedding cars\n- **Area:** Greater Manchester\n- **Customers:** couples getting married\n- **Contact:** 07700 900412, bookings@regal.invalid\n\nHave I got that right?"
+    )
+  })
+
+  it("moves on once the owner confirms or corrects it", () => {
+    const o = beforeRecap()
+    const confirmed = typed(RECAP_REPLY, o, recapCard())
+    const next = {
+      pending_card: "answered" as const,
+      next: { kind: "ask_details" as const, step: "assistant" as const },
+      say: "That's Regal Rides covered. Next, how I come across to you and your customers.",
+    }
+    expect(errorsOf(plan(next), confirmed)).toEqual([])
+    expect(
+      errorsOf(
+        plan({
+          ...next,
+          next: { kind: "ask_open", about: "recap" },
+          say: "Got it.",
+        }),
+        confirmed
+      )
+    ).toContain("the recap is settled already; go on to the next step")
+    const corrected = typed(
+      "Change the area, it's Cheshire too",
+      o,
+      recapCard()
+    )
+    expect(
+      errorsOf(
+        plan({
+          ...next,
+          facts: {
+            "service_area.text": { text: "Greater Manchester and Cheshire" },
+          },
+          say: "Added Cheshire. Now a bit about me, since I'll be the one answering for Regal Rides.",
+        }),
+        corrected
+      )
+    ).toEqual([])
   })
 })
 
@@ -2447,6 +2754,19 @@ describe("a streamed turn", () => {
     expect(said.length).toBeGreaterThan(1)
     expect(said.slice(0, -1).every((s) => /[.?!]$/.test(s.trim()))).toBe(true)
     expect(out.firstChunkMs).not.toBeNull()
+  })
+
+  it("sends a bulleted list a line at a time, so no bullet waits for the last one", async () => {
+    const say =
+      "Done, the form now has these changes:\n\n- **Pick-up address:** now required\n- **Passengers:** removed\n- **Date:** added"
+    const { out, said } = await streamed(
+      [plan({ say, next: { kind: "answer_only" } })],
+      typed("Make the pick-up required, drop passengers and add the date")
+    )
+    expect(out.ok).toBe(true)
+    expect(said.join("")).toBe(say)
+    expect(said.slice(0, -1).every((s) => /[.?!:]\n$|\n$/.test(s))).toBe(true)
+    expect(said.length).toBeGreaterThan(2)
   })
 
   it("says what the plan is on before its message, and names its facts once they are committed", async () => {
@@ -2550,15 +2870,23 @@ describe("a streamed turn", () => {
     ])
   })
 
-  it("retries a message with ceremony or praise, and hears it in the retry's instructions", async () => {
+  it("keeps a message with ceremony or praise, and retries one with the product's plumbing", async () => {
     const praise = plan({ say: "Wonderful, it's an honour to be on the team." })
+    const kept = await planTurn(planner([praise]).model, PRICE, typed("hello"))
+    expect(kept.ok).toBe(true)
+    expect(kept.calls).toHaveLength(1)
+    const plumbing = plan({
+      say: "Saved as business_offerings. Who books you?",
+    })
     const good = plan({ say: "Noted. What area do you cover?" })
-    const run = planner([praise, good])
+    const run = planner([plumbing, good])
     const out = await planTurn(run.model, PRICE, typed("hello"))
     expect(out.ok).toBe(true)
     expect(out.calls.map((c) => c.errors.length > 0)).toEqual([true, false])
-    expect(JSON.stringify(run.prompts[1])).toContain("ceremony or praise")
-    expect(await plannerInstructions()).toContain("How you sound")
+    expect(JSON.stringify(run.prompts[1])).toContain("a snake_case value")
+    expect(await plannerInstructions()).toContain(
+      "These read as filler, so leave them out"
+    )
   })
 
   it("offers no photo move: the photos are a tray question", async () => {
@@ -2648,7 +2976,7 @@ describe("a streamed turn", () => {
 })
 
 describe("the planner's request", () => {
-  it("asks for JSON at low effort, with the instructions marked for the cache", async () => {
+  it("asks for JSON at medium effort, with the instructions marked for the cache", async () => {
     const sent: Record<string, unknown>[] = []
     const real = globalThis.fetch
     globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
@@ -2703,8 +3031,8 @@ describe("the planner's request", () => {
       stream: boolean
       messages: { role: string; content: unknown }[]
     }[]
-    expect(body?.model).toBe("google/gemini-3.8-flash")
-    expect(body?.reasoning).toEqual({ effort: "low" })
+    expect(body?.model).toBe("openai/gpt-6.1-terra")
+    expect(body?.reasoning).toEqual({ effort: "medium" })
     expect(body?.response_format).toEqual({ type: "json_object" })
     expect(body?.stream).toBe(true)
     expect(body?.messages[0]).toEqual({

@@ -16,19 +16,20 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 ).IS_REACT_ACT_ENVIRONMENT = true
 
 /**
- * The assistant set-up's Pick for me keeps what the owner set, the page
- * they are on included before it is saved, and fills only the rest.
+ * The assistant set-up's Pick for me keeps what the owner set, a pick on a
+ * page not saved yet included, and fills the rest: the empty name with the
+ * first name idea.
  */
 
 const INPUT: AskDetailsInput = {
   step: "assistant",
   prefill: [
-    { key: "assistant.name", value: { name: "Ava" } },
     { key: "assistant.pronouns", value: { id: "she_her" } },
     { key: "assistant.avatar", value: { id: "she_1" } },
     { key: "assistant.tone", value: { id: "friendly" } },
   ],
   skippable: false,
+  ideas: ["Poppy", "Hannah", "Rosa"],
 }
 
 beforeEach(() => {
@@ -75,7 +76,7 @@ function Chat({ slot, addResult }: { slot: HTMLElement; addResult: unknown }) {
   )
 }
 
-it("Pick for me keeps the name being typed and a pick made, and fills the rest", async () => {
+it("Pick for me fills the empty name with the first idea and keeps a pick made", async () => {
   const slot = document.createElement("div")
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -89,9 +90,6 @@ it("Pick for me keeps the name being typed and a pick made, and fills the rest",
     slot.remove()
   }
 
-  const name = slot.querySelector<HTMLInputElement>("input:not([type=radio])")
-  if (!name) throw new Error("No name field")
-  name.value = "Sam"
   await act(async () =>
     slot
       .querySelector<HTMLInputElement>(
@@ -108,7 +106,7 @@ it("Pick for me keeps the name being typed and a pick made, and fills the rest",
   expect(addResult).toHaveBeenCalledWith({
     answer: "stated",
     facts: [
-      { key: "assistant.name", value: { name: "Sam" } },
+      { key: "assistant.name", value: { name: "Poppy" } },
       { key: "assistant.pronouns", value: { id: "she_her" } },
       { key: "assistant.avatar", value: { id: "she_1" } },
       { key: "assistant.tone", value: { id: "casual" } },
@@ -117,7 +115,7 @@ it("Pick for me keeps the name being typed and a pick made, and fills the rest",
   })
 })
 
-it("offers each name idea once, Reme first", async () => {
+it("offers the three names written for the business", async () => {
   const slot = document.createElement("div")
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -135,6 +133,5 @@ it("offers each name idea once, Reme first", async () => {
   const ideas = [
     ...slot.querySelectorAll('[aria-label="Name ideas"] button'),
   ].map((each) => each.textContent)
-  expect(ideas[0]).toBe("Reme")
-  expect(new Set(ideas).size).toBe(ideas.length)
+  expect(ideas).toEqual(["Poppy", "Hannah", "Rosa"])
 })

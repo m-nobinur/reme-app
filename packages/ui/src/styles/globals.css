@@ -115,6 +115,31 @@
   --tw-duration: var(--duration-slow);
   transition-duration: var(--duration-slow);
 }
+/* A soft fade at a scroller's foot while there is more below it. Scroll-driven: a scroller that
+   does not scroll, or a browser without scroll timelines, leaves the length at 0 and draws none. */
+@property --scroll-fade {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes scroll-fade {
+  0%,
+  92% {
+    --scroll-fade: 2rem;
+  }
+  100% {
+    --scroll-fade: 0px;
+  }
+}
+@utility scroll-fade {
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--scroll-fade)),
+    transparent
+  );
+  animation: scroll-fade linear both;
+  animation-timeline: scroll(self);
+}
 /* Shown only while `data-scrolling` marks the scroller, and narrower than `thin` where WebKit
    allows: Chrome draws ::-webkit-scrollbar only when scrollbar-width and scrollbar-color are unset. */
 @utility scrollbar-hairline {
@@ -240,6 +265,8 @@
   --animate-shot-drift: shot-drift 7s ease-in-out infinite alternate;
   /* The floating panel asking for a look: its ring glows twice, then rests. */
   --animate-panel-nudge: panel-nudge 1.4s ease-in-out 2;
+  /* Once, for a row that just opened: never loops. */
+  --animate-row-glow: panel-nudge 1s ease-in-out 1;
   /* The conversation's reading type, sized per viewport by `--chat-size`. A
      step line (a check the assistant ran) sits a size under the reply. */
   --text-chat: var(--chat-size);

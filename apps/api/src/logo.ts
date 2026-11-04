@@ -7,9 +7,12 @@ import {
   LOGO_ROUNDS_MAX,
   LOGO_VARIANTS,
   type LogoBrief,
+  type LogoChip,
+  type LogoDirection,
   type LogoRound,
   type LogoRounds,
   type LogoStyle,
+  type LogoType,
 } from "@workspace/contracts"
 import type { Tenancy } from "@workspace/db"
 import { generateText, Output } from "ai"
@@ -25,6 +28,7 @@ import type { Owner } from "./changes.ts"
 import { priceOf, stepCost } from "./cos/agent.ts"
 import { reserveSpend, settleSpend } from "./cos/turns.ts"
 import { failure, invalid, keyMissing, readBody, sha256Hex } from "./http.ts"
+import { readChanges, readChips } from "./logo-chips.ts"
 import { logoReference } from "./logo-references.ts"
 import {
   changesPrompt,
@@ -39,6 +43,7 @@ import {
   plannerModel,
   worstCall,
 } from "./onboarding-agent.ts"
+import { hexOf, WHITE } from "./palette.ts"
 import { cropToMark } from "./png-crop.ts"
 import { readFacts } from "./workspace.ts"
 
@@ -140,11 +145,23 @@ type Manifest = {
   base?: string
   /** The ids the round draws, in the order the tiles show them. */
   planned: string[]
-  /** The style each planned variant is drawn in: one, or several for `surprise`. */
+  /** The style each planned variant is drawn in: one, or several for `surprise` or directions. */
   styles: LogoStyle[]
+  /** The type each planned variant is drawn in, when a round drew directions; absent, the brief's. */
+  types?: LogoType[]
   /** The ones drawn so far. */
   variants: string[]
+  /** Each drawn variant's redesign chips, by id, once read. */
+  chips?: Record<string, LogoChip[]>
+  /** The directions the business's first round drew, which its chips suggest from. */
+  suggested?: LogoDirection[]
 }
+
+/** The directions a round drew, when it drew one per variant. */
+const directionsOf = (m: Manifest): LogoDirection[] =>
+  m.types
+    ? m.types.map((type, at) => ({ type, style: m.styles[at] as LogoStyle }))
+    : []
 
 const manifestPrefix = (orgId: string, toolCallId: string) =>
   `logos/${orgId}/${encodeURIComponent(toolCallId)}/`
@@ -161,6 +178,13 @@ const EXTENSION: Record<string, string> = {
 
 /** The round as the owner sees it: a round drawing past its deadline is over. */
 export function roundView(manifest: Manifest, now = Date.now()): LogoRound {
+  const directionOf = (id: string) => {
+    const at = manifest.planned.indexOf(id)
+    return {
+      type: manifest.types?.[at] ?? manifest.brief.type,
+      style: manifest.styles[at] as LogoStyle,
+    }
+  }
   const lapsed =
     manifest.status === "drawing" &&
     now - Date.parse(manifest.started_at) > DRAW_DEADLINE_MS
@@ -172,8 +196,12 @@ export function roundView(manifest: Manifest, now = Date.now()): LogoRound {
   return {
     round: manifest.round,
     status,
+    started_at: manifest.started_at,
     // A round drawn when a round was four keeps its first `LOGO_VARIANTS`.
-    variants: manifest.variants.slice(0, LOGO_VARIANTS).map((id) => ({ id })),
+    variants: manifest.variants.slice(0, LOGO_VARIANTS).map((id) => {
+      const chips = manifest.chips?.[id]
+      return { id, direction: directionOf(id), ...(chips ? { chips } : {}) }
+    }),
     brief: manifest.brief,
   }
 }
@@ -288,7 +316,13 @@ export async function drawLogos(
   if (!key) return keyMissing()
   const parsed = DrawLogosRequest.safeParse(await readBody(request))
   if (!parsed.success) return invalid(parsed.error.issues)
-  const { tool_call_id: toolCallId, brief, changes, base } = parsed.data
+  const {
+    tool_call_id: toolCallId,
+    brief,
+    changes,
+    base,
+    directions,
+  } = parsed.data
   if (base && !changes) return invalid([{ path: ["changes"] }])
   if (!env.OPENROUTER_API_KEY) {
     return failure(503, {
@@ -376,6 +410,22 @@ export async function drawLogos(
     return response
   }
 
+  // The owner's words may name a type or style; each is set only where the
+  // brief still holds the design's own, so a pick the owner made stands.
+  const read = changes ? await readChanges(env.OPENROUTER_API_KEY, changes) : {}
+  const from = base
+    ? rounds
+        .map((r) => roundView(r.manifest).variants.find((v) => v.id === base))
+        .find(Boolean)?.direction
+    : view && { type: view.brief.type, style: view.brief.style }
+  const asked: LogoBrief = {
+    ...brief,
+    ...(read.type && brief.type === from?.type ? { type: read.type } : {}),
+    ...(read.style && brief.style === from?.style ? { style: read.style } : {}),
+  }
+  const suggested =
+    directions ??
+    rounds.map((r) => directionsOf(r.manifest)).find((d) => d.length > 0)
   const manifest: Manifest = {
     round,
     status: "drawing",
@@ -386,9 +436,10 @@ export async function drawLogos(
       trade: factValue(facts, "business.industry")?.name ?? "service",
       offerings: factValue(facts, "business.offerings")?.items ?? [],
     },
-    brief,
+    brief: asked,
     ...(changes ? { changes } : {}),
     ...(base ? { base } : {}),
+    ...(suggested ? { suggested } : {}),
     // The key is in the seed, so a try that replaces a failed round never
     // shares an id with a late picture from the one before.
     planned: await Promise.all(
@@ -396,7 +447,12 @@ export async function drawLogos(
         stableId(`${orgId}:${toolCallId}:${round}:${key}:${i}`)
       )
     ),
-    styles: variantStyles(brief.style),
+    ...(directions
+      ? {
+          styles: directions.map((d) => d.style),
+          types: directions.map((d) => d.type),
+        }
+      : { styles: variantStyles(asked.style) }),
     variants: [],
   }
   const at = manifestKey(orgId, toolCallId, round)
@@ -523,7 +579,9 @@ export async function keepLogo(
  */
 export type Director = (
   subject: Manifest["subject"],
-  brief: LogoBrief
+  brief: LogoBrief,
+  /** Each variant's type, in order. */
+  types: readonly LogoType[]
 ) => Promise<{ ideas: string[]; support?: string } | null>
 
 function openrouterDirector(
@@ -535,10 +593,10 @@ function openrouterDirector(
   const model = plannerModel(apiKey, modelId)
   const price = priceOf(modelId)
   if (!model || !price) return null
-  return async (subject, brief) => {
+  return async (subject, brief, types) => {
     const data = JSON.stringify({
       ...subject,
-      type: brief.type,
+      types,
       direction: brief.description,
       style: brief.style,
       colors: brief.colors,
@@ -675,6 +733,29 @@ const dataUrl = (bytes: Uint8Array, type: string) => {
 }
 
 /**
+ * A drawn logo as Jev reads it: flattened on white into a 640 px square
+ * JPEG, inside Jev's 256 to 1,568 px limits whatever the mark's shape. The
+ * PNG itself where the Images binding cannot, as in local dev.
+ */
+async function forJev(env: Env, bytes: Uint8Array): Promise<string> {
+  const made = await env.IMAGES?.input(new Blob([bytes]).stream())
+    .transform({
+      width: 640,
+      height: 640,
+      fit: "pad",
+      background: hexOf(WHITE),
+    })
+    .output({ format: "image/jpeg", quality: 80 })
+    .catch(() => null)
+  return made
+    ? dataUrl(
+        new Uint8Array(await new Response(made.image()).arrayBuffer()),
+        "image/jpeg"
+      )
+    : dataUrl(bytes, "image/png")
+}
+
+/**
  * Draws one round for the queue. A variant already in R2 is skipped, so a
  * retried message finishes the round rather than paying for it twice. A
  * round no longer drawing, past its deadline, or replaced by a new try is
@@ -728,8 +809,9 @@ export async function drawRound(
       base = dataUrl(bytes, sniff(bytes) ?? "image/png")
     }
   }
-  const exampleFor = (style: LogoStyle) =>
-    dataUrl(logoReference(manifest.brief.type, style), "image/webp")
+  const typeAt = (i: number) => manifest.types?.[i] ?? manifest.brief.type
+  const exampleFor = (type: LogoType, style: LogoStyle) =>
+    dataUrl(logoReference(type, style), "image/webp")
   const director =
     deps.director !== undefined
       ? deps.director
@@ -742,7 +824,11 @@ export async function drawRound(
   const directed =
     base || !director
       ? null
-      : await director(manifest.subject, manifest.brief).catch(() => null)
+      : await director(
+          manifest.subject,
+          manifest.brief,
+          manifest.planned.map((_, i) => typeAt(i))
+        ).catch(() => null)
   const symbols = directed?.ideas ?? []
   // A second colour only for an owner who gave one.
   const support =
@@ -755,19 +841,20 @@ export async function drawRound(
         return { model: "kept", cost: 0 }
       }
       const style = manifest.styles[i] as LogoStyle
+      const brief = { ...manifest.brief, type: typeAt(i) }
       const asked = manifest.changes && base
-      const reference = base ?? exampleFor(style)
+      const reference = base ?? exampleFor(brief.type, style)
       for (const model of LOGO_MODELS) {
         const prompt = asked
           ? changesPrompt({
               subject: manifest.subject,
-              brief: manifest.brief,
+              brief,
               style,
               changes: manifest.changes as string,
             })
           : logoPrompt({
               subject: manifest.subject,
-              brief: manifest.brief,
+              brief,
               style,
               symbol: symbols[i] ?? null,
               support,
@@ -811,6 +898,18 @@ export async function drawRound(
           }
         )
         await add(id)
+        // Its chips, while the other variants still draw; none leaves the tray's own.
+        const chips = await readChips(
+          apiKey,
+          manifest.subject.name,
+          await forJev(env, drawn.bytes),
+          { type: brief.type, style },
+          manifest.brief,
+          manifest.suggested ?? []
+        ).catch(() => null)
+        if (chips) {
+          await record((m) => ({ ...m, chips: { ...m.chips, [id]: chips } }))
+        }
         return { model: model.id, cost: drawn.cost }
       }
       return { model: null, cost: 0 }

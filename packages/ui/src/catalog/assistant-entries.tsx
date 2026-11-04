@@ -6,6 +6,7 @@ import {
 } from "@assistant-ui/react"
 import { CopyIcon } from "@phosphor-icons/react"
 import {
+  ADDRESS_ASK,
   type AskChoiceInput,
   type DomainPurchaseStatus,
   FONTS,
@@ -13,6 +14,7 @@ import {
   ONBOARDING_GOAL,
   PALETTES,
   PRONOUNS,
+  type QuoteField,
   TEMPLATES,
   TONES,
   TOOL_CALL_CANCELLED,
@@ -41,6 +43,7 @@ import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { PayDialog } from "@workspace/ui/components/assistant/pay-dialog"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
+import { QuoteFormPreview } from "@workspace/ui/components/assistant/quote-form-preview"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
@@ -54,6 +57,7 @@ import {
   ThreadPending,
 } from "@workspace/ui/components/assistant/thread-pending"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
+import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
 import {
   UpdateDeck,
   UpdateKindIcon,
@@ -75,10 +79,14 @@ import {
 } from "@workspace/ui/components/tooltip"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
-import { BROKEN } from "@workspace/ui/lib/tool-state"
+import { BROKEN, designText } from "@workspace/ui/lib/tool-state"
 import { type ReactNode, useState } from "react"
 import { ICON } from "./panel-entries"
-import { INPUT as ASK_DESIGN_INPUT } from "./tray-entries"
+import {
+  INPUT as ASK_DESIGN_INPUT,
+  DESIGN_ANSWERS,
+  TRAY_SERVICES,
+} from "./tray-entries"
 
 /**
  * The chat surface's catalog entries. They live apart from the rest because
@@ -261,10 +269,11 @@ const SUGGESTIONS: ThreadSuggestion[] = [
   { prompt: "What is on my website now?" },
 ]
 
-/** A thread with the owner app's composer settings. */
+/** A thread as the app mounts it for the owner: its composer settings, and thumbs on every reply with words. */
 function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
   return (
     <FixtureThread
+      rates
       {...props}
       settings={{
         assistant: "Reme",
@@ -550,6 +559,7 @@ const askDetails = (
     skippable?: boolean
     prefill?: unknown[]
     ideas?: string[]
+    sign_in_email?: string
   } = {}
 ) => ({
   args: {
@@ -557,6 +567,7 @@ const askDetails = (
     prefill: (extra.prefill ?? []) as [],
     skippable: extra.skippable ?? false,
     ...(extra.ideas ? { ideas: extra.ideas } : {}),
+    ...(extra.sign_in_email ? { sign_in_email: extra.sign_in_email } : {}),
   },
   isError: extra.isError,
   result: extra.result,
@@ -609,10 +620,10 @@ const ASK_DETAILS_STATES: ThreadMessageLike[] = [
 const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
   {
     content: [
-      question(
-        "How can customers reach Brightclean? I have filled in the email you signed up with."
-      ),
-      askDetails("contact", { prefill: [SIGN_IN_EMAIL] }),
+      question("How can customers reach Brightclean?"),
+      askDetails("contact", {
+        sign_in_email: SIGN_IN_EMAIL.value.address,
+      }),
     ],
     role: "assistant",
     status: WAITING,
@@ -622,7 +633,7 @@ const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
       question("Last thing: what should your assistant be called?"),
       askDetails("assistant", {
         skippable: true,
-        ideas: ["Marcus", "Priya"],
+        ideas: ["Poppy", "Hannah", "Rosa"],
       }),
     ],
     role: "assistant",
@@ -646,11 +657,21 @@ const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
       question("Here's your assistant as it comes. Change anything you like."),
       askDetails("assistant", {
         prefill: [
-          { key: "assistant.name", value: { name: "Reme" } },
           { key: "assistant.pronouns", value: { id: "they_them" } },
           { key: "assistant.avatar", value: { id: "reme" } },
           { key: "assistant.tone", value: { id: "friendly" } },
         ],
+      }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("And the email?"),
+      askDetails("contact", {
+        prefill: [{ key: "business.phone", value: { e164: "+447700900123" } }],
+        sign_in_email: SIGN_IN_EMAIL.value.address,
       }),
     ],
     role: "assistant",
@@ -844,8 +865,8 @@ const ASK_CHOICE_OPEN: ThreadMessageLike[] = [
         "Your website turns visitors into enquiries. Shall I build it for you?"
       ),
       askChoice("build_for_me", [
-        { id: "yes", label: "Yes, build it for me" },
-        { id: "skip", label: "Skip" },
+        { id: "yes", label: "Yes, build my website" },
+        { id: "skip", label: "No, I already have one" },
       ]),
     ],
     role: "assistant",
@@ -934,7 +955,7 @@ const ASK_UPLOAD_OPEN: ThreadMessageLike[] = [
 const quoteField = (
   key: string,
   label: string,
-  type: string,
+  type: QuoteField["type"],
   extra: { required?: boolean; hint?: string; options?: string[] } = {}
 ) => ({
   key,
@@ -951,14 +972,70 @@ const LIMOUSINE_QUESTIONS = [
   quoteField("journey_date", "Date and time of the journey", "datetime"),
   quoteField("passengers", "Passengers", "number"),
   quoteField("vehicle", "Vehicle", "radio", {
+    hint: "The minibus seats up to 16",
     options: ["Saloon", "Stretch limousine", "Minibus"],
   }),
   quoteField("occasion", "Occasion", "select", {
     required: false,
     options: ["Wedding", "Airport transfer", "Night out", "Business"],
   }),
-  quoteField("notes", "Anything else", "textarea", { required: false }),
+  quoteField(
+    "notes",
+    "Anything else we should know before we quote",
+    "textarea",
+    {
+      required: false,
+    }
+  ),
 ]
+
+/** One question of every type the contract allows. */
+const EVERY_TYPE_QUESTIONS = [
+  quoteField("summary", "What do you need doing", "text", {
+    hint: "A line is enough",
+  }),
+  quoteField("details", "Tell us more", "textarea", { required: false }),
+  quoteField("passengers", "Passengers", "number"),
+  quoteField("journey_day", "Day of the journey", "date"),
+  quoteField("journey_time", "Date and time of the journey", "datetime"),
+  quoteField("occasion", "Occasion", "select", {
+    required: false,
+    options: ["Wedding", "Airport transfer", "Night out"],
+  }),
+  quoteField("vehicle", "Vehicle", "radio", {
+    hint: "The minibus seats up to 16",
+    options: ["Saloon", "Stretch limousine", "Minibus"],
+  }),
+  quoteField("extras", "Extras", "checkbox", {
+    required: false,
+    options: ["Child seat", "Champagne", "Red carpet"],
+  }),
+  quoteField("pickup_photos", "Photos of the pick-up point", "photos", {
+    required: false,
+  }),
+  quoteField("second_phone", "A second number", "tel", { required: false }),
+  quoteField("billing_email", "Email for the invoice", "email", {
+    required: false,
+  }),
+]
+
+/** The preview's button, with what the modal's "Looks good" did beside it. */
+function QuotePreviewSample() {
+  const [confirmed, setConfirmed] = useState(false)
+  return (
+    <div className="flex items-center gap-3 p-4">
+      <QuoteFormPreview
+        fields={EVERY_TYPE_QUESTIONS}
+        onConfirm={() => setConfirmed(true)}
+      />
+      {confirmed ? (
+        <p className="text-muted-foreground text-sm" role="status">
+          Confirmed
+        </p>
+      ) : null}
+    </div>
+  )
+}
 
 /** A `review_quote_form` call in one of its states. */
 const reviewQuote = (
@@ -1018,6 +1095,34 @@ const REVIEW_QUOTE_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+]
+
+/** The owner's own messages by length: twelve lines, eight (as long as one stays whole) and one. */
+const LONG_MESSAGES: ThreadMessageLike[] = [
+  {
+    content: "Tell me about the business.",
+    role: "assistant",
+    status: DONE,
+  },
+  reply(
+    [
+      "Here is everything, so you do not have to ask.",
+      "",
+      "Weekly and fortnightly home cleans",
+      "End of tenancy cleans with a deposit guarantee",
+      "Deep cleans before and after a move",
+      "Oven and appliance cleans",
+      "Office cleans, evenings only",
+      "",
+      "We cover Leeds, Headingley, Roundhay and Horsforth.",
+      "Fully insured, and we bring our own supplies.",
+      "Prices start at £14 an hour with a two hour minimum.",
+    ].join("\n")
+  ),
+  { content: "Thanks, that is plenty.", role: "assistant", status: DONE },
+  reply(Array.from({ length: 8 }, (_, i) => `Item ${i + 1}`).join("\n")),
+  { content: "Got it.", role: "assistant", status: DONE },
+  reply("Short and sweet."),
 ]
 
 /** The questions still open, each docked in a thread of its own. */
@@ -1571,6 +1676,34 @@ const CONNECT_DOMAIN_STATES = [
   ),
 ]
 
+const PRUNX = "prunx.bnwise.tech"
+const PRUNX_RECORDS = {
+  outcome: "connecting",
+  method: "records",
+  email_affected: false,
+  provider: {
+    id: "cloudflare",
+    name: "Cloudflare",
+    settings_url:
+      "https://dash.cloudflare.com/?to=/:account/bnwise.tech/dns/records",
+  },
+  steps: [{ type: "CNAME", name: "prunx", value: "domains.remeai.co.uk" }],
+}
+
+/** A connect the owner's typed name ran, with no card. */
+const typedConnect = (id: string) =>
+  cosCall("connect_domain", `connect_${id}`, {
+    args: { name: PRUNX },
+    result: PRUNX_RECORDS,
+  })
+
+// The steps for a name the owner typed, at Cloudflare; then the same steps
+// once the owner has asked for a new name instead, folded to one line.
+const CONNECT_STEPS_NOW: ThreadMessageLike[] = [
+  ask(`Yes, it's ${PRUNX}`),
+  typedConnect("typed"),
+]
+
 const REMOVE_DOMAIN_STATES = decisionStates(
   "remove_domain",
   { name: DOMAIN },
@@ -1608,16 +1741,83 @@ const DOMAIN_BOUGHT_STATES = [
 const FREE_UK = { state: "free", price_gbp_year: 8 } as const
 const FREE_COM = { state: "free", price_gbp_year: 12 } as const
 const TAKEN = { state: "taken" } as const
+const CF_UK = { state: "free", registrar_usd: 5.3 } as const
+const CF_COM = { state: "free", registrar_usd: 10.46 } as const
+const FREE = { state: "free" } as const
 
-// What find_domain answers: name rows best first, one ending taken, none
-// free, and a search still running.
+/** Six names for Pruning Co as the registrar checked them, with buying here off. */
+const PRUNING_ROWS = {
+  outcome: "found",
+  rows: [
+    {
+      stem: "pruningco",
+      why: "matches your business name",
+      endings: { "co.uk": CF_UK, uk: CF_UK, com: CF_COM, co: FREE },
+    },
+    {
+      stem: "pruningleeds",
+      why: "your name plus Leeds",
+      endings: { "co.uk": CF_UK, uk: CF_UK, com: CF_COM, co: TAKEN },
+    },
+    {
+      stem: "pruningtrees",
+      why: "your name plus trees",
+      endings: { "co.uk": CF_UK, uk: TAKEN, com: CF_COM, co: FREE },
+    },
+    {
+      stem: "leedstreesurgery",
+      why: "Leeds plus what you do",
+      endings: { "co.uk": CF_UK, uk: CF_UK, com: TAKEN, co: TAKEN },
+    },
+    {
+      stem: "pruning-leeds",
+      why: "your name and Leeds, with a dash",
+      endings: { "co.uk": CF_UK, uk: CF_UK, com: CF_COM, co: FREE },
+    },
+    {
+      stem: "pruningsurgery",
+      why: "your name plus surgery",
+      endings: { "co.uk": CF_UK, uk: CF_UK, com: CF_COM, co: FREE },
+    },
+  ],
+  usd_gbp: 0.7457,
+} as const
+
+const CONNECT_STEPS_PAUSED: ThreadMessageLike[] = [
+  ask(`Yes, it's ${PRUNX}`),
+  typedConnect("paused"),
+  ask("No, help me get one"),
+  cosCall("find_domain", "find_after", {
+    args: {},
+    result: PRUNING_ROWS,
+  }),
+]
+
+// What find_domain answers: a search still running, a refusal with none
+// free, then six names with buying here off, the tray docked for them.
 const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
+  ask("No, help me get one"),
+  cosCall(
+    "find_domain",
+    "find_running",
+    { args: { step: "Looking for names for Pruning Co" } },
+    IN_FLIGHT
+  ),
+  cosCall("find_domain", "find_none", {
+    args: { query: "sparkle" },
+    result: refusal("domain.unavailable", "That name isn't free to register."),
+  }),
+  cosCall("find_domain", "find_found", { args: {}, result: PRUNING_ROWS }),
+]
+
+/** The same names with buying here on: Reme's price, and Continue to Your details. */
+const FIND_DOMAIN_BUY_HERE: ThreadMessageLike[] = [
   ask("I don't have a website address. Can you sort one?"),
-  cosCall("find_domain", "find_running", { args: {} }, IN_FLIGHT),
-  cosCall("find_domain", "find_found", {
+  cosCall("find_domain", "find_found_here", {
     args: {},
     result: {
       outcome: "found",
+      buy_here: true,
       rows: [
         {
           stem: "sparkleclean",
@@ -1631,10 +1831,6 @@ const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
         },
       ],
     },
-  }),
-  cosCall("find_domain", "find_none", {
-    args: { query: "sparkle" },
-    result: refusal("domain.unavailable", "That name isn't free to register."),
   }),
 ]
 
@@ -1919,6 +2115,44 @@ const BUILD_QUESTIONS: ThreadMessageLike[] = [
               id: "00000000-0000-4000-8000-0000000000c3",
               text: "Is there anywhere customers should park?",
               input: { kind: "text", maxLength: 200, email: false },
+              skippable: true,
+            },
+          ],
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
+/** The web address stack: a quick choice, then the name after Yes. */
+const ADDRESS_QUESTIONS: ThreadMessageLike[] = [
+  {
+    content: [
+      {
+        text: "While I build the site in the background, let's sort out your web address.",
+        type: "text",
+      },
+      {
+        type: "data",
+        name: "build_questions",
+        data: {
+          kind: "address",
+          questions: [
+            {
+              id: "00000000-0000-4000-8000-0000000000d1",
+              text: ADDRESS_ASK.have,
+              input: {
+                kind: "choice",
+                options: [ADDRESS_ASK.yes, ADDRESS_ASK.no, ADDRESS_ASK.later],
+              },
+              skippable: false,
+            },
+            {
+              id: "00000000-0000-4000-8000-0000000000d2",
+              text: ADDRESS_ASK.name,
+              input: { kind: "text", maxLength: 253, email: false },
               skippable: true,
             },
           ],
@@ -2681,8 +2915,18 @@ const assistantCatalog = [
       </div>
     ),
   },
-  {
-    name: "ReviewQuoteForm",
+  // The popover is the choice pill's options and hint.
+  ...(
+    [
+      "ReviewQuoteForm",
+      "Popover",
+      "PopoverTrigger",
+      "PopoverContent",
+      "PopoverTitle",
+      "PopoverDescription",
+    ] as const
+  ).map((name) => ({
+    name,
     render: () => (
       <TrayStates
         height="h-[44rem]"
@@ -2690,7 +2934,8 @@ const assistantCatalog = [
         settled={REVIEW_QUOTE_STATES}
       />
     ),
-  },
+  })),
+  { name: "QuoteFormPreview", render: () => <QuotePreviewSample /> },
   // The upload card and the provider that gives it the app's upload.
   ...(["AskUpload", "UploadPhotosProvider"] as const).map((name) => ({
     name,
@@ -2736,6 +2981,34 @@ const assistantCatalog = [
       </SaveDesignAnswerProvider>
     ),
   })),
+  {
+    // The owner's reply to a finished design tray, as chips.
+    name: "DesignReply",
+    render: () => (
+      <TrayServicesProvider value={TRAY_SERVICES}>
+        <FixtureThread
+          height="h-[22rem]"
+          messages={[
+            {
+              content: [
+                question("Let's choose how your website looks."),
+                {
+                  args: ASK_DESIGN_INPUT,
+                  result: DESIGN_ANSWERS,
+                  toolCallId: "design_done",
+                  toolName: "ask_design",
+                  type: "tool-call" as const,
+                },
+              ],
+              role: "assistant",
+              status: DONE,
+            },
+            reply(designText(ASK_DESIGN_INPUT, DESIGN_ANSWERS)),
+          ]}
+        />
+      </TrayServicesProvider>
+    ),
+  },
   {
     name: "SitePictures",
     render: () => (
@@ -2945,12 +3218,33 @@ const assistantCatalog = [
     ),
   },
   // The connect card and the records it ends on.
-  ...(["ConnectDomain", "ConnectSteps"] as const).map((name) => ({
-    name,
+  // Each state in a thread of its own: a later domain card folds an earlier one.
+  {
+    name: "ConnectDomain",
     render: () => (
-      <FixtureThread height="h-[340rem]" messages={CONNECT_DOMAIN_STATES} />
+      <div className="flex flex-col gap-4">
+        {CONNECT_DOMAIN_STATES.map((state, at) => (
+          <FixtureThread
+            height="h-[44rem]"
+            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list
+            key={at}
+            messages={[state]}
+          />
+        ))}
+      </div>
     ),
-  })),
+  },
+  {
+    name: "ConnectSteps",
+    render: () => (
+      <div className="flex flex-col gap-4">
+        <FixtureThread height="h-[44rem]" messages={CONNECT_STEPS_NOW} />
+        <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+          <FixtureThread height="h-[56rem]" messages={CONNECT_STEPS_PAUSED} />
+        </DomainPurchaseProvider>
+      </div>
+    ),
+  },
   {
     name: "DomainBought",
     render: () => (
@@ -2966,7 +3260,12 @@ const assistantCatalog = [
   {
     name: "FindDomain",
     render: () => (
-      <FixtureThread height="h-[60rem]" messages={FIND_DOMAIN_STATES} />
+      <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+        <div className="flex flex-col gap-4">
+          <FixtureThread height="h-[64rem]" messages={FIND_DOMAIN_STATES} />
+          <FixtureThread height="h-[48rem]" messages={FIND_DOMAIN_BUY_HERE} />
+        </div>
+      </DomainPurchaseProvider>
     ),
   },
   // The purchase card, its tray and the provider that gives it the app's checkout.
@@ -3011,6 +3310,23 @@ const assistantCatalog = [
       </FixtureThread>
     ),
   },
+  // Quick replies, as the web address question asks them.
+  ...(["BuildQuestionsAddress", "ReplyPill", "ReplyPills"] as const).map(
+    (name) => ({
+      name,
+      render: () => (
+        <AnswerBuildQuestionProvider value={answerSlowly}>
+          <OwnerThread
+            height="h-[32rem]"
+            messages={ADDRESS_QUESTIONS}
+            stored="00000000-0000-4000-8000-0000000000a2"
+          >
+            <BuildQuestionsUI />
+          </OwnerThread>
+        </AnswerBuildQuestionProvider>
+      ),
+    })
+  ),
   // The question stack and the provider that gives it the app's answer call.
   ...(["BuildQuestionsUI", "AnswerBuildQuestionProvider"] as const).map(
     (name) => ({
@@ -3073,6 +3389,10 @@ const assistantCatalog = [
   {
     name: "Thread",
     render: () => <OwnerThread height="h-[56rem]" messages={CONVERSATION} />,
+  },
+  {
+    name: "ThreadLongMessage",
+    render: () => <OwnerThread height="h-[60rem]" messages={LONG_MESSAGES} />,
   },
   {
     name: "ThreadEmpty",

@@ -258,24 +258,31 @@ describe("when the panel hides", () => {
 })
 
 describe("the first run", () => {
-  it("ticks each onboarding step as it lands, with what was heard", () => {
+  it("ticks each onboarding step as it lands, under one name for the business", () => {
     const early = firstRun([onboarding(1)])?.journey
     expect(early).toHaveLength(1)
     const [setup] = early ?? []
-    expect([
-      "Getting Fixture Clean ready",
-      "Setting up Fixture Clean",
-    ]).toContain(setup?.title)
+    expect(setup?.title).toBe("About the business")
     expect(setup?.line).toBeNull()
     // The business alone: the assistant and the website wait their turn.
+    // A step keeps its name while it is asked: the question is on its card.
     expect(setup?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Services", "done"],
-      ["Where do you work?", "now"],
+      ["Service area", "now"],
       ["Customers", "next"],
       ["What sets you apart", "next"],
-      ["Quote requirements", "next"],
+      ["Quote questions", "next"],
       ["Contact details", "next"],
     ])
+    // The one the owner is answering says so, with the speech bubble.
+    const asked = firstRun([onboarding(1, "waiting")])?.journey[0]?.steps[1]
+    expect(asked).toMatchObject({
+      label: "Service area",
+      state: "waiting",
+      hint: "Waiting for your answer",
+      kind: "waiting",
+    })
+    expect(setup?.steps[1]?.kind).toBe("waiting")
 
     // The next fact lands: its step ticks, and the next one opens.
     const later = firstRun([onboarding(2)])?.journey[0]
@@ -287,35 +294,72 @@ describe("the first run", () => {
     expect(later?.line).toBeNull()
   })
 
-  it("gives the assistant and the website a group each once reached", () => {
-    const assistant = firstRun([onboarding(6)])?.journey ?? []
-    expect(assistant.map((each) => [each.title, each.state])).toEqual([
-      [expect.stringMatching(/Fixture Clean/), "done"],
-      ["Setting up your assistant", "now"],
+  it("moves a finished part out of Now, in the words Completed keeps", () => {
+    const panel = firstRun([onboarding(6)])
+    expect(panel?.journey.map((each) => [each.title, each.state])).toEqual([
+      ["Your assistant", "now"],
     ])
-    expect(assistant[1]?.steps.map((each) => each.label)).toEqual([
-      "What should your assistant be like?",
+    expect(panel?.journey[0]?.steps.map((each) => each.label)).toEqual([
+      "Name, pronouns and tone",
     ])
-    const website = firstRun([onboarding(8, "waiting")])?.journey ?? []
-    expect(website.map((each) => [each.title, each.state])).toEqual([
-      [expect.stringMatching(/Fixture Clean/), "done"],
-      ["Reme is ready", "done"],
-      ["Planning your website", "waiting"],
+    // Finished, it is ready to tick in Now and is in Completed under the same words.
+    expect(panel?.finished.map((each) => [each.id, each.title])).toEqual([
+      ["onboarding", "Business details saved"],
     ])
-    expect(website[2]?.steps.map((each) => each.state)).toEqual([
+    expect(panel?.done.map((each) => [each.id, each.text])).toEqual([
+      ["onboarding", "Business details saved"],
+    ])
+
+    const website = firstRun([onboarding(8, "waiting")])
+    expect(website?.journey.map((each) => [each.title, each.state])).toEqual([
+      ["Website choices", "waiting"],
+    ])
+    expect(website?.journey[0]?.steps.map((each) => each.state)).toEqual([
       "done",
       "waiting",
     ])
+    expect(website?.done.map((each) => each.text)).toEqual([
+      "Business details saved",
+      "Reme set up",
+    ])
   })
 
-  it("says the owner's turn, and the pill waits on them", () => {
+  it("dates each finished part by when its last step settled", () => {
+    const steps = onboarding(8).steps.map((each, i) =>
+      each.state === "done"
+        ? {
+            ...each,
+            at: `2026-10-01T08:${String(10 + i).padStart(2, "0")}:00.000Z`,
+          }
+        : each
+    )
+    const panel = firstRun([segment("onboarding", "now", steps, BUSINESS)])
+    expect(panel?.done).toEqual([
+      {
+        id: "onboarding:assistant",
+        text: "Reme set up",
+        at: "2026-10-01T08:16:00.000Z",
+        brief: null,
+      },
+      {
+        id: "onboarding",
+        text: "Business details saved",
+        at: "2026-10-01T08:15:00.000Z",
+        brief: null,
+      },
+    ])
+  })
+
+  it("keeps one header line through setting up, a question waiting or not", () => {
+    for (const state of ["now", "waiting"] as const) {
+      const panel = firstRun([onboarding(8, state)])
+      expect(panel?.line).toEqual({
+        tone: state === "now" ? "working" : "idle",
+        lead: "Reme is getting to know Fixture Clean",
+      })
+    }
     const panel = firstRun([onboarding(8, "waiting")])
-    expect(panel?.journey.at(-1)?.steps.at(-1)?.state).toBe("waiting")
     expect(panel?.journey.at(-1)?.line).toBeNull()
-    expect(panel?.line).toEqual({
-      tone: "idle",
-      lead: "Reme is waiting for your answer",
-    })
     expect(panel?.suggestions).toEqual([{ kind: "onboarding", id: ONBOARDING }])
   })
 
@@ -369,27 +413,25 @@ describe("the first run", () => {
     const [website, ...rest] = panel?.journey ?? []
     // Going live is not shown before the website is done.
     expect(rest).toEqual([])
-    expect(panel?.done).toEqual([
-      expect.objectContaining({
-        text: "Fixture Clean set up",
-        brief: "Services, service area, customers and 6 more",
-      }),
+    expect(panel?.done.map((each) => each.text)).toEqual([
+      "Business details saved",
+      "Reme set up",
+      "Website choices saved",
     ])
 
     expect(website?.state).toBe("now")
-    // The title says what is happening now.
-    expect([
-      "Reme is writing your pages",
-      "Reme is writing your website",
-    ]).toContain(website?.title)
-    expect(website?.line).toBe("4 minutes so far, about 6 to 10 minutes")
+    // One name for the build; what it is doing and how long are under it.
+    expect(website?.title).toBe("Your website")
+    expect(website?.line).toBe("Step 2 of 5: writing your pages")
+    expect(website?.status).toBe("About 6 min left")
+    expect(website?.quiet).toBe(false)
     expect(website?.steps.map((each) => [each.label, each.state])).toEqual([
       // Photos never applied, so they are not listed.
-      ["Planning", "done"],
-      ["3 pages are done, 3 to go", "now"],
-      ["Polishing", "next"],
-      ["Checking", "next"],
-      ["Ready", "next"],
+      ["The plan", "done"],
+      ["Pages", "now"],
+      ["Design polish", "next"],
+      ["Final checks", "next"],
+      ["Ready to look at", "next"],
     ])
     expect(website?.steps[1]?.kind).toBe("writing")
     expect(website?.build?.assignment_id).toBe("build-first")
@@ -397,6 +439,53 @@ describe("the first run", () => {
       tone: "working",
       lead: "Reme is building your website",
     })
+  })
+
+  it("gives the phone's panel button the build's minutes, an answer waiting over them, and nothing idle", () => {
+    const building = [
+      onboarding(9, "done"),
+      {
+        ...segment("website", "now", along(WEBSITE_STEPS, 2), BUSINESS),
+        usual_seconds: 360,
+        late_seconds: 600,
+      },
+    ]
+    expect(firstRun(building)?.badge).toEqual({ kind: "working", minutes: 6 })
+    expect(
+      firstRun(building, { attention: [question("Alex")] })?.badge
+    ).toEqual({ kind: "answer", count: 1 })
+    // Late: the half circle stays, with no minutes to promise.
+    expect(
+      firstRun([
+        onboarding(9, "done"),
+        {
+          ...segment("website", "now", along(WEBSITE_STEPS, 2), BUSINESS),
+          usual_seconds: 60,
+          late_seconds: 90,
+        },
+      ])?.badge
+    ).toEqual({ kind: "working", minutes: null })
+    // Getting to know the business is the chat itself: the plain face.
+    expect(firstRun([onboarding(2, "waiting")])?.badge).toBeNull()
+    expect(panelFor(input({ workspace: live() }))?.badge).toBeNull()
+  })
+
+  it("shows the design tray's logo round as its own row while it draws, then while it waits on a pick", () => {
+    const tray = (logo: ActivitySegment["logo"]) =>
+      firstRun([{ ...onboarding(8, "waiting"), logo }])?.journey.at(-1)
+    expect(tray({ status: "drawing", options: 3 })).toMatchObject({
+      id: "logo",
+      title: "Your logo",
+      line: "Designing 3 options",
+      state: "now",
+      quiet: true,
+    })
+    expect(tray({ status: "ready", options: 3 })).toMatchObject({
+      title: "Your logo",
+      line: "Waiting for your pick",
+      state: "waiting",
+    })
+    expect(tray(undefined)?.id).not.toBe("logo")
   })
 
   it("puts the review in going live, not in Waiting on you", () => {
@@ -419,22 +508,23 @@ describe("the first run", () => {
     )
     const [golive, ...rest] = panel?.journey ?? []
     expect(rest).toEqual([])
-    expect(panel?.done.map((item) => item.text)).toEqual([
-      "Website built",
-      "Fixture Clean set up",
-    ])
-    expect(golive?.title).toBe("Your website is ready")
+    expect(panel?.done.map((item) => item.text)).toContain(
+      "Website draft ready to look at"
+    )
+    // The finished build is ready to tick in Now as Completed words it.
+    expect(panel?.finished.map((each) => each.id)).toContain("website")
+    expect(golive?.title).toBe("Going live")
     expect(golive?.line).toBeNull()
-    expect(golive?.steps.map((each) => [each.label, each.state])).toEqual([
-      ["Waiting for your approval to publish", "waiting"],
-      ["Publishing", "next"],
-      ["Checking it loads", "next"],
+    expect(
+      golive?.steps.map((each) => [each.label, each.state, each.hint])
+    ).toEqual([
+      ["Your go-ahead", "waiting", "Waiting for your answer"],
+      ["Publishing", "next", undefined],
+      ["Checking it opens", "next", undefined],
     ])
     expect(panel?.review).toBe(review)
     expect(panel?.waiting).toEqual([])
-    expect(panel?.line.lead).toBe(
-      "Reme is waiting for your approval to publish"
-    )
+    expect(panel?.line.lead).toBe("Reme needs your go-ahead to publish")
 
     // On the approvals page the review is the page's, not the segment's.
     const approvals = panelFor(
@@ -463,20 +553,14 @@ describe("the first run", () => {
     const website = panel?.journey[0]
     expect(website?.title).toBe("The website build stopped")
     expect(website?.line).toBe("Ask Reme to try again")
-    expect(website?.steps[4]).toMatchObject({ label: "Checking", state: "now" })
+    expect(website?.steps[4]).toMatchObject({
+      label: "Final checks",
+      state: "now",
+    })
     expect(panel?.line.lead).toBe("The website build stopped")
   })
 
-  it("shows a build step at work by its name, which the title already says, and speaks it in full", () => {
-    const panel = firstRun([
-      onboarding(9, "done"),
-      segment("website", "now", along(WEBSITE_STEPS, 2), BUSINESS),
-    ])
-    const writing = panel?.journey[0]?.steps[2]
-    expect(writing).toMatchObject({ label: "Pages", said: "Writing the pages" })
-  })
-
-  it("gives a counted step a spoken form without its count", () => {
+  it("names a build step one way, counted or not, at work or not", () => {
     const steps = along(WEBSITE_STEPS, 2).map((each) =>
       each.id === "writing" ? { ...each, count: { done: 2, total: 6 } } : each
     )
@@ -484,13 +568,14 @@ describe("the first run", () => {
       onboarding(9, "done"),
       segment("website", "now", steps, BUSINESS),
     ])
-    const [planning, photos, writing] = panel?.journey[0]?.steps ?? []
-    expect(writing?.label).toBe("2 pages are done, 4 to go")
-    expect(writing?.said).toBe("Writing the pages")
-    // A step with no count has nothing to leave out.
-    expect(planning?.said).toBeUndefined()
-    expect(planning?.label).toBe("Planning")
-    expect(photos?.said).toBeUndefined()
+    expect(panel?.journey[0]?.steps.map((each) => each.label)).toEqual([
+      "The plan",
+      "Photos",
+      "Pages",
+      "Design polish",
+      "Final checks",
+      "Ready to look at",
+    ])
   })
 
   it("starts from a new chat or the getting-started chat before the journey", () => {
@@ -573,40 +658,49 @@ describe("later jobs", () => {
 
   it("runs Google in Now with its own steps", () => {
     const [google] = jobs?.now ?? []
-    expect(google?.title).toMatch(
-      /^(Connecting Google|Linking your site to Google)$/
-    )
+    expect(google?.title).toBe("Connecting Google")
     expect(google?.line).toBeNull()
     expect(google?.icon).toBe("google")
     expect(google?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Sign in", "done"],
-      ["Verifying your site", "now"],
-      ["Sending your pages to Google", "next"],
+      ["Site ownership", "now"],
+      ["Your pages sent to Google", "next"],
     ])
+    // Something waits on the owner, so the work folds to one line.
+    expect(google?.quiet).toBe(true)
+  })
+
+  it("leads the header with what waits on the owner, and holds it", () => {
     expect(jobs?.line).toEqual({
+      tone: "live",
+      lead: "Reme needs a record added at your DNS provider",
+    })
+    const working = panelFor(
+      input({
+        workspace: live({
+          assistantName: "Reme",
+          activity: activity({
+            now: [segment("google", "now", along(["sign_in"], 0))],
+          }),
+        }),
+      })
+    )
+    expect(working?.line).toEqual({
       tone: "working",
       lead: "Reme is connecting Google",
     })
-  })
-
-  it("gives every job at work or waiting a turn in the header", () => {
-    const leads = jobs?.lines.map((each) => each.lead) ?? []
-    expect(leads[0]).toBe("Reme is connecting Google")
-    expect(leads.length).toBeGreaterThan(1)
-    expect(new Set(leads).size).toBe(leads.length)
-    expect(jobs?.lines[0]).toEqual(jobs?.line)
+    expect(working?.now[0]?.quiet).toBe(false)
   })
 
   it("waits on the owner for a DNS change and a payment, by when", () => {
     const [domain, purchase, ...rest] = jobs?.blocked ?? []
     // A review is answered in the panel's own list, not drawn twice.
     expect(rest).toEqual([])
-    expect(domain?.title).toMatch(/fixture\.example\.invalid$/)
-    expect(domain?.line).toBe("Changes to make at your DNS provider")
+    // One name, one step: what the owner does now. No line repeating it.
+    expect(domain?.title).toBe("Connecting your domain")
+    expect(domain?.line).toBeNull()
     expect(domain?.steps.map((each) => [each.label, each.state])).toEqual([
-      ["Domain setting", "waiting"],
-      ["Security padlock", "next"],
-      ["Live check", "next"],
+      ["Add the records at your DNS provider", "waiting"],
     ])
     expect(purchase?.title).toMatch(/fixtureclean\.example\.invalid$/)
     expect(purchase?.line).toBe("Pay by 11:50 AM to keep the name")
@@ -648,15 +742,35 @@ describe("tasks not started", () => {
       })
     )
 
-  it("offers the next one as Up next with one button, the address before Google", () => {
+  it("offers to connect a web address while none is the owner's, and none is being set up", () => {
     const panel = withUpcoming([unbegun("google"), unbegun("address")])
-    expect(panel?.upNext).toEqual({
-      id: "address:1",
-      text: expect.stringMatching(/address/i),
-      label: "Use your own domain",
-      ask: "I'd like to use my own domain",
-    })
+    expect(panel?.connect).toBe(true)
+    expect(panel?.upNext).toBeNull()
     expect(panel?.upcoming).toEqual([])
+    // After "Not now" there is no task at all: still offered.
+    expect(withUpcoming([])?.connect).toBe(true)
+    // Not while the address is being asked about or set up.
+    const asking = panelFor(
+      input({
+        workspace: live({
+          activity: activity({
+            waiting: [
+              segment("address", "waiting", [step("find_out", "waiting")], {
+                id: "address:1",
+              }),
+            ],
+          }),
+        }),
+      })
+    )
+    expect(asking?.connect).toBe(false)
+    // Not once the owner's own domain is connected.
+    const connected = segment("address", "done", [step("loads", "done")], {
+      id: "address:1",
+    })
+    expect(withUpcoming([], [connected])?.connect).toBe(false)
+    // Not while the business is still being set up.
+    expect(firstRun([onboarding(2)])?.connect).toBe(false)
   })
 
   it("offers Google only once the owner's domain is live, as its sign-in and never a line in the owner's voice", () => {
@@ -709,7 +823,7 @@ describe("completedOf", () => {
     expect(rows).toEqual([
       {
         id: "address:1:proof",
-        text: "The setting for spark.example.invalid is in",
+        text: "Record for spark.example.invalid found",
         at: records,
         brief: null,
       },
@@ -732,7 +846,7 @@ describe("completedOf", () => {
     expect(done.map((row) => [row.text, row.brief])).toEqual([
       [
         "spark.example.invalid connected",
-        "Your website loads at spark.example.invalid",
+        "Your website opens at spark.example.invalid",
       ],
     ])
   })
@@ -752,7 +866,7 @@ describe("completedOf", () => {
       }),
       { seed: ORG, assistant: "Reme" }
     )
-    expect(rows.map((row) => row.text)).toEqual(["Website published"])
+    expect(rows.map((row) => row.text)).toEqual(["Your website is live"])
   })
 
   it("lists a domain once, though its address task and its standing row both hold it", () => {
@@ -820,50 +934,67 @@ describe("coming up and done today", () => {
       })
     )
 
-  it("lists every reminder ahead, by its own title, with renewals and the next check-in", () => {
+  it("lists every reminder ahead, by its own title, with renewals and no check-in", () => {
     expect(at(ROUTES.home)?.upcoming.map((item) => item.text)).toEqual([
       "Call the supplier",
       "Order cloths for next week",
-      "Reme's next check-in",
       "fixture.example.invalid is due for renewal",
     ])
     // The reminders page lists its own.
     expect(at(ROUTES.reminders)?.upcoming.map((item) => item.text)).toEqual([
-      "Reme's next check-in",
       "fixture.example.invalid is due for renewal",
     ])
   })
 
-  it("keeps the next check-in out until onboarding is done", () => {
-    const withJourney = (journey: ActivitySegment[]) =>
-      panelFor(
-        input({
-          route: ROUTES.home,
-          zone: ZONE,
-          workspace: live({
-            assistantName: "Reme",
-            activity: activity({
-              journey,
-              upcoming: feed.upcoming.slice(2, 3),
-            }),
-          }),
-        })
-      )?.upcoming
-    expect(withJourney([onboarding(2)])).toEqual([])
-    expect(withJourney([onboarding(9, "done")])?.map((i) => i.text)).toEqual([
-      "Reme's next check-in",
+  it("says what finished today, and an all-clear check-in as one quiet line", () => {
+    const panel = at(ROUTES.home)
+    expect(panel?.done.map((item) => item.text)).toEqual([
+      "fixture.example.invalid connected",
     ])
+    expect(panel?.checkIn).toBe("Last check-in 9:56 AM, all clear")
   })
 
-  it("says what finished today, a quiet check-in too", () => {
-    const done = at(ROUTES.home)?.done.map((item) => item.text)
-    expect(done?.[0]).toBe("Reme checked in, all clear")
-    expect(done?.[1]).toBe("fixture.example.invalid connected")
+  it("lists a check-in that wrote to the owner as a row", () => {
+    const wrote = live({
+      assistantName: "Reme",
+      activity: activity({
+        done: [
+          segment("checkin", "done", [step("message", "done")], {
+            id: "checkin:last",
+          }),
+        ],
+      }),
+    })
+    const panel = panelFor(input({ workspace: wrote }))
+    expect(panel?.done.map((item) => item.text)).toEqual([
+      "Reme checked in and left you a message",
+    ])
+    expect(panel?.checkIn).toBeNull()
+  })
+
+  it("says nothing of check-ins while setting up", () => {
+    const panel = panelFor(
+      input({
+        conversations: [onboardingChat],
+        workspace: live({
+          assistantName: "Reme",
+          activity: activity({ ...feed, journey: [onboarding(2)] }),
+        }),
+      })
+    )
+    expect(panel?.done.map((item) => item.text)).not.toContain(
+      expect.stringMatching(/check/)
+    )
+    expect(panel?.upcoming.map((item) => item.text)).not.toContain(
+      expect.stringMatching(/check/)
+    )
+    expect(panel?.checkIn).toBeNull()
   })
 
   it("says no time until the reader's zone is known", () => {
     expect(at(ROUTES.home, null)?.upcoming).toEqual([])
     expect(at(ROUTES.home, null)?.done).toEqual([])
+    expect(at(ROUTES.home, null)?.checkIn).toBeNull()
   })
 })
 
@@ -914,7 +1045,7 @@ describe("on the Approvals page", () => {
       })
     )
     expect(panel?.waiting.map((item) => item.kind)).toEqual(["question"])
-    expect(panel?.line.lead).toBe("Your assistant")
+    expect(panel?.line.lead).toBe("Your assistant needs your answer")
     expect(
       panelFor(
         input({
@@ -947,15 +1078,11 @@ describe("the one line", () => {
     })
     expect(
       line({ live: 2, attention: [question("A"), question("B")] })
-    ).toEqual({ tone: "live", lead: "2 questions", detail: "for you" })
+    ).toEqual({ tone: "live", lead: "Your assistant has 2 questions for you" })
     expect(line({ live: 1 })).toEqual({
       tone: "live",
       lead: "Your website is live",
     })
-    // One thing to say: the header holds still.
-    expect(
-      panelFor(input({ workspace: workspace({ live: 1 }) }))?.lines
-    ).toHaveLength(1)
     expect(line({ open: true, builds: [build("paused")] })).toEqual({
       tone: "idle",
       lead: "Your website",
@@ -970,7 +1097,7 @@ describe("the one line", () => {
         assistantName: "Reme",
         attention: [question("Alex", "staff-1")],
       })
-    ).toEqual({ tone: "live", lead: "Reme", detail: "has a question for you" })
+    ).toEqual({ tone: "live", lead: "Reme needs your answer" })
   })
 })
 

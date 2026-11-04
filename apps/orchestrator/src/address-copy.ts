@@ -54,13 +54,6 @@ export const CONNECT_GOOGLE: ServerButton = {
   action: { kind: "connect", service: "google" },
 }
 
-/** A: the first build has started, and the owner has said nothing about an address yet. */
-export const addressOffer = (about: About): Update => ({
-  facts: nameFact(about),
-  template: `While I put your website together, let's give it a proper home. A web address of your own does a lot of quiet work${about.business ? ` for ${about.business}` : ""}: customers trust it more than a long remeai.co.uk link, it looks right on your quotes and cards, and Google's picture of your business builds up on a name you keep. If we sort it now, your website can go live on it the moment you're happy with the draft.`,
-  brief: `${context(about)}The first website build has just started. Offer the owner a web address of their own while it runs, with the benefits in their terms: customers trust it, it looks right on their quotes and cards, and Google's picture of the business builds up on a name they keep. Say that setting it up now means the website goes live on it the moment they publish. This follows the message that said the build has started, so do not say it started or mention the build's progress. Ask nothing and say nothing of the card: it asks whether they have one. No exclamation mark.`,
-})
-
 /** A, when the business email already runs on a domain of the owner's own. */
 export const addressOfferOwn = (address: string, about: About): Update => ({
   facts: { address },

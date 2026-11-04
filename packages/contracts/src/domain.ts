@@ -151,24 +151,24 @@ export function ownDomain(email: string): string | null {
 /**
  * The tray question "Do you already have a web address?" (`kind: "address"`)
  * and its answers: one place for the sender, the answer handler and the card.
- * A Yes is followed by a text page for the name, which No and Not now close.
+ * A Yes is followed by a text page for the name, which No and Skip for now close.
  */
 export const ADDRESS_ASK = {
   have: "Do you already have a web address?",
   name: "What is it?",
-  yes: "Yes",
+  yes: "Yes, I have one",
   no: "No, help me get one",
-  later: "Not now",
+  later: "Skip for now",
 } as const
 
 /**
  * The owner's words for a settled address stack, sent as their next message
  * so a normal turn acts on them: the name they typed, or that they have one.
- * Null for Not now, which needs no reply.
+ * Null for Skip for now, which needs no reply.
  */
 export function addressReply(choice: string, name?: string): string | null {
   if (choice === ADDRESS_ASK.yes)
-    return name ? `Yes, it's ${name}` : "Yes, I have a web address"
+    return name ? `Yes, it's ${name}` : ADDRESS_ASK.yes
   return choice === ADDRESS_ASK.no ? ADDRESS_ASK.no : null
 }
 
@@ -228,20 +228,31 @@ export const DomainPrice = z.strictObject({
   cost_usd: z.number().nonnegative(),
 })
 
-/** One ending of a name stem: free at its yearly price, or taken. */
+/**
+ * The endings a name row shows, in the order the owner reads them. `.co` is
+ * shown for its availability only: Reme does not sell it.
+ */
+export const RowEnding = z.enum(["co.uk", "uk", "com", "co"])
+
+/**
+ * One ending of a name stem: free or taken. `price_gbp_year` is Reme's own
+ * price, set only while buying here is on; `registrar_usd` is the
+ * registration price Cloudflare's own check returned, the only provider
+ * price there is data for. Neither is ever estimated.
+ */
 const DomainEnding = z.discriminatedUnion("state", [
   z.strictObject({
     state: z.literal("free"),
-    price_gbp_year: z.int().positive(),
+    price_gbp_year: z.int().positive().optional(),
+    registrar_usd: z.number().positive().optional(),
   }),
   z.strictObject({ state: z.literal("taken") }),
 ])
 
 /**
- * One row of the owner's choice of name: a stem with each ending Reme offers,
- * `.co.uk`, `.com` and `.uk`, free or taken. `.net` is not offered. An ending
- * the registrar here does not sell is absent, never "taken": the sandbox
- * sells `.com` only. `why` is this stem's own reason; no two rows share one.
+ * One row of the owner's choice of name: a stem with each ending it was
+ * checked on, free or taken. An ending that could not be checked is absent,
+ * never "taken". `why` is this stem's own reason; no two rows share one.
  */
 export const DomainStemOffer = z.strictObject({
   stem: Text(63),
@@ -250,6 +261,7 @@ export const DomainStemOffer = z.strictObject({
     "co.uk": DomainEnding.optional(),
     com: DomainEnding.optional(),
     uk: DomainEnding.optional(),
+    co: DomainEnding.optional(),
   }),
 })
 
@@ -522,6 +534,62 @@ export const BUY_REFUSALS = {
   },
 } as const satisfies Record<string, EnvelopeBody>
 
+/** Words that open an area's text but name no place, such as "Within 10 miles of York". */
+const NOT_A_PLACE = new Set([
+  "a",
+  "across",
+  "all",
+  "around",
+  "anywhere",
+  "covering",
+  "i",
+  "mainly",
+  "mostly",
+  "most",
+  "the",
+  "we",
+  "within",
+])
+
+/** The town an area's text starts with: its first run of capitalised words, or none. */
+export function townOf(area: string | undefined): string | undefined {
+  const town = area
+    ?.trim()
+    .match(
+      /^[A-Z][\p{L}'-]*(?:[ -](?:upon|on|under|le|in)?[ -]?[A-Z][\p{L}'-]*)*/u
+    )?.[0]
+  return town && !NOT_A_PLACE.has(town.toLowerCase()) ? town : undefined
+}
+
+/** The trade as people search for it: the owner's words up to an "and", lower case. */
+export function tradeWords(trade: string | undefined): string | undefined {
+  const words = trade
+    ?.split(/\s+(?:and|&)\s+|,/i)[0]
+    ?.trim()
+    .toLowerCase()
+  return words || undefined
+}
+
+/**
+ * The web address offer after the first build starts, word for word, built
+ * from the facts and never by a model. The searched phrase is the trade and
+ * the town, "near you" without a town, "a business like yours" without a trade.
+ */
+export function addressOfferText(facts: {
+  trade?: string | undefined
+  area?: string | undefined
+}): string {
+  const trade = tradeWords(facts.trade)
+  const town = townOf(facts.area)
+  const searched = trade
+    ? `${trade} ${town ? `in ${town}` : "near you"}`
+    : "a business like yours"
+  return [
+    "Your website is coming along nicely. While it builds, let's sort out its address.",
+    `I'd recommend your own domain. It looks more professional, is easier for customers to remember, and gives Google one address to show when people search for **${searched}**. The more people find you there, the stronger it gets.`,
+  ].join("\n\n")
+}
+
 export type DomainName = z.infer<typeof DomainName>
 export type DomainState = z.infer<typeof DomainState>
 export type DomainOrigin = z.infer<typeof DomainOrigin>
@@ -529,6 +597,7 @@ export type ConnectMethod = z.infer<typeof ConnectMethod>
 export type DomainTld = z.infer<typeof DomainTld>
 export type DomainPrice = z.infer<typeof DomainPrice>
 export type DomainStemOffer = z.infer<typeof DomainStemOffer>
+export type RowEnding = z.infer<typeof RowEnding>
 export type RegistrantType = z.infer<typeof RegistrantType>
 export type Registrant = z.infer<typeof Registrant>
 export type RegistrantDetails = z.infer<typeof RegistrantDetails>

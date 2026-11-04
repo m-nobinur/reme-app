@@ -11,6 +11,8 @@ import {
   AskOpenOutput,
   AskUploadOutput,
   AVATARS,
+  addressOfferText,
+  addressQuestions,
   CALM_PALETTES,
   type ChoiceStep,
   DETAILS_KEYS,
@@ -23,7 +25,9 @@ import {
   FONTS,
   INDUSTRIES,
   type LogoPath,
+  NAME_IDEAS,
   ONBOARDING_GOAL,
+  ownDomain,
   PAGES,
   PALETTES,
   type PaletteFromImage,
@@ -32,6 +36,7 @@ import {
   PersonaCard,
   PRONOUNS,
   type QuoteField,
+  RECAP_REPLY,
   type ReopenStep,
   type RequestChangeOutput,
   ReviewQuoteFormInput,
@@ -46,7 +51,9 @@ import {
   UPLOAD_TYPES,
 } from "@workspace/contracts"
 import DIRECTIONS from "@workspace/starter-site/directions.json"
+import { phoneText } from "@workspace/starter-site/phone"
 import type { Part, ToolPart } from "./chat.ts"
+import { type DesignStart, tableStart } from "./design-start.ts"
 import type { JevDecision } from "./jev.ts"
 import {
   back,
@@ -62,6 +69,7 @@ import {
   quoteForm,
   quoteUnchanged,
   type RetryReason,
+  recap,
   retry,
   started,
   type Voice,
@@ -94,6 +102,7 @@ export type StepId =
   | "design"
   | "upload"
   | "quote_form"
+  | "recap"
   | "build"
 
 export { ONBOARDING_GOAL }
@@ -161,6 +170,8 @@ export type Onboarding = Progress & {
   asked?: Readonly<Record<string, number>>
   /** Business-specific lines written in the background, once they are ready. */
   prepared?: Prepared | null
+  /** The design's start chosen for the business in the background, once it is ready (`design-start.ts`). */
+  designStart?: DesignStart | null
   /**
    * This turn's quote form the owner asked to change, as they left it. Only
    * a model can redraft it, so without one the script shows it again rather
@@ -177,6 +188,8 @@ export type Prepared = {
   services_phrase: string
   /** Up to three names that suit this business's assistant, offered on its card. */
   assistant_names?: string[]
+  /** How its logo could look, from its trade and services: the logo brief's first words. */
+  logo_look?: string
 }
 
 /**
@@ -347,8 +360,8 @@ const CHOICES: Record<
   }),
   build_for_me: () => ({
     options: plain([
-      { id: "yes", label: "Yes, build it for me" },
-      { id: "skip", label: "Skip" },
+      { id: "yes", label: "Yes, build my website" },
+      { id: "skip", label: "No, I already have one" },
     ]),
     multiple: false,
     preselected: [],
@@ -454,12 +467,12 @@ export const factCard = (
 }
 
 /**
- * The assistant as it comes, for the picks the org does not hold yet, so
- * the card opens filled and one Looks good keeps them all. The face is the
- * first one drawn for she/her.
+ * The assistant as it comes, for the picks the org does not hold yet: the
+ * pronouns, face and tone the card opens on, which one Looks good keeps. The
+ * face is the first one drawn for she/her. The name is never prefilled: the
+ * card offers `nameIdeas` and Pick for me takes the first.
  */
-const PERSONA: [FactValue, FactValue, FactValue, FactValue] = [
-  { key: "assistant.name", value: { name: "Reme" } },
+const PERSONA: [FactValue, FactValue, FactValue] = [
   { key: "assistant.pronouns", value: { id: "she_her" } },
   {
     key: "assistant.avatar",
@@ -468,24 +481,34 @@ const PERSONA: [FactValue, FactValue, FactValue, FactValue] = [
   { key: "assistant.tone", value: { id: "professional" } },
 ]
 
+/** The names the assistant card offers: those written for this business, else the house ones. */
+const nameIdeas = (o: Onboarding): readonly string[] =>
+  o.prepared?.assistant_names?.length ? o.prepared.assistant_names : NAME_IDEAS
+
+/** The assistant as Pick for me sets it: the first name idea and `PERSONA`. */
+const pickedPersona = (o: Onboarding): FactValue[] => [
+  { key: "assistant.name", value: { name: nameIdeas(o)[0] ?? "Reme" } },
+  ...PERSONA,
+]
+
 /** Pick for me left every assistant field as it comes, rather than keeping some the owner set. */
-const asCome = (card: PersonaCard) => {
+const asCome = (card: PersonaCard, o: Onboarding) => {
   const held: Record<string, unknown> = {
     "assistant.name": { name: card.name },
     "assistant.pronouns": { id: card.pronouns },
     "assistant.avatar": { id: card.avatar },
     "assistant.tone": { id: card.tone },
   }
-  return PERSONA.every(
+  return pickedPersona(o).every(
     ({ key, value }) => JSON.stringify(held[key]) === JSON.stringify(value)
   )
 }
 
 /**
  * What a details card opens on: the step's facts, each one the org holds
- * filled in, the sign-in email offered as the business's until one is held,
- * and the assistant as it comes where nothing is held. Pick for me sends
- * exactly this, tapped or typed.
+ * filled in, and the assistant's pronouns, face and tone as they come where
+ * nothing is held. The sign-in email is offered beside the card, never put
+ * in it. Pick for me sends this with a name, tapped or typed.
  */
 const prefillOf = (step: DetailsStep, o: Onboarding): FactValue[] => {
   const held = DETAILS_KEYS[step].flatMap((key) => {
@@ -493,16 +516,20 @@ const prefillOf = (step: DetailsStep, o: Onboarding): FactValue[] => {
     // A held key's own value: the pairing the compiler cannot follow through a loop.
     return value === undefined ? [] : [{ key, value } as FactValue]
   })
+  const unheld = (fact: FactValue) => !has(o, fact.key)
+  return step === "contact" ? held : [...held, ...PERSONA.filter(unheld)]
+}
+
+/** The sign-in email, while the business has none, for the contact card to offer. */
+const signInEmail = (o: Onboarding) => {
+  if (has(o, "business.email")) return undefined
   const email = FactValue.safeParse({
     key: "business.email",
     value: { address: o.ownerEmail ?? "" },
   })
-  const unheld = (fact: FactValue) => !has(o, fact.key)
-  return step === "contact"
-    ? !has(o, "business.email") && email.success
-      ? [...held, email.data]
-      : held
-    : [...held, ...PERSONA.filter(unheld)]
+  return email.success && email.data.key === "business.email"
+    ? email.data.value.address
+    : undefined
 }
 
 /** A details card, opened on what `prefillOf` gives. */
@@ -512,15 +539,15 @@ export const detailsCard = (
   newId: () => string
 ) => {
   const prefill = prefillOf(step, o)
-  // Names written for this business, when the background call has them.
-  const ideas = step === "assistant" ? o.prepared?.assistant_names : undefined
+  const email = step === "contact" ? signInEmail(o) : undefined
   return call(
     "tool-ask_details",
     AskDetailsInput.parse({
       step,
       prefill,
       skippable: false,
-      ...(ideas?.length ? { ideas } : {}),
+      ...(step === "assistant" && { ideas: [...nameIdeas(o)] }),
+      ...(email && { sign_in_email: email }),
     }),
     newId
   )
@@ -735,14 +762,15 @@ export function designCard(
   const palettes = [
     ...new Set([...shown, ...calm, ...suited, ...PaletteId.options]),
   ]
-  const pairs = firstOf(
-    o,
-    "lettering",
-    FONT_PAIRS.filter((pair) => directions.some((d) => d.fonts === pair.id)),
-    (pair) => pair.id,
-    // Two pairs with the same title font read as one choice offered twice.
-    (pair) => pair.display.family
-  )
+  // Chosen for the business in the background, else the industry's table.
+  const start =
+    o.designStart ??
+    tableStart(factValue(o.facts, "business.industry")?.category)
+  // The four fitted pairs first, from four moods, then the rest for More styles.
+  const pairs = [
+    ...start.fonts.flatMap((id) => FONT_PAIRS.filter((p) => p.id === id)),
+    ...FONT_PAIRS.filter((pair) => !start.fonts.includes(pair.id)),
+  ]
   const layouts = firstOf(
     o,
     "arrangement",
@@ -823,14 +851,18 @@ export function designCard(
           id: "logo",
           question: "Do you have a logo?",
           visual: "logo",
-          card: pageCard(
-            "Yes, I have my logo",
-            "No, create one for me",
-            logo !== undefined
-          ),
+          // Two quick answers: nothing opens picked.
+          card: {
+            ...pageCard("Yes, I have my logo", "No, create one for me", false),
+            preselected: [],
+          },
           upload: dropZone(1),
           ...(logo ? { held: [logo] } : {}),
           ...(path ? { path } : {}),
+          start: {
+            directions: start.directions,
+            description: o.prepared?.logo_look ?? "",
+          },
         },
         {
           id: "palette",
@@ -851,13 +883,17 @@ export function designCard(
           id: "lettering",
           question: "Which lettering do you prefer?",
           visual: "font_pair",
-          card: card(
-            "font",
-            pairOptions,
-            font?.id,
-            "Describe the lettering you like",
-            font?.id === "custom" ? font.custom : undefined
-          ),
+          card: {
+            ...card(
+              "font",
+              pairOptions,
+              font?.id,
+              "Describe the lettering you like",
+              font?.id === "custom" ? font.custom : undefined
+            ),
+            initial: start.fonts,
+          },
+          suggested: start.fonts[0],
         },
         {
           id: "arrangement",
@@ -1213,6 +1249,16 @@ export const STEPS: readonly Step[] = [
   // Prices, hours and how enquiries arrive are the assistant's to ask once
   // its work needs them, never here.
   askDetails("contact"),
+  {
+    // The business read back from its facts, for the owner to confirm or
+    // correct in words before the assistant's own setup.
+    id: "recap",
+    done: (o) => o.closed.includes("recap") || detailsDone(o, "assistant"),
+    ask: (o, newId) => [
+      text(recapOf(o)),
+      call("tool-ask_open", AskOpenInput.parse({ about: "recap" }), newId),
+    ],
+  },
   askDetails("assistant"),
   askChoice("build_for_me", "site.build_mode"),
   // An org that reaches the design after the tray shipped is asked in one
@@ -1238,6 +1284,18 @@ export const STEPS: readonly Step[] = [
     ],
   },
 ]
+
+/** The recap's words, from the facts as held. */
+export function recapOf(o: Onboarding): string {
+  const phone = factValue(o.facts, "business.phone")?.e164
+  return recap(voiceOf(o), {
+    services: factValue(o.facts, "business.offerings")?.items ?? [],
+    area: factValue(o.facts, "service_area.text")?.text ?? null,
+    customers: factValue(o.facts, "business.audience")?.text ?? null,
+    phone: phone ? phoneText(phone) : null,
+    email: factValue(o.facts, "business.email")?.address ?? null,
+  })
+}
 
 /** The script's quote form, for a typed answer no model could read: a short form to confirm. */
 const defaultQuoteForm = (o: Onboarding, newId: () => string) => [
@@ -1344,23 +1402,49 @@ export const buildCall = (parts: Part[]) =>
   )
 
 /**
+ * The web address offer the build's reply goes on to, from the facts, or
+ * null when the business email is on a domain of its own: the orchestrator
+ * offers that name, with its Connect button, once it has looked it up.
+ */
+export function addressOffer(o: Onboarding): string | null {
+  const email = factValue(o.facts, "business.email")?.address
+  if (email && ownDomain(email)) return null
+  return addressOfferText({
+    trade: factValue(o.facts, "business.industry")?.name,
+    area:
+      factValue(o.facts, "service_area.radius")?.centre ??
+      factValue(o.facts, "service_area.text")?.text,
+  })
+}
+
+/** The address offer as the build reply's last step: its words, then the question's pills. */
+export const offerParts = (offer: string): Part[] => [
+  { type: "step-start" },
+  text(offer),
+  { type: "data-build_questions", data: addressQuestions() },
+]
+
+/**
  * The build step once the change answered: the call resolved as the
  * request_change card shows it, then the closing line in a step of its own,
- * so no client reads a finished call as the last step and sends again.
+ * so no client reads a finished call as the last step and sends again. A
+ * build that started goes on to `offer`, the web address, in the same reply.
  */
 export function built(
   o: Onboarding,
   pending: ToolPart,
   output: RequestChangeOutput,
   /** The planner's own words for a build that started. */
-  said?: string
+  said?: string,
+  offer?: string | null
 ): Part[] {
   const v = voiceOf(o)
+  const begun = output.outcome === "started"
   return [
     { ...pending, state: "output-available", output },
     { type: "step-start" },
     text(
-      output.outcome === "started"
+      begun
         ? (said ??
             started(
               v,
@@ -1368,6 +1452,7 @@ export function built(
             ))
         : notStarted(v)
     ),
+    ...(begun && offer ? offerParts(offer) : []),
   ]
 }
 
@@ -1430,7 +1515,14 @@ export function stepOf(part: ToolPart): StepId | null {
   if (part.type === "tool-ask_upload") return "upload"
   if (part.type === "tool-review_quote_form") return "quote_form"
   if (part.type === "tool-ask_design") return "design"
-  const input = part.input as { key?: StepId; step?: StepId } | null
+  const input = part.input as {
+    key?: StepId
+    step?: StepId
+    about?: string
+  } | null
+  if (part.type === "tool-ask_open") {
+    return input?.about === "recap" ? "recap" : null
+  }
   if (part.type === "tool-ask_fact") return input?.key ?? null
   if (part.type === "tool-ask_choice" || part.type === "tool-ask_details") {
     return input?.step ?? null
@@ -1619,7 +1711,8 @@ export function cardAnswer(
     const answer = AskOpenOutput.safeParse(output)
     if (!answer.success) return null
     const { about } = part.input as AskOpenInput
-    return answer.data.answer === "skipped" && SKIPPABLE.includes(about)
+    return answer.data.answer === "skipped" &&
+      SKIPPABLE.includes(about as FactValueKey)
       ? { kind: "passed", step: about as StepId }
       : { kind: "facts", facts: [] }
   }
@@ -1811,6 +1904,12 @@ export function typedAnswer(part: ToolPart, words: string): Answer {
   if (part.type === "tool-ask_open") {
     const { about } = part.input as AskOpenInput
     if (about === "quote.form") return { kind: "retry", reason: "quote" }
+    // Without a model nothing can read a correction, so only a yes settles the recap.
+    if (about === "recap") {
+      return norm(words) === norm(RECAP_REPLY) || yesNo(words) === true
+        ? { kind: "passed", step: "recap" }
+        : { kind: "retry", reason: "unclear" }
+    }
     if (SKIPPABLE.includes(about) && saysSkip(words))
       return { kind: "passed", step: about as StepId }
     return typedFact(about, words)
@@ -1872,7 +1971,14 @@ function pickFor(part: ToolPart, o: Onboarding): Answer | null {
   const step = stepOf(part)
   // The assistant's card answers as its Pick for me button does: the owner's own kept, the rest as the card opens.
   if (step === "assistant") {
-    return { kind: "facts", facts: prefillOf(step, o), persona: "picked" }
+    return {
+      kind: "facts",
+      facts: [
+        ...prefillOf(step, o),
+        ...(has(o, "assistant.name") ? [] : pickedPersona(o).slice(0, 1)),
+      ],
+      persona: "picked",
+    }
   }
   const palette = firstPalettes(o.orgId)[0] as PaletteId
   const font = FONTS[0]?.id
@@ -1999,7 +2105,7 @@ export function withChoice(
         persona.data,
         answer?.kind !== "facts" || answer.persona !== "picked"
           ? "stated"
-          : asCome(persona.data)
+          : asCome(persona.data, o)
             ? "picked"
             : "kept"
       )
@@ -2053,6 +2159,11 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
     // A question in words counts only as a skip of an optional fact, on its
     // card or typed over it: the row outlives a reopen, as asked counts do not.
     if (row.type === "tool-ask_open") {
+      // The recap closes once the owner replies, and opens again when it is shown again.
+      if (row.step === "recap") {
+        if (row.state === "input-available") closed.delete("recap")
+        else closed.add("recap")
+      }
       if (
         SKIPPABLE.includes(row.step as FactValueKey) &&
         (row.answer === "skipped" ||

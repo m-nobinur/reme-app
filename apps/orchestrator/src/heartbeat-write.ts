@@ -1,5 +1,4 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
-import { dashesToCommas } from "@workspace/contracts"
 import {
   failureCode,
   reserveSpend,
@@ -228,8 +227,7 @@ export function readReply(raw: string): Reply {
 }
 
 /**
- * `readReply`, with a message's dashes made commas as the chat's are, a
- * message that breaks a limit read as an error, and so is one that carries
+ * `readReply`, with a message that breaks a limit read as an error, and so is one that carries
  * a link, an email address or a phone number that no fact the item vouches
  * for (`DigestItem.trusted`) holds exactly: text injected into a review or
  * a page can shape the message, never point the owner somewhere.
@@ -237,11 +235,10 @@ export function readReply(raw: string): Reply {
 export function replyOf(raw: string, items: DigestItem[] = []): Reply {
   const read = readReply(raw)
   if (read.kind !== "message") return read
-  const reply = { ...read, text: dashesToCommas(read.text) }
-  const over = overLimit(reply.text)
+  const over = overLimit(read.text)
   if (over) return { kind: "error", detail: `over_limit:${over}` }
-  return vouched(reply.text, trustedContacts(items))
-    ? reply
+  return vouched(read.text, trustedContacts(items))
+    ? read
     : { kind: "error", detail: "unsourced_contact" }
 }
 
@@ -467,7 +464,7 @@ export async function writeUpdate(
       kept ? "written" : "template",
       written.spent
     ).catch(() => undefined)
-    return kept ? dashesToCommas(text) : update.template
+    return kept ? text : update.template
   } catch (error) {
     console.error(
       JSON.stringify({ code: "update.write_failed", error: failureCode(error) })

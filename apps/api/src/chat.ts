@@ -1,5 +1,7 @@
 import {
+  ADDRESS_ASK,
   type AskOpenInput,
+  type BuildQuestions,
   BuildQuestionsPart,
   BuildSummary,
   CARD_ANSWERED,
@@ -32,7 +34,11 @@ import {
   lowerNextDue,
   newUlid,
   type OrgScopedDb,
+  openTask,
   orgs,
+  putOff,
+  readTasks,
+  setStep,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -56,6 +62,7 @@ import {
   caughtUp,
   contextOf,
   cosPrefix,
+  FALLBACK_MODEL,
   LIMITS,
   messageTaint,
   NotRun,
@@ -105,6 +112,7 @@ import {
   withinCap,
   writeAsTurn,
 } from "./cos/turns.ts"
+import { decideDesignStart, readDesignStart } from "./design-start.ts"
 import { isOrgOwner } from "./domain-buy.ts"
 import {
   failure,
@@ -126,6 +134,7 @@ import {
 } from "./jev.ts"
 import {
   type Answer,
+  addressOffer,
   again,
   buildCall,
   built,
@@ -137,6 +146,7 @@ import {
   ONBOARDING_GOAL,
   type Onboarding,
   OUTPUTS,
+  offerParts,
   onboardingStep,
   openCard,
   opening as openingParts,
@@ -250,6 +260,7 @@ export type Part =
   | { type: "step-start" }
   | { type: "text"; text: string; state: "done" }
   | { type: typeof PERSONA_CARD; data: PersonaCard }
+  | { type: BuildQuestionsPart["type"]; data: BuildQuestions }
   | ToolPart
 type Content = { role: "user" | "assistant"; parts: Part[] }
 
@@ -297,7 +308,8 @@ function made(part: Part): UIMessageChunk[] {
       { type: "text-end", id: "text" },
     ]
   }
-  if (part.type === PERSONA_CARD) return [part]
+  if (part.type === PERSONA_CARD || part.type === "data-build_questions")
+    return [part]
   const { toolCallId } = part
   const call: UIMessageChunk[] = [
     {
@@ -561,11 +573,12 @@ async function onboardingOf(
   const progress = await readScript(db, id)
   if (scriptEnded(progress)) return null
   // Issued together, so postgres.js pipelines them on the one connection.
-  const [facts, [org], asked, prepared] = await Promise.all([
+  const [facts, [org], asked, prepared, designStart] = await Promise.all([
     readFacts(db),
     db.select({ name: orgs.name }).from(orgs).limit(1),
     askedOf(db, id),
     readPrepared(db, id),
+    readDesignStart(db, id),
   ])
   return {
     ...progress,
@@ -576,6 +589,7 @@ async function onboardingOf(
     ownerEmail: owner.session.email,
     asked,
     prepared,
+    designStart,
   }
 }
 
@@ -795,9 +809,10 @@ export function cosModel(env: Env, task: CosRoute = "owner_turn") {
   const { effort } = ROUTES[route]
   const modelId = env.COS_MODEL ?? ROUTES[route].model
   // A step that fails twice before anything streamed goes to the fallback.
-  const fallbackId = (
-    env.REME_MODEL_FALLBACK ?? DEFAULT_ONBOARDING_MODEL
-  ).replace(/^openrouter\//, "")
+  const fallbackId = (env.REME_MODEL_FALLBACK ?? FALLBACK_MODEL).replace(
+    /^openrouter\//,
+    ""
+  )
   const model = env.OPENROUTER_API_KEY
     ? retrying(
         openrouterModel(env.OPENROUTER_API_KEY, modelId, {
@@ -972,11 +987,14 @@ export async function chat(
       zoneFromArea(env, kit, owner.orgId, stored.area).catch(() => undefined)
     )
   }
-  // After an onboarding turn commits, the background copy call, which runs
-  // once per conversation and only once the business is known.
+  // After an onboarding turn commits, the background copy call and the
+  // design's start, each once per conversation and once the business is known.
   const prepareLater = (response: Response) => {
     if (onboardingTurn && response.ok && preparer && planPrice) {
       waitUntil(prepare(kit, owner.orgId, id, preparer, plannerId, planPrice))
+    }
+    if (onboardingTurn && response.ok && env.OPENROUTER_API_KEY) {
+      waitUntil(decideDesignStart(kit, owner.orgId, id, env.OPENROUTER_API_KEY))
     }
     return response
   }
@@ -1808,7 +1826,8 @@ async function fallbackTurn(
 /**
  * The messages posted outside a turn that the session's log does not hold
  * yet, oldest first, cut to their text: the assistant's own (`srv_…`,
- * `postAssistantMessage`, posted before it logged a `cos.event`) and the
+ * `postAssistantMessage`, posted before it logged a `cos.event`, and the
+ * onboarding reply that asks for the web address on its card) and the
  * owner's emailed replies (`eml_…`,
  * `postOwnerEmail`). A typed turn logs them before the owner's message, so
  * the model's history, which reads the log alone, holds what it already told
@@ -1824,6 +1843,8 @@ async function unloggedPosts(db: OrgScopedDb, id: string) {
     from ${conversationMessages} m
     where m.conversation_id = ${id} and (
         (m.id like 'srv\_%' and m.content->>'role' = 'assistant')
+        or (m.content->>'role' = 'assistant'
+          and m.content->'parts' @> '[{"type":"data-build_questions","data":{"kind":"address"}}]'::jsonb)
         or (m.id like 'eml\_%' and m.content->>'role' = 'user'))
       and not exists (select 1 from ${events} e
         where e.session_id = ${id} and (
@@ -2081,6 +2102,7 @@ async function advance(
   }
   // What the assistant picked leads the reply, a build's outcome included.
   if (!build) return withChoice(reply, next, step)
+  const offer = await openOffer(kit, owner, next)
   const output = await changed(
     env,
     kit,
@@ -2089,8 +2111,60 @@ async function advance(
     { text: ONBOARDING_GOAL },
     `onboarding:${id}`
   )
+  await withdrawOffer(kit, owner, offer, output)
   if (output instanceof Response) throw new Refusal(output)
-  return withChoice(reply, next, built(next, build, output))
+  return withChoice(
+    reply,
+    next,
+    built(next, build, output, undefined, offer?.text)
+  )
+}
+
+type Offer = { text: string; task: string }
+
+/**
+ * The address task the build's reply offers, opened before the build starts
+ * so the orchestrator's own offer (`offerAddress` in publish.ts) finds it and
+ * posts none. A retry finds it still asking and offers it again. Null when
+ * the reply offers nothing: the email is on its own domain, or the task is
+ * past asking.
+ */
+async function openOffer(
+  kit: Tenancy,
+  owner: Owner,
+  onboarding: Onboarding
+): Promise<Offer | null> {
+  const text = addressOffer(onboarding)
+  if (!text) return null
+  return kit.withOrg({ orgId: owner.orgId }, async (db) => {
+    const held = (await readTasks(db)).find((t) => t.kind === "address")
+    const asking = held?.steps.some(
+      (s) => s.step === "find_out" && s.state === "blocked"
+    )
+    if (held && !(held.state === "active" && asking)) return null
+    const task = await openTask(db, owner.orgId, "address")
+    await setStep(db, task, "find_out", {
+      state: "blocked",
+      blocked_on: "owner_action",
+      note: ADDRESS_ASK.have,
+    })
+    return { text, task }
+  })
+}
+
+/**
+ * A build that did not start offers no address: its task is put off until
+ * now, so nothing waits on a card nobody saw and the next reply may offer it.
+ */
+async function withdrawOffer(
+  kit: Tenancy,
+  owner: Owner,
+  offer: Offer | null,
+  output: RequestChangeOutput | Response
+) {
+  if (!offer || (!(output instanceof Response) && output.outcome === "started"))
+    return
+  await kit.withOrg({ orgId: owner.orgId }, (db) => putOff(db, offer.task, 0))
 }
 
 /** The tail's call this turn names, or a response saying why not. */
@@ -2832,7 +2906,9 @@ async function plannedTurn(
     if (!stepOpen) write({ type: "start-step" })
     const rest =
       outcome.shown && parts[0]?.type === "text" ? parts.slice(1) : parts
-    for (const chunk of [...lead, ...rest.flatMap(made)]) write(chunk)
+    // Paced as the script's are, so an address offer after the build's
+    // line follows a pause instead of landing with it.
+    await pace([...lead, ...rest.flatMap(made)], write, how, true)
     if (!continued) write(writtenAt())
     write({ type: "finish-step" })
     write({ type: "finish" })
@@ -2960,6 +3036,7 @@ async function startPlannedBuild(
   close: (db: OrgScopedDb) => Promise<unknown>
 ): Promise<Part[]> {
   const build = staged.build as ToolPart
+  const offer = await openOffer(p.kit, p.owner, staged.onboarding)
   const output = await changed(
     p.env,
     p.kit,
@@ -2968,16 +3045,21 @@ async function startPlannedBuild(
     { text: ONBOARDING_GOAL },
     `onboarding:${p.id}`
   )
+  await withdrawOffer(p.kit, p.owner, offer, output)
   const shownBuild: Part[] =
     output instanceof Response
       ? [textPart(notStarted(voiceOf(staged.onboarding)))]
       : saidFirst && output.outcome === "started"
-        ? [{ ...build, state: "output-available", output }]
+        ? [
+            { ...build, state: "output-available", output },
+            ...(offer ? offerParts(offer.text) : []),
+          ]
         : built(
             staged.onboarding,
             build,
             output,
-            saidFirst ? undefined : staged.said
+            saidFirst ? undefined : staged.said,
+            offer?.text
           )
   // By id: the stored parts are copies (`shown`), not the step's objects.
   const swap = (parts: Part[]) =>

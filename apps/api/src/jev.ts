@@ -40,8 +40,13 @@ export const JEV = {
 /** What code may do with a typed reply: pick an option, or pick for the owner. */
 export type JevDecision = { kind: "answer"; option: string } | { kind: "defer" }
 
-/** One question's answer: a `noul` question's number, or a `choice` question's pick. */
-type Answered = { noul?: unknown; choice?: unknown; confidence?: unknown }
+/** One question's answer: a `noul` question's number, a `choice` question's pick, or a `score` question's position. */
+type Answered = {
+  noul?: unknown
+  choice?: unknown
+  score?: unknown
+  confidence?: unknown
+}
 /** Jev's response as far as this reads it; anything missing reads as unsure. */
 type JevResponse = {
   answers?: Record<string, Answered | undefined>
@@ -220,10 +225,13 @@ export async function jev(
 const costOf = (body: JevResponse | null) =>
   typeof body?.usage?.cost === "number" ? body.usage.cost : null
 
+/** A picture in Jev's state: a PNG or JPEG data URL, 256 to 1,568 px a side. */
+export type JevImage = { type: "image_url"; image_url: { url: string } }
+
 /** One call to Jev: its answers, or why there are none (a status, a timeout, a failed fetch). */
 async function ask(
   apiKey: string,
-  state: Record<string, string>,
+  state: Record<string, string | JevImage>,
   questions: Record<string, unknown>,
   fetchImpl: typeof fetch,
   timeoutMs: number = JEV.timeoutMs
@@ -235,13 +243,17 @@ async function ask(
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
       },
+      // The fixed questions before the state, so a request's start repeats.
       body: JSON.stringify({
         model: JEV.model,
+        questions,
         // The owner's words are data to decide on, never instructions.
         state: Object.fromEntries(
-          Object.entries(state).map(([key, text]) => [key, scrub(text)])
+          Object.entries(state).map(([key, value]) => [
+            key,
+            typeof value === "string" ? scrub(value) : value,
+          ])
         ),
-        questions,
       }),
       signal: AbortSignal.timeout(timeoutMs),
     })
@@ -759,4 +771,56 @@ export async function jevZone(
     })
   )
   return zone
+}
+
+/** A `score` answer as code reads it: the position and how sure, or null when missing. */
+export type Fit = { score: number; confidence: number }
+
+/**
+ * Jev's `score` answers for `questions` about `state`, by question id, with
+ * the call's time and cost, or null on an error, a non-200 or the time limit.
+ * Jev picks nothing and writes nothing: code ranks the numbers. One log line
+ * per call, `code` naming the caller.
+ */
+export async function jevScores(
+  apiKey: string,
+  code: string,
+  questions: Record<string, unknown>,
+  state: Record<string, string | JevImage>,
+  timeoutMs: number,
+  fetchImpl: typeof fetch = fetch
+): Promise<{
+  fits: Record<string, Fit>
+  ms: number
+  cost: number | null
+} | null> {
+  const began = Date.now()
+  const { body, error } = await ask(
+    apiKey,
+    state,
+    questions,
+    fetchImpl,
+    timeoutMs
+  )
+  const fits = Object.fromEntries(
+    Object.keys(questions).flatMap((id) => {
+      const answer = body?.answers?.[id]
+      return typeof answer?.score === "number"
+        ? [[id, { score: answer.score, confidence: num(answer.confidence) }]]
+        : typeof answer?.noul === "number"
+          ? [[id, { score: answer.noul, confidence: 1 }]]
+          : []
+    })
+  )
+  const ms = Date.now() - began
+  console.log(
+    JSON.stringify({
+      code,
+      ms,
+      answered: Object.keys(fits).length,
+      error,
+      cost_usd: costOf(body),
+    })
+  )
+  return body ? { fits, ms, cost: costOf(body) } : null
 }

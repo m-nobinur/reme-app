@@ -718,11 +718,6 @@ export const FindDomainInput = z.strictObject({
   step: ToolStep,
 })
 
-/**
- * `find_domain`'s output: one row per name stem, best first, each ending free
- * at the price table's price or taken. The model quotes no other price. No
- * stem with a free ending is `domain.unavailable`.
- */
 /** One name as `find_domain` offered it before the name rows. */
 const LegacyOffer = z.strictObject({
   name: DomainName,
@@ -730,11 +725,22 @@ const LegacyOffer = z.strictObject({
   why: Text(200),
 })
 
+/**
+ * `find_domain`'s output: one row per name stem, best first, the first the
+ * recommended one, each ending free or taken with only the prices there is
+ * data for. The model quotes no other price. `buy_here` is set only while
+ * buying in the app is on; without it the owner buys from a provider.
+ * `usd_gbp` is pounds per dollar from the ECB's latest daily rate, set only
+ * while that rate is at most 3 days old, so a dollar price may carry a
+ * pound estimate. No stem with a free ending is `domain.unavailable`.
+ */
 export const FindDomainOutput = z.union([
   z.discriminatedUnion("outcome", [
     z.strictObject({
       outcome: z.literal("found"),
-      rows: z.array(DomainStemOffer).min(1).max(5),
+      rows: z.array(DomainStemOffer).min(1).max(6),
+      buy_here: z.literal(true).optional(),
+      usd_gbp: z.number().positive().optional(),
     }),
     Refused,
   ]),
@@ -807,11 +813,7 @@ export const PutOffOutput = z.discriminatedUnion("outcome", [
  * named by the tool that does each. Paying money and a new phone or email on
  * the website are never one of them.
  */
-export const GrantKind = z.enum([
-  "create_reminder",
-  "record_review",
-  "connect_domain",
-])
+export const GrantKind = z.enum(["create_reminder", "record_review"])
 
 /** `offer_grant`'s input: the kind the owner may let run with no card from now on. */
 export const OfferGrantInput = z.strictObject({ kind: GrantKind })

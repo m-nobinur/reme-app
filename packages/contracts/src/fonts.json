@@ -1,36 +1,50 @@
 {
   "outfit_figtree": {
     "label": "Outfit and Figtree",
+    "mood": "modern",
+    "feel": "Round geometric sans serif, clean and friendly",
     "display": { "family": "Outfit", "weights": [500, 600], "italic": false },
     "body": { "family": "Figtree", "weights": [400, 500] }
   },
   "dmsans_fraunces": {
     "label": "Fraunces and DM Sans",
+    "mood": "warm",
+    "feel": "Soft serif with a warm italic, homely and personal",
     "display": { "family": "Fraunces", "weights": [500], "italic": true },
     "body": { "family": "DM Sans", "weights": [400, 500] }
   },
   "instrument_worksans": {
     "label": "Bodoni Moda and Work Sans",
+    "mood": "elegant",
+    "feel": "High-contrast serif, refined and upmarket",
     "display": { "family": "Bodoni Moda", "weights": [500], "italic": false },
     "body": { "family": "Work Sans", "weights": [400, 500] }
   },
   "sora_manrope": {
     "label": "Sora and Manrope",
+    "mood": "modern",
+    "feel": "Crisp, even sans serif, precise and technical",
     "display": { "family": "Sora", "weights": [500, 600], "italic": false },
     "body": { "family": "Manrope", "weights": [400, 500] }
   },
   "syne_jakarta": {
     "label": "Syne and Plus Jakarta Sans",
+    "mood": "bold",
+    "feel": "Wide, quirky display lettering, confident and creative",
     "display": { "family": "Syne", "weights": [600], "italic": false },
     "body": { "family": "Plus Jakarta Sans", "weights": [400, 500] }
   },
   "newsreader_inter": {
     "label": "Newsreader and Inter",
+    "mood": "classic",
+    "feel": "Sober editorial serif, established and trustworthy",
     "display": { "family": "Newsreader", "weights": [500], "italic": false },
     "body": { "family": "Inter", "weights": [400, 500] }
   },
   "cormorant_manrope": {
     "label": "Cormorant Garamond and Manrope",
+    "mood": "elegant",
+    "feel": "Fine classical serif with a light italic, graceful and premium",
     "display": {
       "family": "Cormorant Garamond",
       "weights": [500],
@@ -40,6 +54,8 @@
   },
   "fraunces_figtree": {
     "label": "Fraunces and Figtree",
+    "mood": "warm",
+    "feel": "Rounded old-style serif, friendly and down to earth",
     "display": { "family": "Fraunces", "weights": [600], "italic": false },
     "body": { "family": "Figtree", "weights": [400] }
   }

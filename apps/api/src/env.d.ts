@@ -55,6 +55,8 @@ interface Env {
    */
   STRIPE_SECRET_KEY?: string
   STRIPE_WEBHOOK_SECRET?: string
+  /** `on` offers buying a domain in the app (`buyOffered`); off by default. */
+  DOMAIN_BUY?: string
   /**
    * What Cloudflare's certificate alert sends in `cf-webhook-auth`. Unset,
    * `/webhooks/cloudflare` is not a route and the Workflow's own looks decide.

@@ -2,7 +2,6 @@ import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import {
   CalendarBlankIcon,
   CalendarDotsIcon,
-  CaretCircleDownIcon,
   CheckSquareIcon,
   EnvelopeSimpleIcon,
   HashIcon,
@@ -18,7 +17,15 @@ import {
   TrayNote,
   useTabDraft,
 } from "@workspace/ui/components/assistant/question-tray"
+import { QuoteFormPreview } from "@workspace/ui/components/assistant/quote-form-preview"
 import { Button } from "@workspace/ui/components/button"
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@workspace/ui/components/popover"
 import { Hint } from "@workspace/ui/components/tooltip"
 import { useRevealWaiting } from "@workspace/ui/hooks/use-reveal-waiting"
 import {
@@ -33,14 +40,16 @@ import {
   shownQuote,
 } from "@workspace/ui/lib/quote-form"
 import { reviewQuoteFormView } from "@workspace/ui/lib/tool-state"
-import { useEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
 /**
  * What the owner needs to know before a quote, as the assistant proposes it
  * from their answer: one pill per question in the transcript, its type as an
  * icon, then a star when the question is required or "optional" when it is
  * not. A click on either switches it, and a pill's remove button shows on
- * hover or focus. Anything else is said in the chat: words typed while the
+ * hover or focus. A choice question's label opens its options and hint, and
+ * a label cut short shows whole in a tooltip. "Preview form" opens the form as
+ * customers see it, with "Looks good" in its footer. Anything else is said in the chat: words typed while the
  * pills wait answer them (`quoteChanges` carries the pills as the owner left
  * them), and "Looks good" confirms. Answered, it draws nothing: the reply
  * says what was saved, or the next proposal shows what changed.
@@ -52,7 +61,8 @@ const TYPE_ICON: Record<QuoteDraft[number]["field"]["type"], Icon> = {
   number: HashIcon,
   date: CalendarBlankIcon,
   datetime: CalendarDotsIcon,
-  select: CaretCircleDownIcon,
+  // One choice, however the form draws it.
+  select: RadioButtonIcon,
   radio: RadioButtonIcon,
   checkbox: CheckSquareIcon,
   photos: ImageIcon,
@@ -76,6 +86,73 @@ function Mark({ required }: { required: boolean }) {
   )
 }
 
+/** A pill's label, cut to fit, whole in a tooltip when it is cut. */
+function Label({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [cut, setCut] = useState(false)
+  useLayoutEffect(() => {
+    const label = ref.current
+    if (label) setCut(label.scrollWidth > label.clientWidth)
+  }, [])
+  const shown = (
+    <span className="max-w-56 truncate" ref={ref}>
+      {text}
+    </span>
+  )
+  return cut ? (
+    <Hint label={text} side="top">
+      {shown}
+    </Hint>
+  ) : (
+    shown
+  )
+}
+
+/** A choice question's options and hint, from a tap on its label. */
+function Choices({
+  field,
+  icon: TypeIcon,
+}: {
+  field: QuoteDraft[number]["field"]
+  icon: Icon
+}) {
+  const several = field.type === "checkbox"
+  return (
+    <Popover>
+      <PopoverTrigger
+        aria-label={`${field.label}, ${several ? "several choices" : "one choice"}: show the options`}
+        className="-ms-1 flex min-w-0 items-center gap-1.5 rounded-full ps-1 pe-1 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <TypeIcon
+          aria-hidden
+          className="size-3.5 shrink-0 text-muted-foreground"
+        />
+        <Label text={field.label} />
+      </PopoverTrigger>
+      <PopoverContent>
+        <PopoverTitle>{field.label}</PopoverTitle>
+        {field.hint ? (
+          <PopoverDescription>{field.hint}</PopoverDescription>
+        ) : null}
+        <ul className="flex flex-col gap-1.5 text-sm">
+          {field.options?.map((option) => (
+            <li className="flex items-center gap-2" key={option}>
+              <TypeIcon
+                aria-hidden
+                className="size-3.5 shrink-0 text-muted-foreground"
+              />
+              {option}
+            </li>
+          ))}
+        </ul>
+        <p className="text-muted-foreground text-xs">
+          {several ? "Customers can pick several." : "Customers pick one."}
+        </p>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 /** One proposed question. */
 function Pill({
   row,
@@ -90,12 +167,18 @@ function Pill({
   const TypeIcon = TYPE_ICON[field.type]
   const locked = !canDrop(draft)
   return (
-    <li className="group inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-card ps-2.5 pe-1.5 text-sm">
-      <TypeIcon
-        aria-hidden
-        className="size-3.5 shrink-0 text-muted-foreground"
-      />
-      <span className="max-w-56 truncate">{field.label}</span>
+    <li className="group inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-border bg-card ps-2.5 pe-1.5 text-sm">
+      {field.options ? (
+        <Choices field={field} icon={TypeIcon} />
+      ) : (
+        <>
+          <TypeIcon
+            aria-hidden
+            className="size-3.5 shrink-0 text-muted-foreground"
+          />
+          <Label text={field.label} />
+        </>
+      )}
       <Hint
         detail={
           field.required
@@ -199,12 +282,15 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
             />
           ))}
       </ul>
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
-        <span className="inline-flex items-center gap-1">
-          <Mark required /> Required
-        </span>
-        <span>Name, email and phone are always asked.</span>
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
+          <span className="inline-flex items-center gap-1">
+            <Mark required /> Required
+          </span>
+          <span>Name, email and phone are always asked.</span>
+        </p>
+        <QuoteFormPreview fields={keptFields(draft)} onConfirm={confirm} />
+      </div>
       {invalid ? (
         <p className="text-[0.8125rem] text-destructive" role="alert">
           {invalid}

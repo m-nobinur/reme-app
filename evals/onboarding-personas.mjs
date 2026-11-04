@@ -1,3 +1,5 @@
+import { SKIP_REPLY } from "@workspace/contracts"
+
 /**
  * The owners `tier-2/onboarding-planner.eval.mjs` onboards. Each has a sheet
  * the owner simulator answers open questions from, the truth the run checks
@@ -14,7 +16,8 @@
  * `design` answers the design tray: `pick` (default, one option per question)
  * or `skip` (Skip all). `open` answers an open question: `state` (default, the
  * simulator's words from the sheet) or `skip`. `skipAll` skips every skippable
- * card and question.
+ * card and question. `recap` types a correction under the recap instead of
+ * confirming it, and `areaAfter` is what the area must hold after it.
  */
 export const PERSONAS = [
   {
@@ -298,6 +301,8 @@ export const PERSONAS = [
     turns: {
       1: "plumber. derby. boilers leaks bathrooms emergencies. 07700900188",
     },
+    recap: "Change the area, I do Nottingham too.",
+    areaAfter: /nottingham/i,
     cards: {
       pronouns: "he_him",
       tone: "professional",
@@ -519,6 +524,50 @@ export const CORRECTS_TWICE = {
   },
   quote: "confirm",
   quoteExpect: [/bed/i, /often|frequen/i, /home|office/i],
+}
+
+/**
+ * The staging live test of 2026-11-03 replayed: the owner's messages word
+ * for word, each typed when the question it answered is asked (`answers`,
+ * by the open question's subject), so the replies before and after a prompt
+ * change read side by side whatever order the planner asks in. The contact
+ * details are swapped for fake ones.
+ */
+export const PRUNING_CO = {
+  id: "pruning-co",
+  signIn: { orgName: "Pruning Co", ownerName: "Dev" },
+  sheet: `You are Dev, you run Pruning Co, a tree surgery and garden care company in Leeds, UK. Services: tree pruning and crown reductions, tree felling, hedge trimming, stump grinding. Area: Leeds and about 20 miles out (Bradford, Wakefield, Harrogate, Wetherby), further for big felling jobs. Customers: mostly homeowners, some letting agents and landlords who send repeat work, the odd school or church. Phone 0113 496 0123. Email hello@pruningco.invalid. Assistant: Ava, she/her, professional. Call you Dev.`,
+  style: "Brief and practical.",
+  truth: {
+    name: /pruning co/i,
+    phone: "+441134960123",
+    email: "hello@pruningco.invalid",
+    assistant: /ava/i,
+  },
+  turns: {
+    1: "We're a tree surgery and garden care company in Leeds. Main jobs are tree pruning and crown reductions, tree felling, hedge trimming and stump grinding.",
+  },
+  answers: {
+    "service_area.text":
+      "Leeds and about 20 miles out, so Bradford, Wakefield, Harrogate and Wetherby. We'll go further for big felling jobs.",
+    "business.audience":
+      "Mostly homeowners. A few letting agents and landlords who send repeat work, and the odd school or church.",
+    "business.proof": SKIP_REPLY,
+    "quote.form":
+      "Address and postcode, what needs doing, roughly how big the tree or hedge is, and a couple of photos. Also whether we can get a chipper down the side or it all has to come through the house, and if it's near power lines or a road.",
+  },
+  cards: {
+    pronouns: "she_her",
+    tone: "professional",
+    build_for_me: "yes",
+    upload: "skip",
+  },
+  // Typed over the proposal, then over the revised one.
+  quote: [
+    'type:Let people tick more than one job, felling and stump grinding usually go together. Add a "Not sure" option to garden access, and make photos required.',
+    "type:good",
+  ],
+  quoteExpect: [/address|postcode/i, /chipper|access/i, /photo/i],
 }
 
 /**
