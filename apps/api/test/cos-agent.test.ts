@@ -409,12 +409,15 @@ describe("the CoS's instructions", () => {
       )
     })
 
-    it("look for names at once on No, help me get one, and never ask in words for a name the card asks", () => {
+    it("look for names at once on No, help me get one, and point at the card only while it is on screen", () => {
       expect(INSTRUCTIONS).toMatch(
         /"No, help me get one"[^\n]*call find_domain straight away/
       )
       expect(INSTRUCTIONS).toMatch(
-        /address card asking "What is it\?" is still waiting, never ask for the name in words/
+        /open items note says the address card is on screen asking for it, say they can type it on the card/
+      )
+      expect(INSTRUCTIONS).toMatch(
+        /Point the owner at a card only when it is on screen now/
       )
       expect(INSTRUCTIONS).toMatch(
         /A domain the owner typed connects at once, with no card/

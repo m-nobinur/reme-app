@@ -6133,7 +6133,7 @@ export interface components {
     }
     CosEvent: {
       /** @enum {string} */
-      source: "staff" | "notice" | "schedule" | "enquiry"
+      source: "staff" | "notice" | "schedule" | "enquiry" | "handover"
       summary: string
       evidence: (
         | {

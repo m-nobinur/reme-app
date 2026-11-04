@@ -22,6 +22,7 @@ import {
   GRACE_MS,
   NoSuchSession,
   SessionBusy,
+  sessionState,
   type Turn,
   TurnClosed,
   writeAsTurn,
@@ -208,6 +209,32 @@ describe.skipIf(!url)("the CoS turn writers, on a live connection", () => {
         totalMs
       )
     )
+
+  it("counts the first CoS turn after the planner's as fresh", async () => {
+    const sessionId = await conversation(me)
+    const fresh = () =>
+      kit.withOrg(
+        { orgId: me.orgId },
+        async (db) => (await sessionState(db, sessionId, SHA, null)).fresh
+      )
+    const planned = turnIn(me, sessionId)
+    await kit.withOrg({ orgId: me.orgId }, (db) =>
+      appendSessionEvent(db, {
+        orgId: me.orgId,
+        staffId: me.chiefId,
+        assignmentId: null,
+        sessionId,
+        type: "cos.context",
+        payload: {
+          ...contextOf(planned),
+          context_policy_version: "onboarding-28",
+        },
+      })
+    )
+    expect(await fresh()).toBe(true)
+    await open(turnIn(me, sessionId))
+    expect(await fresh()).toBe(false)
+  })
 
   it("appends an open turn's writes at the session's next seqs, as the CoS", async () => {
     const turn = turnIn(me, await conversation(me))

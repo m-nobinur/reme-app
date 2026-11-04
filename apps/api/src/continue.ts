@@ -20,7 +20,7 @@ import type { LanguageModel } from "ai"
 import { enqueueAfterTurn } from "./after-turn.ts"
 import { settleCard } from "./build-questions.ts"
 import type { Owner } from "./changes.ts"
-import { cosModel, putRow } from "./chat.ts"
+import { cosModel, putRow, turnNotes } from "./chat.ts"
 import {
   type AgentTurn,
   activeTools,
@@ -193,7 +193,9 @@ export async function continueTurn(
       facts,
       false,
       job.unknown || unknownAfter(log, continued.seq) ? "unknown" : "cut",
-      await grantedKinds(db)
+      await grantedKinds(db),
+      [],
+      (await turnNotes(db, sessionId, workspace, found.zone, false)).lines
     )
     const turn: Turn = { ...session, turnId: newUlid() }
     await beginTurn(db, turn, {

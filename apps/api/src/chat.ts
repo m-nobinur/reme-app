@@ -7,9 +7,11 @@ import {
   ChatRequest,
   type ChatResult,
   CosChangeRequest,
+  type CosEvent,
   type CosRoute,
   type CosToolName,
   type CosTurn,
+  type CosWorkspace,
   ErrorEnvelope,
   type FactRecord,
   GrantKind,
@@ -85,6 +87,12 @@ import {
   sha256,
 } from "./cos/history.ts"
 import { takeChip } from "./cos/memory.ts"
+import {
+  type AddressCard,
+  cardState,
+  handoverNote,
+  openItems,
+} from "./cos/notes.ts"
 import { retrying } from "./cos/retry.ts"
 import {
   closeTurn,
@@ -183,6 +191,7 @@ import {
 } from "./onboarding-agent.ts"
 import { notStarted } from "./onboarding-copy.ts"
 import { prepare, readPrepared } from "./onboarding-prepare.ts"
+import { onboardingSteps } from "./onboarding-progress.ts"
 import { type Pace, pace } from "./pacing.ts"
 import { ownerStaffId } from "./staff.ts"
 import { rememberZone, zoneFromArea } from "./time-zone.ts"
@@ -1110,6 +1119,7 @@ export async function chat(
       const { workspace, facts, profile } =
         loaded ?? (await loadWorkspace(tools))
       const granted = await grantedKinds(db)
+      const notes = await turnNotes(db, id, workspace, zone ?? null, log.fresh)
       const context = contextOf(
         mode,
         workspace,
@@ -1124,10 +1134,12 @@ export async function chat(
         turn.kind === "message" && SETS_RULE.test(turn.text),
         null,
         granted,
-        await offerable(db, granted)
+        await offerable(db, granted),
+        notes.lines
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
+        events: notes.events,
         messages: opening.messages,
         context: {
           turn_id: cosTurn.turnId,
@@ -1870,19 +1882,93 @@ async function unloggedPosts(db: OrgScopedDb, id: string) {
     role: row.role,
     parts: row.parts.flatMap((p): Part[] => {
       if (p.type === "step-start" || p.type === "text") return [p]
-      // A card's questions, as the words the owner read, so a typed answer is recognised.
-      const asked = BuildQuestionsPart.safeParse(p).data?.data.questions
-      return asked
-        ? [
-            {
-              type: "text",
-              text: `On a card I asked: ${asked.map((q) => q.text).join(" ")}`,
-              state: "done",
-            },
-          ]
-        : []
+      // A card's questions, as the words the owner read, so a typed answer
+      // is recognised, and the option they picked: one of ours, never their text.
+      const stack = BuildQuestionsPart.safeParse(p).data?.data
+      if (!stack) return []
+      const picked = stack.questions.flatMap((q) =>
+        q.input.kind === "choice" &&
+        q.answer?.kind === "value" &&
+        q.input.options.includes(String(q.answer.value))
+          ? [String(q.answer.value)]
+          : []
+      )
+      return [
+        {
+          type: "text",
+          text: [
+            `On a card I asked: ${stack.questions.map((q) => q.text).join(" ")}`,
+            ...(picked.length > 0
+              ? [`The owner picked: ${picked.join(", ")}.`]
+              : []),
+          ].join(" "),
+          state: "done",
+        },
+      ]
     }),
   }))
+}
+
+/**
+ * The org's newest address card as `cardState` reads it, here since the
+ * CoS's code never reads the conversation's messages. Null when none was
+ * ever shown.
+ */
+async function addressCardOf(
+  db: OrgScopedDb,
+  id: string
+): Promise<AddressCard | null> {
+  const [row] = await db.execute<{ here: boolean; data: unknown }>(sql`
+    select m.conversation_id = ${id} as here, p->'data' as data
+    from ${conversationMessages} m
+    cross join lateral jsonb_array_elements(m.content->'parts') p
+    where m.content->'parts' @> '[{"type":"data-build_questions","data":{"kind":"address"}}]'::jsonb
+      and p->>'type' = 'data-build_questions'
+    order by m.seq desc
+    limit 1`)
+  const stack = BuildQuestionsPart.shape.data.safeParse(row?.data).data
+  return row && stack ? cardState(stack, row.here) : null
+}
+
+/**
+ * What code tells a CoS turn about where things stand (`notes.ts`): the open
+ * items every turn, and on the first CoS turn of an onboarding conversation
+ * the hand-over, as its context's lines and as the `cos.event` the turn logs.
+ */
+export async function turnNotes(
+  db: OrgScopedDb,
+  id: string,
+  workspace: CosWorkspace,
+  zone: string | null,
+  fresh: boolean
+): Promise<{ lines: string[]; events: CosEvent[] }> {
+  const card = await addressCardOf(db, id)
+  const lines = openItems(workspace, card, new Date(), zone)
+  const [kind] = fresh
+    ? await db
+        .select({ kind: conversations.kind })
+        .from(conversations)
+        .where(eq(conversations.id, id))
+    : []
+  if (kind?.kind !== "onboarding") return { lines, events: [] }
+  const [progress, facts] = await Promise.all([
+    readScript(db, id),
+    readFacts(db),
+  ])
+  const summary = handoverNote(
+    onboardingSteps({
+      ...progress,
+      orgId: "",
+      facts,
+      orgName: "",
+      ownerName: "",
+    }),
+    card
+  )
+  return {
+    lines,
+    events: [{ source: "handover", summary, evidence: [], wake: false }],
+  }
 }
 
 /** A message id is written once. A retried send is refused, never merged. */

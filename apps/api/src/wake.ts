@@ -18,7 +18,7 @@ import {
 import { vouched } from "@workspace/gates/contacts"
 import type { LanguageModel } from "ai"
 import { settleCard } from "./build-questions.ts"
-import { cosModel } from "./chat.ts"
+import { cosModel, turnNotes } from "./chat.ts"
 import { ownerOf, runOpened } from "./continue.ts"
 import {
   activeTools,
@@ -262,6 +262,7 @@ export async function wakeTurn(
     const state = await sessionState(db, sessionId, prefix.sha256, null)
     if (state.frozen) return "frozen" as const
     if (!(await withinCap(db, job.orgId, reserved))) return "over_cap" as const
+    const notes = await turnNotes(db, sessionId, workspace, zone, state.fresh)
     const context = contextOf(
       "ask",
       workspace,
@@ -273,11 +274,15 @@ export async function wakeTurn(
       null,
       facts,
       false,
-      job.skill ? { skill: job.skill } : "wake"
+      job.skill ? { skill: job.skill } : "wake",
+      [],
+      [],
+      notes.lines
     )
     const turn: Turn = { ...session, turnId: newUlid() }
     await beginTurn(db, turn, {
       prefix: state.prefixLogged ? null : prefix,
+      events: notes.events,
       messages: [],
       context: {
         turn_id: turn.turnId,

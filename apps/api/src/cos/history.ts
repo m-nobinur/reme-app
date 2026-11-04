@@ -94,9 +94,11 @@ export type ContextPolicy = {
  * messages. Version 18 reads the results of ask_developer and get_review.
  * Version 19 tells the model in the summary's header that its tools stay in
  * use, as hermes found a reference-only header stopped tool calls.
+ * Version 20 adds the open items note before the facts, and may log
+ * onboarding's hand-over as a `cos.event` before the turn's messages.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "19",
+  version: "20",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,
