@@ -1904,9 +1904,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
      * A planner model that streams each call's plan, keys in the order the
      * instructions ask for, five characters a chunk, or throws. With `drop`,
      * the stream fails once the plan is written, as a provider that drops
-     * the connection does.
+     * the connection does. `cached` of each streamed call's 5,000 input
+     * tokens are read from the provider's cache.
      */
-    const planner = (answers: (object | Error)[], drop = false) => {
+    const planner = (answers: (object | Error)[], drop = false, cached = 0) => {
       const calls: string[] = []
       const model = new MockLanguageModelV4({
         // The background copy call is not streamed: its answer as given.
@@ -1953,8 +1954,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
               usage: {
                 inputTokens: {
                   total: 5000,
-                  noCache: 5000,
-                  cacheRead: undefined,
+                  noCache: 5000 - cached,
+                  cacheRead: cached || undefined,
                   cacheWrite: undefined,
                 },
                 outputTokens: { total: 400, text: 400, reasoning: undefined },
@@ -2009,29 +2010,43 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
 
     it("reads a long first reply to the opener, states its facts, infers the industry and logs the call as a turn", async () => {
       const who = await owner(kit, url as string, "chat-planner")
-      const { model, calls } = planner([
-        plan({
-          facts: {
-            "business.industry": {
-              name: "Limousine hire",
-              category: "chauffeur",
+      const { model, calls } = planner(
+        [
+          plan({
+            facts: {
+              "business.industry": {
+                name: "Limousine hire",
+                category: "chauffeur",
+              },
+              "business.offerings": { items: ["Weddings", "Proms"] },
+              "business.phone": { e164: "+447700900412" },
             },
-            "business.offerings": { items: ["Weddings", "Proms"] },
-            "business.phone": { e164: "+447700900412" },
-          },
-          say: "Weddings and proms, lovely. Who books you most?",
-          next: { kind: "ask_open", about: "business.audience" },
-        }),
-      ])
+            say: "Weddings and proms, lovely. Who books you most?",
+            next: { kind: "ask_open", about: "business.audience" },
+          }),
+        ],
+        false,
+        4000
+      )
       const me = talker(who, undefined, { planner: model })
       const id = await me.onboarding()
       const [first] = await me.rows(id)
       const text =
         "We're a limo firm in Manchester, weddings and proms. Call 07700 900 412."
+      const printed = vi.spyOn(console, "log")
       const done = await me.turn(id, {
         turn: { kind: "message", message_id: "u_plan_1", text },
       })
+      const line = printed.mock.calls
+        .map(([l]) => (typeof l === "string" ? l : ""))
+        .find((l) => l.includes('"onboarding.plan"'))
+      printed.mockRestore()
       expect(calls).toHaveLength(1)
+      // The cache share is measured per planner turn.
+      expect(JSON.parse(line ?? "{}")).toMatchObject({
+        input_tokens: 5000,
+        cached_tokens: 4000,
+      })
       // Streamed: the response opens at once under the stored row's id,
       // reserved before the model runs, and the message arrives as the model
       // writes it, a sentence at a time. The id never changes mid-stream: a

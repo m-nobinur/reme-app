@@ -2931,6 +2931,14 @@ async function plannedTurn(
       max_gap_ms: outcome.maxGapMs,
       shown_chars: outcome.shown.length,
       cost_usd: outcome.calls.reduce((total, c) => total + c.costUsd, 0),
+      input_tokens: outcome.calls.reduce(
+        (total, c) => total + c.usage.input_tokens,
+        0
+      ),
+      cached_tokens: outcome.calls.reduce(
+        (total, c) => total + c.usage.cached_input_tokens,
+        0
+      ),
     })
   )
   // A planner that failed on its own leaves the script to answer, and Jev's
