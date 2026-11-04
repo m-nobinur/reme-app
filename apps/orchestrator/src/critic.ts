@@ -832,6 +832,18 @@ export async function critiqueRound(input: {
         ? { skip: "no screenshot changed since the first look" }
         : {}),
     })
+    // Advice, so the build goes on, but a look that could not run is an error
+    // in the logs: round 2 of 2026-11-04 lost its only look to a cut reply.
+    if (!looked.ran && !(taken.length > 0 && images.length === 0))
+      console.error(
+        JSON.stringify({
+          type: "critic.did_not_run",
+          assignment_id: ids.assignmentId,
+          round,
+          model: route?.model ?? null,
+          errors: looked.errors,
+        })
+      )
     // Code's comparison beats the model's reading of a picture where it has one.
     if (round > 1)
       looked.held = decided.map((d, i) => d ?? looked.held?.[i] ?? null)
