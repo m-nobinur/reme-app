@@ -48,7 +48,12 @@ import { type FocusEvent, type FormEvent, useId, useRef, useState } from "react"
  * what they gave.
  */
 
-type Answer = { answer: "stated"; facts: FactValue[]; skip_all?: boolean }
+type Answer = {
+  answer: "stated"
+  facts: FactValue[]
+  skip_all?: boolean
+  changed: string[]
+}
 
 const PICKS = {
   "assistant.pronouns": {
@@ -373,6 +378,18 @@ function DetailsTray({
     setProblem("error" in result ? result.error : null)
   }
 
+  /** The keys whose field in `set` holds something other than the card offered. */
+  const changedIn = (set: Record<string, string>) =>
+    keys.filter((each) => {
+      const offered = prefilled(input, each)
+      return isPick(each)
+        ? (set[each] ?? "") !== "" && set[each] !== String(offered?.id ?? "")
+        : FACT_INPUTS[each].fields.some(
+            (field) =>
+              (set[field.name] ?? "").trim() !== "" &&
+              set[field.name] !== String(offered?.[field.name] ?? "")
+          )
+    })
   /** Every key's fact from `held`, else the page of the first one wrong. */
   const send = (held: Record<string, string>, picked = false) => {
     const facts: FactValue[] = []
@@ -382,7 +399,12 @@ function DetailsTray({
       facts.push(result.fact)
     }
     // The draft stays: a refused answer reopens the card with it.
-    onAnswer({ answer: "stated", facts, ...(picked && { skip_all: true }) })
+    onAnswer({
+      answer: "stated",
+      facts,
+      changed: changedIn(picked ? values() : held),
+      ...(picked && { skip_all: true }),
+    })
   }
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
