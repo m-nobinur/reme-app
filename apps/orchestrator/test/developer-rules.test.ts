@@ -270,7 +270,7 @@ describe("the owner's onboarding choices in the rules", () => {
       "The site never shows a price, a rate, a fee or a pricing tier"
     )
     expect(rules).toContain("links it to /quote/")
-    expect(rules).toContain('"Book a consultation" for legal')
+    expect(rules).toContain('Label it "Request a quote"')
     expect(rules).not.toContain("Book a clean")
   })
 

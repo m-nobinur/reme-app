@@ -23,13 +23,12 @@ describe("the assistant names the background call writes", () => {
 })
 
 describe("the logo's look", () => {
-  it("keeps a short plain phrase and drops one too long, with a dash or a price", () => {
+  it("keeps a short phrase as written and drops one too long", () => {
     expect(logoLook(" a neatly pruned tree, simple and clear ")).toBe(
       "a neatly pruned tree, simple and clear"
     )
     expect(logoLook("x".repeat(121))).toBeNull()
-    expect(logoLook("a tree \u2014 bold")).toBeNull()
-    expect(logoLook("a tree with prices from £20")).toBeNull()
+    expect(logoLook("a tree \u2014 bold")).toBe("a tree \u2014 bold")
     expect(logoLook(42)).toBeNull()
   })
 })

@@ -36,7 +36,6 @@ describe("a thought's heading as the waiting line", () => {
       "Opening https://example.com",
       "Matching id 4f2a9c81",
       "Handing over to the Developer",
-      "Planning: next steps — then the build",
       "Weighing every single option for the cleaning business at length",
       "",
     ]) {

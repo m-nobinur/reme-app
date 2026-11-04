@@ -936,7 +936,9 @@ export async function chat(
     deps.planner !== undefined
       ? deps.planner
       : env.OPENROUTER_API_KEY
-        ? plannerModel(env.OPENROUTER_API_KEY, plannerId)
+        ? plannerModel(env.OPENROUTER_API_KEY, plannerId, {
+            session: owner.orgId,
+          })
         : null
   // A typed reply to a waiting card: code reads an exact answer itself, and
   // Jev reads the rest beside the planner (`plannedTurn`), so the planner
@@ -978,7 +980,9 @@ export async function chat(
     deps.prepare !== undefined
       ? deps.prepare
       : env.OPENROUTER_API_KEY
-        ? plannerModel(env.OPENROUTER_API_KEY, plannerId, "medium")
+        ? plannerModel(env.OPENROUTER_API_KEY, plannerId, {
+            session: owner.orgId,
+          })
         : null
   const waitUntil = deps.waitUntil ?? ((promise) => void promise)
   // Once onboarding has the service area, its zone replaces the browser's guess.

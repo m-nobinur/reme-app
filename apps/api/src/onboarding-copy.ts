@@ -204,13 +204,10 @@ export function recap(
     ["Area", held.area && bare(held.area)],
     ["Customers", held.customers && lower(bare(held.customers))],
     ["Contact", [held.phone, held.email].filter(Boolean).join(", ")],
-  ].flatMap(([label, value]) =>
-    // The owner's own dash would read as ours: a comma instead.
-    value ? [`- **${label}:** ${md(value).replace(/\s*[—–]\s*/g, ", ")}`] : []
-  )
+  ].flatMap(([label, value]) => (value ? [`- **${label}:** ${md(value)}`] : []))
   return say(
     v,
-    `Here's what I've noted for ${md(v.business)}:\n\n${rows.join("\n")}\n\nHave I got that right?`
+    `Here's what I have for ${md(v.business)}:\n\n${rows.join("\n")}\n\nHave I got that right?`
   )
 }
 

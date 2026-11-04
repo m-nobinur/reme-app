@@ -25,7 +25,6 @@ import {
   planParts,
   planTurn,
   REQUIRED,
-  sayContext,
   sayProblems,
 } from "../../apps/api/src/onboarding-agent.ts"
 import { voiceProblems } from "../../apps/api/src/voice.ts"
@@ -225,9 +224,9 @@ const factOf = (facts, key) => facts.find((f) => f.key === key)?.value
 
 /** One owner, onboarded by one model. */
 async function onboard(persona, spec) {
-  // `model@effort` sets the reasoning effort; the api's default is medium.
+  // `model@effort` sets the reasoning effort; the api's default is high.
   const [modelId, effort] = spec.split("@")
-  const model = plannerModel(KEY, modelId, effort)
+  const model = plannerModel(KEY, modelId, effort ? { effort } : {})
   const price = priceOf(modelId)
   const newId = counter("c")
   const sim = {
@@ -385,11 +384,7 @@ async function onboard(persona, spec) {
     says.push(checked.plan.say)
     styled.push(styleHits(checked.plan.say, styleContext(checked.plan, s)))
     plans.push(checked.plan)
-    for (const problem of sayProblems(
-      checked.plan.say,
-      sayContext(checked.plan, s, checked.after)
-    ))
-      flag(`say: ${problem}`)
+    for (const problem of sayProblems(checked.plan.say)) flag(`say: ${problem}`)
     // A re-docked card after a side question (answer_only) is not a new ask.
     if (checked.plan.next.kind === "ask_open") asked([checked.plan.next.about])
     else if (checked.plan.next.kind !== "answer_only")

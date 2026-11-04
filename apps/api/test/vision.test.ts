@@ -11,7 +11,7 @@ import { MockLanguageModelV4 } from "ai/test"
 import { describe, expect, it } from "vitest"
 import type { Owner } from "../src/changes.ts"
 import { DAILY_CAP_USD } from "../src/cos/turns.ts"
-import { worstCall } from "../src/onboarding-agent.ts"
+import { PLANNER, worstCall } from "../src/onboarding-agent.ts"
 import { contrast, paletteRoles, readableStops } from "../src/palette.ts"
 import {
   finishedPalettes,
@@ -324,7 +324,7 @@ describe("POST /palettes/from-image", () => {
   it("reserves a call at the output cap it sets, the planner's when it sets none", () => {
     const price = { input: 0, output: 1_000_000, cacheRead: 0 }
     expect(worstCall(price, 0, 3_000)).toBe(3_000)
-    expect(worstCall(price, 0)).toBe(2_500)
+    expect(worstCall(price, 0)).toBe(PLANNER.maxOutputTokens)
   })
 
   it("answers 429 and calls no model once the day's cap has no room", async () => {

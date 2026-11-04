@@ -77,10 +77,10 @@ describe("the card-click route", () => {
     expect(sent.body.reasoning).toEqual({ effort: "low" })
   })
 
-  it("leaves a card click on the owner turn's default effort while switched off", async () => {
+  it("leaves a card click on the owner turn's effort while switched off", async () => {
     const sent = await sentBy({})
     expect(sent.route).toBe("owner_turn")
     expect(sent.body.model).toBe(DEFAULT_MODEL)
-    expect(sent.body.reasoning).toBeUndefined()
+    expect(sent.body.reasoning).toEqual({ effort: "medium" })
   })
 })

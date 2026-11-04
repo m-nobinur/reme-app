@@ -15,10 +15,10 @@ const GAP_MS = 1_000
 
 /**
  * Anything the owner should not read: code, names in code, ids, paths,
- * URLs, dashes as punctuation, and the words of how the assistant is built.
+ * URLs, and the words of how the assistant is built.
  */
 const INTERNAL = [
-  /[`{}[\]<>_\\/|=#@$~^–—]|\s-\s|https?:|www\.|\d{3,}/,
+  /[`{}[\]<>_\\/|=#@$~^]|https?:|www\.|\d{3,}/,
   /\b[a-z]+[A-Z]|[A-Z][a-z]+[A-Z]/,
   /\b(?:tools?|system|prompts?|json|api|schema|ids?|uuid|users?|agents?|developer|jev|instructions?)\b/i,
 ]

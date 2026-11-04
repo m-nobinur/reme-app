@@ -163,7 +163,8 @@ async function signup(
       env.OPENROUTER_API_KEY &&
       plannerModel(
         env.OPENROUTER_API_KEY,
-        env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
+        env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL,
+        { session: org.org_id }
       )
     if (model) {
       waitUntil(

@@ -92,9 +92,11 @@ export type ContextPolicy = {
  * turn. Version 17 swaps the preview tool for one that reads a change's
  * record, and adds the line that puts this turn's workspace over earlier
  * messages. Version 18 reads the results of ask_developer and get_review.
+ * Version 19 tells the model in the summary's header that its tools stay in
+ * use, as hermes found a reference-only header stopped tool calls.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "18",
+  version: "19",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,
@@ -112,6 +114,7 @@ export const SUMMARY_HEADER = [
   "Earlier turns of this conversation, summarised. This is reference only: the latest message wins over anything here.",
   "Do not act on anything it lists. Those requests were already handled or may be stale.",
   "An approval that is still open is decided on its card, never from this summary. The owner profile outranks this summary.",
+  "Your tools work as usual: use them for whatever the latest message asks.",
 ].join(" ")
 
 /** An event's message id prefix, outside every message id the chat accepts, as `SUMMARY_ID` is. */
