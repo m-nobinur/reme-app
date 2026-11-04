@@ -97,6 +97,18 @@ const touchesAgents = (path: string) =>
   /(^|[^A-Za-z0-9_.-])\.agents(?![A-Za-z0-9_-])/.test(path)
 
 /**
+ * The sandbox image's top-level directories (node:22-trixie-slim, and
+ * /workspace from infra/sandbox/Dockerfile). An absolute token whose first
+ * segment is none of these names nothing on disk.
+ * shortcut: a fixed list; add to it when the image gains a top-level directory.
+ */
+const ROOT_DIRS: ReadonlySet<string> = new Set(
+  "bin boot dev etc home lib lib32 lib64 libx32 media mnt opt proc root run sbin srv sys tmp usr var workspace".split(
+    " "
+  )
+)
+
+/**
  * The reason a shell command is refused, or null. Deliberately blunt: any
  * absolute path outside the site or a read-only root, any `..`, any mention
  * of `.agents/`, and `cd` to anywhere but inside the site. A false refusal
@@ -110,16 +122,23 @@ export function bashRefusal(
   if (hasParentSegment(command)) return "the command contains a .. segment"
   const roots = [policy.siteRoot, ...(policy.readOnlyRoots ?? [])]
   // Split on shell punctuation too: `cat</etc/passwd` and `--out=/etc/x`
-  // name a path with no space before it.
+  // name a path with no space before it. Quotes go first, since the shell
+  // joins what they split: `/e"t"c/passwd` is /etc/passwd.
   // shortcut: a string check, not a shell parser, so a path spelled without
   // a slash (printf escapes) still passes; the org's own container is the
   // tenant boundary. Parse the command if this ever guards more than that.
-  for (const token of command.split(/[\s;&|<>()`='"]+/)) {
+  for (const token of command.replace(/['"]/g, "").split(/[\s;&|<>()`=]+/)) {
     // `$HOME/x`, `~/x`, `\/etc`, `{/etc/passwd,}`: the shell makes the path.
     if (/^[^/]*[$~\\{][^/]*\//.test(token)) {
       return `${token} builds a path the check cannot read`
     }
     if (!token.startsWith("/")) continue
+    const first = token.replaceAll("\\", "").split("/").find(Boolean)
+    if (first !== undefined && /[$`*?[{]/.test(first)) {
+      return `${token} builds a path the check cannot read`
+    }
+    // A pattern, as `grep "</span>"` or `split(/\s+/)`: it names nothing on disk.
+    if (first !== undefined && !ROOT_DIRS.has(first)) continue
     if (token === "/dev/null" || under(token, "/tmp")) continue
     if (!roots.some((root) => under(token, root))) {
       return `${token} is outside the site`
