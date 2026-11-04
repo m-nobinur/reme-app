@@ -442,6 +442,19 @@ describe("the copy gate", () => {
         "cleering",
       ])
       expect(slips("<p>Winndow cleaning for homes.</p>")).toEqual(["winndow"])
+      // Round 2 of 2026-11-04: "getting" beside the audience's "letting agents".
+      expect(
+        copyFindings(
+          site("<p>Getting ready for a regular clean.</p>"),
+          "",
+          factWords([
+            {
+              key: "business.audience",
+              value: "Tenants moving out and local letting agents",
+            },
+          ] as unknown as FactRecord[])
+        ).filter((f) => f.problem === "term")
+      ).toEqual([])
       // Plurals, other forms and ordinary words are not slips.
       expect(
         slips(

@@ -482,7 +482,9 @@ const singular = (word: string) =>
  * A word that is a slip for one of the business's terms, not another form of
  * it: one letter off before the last two (a different ending is another word,
  * "cleaned" for "cleaner"), or a long word sharing all but its ending with one
- * and within three edits ("conservative" for "conservatory").
+ * and within three edits ("conservative" for "conservatory"). A slip keeps
+ * the first letter: a different one makes another word, "getting" beside the
+ * facts' "letting".
  */
 const slipFor = (word: string, term: string) => {
   const a = singular(word)
@@ -491,7 +493,7 @@ const slipFor = (word: string, term: string) => {
   let shared = 0
   while (a[shared] && a[shared] === b[shared]) shared++
   const shorter = Math.min(a.length, b.length)
-  if (oneOff(a, b) && shared < shorter - 2) return true
+  if (oneOff(a, b) && shared > 0 && shared < shorter - 2) return true
   return shorter >= 10 && shared >= 8 && levenshtein(a, b) <= 3
 }
 
