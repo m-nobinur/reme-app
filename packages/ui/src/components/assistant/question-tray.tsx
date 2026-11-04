@@ -1390,7 +1390,7 @@ function TrayFrame({
               ) : null}
               {submit ? (
                 <Button
-                  className={submit.swap ? "w-44 px-3" : "px-5"}
+                  className={submit.swap ? "w-40 px-2" : "px-5"}
                   disabled={submit.disabled}
                   form={submit.form}
                   onClick={submit.form ? undefined : submit.onSubmit}
