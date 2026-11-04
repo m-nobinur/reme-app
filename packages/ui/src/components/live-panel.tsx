@@ -954,12 +954,15 @@ function AnswerInputs({
   title,
   invalid,
   prefill = null,
+  text,
 }: {
   id: string
   spec: AnswerSpec
   title: string
   invalid: boolean
   prefill?: Record<string, unknown> | null
+  /** A text answer's own label and example, in place of "Your answer". */
+  text?: { label: string; placeholder: string }
 }) {
   // `min` steers the closing time's picker. The form is `noValidate`, so it
   // blocks nothing: `answerValue` refuses a closing time that is not after
@@ -996,9 +999,10 @@ function AnswerInputs({
         aria-invalid={invalid || undefined}
         autoComplete={spec.email ? "email" : "off"}
         id={`${id}-answer`}
-        label="Your answer"
+        label={text?.label ?? "Your answer"}
         maxLength={spec.maxLength}
         name="answer"
+        placeholder={text?.placeholder}
         required
         type={spec.email ? "email" : "text"}
       />
