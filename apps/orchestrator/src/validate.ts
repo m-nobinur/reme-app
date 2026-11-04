@@ -222,6 +222,7 @@ export async function validateRevision(
         hosts: [siteHost(slug ?? "", hostSuffix)],
         timings,
         ...planned(row.blueprint),
+        photos: row.kind === "site.build",
       })
     ).filter((result) => result.gate !== "a11y"),
     ...(input.axe === "later"

@@ -565,6 +565,7 @@ describe("the planned photos", () => {
       facts: [],
       budget: { limit: 102_400 },
       plan: { ...(plan as object), pages: [] } as never,
+      photos: true,
     })
     expect(results[0]).toMatchObject({
       gate: "build",

@@ -543,6 +543,8 @@ export async function runGates(input: {
    * copy gate runs only with it.
    */
   plan?: Parameters<typeof generatedImageFindings>[0]
+  /** Every photo the plan holds must show: a first build. A revise may take one off at the owner's word. */
+  photos?: boolean
 }): Promise<GateResult[]> {
   const lap = <T>(name: string, fn: () => T): T => {
     const started = Date.now()
@@ -630,7 +632,9 @@ export async function runGates(input: {
           input.plan,
           built.map(({ page, html }) => ({ file: page.file, html }))
         ) ??
-        checkPlannedPhotos(input.plan, parsed.data.files))
+        (input.photos
+          ? checkPlannedPhotos(input.plan, parsed.data.files)
+          : null))
       : null) ?? (await checkFavicon(input.facts, parsed.data.files, read))
   return [
     build.passed && gap ? gap : build,
