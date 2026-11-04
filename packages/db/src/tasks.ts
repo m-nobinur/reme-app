@@ -1,6 +1,7 @@
 import {
   ADDRESS_TASK_STEPS,
   type AddressDetail,
+  type AddressStageName,
   GOOGLE_TASK_STEPS,
   type OwnerTask,
   type TaskBlockedOn,
@@ -180,21 +181,11 @@ export async function readTasks(db: OrgScopedDb): Promise<OwnerTask[]> {
  * `unknown` until the owner says whether they have a domain, then
  * `choosing` a name, `paying` here, `buying_elsewhere` and then `bought`
  * once the registry shows it, `connecting` one,
- * `live`, or `put_off` and `declined` by the owner. One reading for the
- * assistant's notes and the draft-ready line, so both say the same.
+ * `live`, or `put_off` and `declined` by the owner. `journeyOf` reads it
+ * for the assistant's notes, the update stack and the draft-ready line.
  */
 export type AddressStage = {
-  stage:
-    | "none"
-    | "unknown"
-    | "put_off"
-    | "declined"
-    | "choosing"
-    | "paying"
-    | "buying_elsewhere"
-    | "bought"
-    | "connecting"
-    | "live"
+  stage: AddressStageName
   name?: string
   /** For `put_off`: when it may be offered again. */
   until?: string

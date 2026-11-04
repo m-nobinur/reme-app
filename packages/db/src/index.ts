@@ -51,6 +51,17 @@ export {
   supersedeFact,
   supersedePrivateFact,
 } from "./facts.ts"
+export {
+  BRING_BACKS,
+  type JourneyCard,
+  type JourneyChange,
+  type JourneyInput,
+  type JourneyState,
+  journeyOf,
+  type Latch,
+  type OwnerVisit,
+  SITTING_GAP_MS,
+} from "./journey.ts"
 export * from "./map.ts"
 export { addPushSubscription, PUSH_SUBSCRIPTION_CAP } from "./push.ts"
 export { type Waited, waitedOn } from "./questions.ts"
