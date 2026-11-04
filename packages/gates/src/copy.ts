@@ -532,15 +532,19 @@ const WORK_KEYS = new Set(["business.offerings", "business.industry"])
 
 /**
  * What the copy may say: every word in the facts, those of them that name the
- * work, the stems of the service and trade names, and the headings the owner
- * gave in their own words (a `site.content` title), which may be stock labels.
+ * work, the stems of the service and trade names, the headings the owner
+ * gave in their own words (a `site.content` title), which may be stock
+ * labels, and the service names, which every page that lists them repeats.
  */
 export function factWords(facts: readonly FactRecord[]) {
   const known = new Set<string>()
   const terms = new Set<string>()
   const work = new Set<string>()
   const owned = new Set<string>()
+  const names = new Set<string>()
   for (const fact of facts) {
+    if (fact.key === "business.offerings")
+      for (const name of stringsOf(fact.value)) names.add(plainText(name))
     const content = FactValue.safeParse({ key: fact.key, value: fact.value })
     if (content.data?.key === "site.content")
       for (const { title } of content.data.value.items)
@@ -552,7 +556,7 @@ export function factWords(facts: readonly FactRecord[]) {
         work.add(word.slice(0, 5))
     }
   }
-  return { known, terms, work, owned }
+  return { known, terms, work, owned, names }
 }
 
 /**
@@ -568,6 +572,7 @@ export function copyFindings(
     terms: new Set(),
     work: new Set(),
     owned: new Set(),
+    names: new Set(),
   }
 ): CopyFinding[] {
   const found: CopyFinding[] = []
@@ -657,7 +662,11 @@ export function copyFindings(
       })
 
     for (const { sentence, files } of repeats)
-      if (files[0] !== file && files.includes(file))
+      if (
+        files[0] !== file &&
+        files.includes(file) &&
+        !words.names.has(sentence)
+      )
         found.push({
           file,
           node: "text",

@@ -882,6 +882,27 @@ describe("each thing said once", () => {
     ])
   })
 
+  it("passes a service's own name on every page that lists it, as round 2 of 2026-11-04 did", () => {
+    const name = "End of tenancy cleans for tenants and landlords"
+    const pages = [
+      page("index.html", "x", `<h1>Home</h1><ul><li>${name}</li></ul>`),
+      page(
+        "services/index.html",
+        "y",
+        `<h1>Services</h1><ul><li>${name}</li></ul>`
+      ),
+    ]
+    const offered = factWords([
+      { key: "business.offerings", value: { items: [name, "Oven cleaning"] } },
+    ] as unknown as FactRecord[])
+    expect(
+      copyFindings(pages).filter((f) => f.problem === "repeat")
+    ).toHaveLength(1)
+    expect(
+      copyFindings(pages, "", offered).filter((f) => f.problem === "repeat")
+    ).toEqual([])
+  })
+
   it("passes short lines, contact details, the shared service list and hidden fields", () => {
     expect(
       two(
