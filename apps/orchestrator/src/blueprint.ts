@@ -6,6 +6,7 @@ import {
   type PlannedKind,
   SECTION_VARIANTS,
 } from "@workspace/contracts"
+import { slotFields } from "@workspace/gates"
 
 import { generatedPath, plannedPath } from "./photo-files.ts"
 import type { PhotoFile } from "./photo-step.ts"
@@ -38,16 +39,8 @@ export function blueprintLayout(
 
 /** The site fields a page header's photo and its alt go in, where the slot is one. */
 function headerField(slot: ImageSlot): string {
-  const header = /^service_(\d)_hero$/.exec(slot.id)?.[1]
-  const card = /^service_(\d)_card$/.exec(slot.id)?.[1]
-  const field = header
-    ? `service${header}HeaderImage`
-    : card
-      ? `service${card}Image`
-      : slot.section === "hero" && ["about", "contact"].includes(slot.page)
-        ? `${slot.page}Image`
-        : ""
-  return field ? ` (site.${field} and site.${field}Alt)` : ""
+  const at = slotFields(slot)
+  return at ? ` (site.${at.src}${at.alt ? ` and site.${at.alt}` : ""})` : ""
 }
 
 /**

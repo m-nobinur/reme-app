@@ -89,7 +89,14 @@ test("the web address question is quick replies, and Yes asks for the name", asy
   await have.getByRole("button", { name: "Yes, I have one" }).click()
   const card = tray(page)
   await expect(card.getByRole("heading", { name: "What is it?" })).toBeVisible()
-  await card.getByLabel("Your answer").fill("sparkle.co.uk")
+  const address = card.getByLabel("Web address")
+  await expect(address).toHaveAttribute("placeholder", "yourbusiness.co.uk")
+  await address.fill("sparkle clean")
+  await card.getByRole("button", { name: "Done" }).click()
+  await expect(card.getByRole("alert")).toHaveText(
+    "Enter a web address like yourbusiness.co.uk."
+  )
+  await address.fill("https://www.sparkle.co.uk/")
   await card.getByRole("button", { name: "Done" }).click()
   await expect(
     page.getByText("Thanks, that's everything I needed.")

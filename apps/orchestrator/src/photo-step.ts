@@ -81,6 +81,21 @@ export function applyPhotos(
   }
 }
 
+/**
+ * The photos' spend as one `runtime.turn`, so the build's cost counts it:
+ * every draw and defect check each slot paid for, with the models that drew.
+ */
+export function photoTurn(results: readonly PhotoResult[]) {
+  const total = results.reduce((n, r) => n + (r.cost_usd ?? 0), 0)
+  const models = [...new Set(results.flatMap((r) => r.model ?? []))]
+  return {
+    role: "photos",
+    model: models.join(", ") || null,
+    slots: results.length,
+    response: { usage: { cost: { total } } },
+  }
+}
+
 /** The palette in words for the prompt writer. */
 function paletteWords(plan: Blueprint): string {
   if (plan.palette.kind === "brand") {
@@ -210,6 +225,14 @@ export async function makePhotos(input: {
       },
       taint: ["inferred"],
     })
+    if (results.some((r) => r.cost_usd !== null))
+      await appendEvent(db, {
+        orgId: ids.orgId,
+        assignmentId: ids.assignmentId,
+        staffId: read.row?.staffId ?? null,
+        type: "runtime.turn",
+        payload: photoTurn(results),
+      })
   })
   return step
 }

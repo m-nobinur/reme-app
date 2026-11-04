@@ -47,7 +47,10 @@ export const ROLES = {
   // one); home then took 24,600.
   page: { model: "sonnet", effort: "medium", maxTokens: 32_000 },
   copy: { model: "haiku", effort: "low", maxTokens: 8_000 },
-  critic: { model: "sonnet", effort: "medium", maxTokens: 4_000 },
+  // 16k since 2026-11-05: OpenRouter gives effort high 80% of the cap, and
+  // Haiku standing in at high spent all of 4k reasoning and replied with no
+  // JSON, so the look did not run.
+  critic: { model: "sonnet", effort: "medium", maxTokens: 16_000 },
   critic_recheck: { model: "haiku", effort: "low", maxTokens: 2_000 },
   quick_copy: { model: "haiku", effort: "low", maxTokens: 4_000 },
   quick_section: { model: "sonnet", effort: "low", maxTokens: 16_000 },

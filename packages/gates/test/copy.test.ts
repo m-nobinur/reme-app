@@ -442,6 +442,19 @@ describe("the copy gate", () => {
         "cleering",
       ])
       expect(slips("<p>Winndow cleaning for homes.</p>")).toEqual(["winndow"])
+      // Round 2 of 2026-11-04: "getting" beside the audience's "letting agents".
+      expect(
+        copyFindings(
+          site("<p>Getting ready for a regular clean.</p>"),
+          "",
+          factWords([
+            {
+              key: "business.audience",
+              value: "Tenants moving out and local letting agents",
+            },
+          ] as unknown as FactRecord[])
+        ).filter((f) => f.problem === "term")
+      ).toEqual([])
       // Plurals, other forms and ordinary words are not slips.
       expect(
         slips(
@@ -867,6 +880,27 @@ describe("each thing said once", () => {
     expect(found.map((f) => [f.file, f.detail])).toEqual([
       ["about/index.html", expect.stringContaining("is on index.html too")],
     ])
+  })
+
+  it("passes a service's own name on every page that lists it, as round 2 of 2026-11-04 did", () => {
+    const name = "End of tenancy cleans for tenants and landlords"
+    const pages = [
+      page("index.html", "x", `<h1>Home</h1><ul><li>${name}</li></ul>`),
+      page(
+        "services/index.html",
+        "y",
+        `<h1>Services</h1><ul><li>${name}</li></ul>`
+      ),
+    ]
+    const offered = factWords([
+      { key: "business.offerings", value: { items: [name, "Oven cleaning"] } },
+    ] as unknown as FactRecord[])
+    expect(
+      copyFindings(pages).filter((f) => f.problem === "repeat")
+    ).toHaveLength(1)
+    expect(
+      copyFindings(pages, "", offered).filter((f) => f.problem === "repeat")
+    ).toEqual([])
   })
 
   it("passes short lines, contact details, the shared service list and hidden fields", () => {

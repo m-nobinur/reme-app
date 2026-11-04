@@ -286,10 +286,10 @@ describe("a build's pace", () => {
     expect(
       paceOf({ ...build, state: "awaiting_review" }, undefined, expected, now)
     ).toEqual({})
-    // 38 minutes is past the measured 6 to 10, so the range moves above it.
+    // 38 minutes is past the measured 10 to 17, so the range moves above it.
     expect(paceOf(build, undefined, undefined, now).timing).toMatchObject({
       overdue: true,
-      range: "about 39 to 43 minutes",
+      range: "about 39 to 46 minutes",
     })
   })
 })
@@ -506,7 +506,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         expected_seconds: expect.any(Object),
         expected_range: {
           quick: "about 1 to 2 minutes",
-          full: "about 6 to 10 minutes",
+          full: "about 10 to 17 minutes",
         },
       })
       expect(output.missing_facts.length).toBeGreaterThan(0)

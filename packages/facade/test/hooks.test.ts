@@ -97,6 +97,60 @@ describe("the pre_tool_call policy", () => {
     expect(bashRefusal("cd src && cd components && ls", policy)).toBeNull()
   })
 
+  it("passes patterns that only look like paths, as issue 611 and round 2 of 2026-11-04 ran", () => {
+    for (const command of [
+      `grep -c "home_hero\\|/_astro/home" dist/index.html`,
+      `grep -o '.\\{40\\}<span>Regular cleans</span>' dist/index.html`,
+      `grep -o "<title>[^<]*</title>" dist/index.html`,
+      `awk '/about-audience/,/about-practice/' src/content/pages/about.json`,
+      `node -e 'console.log(t.split(/\\s+/).length)'`,
+      `node -e 'console.log(t.replace(/#+ /g,"").length)'`,
+      `node -e 'console.log(t.replace(/###|#/g,"").length)'`,
+      "cd /workspace/site && node /opt/astro/axe.mjs dist /tmp/axe.json",
+    ]) {
+      expect(bashRefusal(command, policy)).toBeNull()
+    }
+  })
+
+  it("still refuses a real path however it is spelt", () => {
+    for (const command of [
+      'cat "/etc/passwd"',
+      `cat '/etc/passwd'`,
+      'cat /e"t"c/passwd',
+      "cat /e\\tc/passwd",
+      "cat //etc/passwd",
+      'bash -c "cat</etc/passwd"',
+      `node -e 'require("fs").readFileSync("/etc/passwd")'`,
+      "find / -name passwd",
+      "ls /",
+      "cat /proc/self/environ",
+      "ls /workspace",
+      "cat /./etc/passwd",
+      'cat "/./etc/passwd"',
+      'cat "/.//etc/passwd"',
+      "cat /e\\\ntc/passwd",
+      'cat "/e"tc/passwd',
+      `cat "$(cat /e't'c/passwd)"`,
+      `node -e 'require("fs").readFileSync("/./etc/passwd")'`,
+      `node -e 'require("fs").readFileSync("/"+"etc/passwd")'`,
+      `node -e 'require("fs").readFileSync("/e"+"tc/passwd")'`,
+      // Unquoted, a lookalike is still a path: only quotes hold patterns.
+      "cat /span",
+    ]) {
+      expect(bashRefusal(command, policy)).toMatch(/outside the site/)
+    }
+    for (const command of [
+      "cat /$(echo etc)/passwd",
+      "cat /*/passwd",
+      "cat /e?c/passwd",
+      `cat /\${D}/passwd`,
+    ]) {
+      expect(bashRefusal(command, policy)).toMatch(
+        /builds a path|outside the site/
+      )
+    }
+  })
+
   it("allows bash inside the site, the toolchain and the scratch dir", () => {
     expect(bashRefusal("pnpm astro build", policy)).toBeNull()
     expect(

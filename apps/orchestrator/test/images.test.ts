@@ -1,6 +1,6 @@
 import { PALETTES } from "@workspace/contracts"
 import { describe, expect, it, vi } from "vitest"
-import { applyPhotos } from "../src/photo-step.ts"
+import { applyPhotos, photoTurn } from "../src/photo-step.ts"
 
 vi.mock("cloudflare:workers", () => ({
   WorkflowEntrypoint: class {},
@@ -825,6 +825,29 @@ describe("the plan once its photos are made", () => {
           content_type: "image/png",
         },
       ],
+    })
+  })
+
+  it("costs the photos as one turn: every slot's draws, a thrown-away one too, and the models", () => {
+    expect(
+      photoTurn([
+        {
+          ...result("hero", "generated"),
+          cost_usd: 0.04,
+          model: "google/gemini-3.5-flash-image",
+        },
+        { ...result("kitchen", "fallback"), cost_usd: 0.02 },
+        {
+          ...result("about", "generated"),
+          cost_usd: 0.03,
+          model: "google/gemini-3.5-flash-image",
+        },
+      ])
+    ).toEqual({
+      role: "photos",
+      model: "google/gemini-3.5-flash-image",
+      slots: 3,
+      response: { usage: { cost: { total: 0.09 } } },
     })
   })
 })

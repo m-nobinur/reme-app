@@ -530,10 +530,64 @@ describe("the ready line", () => {
         ]
       )
     ).toEqual([
-      'Took off "Deep clean questions" on Services deep cleans',
+      'Took off "Deep clean questions" on the Deep cleans page',
       'Changed "Weekly cleans." to "Weekly and fortnightly cleans." on Home',
       'Changed "Call 01234" to "Call 05678" on Home',
     ])
+  })
+  it("names every line whole, drops a block with no words and keeps page and service apart, as round 2 of 2026-11-04 did not", () => {
+    const steps = (items: string[]) =>
+      items.map((l, i) => `${i + 1}. ${l}`).join("\n")
+    const lines = changeLines(
+      [
+        { before: "", after: "Trading since 2017", pages: ["/about/", "/"] },
+        {
+          before: "",
+          after: "Send a quote request",
+          pages: ["/"],
+        },
+      ],
+      [
+        {
+          page: "home",
+          section: "trust-strip",
+          block: null,
+          change: "added",
+          before: "",
+          after: "",
+        },
+        {
+          page: "home",
+          section: "steps",
+          block: "steps-list",
+          change: "changed",
+          before: steps([
+            "Send your request: Use the quote form to tell us the clean you need, your postcode, the number of bedrooms and bathrooms, and your preferred date.",
+          ]),
+          after: steps([
+            "Send a quote request: Use the quote form to tell us the rooms you want cleaned and the date you have in mind.",
+          ]),
+        },
+        {
+          page: "services/end-of-tenancy-cleans-for-tenants-and-landlords",
+          section: "content-2",
+          block: "content-2-signoff",
+          change: "added",
+          before: "",
+          after:
+            "### A checklist the letting agent can sign off\n\nEvery end of tenancy clean comes with a checklist.",
+        },
+      ]
+    )
+    expect(lines).toEqual([
+      'Changed "Send your request" to "Send a quote request" on Home',
+      'Added "A checklist the letting agent can sign off" on the End of tenancy cleans for tenants and landlords page',
+      'Added "Trading since 2017" on About',
+    ])
+    for (const line of lines) {
+      expect(line).not.toContain('""')
+      expect(line).not.toContain("...")
+    }
   })
 })
 

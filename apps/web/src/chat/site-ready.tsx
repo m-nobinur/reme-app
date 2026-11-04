@@ -4,17 +4,21 @@ import { revisionPictures } from "@workspace/contracts"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import { useRef, useState } from "react"
 import { decideApproval } from "@/lib/api/server"
+import type { Workspace } from "@/lib/api/types"
 import { DECISION_REFUSED } from "@/lib/decision"
 import {
   type Approved,
   awaitsReadyLine,
+  draftReview,
+  type ReadyReview,
   readyCard,
-  readyForReview,
+  readySlot,
   versionMeta,
   versionTitle,
 } from "@/lib/site-ready"
 import { useLiveWorkspace } from "@/lib/workspace"
 import {
+  useAskInChat,
   useBrowserZone,
   usePreview,
   useRequestChanges,
@@ -23,6 +27,14 @@ import {
 const FAILED = "That did not go through. Try again."
 
 const frame = getRouteApi("/app")
+
+/** The draft the card shows, kept while an update build replaces it. */
+function useDraft(workspace: Workspace | null) {
+  const last = useRef<ReadyReview | null>(null)
+  const draft = draftReview(workspace, last.current)
+  if (draft || workspace) last.current = draft
+  return draft
+}
 
 /**
  * The ready card, wired: the review comes from the polled workspace, Publish
@@ -48,11 +60,17 @@ export function SiteReadyCard({
   const { active } = frame.useLoaderData()
   const zone = useBrowserZone()
   const requestChanges = useRequestChanges()
+  const askInChat = useAskInChat()
+  const slot = readySlot(live.workspace)
+  const connect = slot && {
+    label: slot.label,
+    onClick: () => askInChat(slot.ask),
+  }
   const [approved, setApproved] = useState<Approved | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const card = readyCard(
-    readyForReview(live.workspace),
+    useDraft(live.workspace),
     approved,
     live.workspace?.live ?? null,
     saidAt
@@ -110,6 +128,7 @@ export function SiteReadyCard({
       className={className}
       docked={docked}
       row={row}
+      connect={connect}
       error={error}
       // Each message the owner sends closes an opened card, so the chat shows.
       closeOn={sentAt}
@@ -149,7 +168,7 @@ export function ChatSiteReadyCard() {
   const empty = useAuiState((s) => s.thread.messages.length === 0)
   const sentAt = useAuiState((s) => lastAt(s.thread.messages, "user"))
   const saidAt = useAuiState((s) => lastAt(s.thread.messages, "assistant"))
-  const review = readyForReview(useLiveWorkspace().workspace)
+  const review = useDraft(useLiveWorkspace().workspace)
   // When this tab first saw each review: a ref, read and set in render, since
   // it only ever records the first sight.
   const seen = useRef(new Map<string, number>()).current

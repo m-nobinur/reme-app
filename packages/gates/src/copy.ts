@@ -482,7 +482,9 @@ const singular = (word: string) =>
  * A word that is a slip for one of the business's terms, not another form of
  * it: one letter off before the last two (a different ending is another word,
  * "cleaned" for "cleaner"), or a long word sharing all but its ending with one
- * and within three edits ("conservative" for "conservatory").
+ * and within three edits ("conservative" for "conservatory"). A slip keeps
+ * the first letter: a different one makes another word, "getting" beside the
+ * facts' "letting".
  */
 const slipFor = (word: string, term: string) => {
   const a = singular(word)
@@ -491,7 +493,7 @@ const slipFor = (word: string, term: string) => {
   let shared = 0
   while (a[shared] && a[shared] === b[shared]) shared++
   const shorter = Math.min(a.length, b.length)
-  if (oneOff(a, b) && shared < shorter - 2) return true
+  if (oneOff(a, b) && shared > 0 && shared < shorter - 2) return true
   return shorter >= 10 && shared >= 8 && levenshtein(a, b) <= 3
 }
 
@@ -530,15 +532,19 @@ const WORK_KEYS = new Set(["business.offerings", "business.industry"])
 
 /**
  * What the copy may say: every word in the facts, those of them that name the
- * work, the stems of the service and trade names, and the headings the owner
- * gave in their own words (a `site.content` title), which may be stock labels.
+ * work, the stems of the service and trade names, the headings the owner
+ * gave in their own words (a `site.content` title), which may be stock
+ * labels, and the service names, which every page that lists them repeats.
  */
 export function factWords(facts: readonly FactRecord[]) {
   const known = new Set<string>()
   const terms = new Set<string>()
   const work = new Set<string>()
   const owned = new Set<string>()
+  const names = new Set<string>()
   for (const fact of facts) {
+    if (fact.key === "business.offerings")
+      for (const name of stringsOf(fact.value)) names.add(plainText(name))
     const content = FactValue.safeParse({ key: fact.key, value: fact.value })
     if (content.data?.key === "site.content")
       for (const { title } of content.data.value.items)
@@ -550,7 +556,7 @@ export function factWords(facts: readonly FactRecord[]) {
         work.add(word.slice(0, 5))
     }
   }
-  return { known, terms, work, owned }
+  return { known, terms, work, owned, names }
 }
 
 /**
@@ -566,6 +572,7 @@ export function copyFindings(
     terms: new Set(),
     work: new Set(),
     owned: new Set(),
+    names: new Set(),
   }
 ): CopyFinding[] {
   const found: CopyFinding[] = []
@@ -655,7 +662,11 @@ export function copyFindings(
       })
 
     for (const { sentence, files } of repeats)
-      if (files[0] !== file && files.includes(file))
+      if (
+        files[0] !== file &&
+        files.includes(file) &&
+        !words.names.has(sentence)
+      )
         found.push({
           file,
           node: "text",

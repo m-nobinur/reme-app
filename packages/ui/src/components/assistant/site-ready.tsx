@@ -1,5 +1,6 @@
 import {
   PaintBrushIcon,
+  PlugsConnectedIcon,
   RocketLaunchIcon,
   SpinnerGapIcon,
 } from "@phosphor-icons/react"
@@ -52,6 +53,7 @@ export function SiteReady({
   live = false,
   pending = false,
   error = null,
+  connect = null,
   onApprove,
   onMakeChanges,
   docked = false,
@@ -74,6 +76,8 @@ export function SiteReady({
   pending?: boolean
   /** Why the last approval did not go through, in the owner's words. */
   error?: string | null
+  /** A step beside Publish, such as setting up the web address; none when null. */
+  connect?: { label: string; onClick: () => void } | null
   onApprove: () => void
   /** Puts the composer in website change mode. */
   onMakeChanges: () => void
@@ -219,6 +223,17 @@ export function SiteReady({
         ) : (
           name
         )}
+        {connect ? (
+          <Button
+            className="shrink-0"
+            onClick={connect.onClick}
+            size="sm"
+            variant="outline"
+          >
+            <PlugsConnectedIcon aria-hidden />
+            {connect.label}
+          </Button>
+        ) : null}
         {publish}
       </div>
       {inTray && !open ? null : (

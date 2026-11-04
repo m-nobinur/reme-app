@@ -57,6 +57,29 @@ let root: Root
 let container: HTMLDivElement
 let runtime: AssistantRuntime | undefined
 
+// The reveal runs on animation frames and `performance.now`; both are held
+// here and moved by the test, so how fast the runner is cannot decide whether
+// the words are still typing when the stream ends.
+let clock = 0
+const frames = new Map<number, FrameRequestCallback>()
+let frameId = 0
+const advance = (ms: number) =>
+  act(async () => {
+    clock += ms
+    const due = [...frames.values()]
+    frames.clear()
+    for (const frame of due) frame(clock)
+  })
+/** Moves the clock on, a quarter second a step, until `check` holds. */
+const until = (check: () => boolean) =>
+  vi.waitFor(
+    async () => {
+      await advance(250)
+      expect(check()).toBe(true)
+    },
+    { timeout: 5000 }
+  )
+
 function Chat() {
   const current = useSyncExternalStore(
     (listener) => {
@@ -88,6 +111,14 @@ beforeEach(async () => {
     }
   )
   Element.prototype.scrollTo ??= () => undefined
+  clock = 0
+  frames.clear()
+  vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => {
+    frames.set(++frameId, frame)
+    return frameId
+  })
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id))
+  vi.spyOn(performance, "now").mockImplementation(() => clock)
   state = {
     messages: [
       {
@@ -104,10 +135,10 @@ beforeEach(async () => {
   root = createRoot(container)
   await act(async () => root.render(createElement(Chat)))
   // The first words are on screen when the stream ends.
-  await vi.waitFor(() =>
-    expect(container.querySelector(".aui-md")?.textContent).toBe(
+  await until(
+    () =>
+      container.querySelector(".aui-md")?.textContent ===
       WORDS.slice(0, 12).trim()
-    )
   )
 })
 
@@ -115,6 +146,7 @@ afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 const pills = () =>
@@ -132,18 +164,14 @@ it("waits for the words to type in, then fades every pill in at once and focuses
   expect(pills()?.className).toContain("invisible")
   expect(document.activeElement).toBe(document.body)
 
-  await vi.waitFor(() => expect(typing()).toBe(false))
-  await vi.waitFor(() =>
-    expect(pills()?.className).toContain("motion-safe:fade-in")
-  )
+  await until(() => !typing())
+  await until(() => pills()?.className.includes("motion-safe:fade-in") ?? false)
   expect(pills()?.className).not.toContain("invisible")
   // One fade on the group, none per pill: no stagger.
   for (const pill of pills()?.querySelectorAll("button") ?? []) {
     expect(pill.className).not.toMatch(/animate-in|delay-/)
   }
-  await vi.waitFor(() =>
-    expect(document.activeElement?.textContent).toBe(RECAP_REPLY)
-  )
+  await until(() => document.activeElement?.textContent === RECAP_REPLY)
 })
 
 it("leaves the focus in the composer while the owner is typing there", async () => {
@@ -156,9 +184,7 @@ it("leaves the focus in the composer while the owner is typing there", async () 
     messages: [state.messages[0] as ThreadMessageLike, recap(WORDS, true)],
     isRunning: false,
   })
-  await vi.waitFor(() =>
-    expect(pills()?.className).toContain("motion-safe:fade-in")
-  )
+  await until(() => pills()?.className.includes("motion-safe:fade-in") ?? false)
   // A task later, when the pills would have taken it.
   await act(async () => new Promise((resolve) => setTimeout(resolve, 20)))
   expect(document.activeElement).toBe(composer)

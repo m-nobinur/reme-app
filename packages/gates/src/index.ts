@@ -15,6 +15,7 @@ import {
   withCustomSections,
 } from "./custom.ts"
 import { type Located, type Page, parsePage } from "./page.ts"
+import { checkFavicon, checkPlannedPhotos } from "./photos.ts"
 import { limit } from "./pool.ts"
 import { resolveSitePath } from "./site-path.ts"
 import { checkSize, type SizeBudget } from "./size.ts"
@@ -69,6 +70,7 @@ export {
   parseInteraction,
 } from "./interaction.ts"
 export { type Page, parsePage } from "./page.ts"
+export { checkFavicon, checkPlannedPhotos, slotFields } from "./photos.ts"
 export { limit } from "./pool.ts"
 export { resolveSitePath } from "./site-path.ts"
 export { checkSize, type SizeBudget } from "./size.ts"
@@ -541,6 +543,8 @@ export async function runGates(input: {
    * copy gate runs only with it.
    */
   plan?: Parameters<typeof generatedImageFindings>[0]
+  /** Every photo the plan holds must show: a first build. A revise may take one off at the owner's word. */
+  photos?: boolean
 }): Promise<GateResult[]> {
   const lap = <T>(name: string, fn: () => T): T => {
     const started = Date.now()
@@ -621,13 +625,17 @@ export async function runGates(input: {
     })(),
   ])
   const pages = built.map((each) => each.page)
-  const gap = input.plan
-    ? (checkPlannedPages(input.plan, parsed.data.files) ??
-      checkPlannedSections(
-        input.plan,
-        built.map(({ page, html }) => ({ file: page.file, html }))
-      ))
-    : null
+  const gap =
+    (input.plan
+      ? (checkPlannedPages(input.plan, parsed.data.files) ??
+        checkPlannedSections(
+          input.plan,
+          built.map(({ page, html }) => ({ file: page.file, html }))
+        ) ??
+        (input.photos
+          ? checkPlannedPhotos(input.plan, parsed.data.files)
+          : null))
+      : null) ?? (await checkFavicon(input.facts, parsed.data.files, read))
   return [
     build.passed && gap ? gap : build,
     types,

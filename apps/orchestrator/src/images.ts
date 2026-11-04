@@ -147,6 +147,8 @@ export type PhotoResult = {
   key: string | null
   content_type: string | null
   cost_usd: number | null
+  /** The image model that drew it, when one did. */
+  model?: string
   /** Why a slot fell back, for the log. */
   reason: string | null
   /** What the drawn photo shows, from its defect check or its final subject: the slot's alt and caption. Unset when reused or not drawn. */
@@ -770,7 +772,11 @@ export async function directPhotos(input: {
         )
       }
       if (!drawn.ok) {
-        settle(p.slot.id, fallback(p.slot.id, drawn.reason))
+        // Draws a defect threw away were still paid for.
+        settle(p.slot.id, {
+          ...fallback(p.slot.id, drawn.reason),
+          cost_usd: spent > 0 ? spent : null,
+        })
         return null
       }
       const objectKey = `${generatedKey(orgId, p.assetId)}.${extension(drawn.contentType)}`
@@ -797,6 +803,7 @@ export async function directPhotos(input: {
         key: objectKey,
         content_type: drawn.contentType,
         cost_usd: drawn.cost === null ? null : spent,
+        model: drawn.model,
         reason: null,
         alt: (shows || simplified(subject)).slice(0, 200),
       })

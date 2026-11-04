@@ -112,6 +112,45 @@ it("Pick for me fills the empty name with the first idea and keeps a pick made",
       { key: "assistant.tone", value: { id: "casual" } },
     ],
     skip_all: true,
+    changed: ["assistant.tone"],
+  })
+})
+
+it("Done names only the values the owner changed from the card's defaults", async () => {
+  const slot = document.createElement("div")
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  document.body.appendChild(slot)
+  const root = createRoot(container)
+  const addResult = vi.fn()
+  await act(async () => root.render(createElement(Chat, { slot, addResult })))
+  unmount = async () => {
+    await act(async () => root.unmount())
+    container.remove()
+    slot.remove()
+  }
+  const press = (label: string) =>
+    act(async () =>
+      [...slot.querySelectorAll("button")]
+        .find((each) => each.textContent === label)
+        ?.click()
+    )
+
+  await press("Hannah")
+  await press("Next")
+  await press("Next")
+  await press("Next")
+  await press("Done")
+
+  expect(addResult).toHaveBeenCalledWith({
+    answer: "stated",
+    facts: [
+      { key: "assistant.name", value: { name: "Hannah" } },
+      { key: "assistant.pronouns", value: { id: "she_her" } },
+      { key: "assistant.avatar", value: { id: "she_1" } },
+      { key: "assistant.tone", value: { id: "friendly" } },
+    ],
+    changed: ["assistant.name"],
   })
 })
 

@@ -199,8 +199,8 @@ type MarkSite = {
   logo: string
 }
 
-const dataUri = (png: Buffer) =>
-  `data:image/png;base64,${png.toString("base64")}`
+const dataUri = (png: Uint8Array) =>
+  `data:image/png;base64,${Buffer.from(png).toString("base64")}`
 
 type Box = { l: number; t: number; r: number; b: number; ink: number }
 
@@ -219,7 +219,7 @@ type Box = { l: number; t: number; r: number; b: number; ink: number }
  * An opaque logo with nothing to cut apart (a frame, a fill, one piece) is
  * drawn whole, exactly as the mark drew every logo before.
  */
-export async function symbolOf(file: Buffer): Promise<string | undefined> {
+export async function symbolOf(file: Uint8Array): Promise<string | undefined> {
   const whole = async () =>
     dataUri(
       await sharp(file).resize(128, 128, { fit: "inside" }).png().toBuffer()
@@ -308,10 +308,12 @@ export async function symbolOf(file: Buffer): Promise<string | undefined> {
     (p) => p.ink > 0.03 * all.ink && p.ink < 0.97 * all.ink
   )
   const symbol = big.filter(squarish).sort((a, b) => b.ink - a.ink)[0]
+  // A squarish logo whose biggest piece holds most of the ink has no name
+  // beside it to cut away: it is all symbol, as sparkles over a bucket.
   const pick =
     symbol && symbol.ink > 0.15 * all.ink && symbol.ink < 0.75 * all.ink
       ? symbol
-      : !big.length && squarish(all)
+      : squarish(all) && (!big.length || (symbol?.ink ?? 0) >= 0.75 * all.ink)
         ? all
         : undefined
   if (!pick) return undefined
@@ -370,28 +372,36 @@ export async function symbolOf(file: Buffer): Promise<string | undefined> {
 }
 
 /**
- * The owner's logo, cut to its symbol, as a PNG data URI, from the file the
- * build placed under src/assets (the site root is the build's working
- * directory), or undefined when there is no logo, its file is not there or
- * it has no symbol to draw.
+ * The owner's logo file the build placed under src/assets (the site root is
+ * the build's working directory), or undefined when there is no logo or its
+ * file is not there.
  */
-async function logoUri(path: string): Promise<string | undefined> {
+function logoFile(path: string): string | undefined {
   if (!path) return undefined
   const root = resolve(process.cwd(), "src/assets")
   const file = resolve(root, path.replace(/^\/?(?:src\/assets\/)?/, ""))
   // The field is written by the Developer, so a path that climbs out of the
   // assets folder reads nothing rather than any file the build can see.
-  if (!file.startsWith(root + sep) || !existsSync(file)) return undefined
-  return symbolOf(readFileSync(file))
+  return file.startsWith(root + sep) && existsSync(file) ? file : undefined
 }
 
-/** This site's mark: the owner's logo when there is one, else its initial. */
+/**
+ * This site's mark: the owner's logo cut to its symbol when there is one,
+ * else its initial. A logo with no symbol to draw (a wordmark) is marked
+ * `data-logo="no-symbol"`, so the favicon gate tells it from a logo the
+ * build never found.
+ */
 export async function siteMark(site: MarkSite): Promise<string> {
-  return markSvg(
+  const file = logoFile(site.logo)
+  const image = file ? await symbolOf(readFileSync(file)) : undefined
+  const svg = markSvg(
     site.businessName,
     markColours(site.palette, site.brandColor),
-    await logoUri(site.logo)
+    image
   )
+  return file && !image
+    ? svg.replace("<svg ", '<svg data-logo="no-symbol" ')
+    : svg
 }
 
 /**

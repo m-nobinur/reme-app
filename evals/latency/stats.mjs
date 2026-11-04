@@ -40,9 +40,9 @@ export const timingsOf = (text) =>
 
 /**
  * `runtime.turn` rows, from the event log or the billed-cost tap's export,
- * as `{assignment, role, input, cacheRead, cacheWrite, output, cost}`. A row
- * carries a role when its writer set one (the quick lane's calls do); a
- * Developer turn has none, so the model it asked for stands in, then "unknown".
+ * as `{assignment, role, model, input, cacheRead, cacheWrite, output, cost}`.
+ * A writer's own row names its role and model (page, plan, copy, critic,
+ * photos); a Developer turn names its agent and the model it asked for.
  */
 export function turnsOf(text) {
   return objects(text)
@@ -52,10 +52,10 @@ export function turnsOf(text) {
       const usage = p.response?.usage ?? {}
       return {
         assignment: o.assignment_id ?? o.assignmentId ?? null,
-        role:
-          p.role ??
-          p.request?.requestedModel ??
+        role: p.role ?? p.agentName ?? "unknown",
+        model:
           p.model ??
+          p.request?.requestedModel ??
           p.response?.model ??
           "unknown",
         input: usage.input ?? 0,
@@ -75,11 +75,14 @@ const PHOTO_ESTIMATE = { "1K": 0.034, "2K": 0.05 }
  * `payload.slots`, each with `source`, `resolution` and an `asset_id` once
  * drawn, and `regenerated` for a lone redraw). A build drew every generated
  * slot that has an asset; a redraw drew only the slot it names. Cost is the
- * payload's `cost_usd` when it has one, else the estimate per resolution:
- * the event holds no billed figure (that sits in R2 metadata).
+ * billed figure of the assignment's `photos` turns when it has them, else
+ * the payload's `cost_usd`, else the estimate per resolution.
  */
 export function photosOf(text) {
   const out = new Map()
+  const billed = new Map()
+  for (const t of turnsOf(text).filter((r) => r.role === "photos"))
+    billed.set(t.assignment, (billed.get(t.assignment) ?? 0) + t.cost)
   for (const o of objects(text).filter((e) => e.type === "site.photos")) {
     const p = o.payload ?? {}
     const id = o.assignment_id ?? o.assignmentId
@@ -93,9 +96,10 @@ export function photosOf(text) {
     out.set(id, {
       images: drawn.length,
       cost:
-        typeof p.cost_usd === "number"
+        billed.get(id) ??
+        (typeof p.cost_usd === "number"
           ? p.cost_usd
-          : drawn.reduce((n, s) => n + (PHOTO_ESTIMATE[s.resolution] ?? 0), 0),
+          : drawn.reduce((n, s) => n + (PHOTO_ESTIMATE[s.resolution] ?? 0), 0)),
     })
   }
   return out
@@ -160,19 +164,22 @@ export function laneRows(timings, turns, baseline = [], photos = new Map()) {
   })
 }
 
-/** Cache-read tokens over everything the prompts held (uncached, read and written), per role. */
+/** Cache-read tokens over everything the prompts held (uncached, read and written), per role and model. */
 export function roleRows(turns) {
-  return [...Map.groupBy(turns, (t) => t.role)].map(([role, group]) => {
-    const sum = (key) => group.reduce((n, t) => n + t[key], 0)
-    const prompt = sum("input") + sum("cacheRead") + sum("cacheWrite")
-    return {
-      role,
-      turns: group.length,
-      promptTokens: prompt,
-      cacheRead: sum("cacheRead"),
-      ratio: prompt ? sum("cacheRead") / prompt : null,
+  return [...Map.groupBy(turns, (t) => `${t.role} ${t.model}`)].map(
+    ([, group]) => {
+      const sum = (key) => group.reduce((n, t) => n + t[key], 0)
+      const prompt = sum("input") + sum("cacheRead") + sum("cacheWrite")
+      return {
+        role: group[0].role,
+        model: group[0].model,
+        turns: group.length,
+        promptTokens: prompt,
+        cacheRead: sum("cacheRead"),
+        ratio: prompt ? sum("cacheRead") / prompt : null,
+      }
     }
-  })
+  )
 }
 
 const fmt = (v, digits = 1) =>
@@ -224,9 +231,17 @@ export function render(lanes, roles) {
     ),
     "",
     md(
-      ["role", "turns", "prompt tokens", "cache read", "cache-read ratio"],
+      [
+        "role",
+        "model",
+        "turns",
+        "prompt tokens",
+        "cache read",
+        "cache-read ratio",
+      ],
       roles.map((r) => [
         r.role,
+        r.model,
         r.turns,
         r.promptTokens,
         r.cacheRead,
