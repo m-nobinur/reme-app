@@ -775,6 +775,49 @@ export const DerivedReminder = z.discriminatedUnion("rule", [
 /** The most open reminders `/workspace` lists. */
 export const REMINDER_NOTES_MAX = 20
 
+/**
+ * Where the website's own address stands (`addressStage`): `unknown` until
+ * the owner says whether they have a domain, then `choosing` a name, `paying`
+ * here, `buying_elsewhere` and then `bought` once the registry shows it,
+ * `connecting` one, `live`, or `put_off` and `declined` by the owner.
+ */
+export const AddressStageName = z.enum([
+  "none",
+  "unknown",
+  "put_off",
+  "declined",
+  "choosing",
+  "paying",
+  "buying_elsewhere",
+  "bought",
+  "connecting",
+  "live",
+])
+
+/**
+ * The website journey (`journeyOf`), the one reading the update stack, the
+ * draft-ready line and the assistant's notes share, so all three agree.
+ * `offer` is the Connect the owner is pointed to: `connect` while the address
+ * is open and theirs to start, `connect_bought` once a name they bought
+ * elsewhere shows at the registry, null otherwise.
+ */
+export const Journey = z.strictObject({
+  website: z.enum(["none", "building", "draft_ready", "published"]),
+  address: z.strictObject({
+    stage: AddressStageName,
+    name: Hostname.optional(),
+    offer: z.enum(["connect", "connect_bought"]).nullable(),
+  }),
+  google: z.enum([
+    "waiting_for_domain",
+    "offerable",
+    "put_off",
+    "setting_up",
+    "connected",
+    "declined",
+  ]),
+})
+
 /** `GET /workspace`: everything the owner's panel polls for. */
 export const WorkspaceStatus = z.strictObject({
   site: z.strictObject({
@@ -828,6 +871,8 @@ export const WorkspaceStatus = z.strictObject({
    * api sends it, and the web keeps the reader's.
    */
   time_zone: TimeZone.nullable().optional(),
+  /** The website journey, as the assistant and the draft-ready line read it. Absent until the api sends it. */
+  journey: Journey.optional(),
 })
 
 export type FactValue = z.infer<typeof FactValue>
@@ -857,3 +902,5 @@ export type CreateReminderRequest = z.infer<typeof CreateReminderRequest>
 export type ReminderPatch = z.infer<typeof ReminderPatch>
 export type DerivedReminder = z.infer<typeof DerivedReminder>
 export type WorkspaceStatus = z.infer<typeof WorkspaceStatus>
+export type AddressStageName = z.infer<typeof AddressStageName>
+export type Journey = z.infer<typeof Journey>

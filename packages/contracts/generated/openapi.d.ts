@@ -18303,6 +18303,34 @@ export interface components {
         }[]
       }
       time_zone?: string | null
+      journey?: {
+        /** @enum {string} */
+        website: "none" | "building" | "draft_ready" | "published"
+        address: {
+          /** @enum {string} */
+          stage:
+            | "none"
+            | "unknown"
+            | "put_off"
+            | "declined"
+            | "choosing"
+            | "paying"
+            | "buying_elsewhere"
+            | "bought"
+            | "connecting"
+            | "live"
+          name?: string
+          offer: ("connect" | "connect_bought") | null
+        }
+        /** @enum {string} */
+        google:
+          | "waiting_for_domain"
+          | "offerable"
+          | "put_off"
+          | "setting_up"
+          | "connected"
+          | "declined"
+      }
     }
   }
   responses: never

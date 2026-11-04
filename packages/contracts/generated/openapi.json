@@ -66230,6 +66230,81 @@
                 "type": "null"
               }
             ]
+          },
+          "journey": {
+            "type": "object",
+            "properties": {
+              "website": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "building",
+                  "draft_ready",
+                  "published"
+                ]
+              },
+              "address": {
+                "type": "object",
+                "properties": {
+                  "stage": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "unknown",
+                      "put_off",
+                      "declined",
+                      "choosing",
+                      "paying",
+                      "buying_elsewhere",
+                      "bought",
+                      "connecting",
+                      "live"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 253,
+                    "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                  },
+                  "offer": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "connect",
+                          "connect_bought"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "stage",
+                  "offer"
+                ],
+                "additionalProperties": false
+              },
+              "google": {
+                "type": "string",
+                "enum": [
+                  "waiting_for_domain",
+                  "offerable",
+                  "put_off",
+                  "setting_up",
+                  "connected",
+                  "declined"
+                ]
+              }
+            },
+            "required": [
+              "website",
+              "address",
+              "google"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
