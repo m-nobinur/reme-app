@@ -403,6 +403,19 @@ const PHOTOS = 5
 const PAGES_ASKED = 6
 const PHONE = "max-w-[22.5rem]"
 const SECOND: LogoRound = { ...ROUND, round: 2 }
+/** A redesign round with its first design in, and then all three. */
+const REDESIGN_DRAWING: LogoRound = {
+  ...ROUND,
+  round: 2,
+  status: "drawing",
+  started_at: new Date().toISOString(),
+  variants: [variant(3)],
+}
+const REDESIGN_READY: LogoRound = {
+  ...REDESIGN_DRAWING,
+  status: "ready",
+  variants: [3, 4, 5].map(variant),
+}
 
 type State = {
   title: string
@@ -416,8 +429,39 @@ type State = {
 }
 
 const STATES: State[] = [
-  // No start: designs draw behind the question; No shows them, the first picked.
+  // No start: nothing draws until No, which starts the first round.
   { title: "Logo, nothing chosen" },
+  {
+    title: "Logo, a redesign landing",
+    start: {
+      index: DESIGNS,
+      answers: { logo: { logo: KEPT } },
+      logo: { path: "create", brief: PICKED },
+    },
+    services: reads(
+      [ROUND, REDESIGN_DRAWING],
+      [ROUND, REDESIGN_DRAWING],
+      [ROUND, REDESIGN_READY]
+    ),
+  },
+  {
+    title: "Logo, a redesign drawing",
+    start: {
+      index: DESIGNS,
+      answers: { logo: { logo: KEPT } },
+      logo: { path: "create", brief: PICKED },
+    },
+    services: reads([ROUND, REDESIGN_DRAWING]),
+  },
+  {
+    title: "Logo, designs listed in another order",
+    start: { logo: { path: "create", brief: PICKED } },
+    services: reads(
+      [{ ...ROUND, status: "drawing", variants: [variant(1)] }],
+      [{ ...ROUND, status: "drawing", variants: [variant(1)] }],
+      [{ ...ROUND, variants: [variant(0), variant(1), variant(2)] }]
+    ),
+  },
   {
     title: "Logo, back on the question, No picked",
     start: { index: LOGO, logo: { path: "create", brief: PICKED } },

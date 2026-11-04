@@ -372,7 +372,12 @@ function TrayNote({ name, error }: { name: string; error?: string | null }) {
 }
 
 /** An option tile in the tray, a label over a native radio or checkbox. */
-const TRAY_TILE = cn(OPTION, OPTION_TILE, "rounded-xl", PICKED_LINE)
+const TRAY_TILE = cn(
+  OPTION,
+  OPTION_TILE,
+  "rounded-xl hover:border-foreground/25",
+  PICKED_LINE
+)
 
 /** A tile that answers on a tap, its answer shown pressed: the tray tile as a button. */
 const QUICK_TILE = cn(
