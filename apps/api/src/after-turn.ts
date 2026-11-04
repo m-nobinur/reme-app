@@ -1,5 +1,6 @@
 import {
   conversationMessages,
+  conversations,
   events,
   type OrgScopedDb,
   sql,
@@ -58,8 +59,10 @@ export async function enqueueAfterTurn(
 }
 
 /**
- * What the owner typed in the conversation that the CoS never logged:
- * onboarding's answers, oldest first, for reflection's first pass.
+ * What the owner typed in an onboarding conversation that the CoS never
+ * logged: onboarding's answers, oldest first, for reflection's first pass.
+ * Typed in the chat only: an emailed reply (`eml_`) is left out, as
+ * `ownerWords` leaves it out.
  */
 export async function onboardingWords(
   db: OrgScopedDb,
@@ -67,8 +70,11 @@ export async function onboardingWords(
 ): Promise<string[]> {
   const rows = await db.execute<{ text: string | null }>(sql`
     select p->>'text' as text
-    from ${conversationMessages} m, jsonb_array_elements(m.content->'parts') p
+    from ${conversationMessages} m
+    join ${conversations} c on c.id = m.conversation_id and c.kind = 'onboarding',
+      jsonb_array_elements(m.content->'parts') p
     where m.conversation_id = ${id} and m.content->>'role' = 'user'
+      and m.id not like 'eml\_%'
       and p->>'type' = 'text'
       and not exists (select 1 from ${events} e where e.session_id = ${id}
         and e.type = 'cos.message' and e.payload->'message'->>'id' = m.id)
