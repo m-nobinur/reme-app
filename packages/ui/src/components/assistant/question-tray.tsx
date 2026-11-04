@@ -1745,7 +1745,7 @@ function QuestionTray({
           ? undefined
           : designsSubmit || {
               label: finishing ? "Done" : undefined,
-              swap: "next",
+              swap: logo ? "next" : undefined,
               onSubmit: next,
               disabled: !ready,
             }
