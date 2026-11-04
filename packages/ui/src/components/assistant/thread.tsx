@@ -50,10 +50,8 @@ import {
   Reasoning,
 } from "@workspace/ui/components/assistant/reasoning"
 import {
-  pillsIn,
   ReplyPill,
   ReplyPills,
-  useWordsIn,
 } from "@workspace/ui/components/assistant/reply-pill"
 import { ThreadHistorySkeleton } from "@workspace/ui/components/assistant/thread-pending"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
@@ -1063,6 +1061,7 @@ const ThreadWelcome: FC = () => {
 /**
  * Skip this one, above the composer while an optional question asked in
  * words waits: a tap says so as the owner's message. A required one has none.
+ * It leaves the focus where it is: the answer is typed.
  */
 const SkipThisOne: FC = () => {
   const aui = useAui()
@@ -1071,22 +1070,15 @@ const SkipThisOne: FC = () => {
     (s) => !s.thread.isRunning && waitsToSkip(s.thread.messages.at(-1)?.parts)
   )
   if (!waiting || !sendable) return null
-  return <SkipPill onSkip={() => aui.thread().append(SKIP_REPLY)} />
-}
-
-/** Fades in with the words above it, and leaves the focus where it is: the answer is typed. */
-const SkipPill: FC<{ onSkip: () => void }> = ({ onSkip }) => {
-  const ref = useRef<HTMLButtonElement>(null)
-  const words = useWordsIn(ref)
   return (
-    <ReplyPill
-      className={cn("self-start", pillsIn(words))}
-      data-slot="skip-this-one"
-      onClick={onSkip}
-      ref={ref}
-    >
-      {SKIP_REPLY}
-    </ReplyPill>
+    <ReplyPills composer label="An optional question" takesFocus={false}>
+      <ReplyPill
+        data-slot="skip-this-one"
+        onClick={() => aui.thread().append(SKIP_REPLY)}
+      >
+        {SKIP_REPLY}
+      </ReplyPill>
+    </ReplyPills>
   )
 }
 
@@ -1104,7 +1096,7 @@ const RecapReplies: FC = () => {
   )
   if (!waiting || !sendable) return null
   return (
-    <ReplyPills label="Have I got that right?">
+    <ReplyPills composer label="Have I got that right?">
       <ReplyPill onClick={() => aui.thread().append(RECAP_REPLY)}>
         {RECAP_REPLY}
       </ReplyPill>
@@ -1114,7 +1106,9 @@ const RecapReplies: FC = () => {
           if (!aui.composer().getState().text.trim()) {
             aui.composer().setText("Change ")
           }
-          input.current?.focus()
+          const field = input.current
+          field?.focus()
+          field?.setSelectionRange(field.value.length, field.value.length)
         }}
       >
         Change something

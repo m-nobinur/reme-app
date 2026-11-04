@@ -663,7 +663,7 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
   if (quickOf(input)) {
     return (
       <Docked name="ask-choice">
-        <ReplyPills label={STEP_ASK[input.step]}>
+        <ReplyPills composer label={STEP_ASK[input.step]}>
           {input.options.map((option) => (
             <ReplyPill
               key={option.id}
