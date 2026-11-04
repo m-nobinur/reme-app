@@ -98,8 +98,7 @@ const touchesAgents = (path: string) =>
 
 /**
  * The sandbox image's top-level directories (node:22-trixie-slim, and
- * /workspace from infra/sandbox/Dockerfile). An absolute token whose first
- * segment is none of these names nothing on disk.
+ * /workspace from infra/sandbox/Dockerfile).
  * shortcut: a fixed list; add to it when the image gains a top-level directory.
  */
 const ROOT_DIRS: ReadonlySet<string> = new Set(
@@ -108,11 +107,30 @@ const ROOT_DIRS: ReadonlySet<string> = new Set(
   )
 )
 
+/** A quoted span, single or double. */
+const QUOTED = /'[^']*'|"[^"]*"/g
+
+/**
+ * Whether a token inside quotes may name something on disk: its first
+ * segment past any `/` and `.` is a directory the image has, is built by the
+ * shell, or there is none (the root itself). Anything else, as `"</span>"`
+ * or `split(/\s+/)`, is a pattern.
+ */
+const namesDisk = (token: string) => {
+  const first = token
+    .replaceAll("\\", "")
+    .split("/")
+    .find((segment) => segment !== "" && segment !== ".")
+  return first === undefined || /[$`*?[{~]/.test(first) || ROOT_DIRS.has(first)
+}
+
 /**
  * The reason a shell command is refused, or null. Deliberately blunt: any
  * absolute path outside the site or a read-only root, any `..`, any mention
- * of `.agents/`, and `cd` to anywhere but inside the site. A false refusal
- * costs the model a retry; a false pass costs a tenant.
+ * of `.agents/`, and `cd` to anywhere but inside the site. Inside quotes, where
+ * grep, sed and `node -e` patterns live, a token that names no directory of
+ * the image is let through; outside them every absolute token is a path. A
+ * false refusal costs the model a retry; a false pass costs a tenant.
  */
 export function bashRefusal(
   command: string,
@@ -121,24 +139,28 @@ export function bashRefusal(
   if (touchesAgents(command)) return "the command names .agents/"
   if (hasParentSegment(command)) return "the command contains a .. segment"
   const roots = [policy.siteRoot, ...(policy.readOnlyRoots ?? [])]
-  // Split on shell punctuation too: `cat</etc/passwd` and `--out=/etc/x`
-  // name a path with no space before it. Quotes go first, since the shell
-  // joins what they split: `/e"t"c/passwd` is /etc/passwd.
   // shortcut: a string check, not a shell parser, so a path spelled without
   // a slash (printf escapes) still passes; the org's own container is the
   // tenant boundary. Parse the command if this ever guards more than that.
-  for (const token of command.replace(/['"]/g, "").split(/[\s;&|<>()`=]+/)) {
+  const joined = command.replace(/\\\n/g, "")
+  const split = (text: string) =>
+    text.replace(/['"]/g, "").split(/[\s;&|<>()`=]+/)
+  // The words as the shell joins them (`/e"t"c/passwd` is /etc/passwd), and
+  // each quoted span's own pieces, which alone may be patterns.
+  const inQuotes = new Set(
+    [...joined.matchAll(QUOTED)].flatMap((span) => split(span[0]))
+  )
+  const tokens = split(joined).map((token) => ({
+    token,
+    quoted: inQuotes.has(token),
+  }))
+  for (const { token, quoted } of tokens) {
     // `$HOME/x`, `~/x`, `\/etc`, `{/etc/passwd,}`: the shell makes the path.
     if (/^[^/]*[$~\\{][^/]*\//.test(token)) {
       return `${token} builds a path the check cannot read`
     }
     if (!token.startsWith("/")) continue
-    const first = token.replaceAll("\\", "").split("/").find(Boolean)
-    if (first !== undefined && /[$`*?[{]/.test(first)) {
-      return `${token} builds a path the check cannot read`
-    }
-    // A pattern, as `grep "</span>"` or `split(/\s+/)`: it names nothing on disk.
-    if (first !== undefined && !ROOT_DIRS.has(first)) continue
+    if (quoted && !namesDisk(token)) continue
     if (token === "/dev/null" || under(token, "/tmp")) continue
     if (!roots.some((root) => under(token, root))) {
       return `${token} is outside the site`

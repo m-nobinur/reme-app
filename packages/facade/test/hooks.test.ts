@@ -125,6 +125,15 @@ describe("the pre_tool_call policy", () => {
       "ls /",
       "cat /proc/self/environ",
       "ls /workspace",
+      "cat /./etc/passwd",
+      'cat "/./etc/passwd"',
+      'cat "/.//etc/passwd"',
+      "cat /e\\\ntc/passwd",
+      'cat "/e"tc/passwd',
+      `cat "$(cat /e't'c/passwd)"`,
+      `node -e 'require("fs").readFileSync("/./etc/passwd")'`,
+      // Unquoted, a lookalike is still a path: only quotes hold patterns.
+      "cat /span",
     ]) {
       expect(bashRefusal(command, policy)).toMatch(/outside the site/)
     }
