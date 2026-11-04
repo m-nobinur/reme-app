@@ -602,7 +602,7 @@ live("a failed owner build's retry", () => {
     expect(done[0]?.pages).toEqual(expect.arrayContaining(["Home"]))
   })
 
-  it("offers what the build left out with the ready line, once per missing fact", async () => {
+  it("asks nothing with the ready line, whatever the build left out", async () => {
     const orgId = await freshOrg(kit)
     const ids = await newAssignment(kit, orgId)
     const ask = (field: string, question: string) => ({
@@ -658,19 +658,11 @@ live("a failed owner build's retry", () => {
         .where(eq(assignments.id, ids.assignmentId))
     })
     const ready = await readyNote(kit, ids)
-    expect(ready?.questions).toEqual({
-      kind: "offer",
-      assignment_id: ids.assignmentId,
-      questions: [
-        {
-          id: expect.any(String),
-          text: "Are you insured, and for how much?",
-          input: { kind: "text", maxLength: 500, email: false },
-          skippable: true,
-          field: "business.insurance",
-        },
-      ],
+    expect(ready).toEqual({
+      key: `site.ready:${ids.assignmentId}`,
+      text: expect.stringMatching(/^Your draft is ready/),
     })
+    expect(ready?.text).not.toMatch(/left out|Want me to add/)
   })
 
   it("notes every mid-build resume once, and says only a stall in the chat", async () => {

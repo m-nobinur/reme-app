@@ -3,8 +3,6 @@ import {
   AgentNote,
   type BlockChange,
   Blueprint,
-  type BuildQuestion,
-  type BuildQuestions,
   type BuildStopCause,
   BuildSummary,
   buildFailure,
@@ -43,7 +41,6 @@ import {
   writeText,
 } from "./heartbeat-write.ts"
 import { PICK_LINES } from "./planner.ts"
-import { inputOf, refuseQuestion } from "./question.ts"
 import { QUICK_EDITED } from "./quick.ts"
 import { workKey } from "./sandbox.ts"
 import { type Ids, REPAIR_LIMIT, repairsSoFar } from "./state.ts"
@@ -296,57 +293,8 @@ export function readyText(
   ].join(" ")
 }
 
-/** A chat line to post, and with a ready line, what the build left out to offer. */
-export type Note = { key: string; text: string; questions?: BuildQuestions }
-
-/** Said above the offer, which is a card of skippable questions. */
-export const OFFER_LINE =
-  "I left out a few things I didn't know yet. Want me to add these?"
-
-/** Details the assistant asks for once its own work needs them, never beside a draft. */
-const LATER =
-  /^(?:hours\.|business\.prices$|business\.enquiries$|owner\.priorities$)/
-
-/**
- * What this build left out (`left_out` on its last report) as one stack of
- * skippable questions: each one `ask_chief` would take, about a fact that is
- * still missing and not one for `LATER`, once per fact. None when nothing is
- * left to offer.
- */
-async function offerOf(
-  db: OrgScopedDb,
-  assignmentId: string
-): Promise<BuildQuestions | undefined> {
-  const [row] = await db
-    .select({ payload: events.payload })
-    .from(events)
-    .where(
-      sql`${events.assignmentId} = ${assignmentId} and ${events.type} = 'assignment.completion_reported'`
-    )
-    .orderBy(sql`${events.eventId} desc`)
-    .limit(1)
-  const items = CompletionReport.safeParse(row?.payload).data?.left_out ?? []
-  const questions: BuildQuestion[] = []
-  for (const item of items) {
-    if (questions.some((q) => q.field === item.field)) continue
-    if (
-      LATER.test(item.field) ||
-      refuseQuestion(item) ||
-      (await currentFact(db, item.field))
-    )
-      continue
-    questions.push({
-      id: crypto.randomUUID(),
-      text: item.question.trim(),
-      input: inputOf(item),
-      skippable: true,
-      field: item.field,
-    })
-  }
-  return questions.length > 0
-    ? { kind: "offer", assignment_id: assignmentId, questions }
-    : undefined
-}
+/** A chat line to post. */
+export type Note = { key: string; text: string }
 
 /** The change's label from its creation, its new words from the quick lane and whether its report says it was not made as asked, each absent when not recorded. */
 async function changeOf(db: OrgScopedDb, ids: Ids): Promise<Change> {
@@ -551,9 +499,7 @@ export async function postNote(
   const posted = await postAssistantMessage(kit, {
     orgId,
     key: note.key,
-    message: note.questions
-      ? { text: [note.text, OFFER_LINE], questions: note.questions }
-      : { text: [note.text] },
+    message: { text: [note.text] },
   })
   if (posted === "busy" || posted === "waiting") {
     throw new Error(`build.note_${posted}`)
@@ -578,16 +524,16 @@ const reviewOpen = async (kit: Tenancy, ids: Ids) => {
 /**
  * The draft is ready: its `done` note and the ready line to post, while the
  * review it announces is still open. The line is the template, with no model
- * call in front of it: the owner is looking at the review already.
+ * call in front of it: the owner is looking at the review already. It asks
+ * nothing: what the build left out waits until asking is defined (O26).
  */
 export async function readyNote(kit: Tenancy, ids: Ids): Promise<Note | null> {
   const row = await reviewOpen(kit, ids)
   if (!row) return null
-  const { retry_of, offer, change } = await kit.withOrg(
+  const { retry_of, change } = await kit.withOrg(
     { orgId: ids.orgId },
     async (db) => ({
       ...(await creationChoices(db, ids)),
-      offer: await offerOf(db, ids.assignmentId),
       change: row.kind === "site.revise" ? await changeOf(db, ids) : {},
     })
   )
@@ -612,7 +558,6 @@ export async function readyNote(kit: Tenancy, ids: Ids): Promise<Note | null> {
   return {
     key: note.key,
     text: readyText(row.kind, row.blueprint, change, ids.assignmentId),
-    ...(offer && { questions: offer }),
   }
 }
 
