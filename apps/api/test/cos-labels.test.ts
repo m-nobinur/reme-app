@@ -1,4 +1,5 @@
 import type { CosWorkspace } from "@workspace/contracts"
+import { PROCEDURES } from "@workspace/skills"
 import { describe, expect, it } from "vitest"
 import { contextOf, INSTRUCTIONS } from "../src/cos/agent.ts"
 import { workspaceLabels } from "../src/cos/labels.ts"
@@ -221,10 +222,10 @@ describe("the workspace the CoS reads", () => {
       "goal",
       "fixing",
     ]
+    // The core and the procedures the model reads, together.
+    const read = [INSTRUCTIONS, ...PROCEDURES.map((p) => p.body)].join("\n")
     for (const key of named) {
-      expect(INSTRUCTIONS).toContain(
-        key.replace(/_/g, " ").split(" ")[0] as string
-      )
+      expect(read).toContain(key.replace(/_/g, " ").split(" ")[0] as string)
       expect(data).toContain(`"${key}"`)
     }
   })
