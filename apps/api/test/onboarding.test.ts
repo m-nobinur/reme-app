@@ -65,7 +65,6 @@ import {
   retry,
   say,
   started,
-  townOf,
   type Voice,
 } from "../src/onboarding-copy.ts"
 import { voiceProblems } from "../src/voice.ts"
@@ -573,7 +572,9 @@ describe("the onboarding steps", () => {
       ],
     })
     const offer = addressOffer(o)
-    expect(offer).toContain("**tree surgery in Leeds**")
+    expect(offer).toContain(
+      "**a tree surgery and garden care business in Leeds**"
+    )
     const pending: ToolPart = {
       type: "tool-request_change",
       toolCallId: "c1",
@@ -1864,17 +1865,21 @@ describe("the onboarding copy", () => {
     expect(
       [...offers({ industry: { name: "Electrician", category: null } })].join()
     ).toContain("people looking for an electrician in Leeds")
-  })
-
-  it("reads the town from the start of the owner's area, or none", () => {
-    expect(townOf("Leeds and about 15 miles")).toBe("Leeds")
-    expect(townOf("Milton Keynes, Bedford and Luton")).toBe("Milton Keynes")
-    expect(townOf("Newcastle upon Tyne 10 miles")).toBe("Newcastle upon Tyne")
-    expect(townOf("Bristol.")).toBe("Bristol")
-    expect(townOf("Within 20 miles of Leeds")).toBeNull()
-    expect(townOf("anywhere in Yorkshire")).toBeNull()
-    expect(townOf("Leeds plus Bradford")).toBeNull()
-    expect(townOf(null)).toBeNull()
+    // #687: the category names the business, and the town is read past "Based in".
+    expect(
+      [
+        ...offers({
+          industry: {
+            name: "Domestic and end of tenancy cleaning",
+            category: "cleaning",
+          },
+          area: "Based in Stockport",
+        }),
+      ].join()
+    ).toContain("people looking for a cleaning company in Stockport")
+    expect(
+      [...offers({ industry: { name: "Removals", category: "trades" } })].join()
+    ).toContain("people looking for a removals business in Leeds")
   })
 
   it("asks what a quote needs in words, without the website", () => {

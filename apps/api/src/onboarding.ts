@@ -1413,8 +1413,10 @@ export const buildCall = (parts: Part[]) =>
 export function addressOffer(o: Onboarding): string | null {
   const email = factValue(o.facts, "business.email")?.address
   if (email && ownDomain(email)) return null
+  const industry = factValue(o.facts, "business.industry")
   return addressOfferText({
-    trade: factValue(o.facts, "business.industry")?.name,
+    trade: industry?.name,
+    category: industry?.category,
     area:
       factValue(o.facts, "service_area.radius")?.centre ??
       factValue(o.facts, "service_area.text")?.text,

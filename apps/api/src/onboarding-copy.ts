@@ -5,6 +5,8 @@ import {
   type PronounId,
   TONES,
   type ToneId,
+  townOf,
+  tradeOf,
 } from "@workspace/contracts"
 import type { StepId } from "./onboarding.ts"
 
@@ -261,29 +263,6 @@ type Asked = Exclude<StepId, "upload" | "build" | "manual_builder" | "recap">
 /** "your services", or the phrase written for this business. */
 const services = (v: Voice) => v.services ?? "your services"
 
-/** "a cleaning company" from the trade's name, or null without one. */
-const tradeOf = (v: Voice) => {
-  const name = v.industry?.name.trim().toLowerCase()
-  return name ? `${/^[aeiou]/.test(name) ? "an" : "a"} ${name}` : null
-}
-
-/** Capitalised words that start an area but name no place. */
-const NOT_A_TOWN =
-  /^(?:Within|Anywhere|All|Around|Across|Based|Mainly|Mostly|Most|The|Up|Our|My|We|I|Any|North|South|East|West|Central)$/
-
-/**
- * The first place in the owner's area, such as "Leeds" from "Leeds and about
- * 15 miles", or null when the words do not start with one that reads cleanly.
- */
-export function townOf(area: string | null): string | null {
-  const found = area
-    ?.trim()
-    .match(
-      /^([A-Z][\p{L}'-]*(?: (?:upon |on |under )?[A-Z][\p{L}'-]*)*)(?=\s+and\b|\s*,|\s*\d|\s*[.!]?$)/u
-    )?.[1]
-  return found && !NOT_A_TOWN.test(found.split(" ")[0] ?? "") ? found : null
-}
-
 const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   "business.name": () => [
     "One quick check. What's your business called, as you'd like customers to see it?",
@@ -358,7 +337,7 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   // Phase 2 to 3: the new identity, then the website and the quote page.
   build_for_me: (v) => {
     const thanks = v.picked ? "" : `Thanks${comma(v.owner)}.\n\n`
-    const trade = tradeOf(v)
+    const trade = tradeOf(v.industry)
     const town = townOf(v.area)
     const where = town ? ` in ${town}` : ""
     const ask = "Shall I build a website?"
