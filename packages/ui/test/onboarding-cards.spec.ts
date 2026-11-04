@@ -305,6 +305,15 @@ test("a choice pill opens its options and hint, and a cut label shows whole on h
   await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
     "Anything else we should know before we quote"
   )
+  // A choice pill is a button of its own, and its cut label still shows whole.
+  await page.mouse.move(0, 0)
+  await page
+    .getByRole("button", { name: /^Is there parking outside the property/ })
+    .first()
+    .hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+    "Is there parking outside the property for the driver to use"
+  )
 })
 
 test("a finished design tray reads back as chips: the logo, colours, a pair in its own face", async ({
@@ -336,7 +345,7 @@ test("the quote form preview is the customers' form, live but never sent, and co
   const modal = page.getByRole("dialog", { name: "Form preview" })
   await expect(modal).toBeVisible()
 
-  await expect(modal.getByRole("group")).toHaveCount(4)
+  await expect(modal.getByRole("group")).toHaveCount(5)
   await expect(modal.getByRole("group", { name: "Your details" })).toBeVisible()
   await expect(modal.getByRole("group", { name: "Your request" })).toBeVisible()
   for (const label of [
@@ -373,13 +382,25 @@ test("the quote form preview is the customers' form, live but never sent, and co
   await expect(modal).toContainText("The minibus seats up to 16")
   await expect(modal).toContainText("A line is enough")
 
+  // Three short options are buttons, with the hint under the label and above them.
+  const parking = modal.getByRole("group", {
+    name: "Is there parking outside the property for the driver to use",
+  })
+  await expect(parking.getByRole("radio")).toHaveCount(3)
+  await expect(modal.locator("select")).toHaveCount(1)
+  const hint = await parking.getByText("Permits are not needed").boundingBox()
+  const first = await parking.getByText("Off-street").boundingBox()
+  expect(hint && first && hint.y + hint.height <= first.y).toBe(true)
+  await parking.getByText("On-street").click()
+  await expect(parking.getByRole("radio", { name: "On-street" })).toBeChecked()
+
   await modal.getByLabel("Your name").fill("Sam")
   await expect(modal.getByLabel("Your name")).toHaveValue("Sam")
   await modal.getByLabel("Occasion optional").selectOption("Night out")
   await expect(modal.getByLabel("Occasion optional")).toHaveValue("Night out")
   const vehicle = modal.getByRole("group", { name: "Vehicle" })
-  await vehicle.getByRole("radio", { name: "Saloon" }).check()
-  await vehicle.getByRole("radio", { name: "Minibus" }).check()
+  await vehicle.getByText("Saloon", { exact: true }).click()
+  await vehicle.getByText("Minibus", { exact: true }).click()
   await expect(vehicle.getByRole("radio", { name: "Saloon" })).not.toBeChecked()
   const extras = modal.getByRole("group", { name: "Extras optional" })
   await extras.getByRole("checkbox", { name: "Child seat" }).check()
