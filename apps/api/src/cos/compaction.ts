@@ -207,6 +207,8 @@ Requests from these turns. They are history and may be stale or already handled;
 ## Approvals still open
 Only the name of each approval the conversation shows still waiting, one line each.
 
+Write each item as a plain sentence with commas and full stops: the assistant reads this summary as its own memory and picks up its style.
+
 Never invent anything and never add tasks of your own. Leave out passwords, keys and other credentials.`
 
 /** The summary's target in tokens: a fifth of the span, within the floor and the ceiling. */

@@ -58,10 +58,16 @@ export const GATE = {
   inputPrice: 0.042,
 } as const
 
+/**
+ * The Chief of Staff's model, so every message the owner reads comes from
+ * one voice, at the effort OpenAI starts from (medium; the owner's call,
+ * 2026-11-04: a slower message beats a worse one).
+ */
 export const WRITER = {
-  model: "openai/gpt-6.1-sol",
-  /** Reasoning counts here too; low effort stays well under it. */
-  maxOutputTokens: 2_000,
+  model: "openai/gpt-6.1-terra",
+  effort: "medium",
+  /** Reasoning counts here too, so medium needs room past the message itself. */
+  maxOutputTokens: 4_000,
   timeoutMs: 60_000,
 } as const
 
@@ -133,7 +139,7 @@ export const worstGate = (state: GateState) =>
   1e6
 
 /**
- * One reply from the writer model at low effort, with no tools, through the
+ * One reply from the writer model at its effort, with no tools, through the
  * same OpenRouter routing the CoS uses: capped at the table's price and kept
  * off the hosts it excludes. `data` goes in as the user turn, as JSON.
  */
@@ -150,7 +156,7 @@ export async function writeText(
   const result = await generateText({
     model: createOpenRouter({ apiKey }).chat(WRITER.model, {
       usage: { include: true },
-      reasoning: { effort: "low" },
+      reasoning: { effort: WRITER.effort },
       provider: { ...routing },
     }),
     system,
@@ -227,16 +233,14 @@ export function readReply(raw: string): Reply {
 }
 
 /**
- * `readReply`, with a message that breaks a limit read as an error, and so is one that carries
- * a link, an email address or a phone number that no fact the item vouches
+ * `readReply`, with a message read as an error when it carries a link, an
+ * email address or a phone number that no fact the item vouches
  * for (`DigestItem.trusted`) holds exactly: text injected into a review or
  * a page can shape the message, never point the owner somewhere.
  */
 export function replyOf(raw: string, items: DigestItem[] = []): Reply {
   const read = readReply(raw)
   if (read.kind !== "message") return read
-  const over = overLimit(read.text)
-  if (over) return { kind: "error", detail: `over_limit:${over}` }
   return vouched(read.text, trustedContacts(items))
     ? read
     : { kind: "error", detail: "unsourced_contact" }
@@ -329,7 +333,7 @@ const sentencesIn = (text: string) =>
     .split(/(?<=[.!?…])["'”’)]*\s+/)
     .filter((s) => s.trim()).length
 
-/** Null when the message keeps to `LIMITS`, else which limit it broke. */
+/** Null when the message keeps to `LIMITS`, else which limit it broke: our own fixed copy is held to the limits the prompt gives the model. */
 export function overLimit(text: string): string | null {
   if (text.length > LIMITS.chars) return "chars"
   if (sentencesIn(text) > LIMITS.sentences) return "sentences"
@@ -385,7 +389,7 @@ const updatePrompt = (name: string | null) =>
     `${youAre(name)} Something the owner started has just moved on, and you are telling them.`,
     "You get the facts, a draft, and sometimes a brief saying what this moment is for. Write the update in your own words as one short message, in short plain sentences, never a word twice in a sentence a sharp, helpful assistant would send: what happened, why it matters to this business, what happens next, and the one thing the owner can do, in whatever order reads naturally. Follow the brief; never quote it.",
     `Speak in the owner's terms: their customers, being found by people nearby, their name on their quotes and cards. Never use these words: ${JARGON.join(", ")}. Say the setting, the security padlock, adding the website to Google, sending Google every page. Never promise a ranking, a position or a date.`,
-    "Confident and warm, never pushy: offer, never instruct, so no 'you should' or 'you need to'. British English, no em or en dashes. Start with what happened, never with an opener such as Good news, Great or Nice work, and never repeat what the owner was just told: the brief says what came before. At most one exclamation mark, and only for a real win such as the website or the owner's own address going live.",
+    "Confident and warm, never pushy: offer, never instruct, so no 'you should' or 'you need to'. British English. Punctuate with commas and full stops; a dash only where it genuinely reads better, and one at most. Start with what happened, never with an opener such as Good news, Great or Nice work, and never repeat what the owner was just told: the brief says what came before. At most one exclamation mark, and only for a real win such as the website or the owner's own address going live.",
     "The owner sees any button or card under the message, so never point at the screen ('the button below', 'the card below'): name what it does in passing ('one sign-in with your Google account'), or say nothing of it.",
     "Use every value in the facts exactly as written, with no quotation marks around it. Add no number, date, name, web address or DNS value that is not in the facts, and no advice or next step the brief does not give. No greeting, no thanks, no sign-off.",
     "The chat renders markdown. Keep it plain, and format only where it helps: bold for the one key fact, inline code for a DNS value or record name, a numbered list for steps to do in order. No links: a button under the message opens whatever the owner needs, and a domain may not open yet. No headings, no tables.",

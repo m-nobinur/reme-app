@@ -73,10 +73,10 @@ describe("a message's links and numbers", () => {
       })
   })
 
-  it("reads a broken limit as an error and quiet as quiet", () => {
+  it("keeps a long message as written and reads quiet as quiet", () => {
     expect(replyOf("One. Two. Three. Four.")).toEqual({
-      kind: "error",
-      detail: "over_limit:sentences",
+      kind: "message",
+      text: "One. Two. Three. Four.",
     })
     expect(replyOf("[quiet] see cheap-clean.biz")).toEqual({
       kind: "quiet",

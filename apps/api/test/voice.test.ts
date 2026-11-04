@@ -79,8 +79,9 @@ describe("voiceProblems", () => {
     expect(hits(whole)).toBeGreaterThan(0)
   })
 
-  it("gives both models the same rules", () => {
-    expect(VOICE).toContain("past tense")
+  it("gives both models the same voice, with dashes kept rare rather than banned", () => {
+    expect(VOICE).toContain("12-hour")
+    expect(VOICE).toContain("A dash is fine where it genuinely reads better")
     expect(VOICE).not.toMatch(/[—–]/)
   })
 })

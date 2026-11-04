@@ -26,7 +26,6 @@ const {
   decide,
   NARRATED_PER_HOUR,
   narrate,
-  narrationOk,
   noteProblem,
   noteResumed,
   readyNote,
@@ -187,48 +186,6 @@ describe("a change's ready line", () => {
     expect(readyText("site.revise", null, {}, "a")).toMatch(
       /^Your changes are ready/
     )
-  })
-})
-
-describe("whether a narrated line may stand in for the template", () => {
-  it("keeps one or two short sentences in plain words", () => {
-    expect(
-      narrationOk(
-        "I hit a snag while building your website, so I've started it again. Nothing for you to do, I'll tell you here when it's ready.",
-        []
-      )
-    ).toBe(true)
-  })
-
-  it.each([
-    ["a dash", "I hit a snag — so I've started again."],
-    ["a spaced hyphen", "I hit a snag - so I've started again."],
-    ["a link", "It's ready at https://example.test, have a look."],
-    ["a bare host", "It's ready at sparkle.example.test, have a look."],
-    ["a digit", "Attempt 2 is under way now."],
-    ["our name", "Reme hit a snag, so I've started again."],
-    ["three sentences", "I hit a snag. I started again. I'll say when."],
-    ["a line break", "I hit a snag.\nI started again."],
-    ["silence", "[quiet]"],
-    ["too long", `I hit a snag ${"and kept going ".repeat(30)}.`],
-    [
-      "the owner in the third person",
-      "It stopped again. Nothing more happens until the owner says try again.",
-    ],
-  ])("refuses %s", (_, text) => {
-    expect(narrationOk(text, [])).toBe(false)
-  })
-
-  it("allows a name or number that is one of the values it was given", () => {
-    expect(narrationOk("Ava here: A1 Cleaning's site is ready.", ["Ava"])).toBe(
-      false
-    )
-    expect(
-      narrationOk("Ava here: A1 Cleaning's site is ready.", [
-        "Ava",
-        "A1 Cleaning",
-      ])
-    ).toBe(true)
   })
 })
 

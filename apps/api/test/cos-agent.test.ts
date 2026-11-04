@@ -382,7 +382,7 @@ describe("the CoS's instructions", () => {
 
     it("make the build's address offer when it did not land, once, with its benefit", () => {
       expect(INSTRUCTIONS).toMatch(
-        /When the first build starts, I offer the address myself[^\n]*still no address task, that offer did not land, so make it in your next reply, once[^\n]*goes live on it the moment they publish/
+        /When the first build starts, the app offers the address itself[^\n]*still no address task, that offer did not land, so make it in your next reply, once[^\n]*goes live on it the moment they publish/
       )
     })
 
@@ -400,7 +400,7 @@ describe("the CoS's instructions", () => {
 
     it("leave Google to the offer once the setting is in, and never offer a purchase while buying is off", () => {
       expect(INSTRUCTIONS).toMatch(
-        /Once the owner's setting is in, I offer Google myself, with a Connect Google button; when that message is in the conversation, don't offer it again/
+        /Once the owner's setting is in, the app offers Google itself, with a Connect Google button; when that message is in the conversation, don't offer it again/
       )
       expect(INSTRUCTIONS).toMatch(
         /When the workspace's buying is false, the card shows where to buy each name, at Cloudflare or GoDaddy[^\n]*never offer to buy it here and never call buy_domain/
@@ -670,10 +670,10 @@ describe("the CoS's change kinds", () => {
 })
 
 describe("the CoS's routing table", () => {
-  it("keeps every owner-waiting turn on the default model at default effort", () => {
+  it("keeps every owner-waiting turn on the default model at medium effort", () => {
     expect(ROUTES.owner_turn).toEqual({
       model: DEFAULT_MODEL,
-      effort: null,
+      effort: "medium",
       path: "stream",
     })
   })

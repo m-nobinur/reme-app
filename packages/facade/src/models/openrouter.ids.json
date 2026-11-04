@@ -1,5 +1,6 @@
 [
   "deepseek/deepseek-v4.1-flash",
+  "deepseek/deepseek-v4.1-flash-1017",
   "x-ai/grok-4.6",
   "z-ai/glm-5.3-flash",
   "anthropic/claude-sonnet-5.5",

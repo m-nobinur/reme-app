@@ -101,7 +101,7 @@ export const PICKED: readonly string[] = [
 /**
  * Whether `text` may be put to the owner as it stands: one plain question,
  * with no field name ("business.proof"), no one else named, nothing of the
- * build and no dash.
+ * build.
  */
 export function questionOk(text: string): boolean {
   const line = text.trim()
@@ -110,7 +110,7 @@ export function questionOk(text: string): boolean {
     line.length <= 300 &&
     line.endsWith("?") &&
     line.split("?").length === 2 &&
-    !/\n|[—–]|\s-\s|https?:/.test(line) &&
+    !/\n|https?:/.test(line) &&
     !/\b[a-z]+[._][a-z_]+\b/.test(line) &&
     !/\b(?:developer|agent|chief of staff|staff|reme)\b/i.test(line) &&
     !INTERNALS.test(line)
@@ -132,7 +132,7 @@ export function refuseQuestion(q: {
     return `${q.field} is the owner's own pick. Build with what they picked, or leave it out and list it in your report.`
   }
   if (q.question !== undefined && !questionOk(q.question)) {
-    return "Write question as one short plain question to the owner about their business, ending in a question mark: no field names, no names of anyone, no dashes and no technical words."
+    return "Write question as one short plain question to the owner about their business, ending in a question mark: no field names, no names of anyone and no technical words."
   }
   const options = q.options ?? []
   if (isFactKey(q.field)) {

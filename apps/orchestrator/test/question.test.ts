@@ -192,18 +192,18 @@ describe("the questions ask_chief refuses", () => {
 describe("the question the owner reads", () => {
   const ask = { field: "business.parking", answer_schema: { type: "string" } }
 
-  it("refuses a field label, a name or a dash, and takes a plain question", () => {
+  it("refuses a field label or a name, and takes a plain question", () => {
     for (const question of [
       "business.proof?",
       "Years trading, accreditations, guarantees",
       "The Developer needs your hours: what are they?",
-      "Parking - is there any?",
       "Is there parking? And is it free?",
     ]) {
       expect(questionOk(question)).toBe(false)
       expect(refuseQuestion({ ...ask, question })).toMatch(/plain question/)
     }
     expect(questionOk("Is there parking near you for customers?")).toBe(true)
+    expect(questionOk("Parking - is there any near you?")).toBe(true)
   })
 
   it("refuses a key the owner picks rather than types", () => {

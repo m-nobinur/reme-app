@@ -570,7 +570,7 @@
     },
     "cleaning": {
       "label": "Cleaning",
-      "cta": "Get a quote",
+      "cta": "Request a quote",
       "headings": {
         "serviceCardsEyebrow": "Cleaning services",
         "serviceCardsHeading": "Rooms we leave spotless",
@@ -764,7 +764,7 @@
     },
     "legal": {
       "label": "Legal",
-      "cta": "Book a consultation",
+      "cta": "Request a quote",
       "headings": {
         "serviceCardsEyebrow": "Practice areas",
         "serviceCardsHeading": "Where we can act for you",
@@ -776,7 +776,7 @@
         "serviceAreaHeading": "Who we act for, and where",
         "servicesHeading": "Practice areas",
         "contactHeading": "Speak to a solicitor",
-        "quoteHeading": "Book a consultation"
+        "quoteHeading": "Request a quote"
       },
       "icons": [
         "scales",
@@ -943,7 +943,7 @@
     },
     "limousine": {
       "label": "Limousine and chauffeur",
-      "cta": "Reserve a car",
+      "cta": "Request a quote",
       "headings": {
         "serviceCardsEyebrow": "The fleet",
         "serviceCardsHeading": "The car for your journey",
@@ -955,7 +955,7 @@
         "serviceAreaHeading": "Where we pick up and drop off",
         "servicesHeading": "Occasions and journeys",
         "contactHeading": "Talk to our bookings team",
-        "quoteHeading": "Reserve a car"
+        "quoteHeading": "Request a quote"
       },
       "icons": [
         "carProfile",

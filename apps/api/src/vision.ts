@@ -43,7 +43,8 @@ import { readFacts } from "./workspace.ts"
 
 export const VISION = {
   callMs: 25_000,
-  maxOutputTokens: 3_000,
+  /** Reasoning counts against it, and onboarding calls think at high. */
+  maxOutputTokens: 8_000,
   /** The long side the model sees: enough to judge a photo or read a colour. */
   width: 640,
   /** What a picture adds to a call's prompt in characters, so the reservation covers it. */

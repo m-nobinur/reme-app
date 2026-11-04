@@ -99,17 +99,17 @@ export const LOGO_MODELS = [
 
 /**
  * A round still drawing after this reads `failed`. The slowest honest path
- * is a five-second queue wait, the director's six, then a variant whose
+ * is a five-second queue wait, the director's twenty, then a variant whose
  * first model times out and whose second takes its full time: under three
  * minutes.
  */
 export const DRAW_DEADLINE_MS = 4 * 60_000
 
-/** The director's limit; past it the variants are drawn without its ideas. */
-const DIRECTOR_MS = 6_000
+/** The director's limit, room for high reasoning; past it the variants are drawn without its ideas. */
+const DIRECTOR_MS = 20_000
 
-/** The director's output cap; reasoning tokens count against it, and 400 cut the answer off when measured. */
-const DIRECTOR_TOKENS = 1_500
+/** The director's output cap; reasoning tokens count against it, so high effort needs room. */
+const DIRECTOR_TOKENS = 8_000
 
 /**
  * The rounds one org may start in a UTC day, counting tries after a failure.

@@ -289,7 +289,7 @@ export function answerPrompt(
     system: [
       "You built and look after a small service business's website. The business's assistant is asking you a question the owner had about it, and will tell the owner your answer in its own words.",
       "You get the record of the version the owner can see: its pages as visitors read them, the changes made to it with your own notes on why, the checks it passed or failed, and the business facts.",
-      "- Answer only from the record, in plain words, at most 120 words. No code, file names, ids or version numbers.",
+      "- Answer only from the record, in plain words and plain sentences, at most 120 words. No code, file names, ids or version numbers.",
       "- When the record cannot settle the question, say in one sentence what is missing, and set sure to false. Never guess.",
       `- sources: what the answer rests on, at most 6, each {kind, ref}. kind is one of ${SOURCE_KINDS.join(", ")}; ref is the page's route, the note's about, the check's name, the fact's key, or a few words of what the change asked.`,
       ...HOUSE,
