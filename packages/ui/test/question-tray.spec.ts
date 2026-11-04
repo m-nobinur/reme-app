@@ -194,6 +194,50 @@ test("a design read that fails says so and stops asking until Try again", async 
   }
 })
 
+const tileNames = (tiles: import("@playwright/test").Locator) =>
+  tiles.evaluateAll((all) =>
+    all.map((tile) => tile.closest("label")?.textContent?.trim() ?? "")
+  )
+
+for (const [title, why] of [
+  ["Palette, nothing picked", "the presets"],
+  ["Palette, built from the logo", "the logo's palettes"],
+] as const) {
+  test(`Surprise me brings a palette from ${why} into the last tile, picks it and moves on, and no tile ever moves`, async ({
+    page,
+  }) => {
+    await open(page, "QuestionTray")
+    const palette = state(page, title)
+    const tiles = palette.getByRole("radio")
+    await expect(tiles).toHaveCount(4)
+    const first = await tileNames(tiles)
+    await palette.getByRole("button", { name: "Surprise me" }).click()
+    await expect(tiles.nth(3)).toBeChecked()
+    const brought = await tileNames(tiles)
+    expect(brought.slice(0, 3)).toEqual(first.slice(0, 3))
+    expect(brought[3]).not.toBe(first[3])
+    await expect(palette.getByText("4 of 7", { exact: true })).toBeVisible()
+
+    await palette.getByRole("button", { name: "Previous question" }).click()
+    await expect(tiles.nth(3)).toBeChecked()
+    await tiles.nth(0).locator("xpath=ancestor::label").click()
+    await expect(tiles.nth(0)).toBeChecked()
+    expect(await tileNames(tiles)).toEqual(brought)
+    // Picking a tile moves nothing on: the question is still this one.
+    await expect(palette.getByText("3 of 7", { exact: true })).toBeVisible()
+  })
+}
+
+test("Surprise me moves on at once with reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await open(page, "QuestionTray")
+  const palette = state(page, "Palette, nothing picked")
+  await palette.getByRole("button", { name: "Surprise me" }).click()
+  await expect(palette.getByText("4 of 7", { exact: true })).toBeVisible({
+    timeout: 300,
+  })
+})
+
 test("Next turns into Redesign my logo at one width, and the brief opens with the change", async ({
   page,
 }) => {

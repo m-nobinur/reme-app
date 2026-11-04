@@ -954,18 +954,31 @@ const pictureStops = ({ paper, tint, primary, ink }: PaletteStops): Stops => [
 
 /**
  * The options a page shows: the card's `initial` ones when it has them, with
- * a pick from the rest (Surprise me) first in place of the last.
+ * a pick from the rest (Surprise me) in the place of the last. The pick stays
+ * there while another is chosen, so no tile moves; `held` is the one Surprise
+ * me brought, else the answer's own when it is not one of the first.
  */
-function shownOptions(question: Question, answer: Answer | undefined) {
+function shownOptions(
+  question: Question,
+  answer: Answer | undefined,
+  held?: string | null
+) {
   const { options, initial } = question.card
   if (!initial) return options
   const shown = options.filter((each) => initial.includes(each.id))
-  const picked =
-    answer && "choice" in answer && !initial.includes(answer.choice)
-      ? options.find((each) => each.id === answer.choice)
-      : undefined
-  return picked ? [picked, ...shown.slice(0, -1)] : shown
+  const beyond =
+    held ??
+    (answer && "choice" in answer && !initial.includes(answer.choice)
+      ? answer.choice
+      : undefined)
+  const extra = options.find(
+    (each) => each.id === beyond && !initial.includes(each.id)
+  )
+  return extra ? [...shown.slice(0, -1), extra] : shown
 }
+
+/** How long Surprise me shows its pick before the tray moves on. */
+const SURPRISE_MS = 400
 
 /**
  * The palettes the tray offers, the site's own first: the one the owner
@@ -1532,6 +1545,12 @@ function QuestionTray({
   )
   // Every lettering, past the four that fit the business.
   const [allPairs, setAllPairs] = useState(false)
+  // The palette Surprise me brought into the last tile, and whether it is
+  // still being shown before the tray moves on.
+  const [brought, setBrought] = useState<string | null>(null)
+  const [holding, setHolding] = useState(false)
+  const holdTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(holdTimer.current), [])
   const focusComposer = useFocusComposer()
 
   const step = pages[index]
@@ -1573,7 +1592,13 @@ function QuestionTray({
     setAnswers(now)
     return now
   }
+  /** The owner's own move ends Surprise me's pause. */
+  const stopHold = () => {
+    clearTimeout(holdTimer.current)
+    setHolding(false)
+  }
   const go = (to: number, skipping: boolean, chosen = answer) => {
+    stopHold()
     settle(skipping, chosen)
     setIndex(to)
   }
@@ -1581,6 +1606,7 @@ function QuestionTray({
   // or the upload on Yes, and the logo kept there finishes. A logo brief
   // changed since its designs is the owner's too: it is drawn first.
   const finish = (skipAll: boolean, chosen = answer) => {
+    stopHold()
     if (logo && logoSubmit && !logoSubmit.disabled) {
       setIndex(designs)
       setFinishing(true)
@@ -1630,14 +1656,25 @@ function QuestionTray({
   const shown =
     allPairs && question.visual === "font_pair"
       ? question.card.options
-      : shownOptions(question, answer)
-  // Any palette but the one picked, from every one offered, not only those shown.
+      : shownOptions(question, answer, brought)
+  const unseen = question.card.options.filter(
+    (each) => !shown.some((one) => one.id === each.id)
+  )
+  /** Shows what Surprise me picked as picked for a moment, then moves on as Next would. */
+  const showThenMoveOn = (chosen: Answer) => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return onward(chosen)
+    }
+    setHolding(true)
+    holdTimer.current = setTimeout(() => onward(chosen), SURPRISE_MS)
+  }
+  // A palette from those not shown, in the last tile, picked.
   const surprise = () => {
-    const rest = question.card.options.filter(
-      (each) => !(answer && "choice" in answer && answer.choice === each.id)
-    )
-    const lucky = rest[Math.floor(Math.random() * rest.length)]
-    if (lucky) pick(lucky.id)
+    const lucky = unseen[Math.floor(Math.random() * unseen.length)]
+    if (!lucky) return
+    setBrought(lucky.id)
+    pick(lucky.id)
+    showThenMoveOn({ choice: lucky.id })
   }
   const ownPage = question.visual === "logo" || question.visual === "photos"
   // With a logo the palettes come from it; the presets are the fallback.
@@ -1650,6 +1687,11 @@ function QuestionTray({
   const ticks = answer && "choices" in answer ? answer.choices : []
   const pick = (value: string) =>
     setAnswers((now) => ({ ...now, [question.id]: { choice: value } }))
+  // A tap on a tile picks that tile and nothing else moves.
+  const tap = (value: string) => {
+    stopHold()
+    pick(value)
+  }
   // A tick toggles; the options keep their order, and none ticked is unanswered.
   const toggle = (value: string) =>
     setAnswers((now) => {
@@ -1746,9 +1788,19 @@ function QuestionTray({
       ) : null}
       {logoLed ? (
         <LogoPalettes
+          brought={brought}
           group={`${id}-${question.id}`}
+          holding={holding}
           label={question.question ?? "Choose one"}
-          onPick={(palette) => set({ palette })}
+          onPick={(palette) => {
+            stopHold()
+            set({ palette })
+          }}
+          onSurprise={(palette) => {
+            setBrought(palette.name)
+            set({ palette })
+            showThenMoveOn({ palette })
+          }}
           picked={pickedFromLogo}
           read={fromLogo}
         />
@@ -1806,7 +1858,7 @@ function QuestionTray({
                   className="sr-only"
                   name={`${id}-${question.id}`}
                   onChange={() =>
-                    multiple ? toggle(option.id) : pick(option.id)
+                    multiple ? toggle(option.id) : tap(option.id)
                   }
                   type={multiple ? "checkbox" : "radio"}
                   value={option.id}
@@ -1859,7 +1911,9 @@ function QuestionTray({
       ) : null}
       {question.visual === "palette" ? (
         <>
-          {logoLed ? null : <Surprise onClick={surprise} />}
+          {logoLed || unseen.length === 0 ? null : (
+            <Surprise disabled={holding} onClick={surprise} />
+          )}
           <PalettePicture
             checked={
               answer !== undefined &&
@@ -1868,7 +1922,10 @@ function QuestionTray({
               samePalette(answer.palette, picture)
             }
             group={`${id}-${question.id}`}
-            onPick={(palette) => set({ palette })}
+            onPick={(palette) => {
+              stopHold()
+              set({ palette })
+            }}
             // A logo palette picked is the logo's, never a picture's.
             read={
               picture && !logoPick({ palette: picture }, logoPalettes)

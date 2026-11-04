@@ -471,6 +471,8 @@ it("an idea adds its words and sets its option, a second tap takes both back, an
   expect(retro()?.closest("label")?.textContent).toContain("Hand-drawn")
 
   await tray.press("Fewer details")
+  // The old label fades out over a moment before the button reads Redesign my logo alone.
+  await vi.waitFor(() => expect(tray.control("Redesign my logo")).toBeDefined())
   await tray.press("Redesign my logo")
   expect(fake.drawn.at(-1)).toMatchObject({
     changes: "fewer small details",
