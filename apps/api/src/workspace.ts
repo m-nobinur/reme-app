@@ -72,15 +72,18 @@ const iso = (at: Date) => at.toISOString()
 
 /**
  * How long each lane takes, from the click to the draft, as the bounds of
- * the range the chat and the panel both quote ("6 to 10 minutes"): p50 is
- * the low end, p95 the high. The full lane is the local runs of 2026-10-24
- * and 25 (310 to 406 s, a repair round in some; the owner's top is 10
- * minutes for a slow provider); the quick lane is 34 to 65 s to the ready card.
- * shortcut: a few runs on one machine, until EV3's rolling p50 and p95 per lane exist; swap this one object for them.
+ * the range the chat and the panel both quote ("10 to 17 minutes"): p50 is
+ * the low end, p95 the high. The full lane is the staging build of
+ * 2026-11-04 on the Haiku developer (assignment a7436114, 990 s): planning
+ * 185 s, implementing 382 s and validating 17 s reach the draft in about 585
+ * s, and the repair round its gates sent it back for added 399 s and a second
+ * validation. The low end is the run without a repair, the high end the one
+ * with it. The quick lane is 34 to 65 s to the ready card.
+ * shortcut: one staging run and a few local ones, until EV3's rolling p50 and p95 per lane exist; swap this one object for them.
  */
 export const EXPECTED_SECONDS = {
   quick: { p50: 45, p95: 90 },
-  full: { p50: 360, p95: 600 },
+  full: { p50: 600, p95: 1000 },
 } as const
 
 /** What a full build is doing, finer than the stages the owner sees. */
