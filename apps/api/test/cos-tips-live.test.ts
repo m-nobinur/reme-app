@@ -1,4 +1,5 @@
 import { COS_TOOLS, type CosToolName, CosWorkspace } from "@workspace/contracts"
+import { procedure } from "@workspace/skills"
 import { generateText, isStepCount, tool } from "ai"
 import { describe, expect, it } from "vitest"
 import {
@@ -8,6 +9,7 @@ import {
   INSTRUCTIONS,
   openrouterModel,
 } from "../src/cos/agent.ts"
+import { skillHeader } from "../src/cos/history.ts"
 import { workspaceLabels } from "../src/cos/labels.ts"
 
 /**
@@ -76,6 +78,11 @@ async function turn(tips: ("business_email" | "local_phone")[], said: string) {
     },
     stopWhen: isStepCount(4),
     messages: [
+      // The tips live in web-address, which code loads while tips are listed.
+      {
+        role: "user",
+        content: `${skillHeader("web-address")}\n${procedure("cos", "web-address")?.body}`,
+      },
       {
         role: "user",
         content: contextOf(
