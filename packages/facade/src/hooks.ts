@@ -117,8 +117,9 @@ const QUOTED = /'[^']*'|"[^"]*"/g
  * or `split(/\s+/)`, is a pattern.
  */
 const namesDisk = (token: string) => {
+  // `"/"+"etc"` joins in the script, so `+` is no part of a segment.
   const first = token
-    .replaceAll("\\", "")
+    .replace(/[\\+]/g, "")
     .split("/")
     .find((segment) => segment !== "" && segment !== ".")
   return first === undefined || /[$`*?[{~]/.test(first) || ROOT_DIRS.has(first)

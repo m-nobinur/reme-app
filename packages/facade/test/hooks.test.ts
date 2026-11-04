@@ -132,6 +132,8 @@ describe("the pre_tool_call policy", () => {
       'cat "/e"tc/passwd',
       `cat "$(cat /e't'c/passwd)"`,
       `node -e 'require("fs").readFileSync("/./etc/passwd")'`,
+      `node -e 'require("fs").readFileSync("/"+"etc/passwd")'`,
+      `node -e 'require("fs").readFileSync("/e"+"tc/passwd")'`,
       // Unquoted, a lookalike is still a path: only quotes hold patterns.
       "cat /span",
     ]) {
