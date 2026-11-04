@@ -2839,6 +2839,31 @@ describe("recovering a planned turn", () => {
     expect(said.join("")).toBe(offerings.say)
   })
 
+  it("tells a retry which facts an earlier call already saved", async () => {
+    const tooLong = plan({
+      facts: { "business.offerings": { items: ["Weddings", "Proms"] } },
+      say: `Weddings and proms. ${"word ".repeat(SAY_MAX / 5)}`,
+      next: { kind: "ask_open", about: "business.audience" },
+    })
+    const { model, prompts } = planner([tooLong, offerings])
+    const out = await planTurn(
+      model,
+      PRICE,
+      typed("We do weddings and proms"),
+      undefined,
+      () => undefined,
+      undefined,
+      {
+        send: () => undefined,
+        commit: async (checked) => checked.stated.map((f) => f.key),
+      }
+    )
+    expect(out.ok).toBe(true)
+    expect(JSON.stringify(prompts[1])).toContain(
+      "These facts from it are already saved: business.offerings"
+    )
+  })
+
   it("shows the recap again from the facts, with no apology, once every plan is refused after words showed", async () => {
     const recapCard = call("tool-ask_open", { about: "recap" }, counter())
     const s = typed(

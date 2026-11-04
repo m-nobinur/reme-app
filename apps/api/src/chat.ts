@@ -2921,6 +2921,7 @@ async function plannedTurn(
       calls: outcome.calls.length,
       ms: outcome.calls.reduce((total, c) => total + c.ms, 0),
       first_chunk_ms: outcome.firstChunkMs,
+      max_gap_ms: outcome.maxGapMs,
       shown_chars: outcome.shown.length,
       cost_usd: outcome.calls.reduce((total, c) => total + c.costUsd, 0),
     })

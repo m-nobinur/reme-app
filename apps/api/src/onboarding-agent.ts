@@ -1508,12 +1508,18 @@ export type PlanCall = {
  * fallback after it must keep it. `firstChunkMs` is when its first words
  * went, from the turn's start, or null when none did. `refused` holds why
  * every call was refused when the plan is code's own after words showed
- * (`reshown`).
+ * (`reshown`). `maxGapMs` is the longest wait between stream parts once a
+ * call began writing, which is what `PLANNER.stallMs` cuts.
  */
 export type PlanOutcome = (
   | { ok: true; checked: Checked; refused?: string[] }
   | { ok: false; reason: "invalid" | "provider" | "timeout" }
-) & { calls: PlanCall[]; shown: string; firstChunkMs: number | null }
+) & {
+  calls: PlanCall[]
+  shown: string
+  firstChunkMs: number | null
+  maxGapMs: number
+}
 
 const NO_USAGE: Usage = {
   input_tokens: 0,
@@ -1684,7 +1690,11 @@ export async function planTurn(
   const messages: PlanCall["messages"] = [{ role: "user", content: data }]
   const calls: PlanCall[] = []
   const began = Date.now()
-  const out = { shown: "" as string, firstChunkMs: null as number | null }
+  const out = {
+    shown: "" as string,
+    firstChunkMs: null as number | null,
+    maxGapMs: 0,
+  }
   // `shown` keeps the model's own text, which a retry must begin with.
   // Whole sentences arrive, so no word splits.
   const show = (words: string) => {
@@ -1705,16 +1715,22 @@ export async function planTurn(
   let stallRetried = false
   let doingShown = false
   const stallMs = limits.stallMs ?? PLANNER.stallMs
+  // Facts an earlier call wrote stay written, so a retry keeps them rather
+  // than leave a fact behind that its own plan no longer states.
+  const saved = new Set<string>()
   // The next call reads its last answer and exactly why it went no further.
   const feedBack = (raw: string, what: string, errors: string[]) => {
     const heard = out.shown
       ? `\nThe owner has already read the start of your message: ${JSON.stringify(out.shown)}. say must begin with exactly that text, then go on from it.`
       : ""
+    const kept = saved.size
+      ? `\nThese facts from it are already saved: ${[...saved].join(", ")}. State them again as they were.`
+      : ""
     messages.push(
       { role: "assistant", content: raw || "(no answer)" },
       {
         role: "user",
-        content: `${what}, so ${out.shown ? "nothing more" : "nothing"} was sent to the owner:\n- ${errors.join("\n- ")}${heard}\nWrite the whole plan again with these fixed.`,
+        content: `${what}, so ${out.shown ? "nothing more" : "nothing"} was sent to the owner:\n- ${errors.join("\n- ")}${heard}${kept}\nWrite the whole plan again with these fixed.`,
       }
     )
   }
@@ -1741,7 +1757,10 @@ export async function planTurn(
       if (!status || committed || c.plan.next.kind === "start_build") return []
       committed = true
       const written = await status.commit(c)
-      if (Array.isArray(written)) return written
+      if (Array.isArray(written)) {
+        for (const key of written) saved.add(key)
+        return written
+      }
       commitErrors = (written as { errors: string[] }).errors
       return []
     }
@@ -1844,10 +1863,12 @@ export async function planTurn(
       const nextPart = async (c: Call) => {
         if (!c.wrote) return c.parts.next()
         const quiet = setTimeout(() => c.stop.abort(), stallMs)
+        const asked = Date.now()
         try {
           return await c.parts.next()
         } finally {
           clearTimeout(quiet)
+          out.maxGapMs = Math.max(out.maxGapMs, Date.now() - asked)
         }
       }
       // A call's parts up to its first text, or its end, whichever comes
