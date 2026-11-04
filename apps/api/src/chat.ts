@@ -2110,22 +2110,29 @@ async function advance(
   if (reply?.kind === "facts" || reply?.kind === "design") {
     const source =
       reply.kind === "facts" && reply.chose ? "inferred" : "owner_stated"
+    const kept = reply.kind === "facts" ? (reply.suggested ?? []) : []
+    const state = async (on: OrgScopedDb, current?: FactRecord[]) => {
+      await stateFacts(
+        on,
+        owner,
+        reply.facts.filter((f) => !kept.includes(f.key)),
+        current,
+        source
+      )
+      const left = reply.facts.filter((f) => kept.includes(f.key))
+      if (left.length > 0)
+        await stateFacts(on, owner, left, current, "inferred")
+    }
     // The build's orchestrator reads the facts over its own connection, so
     // an answer that starts it is committed first, in a transaction of its
     // own; a retry finds it held and writes nothing.
     if (build) {
       await kit.withOrg(
         { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
-        (own) => stateFacts(own, owner, reply.facts, undefined, source)
+        (own) => state(own)
       )
     } else {
-      await stateFacts(
-        db,
-        owner,
-        reply.facts,
-        onboarding.facts as FactRecord[],
-        source
-      )
+      await state(db, onboarding.facts as FactRecord[])
     }
   }
   // What the assistant picked leads the reply, a build's outcome included.
@@ -3152,14 +3159,26 @@ async function planFacts(
   const byKey = new Map(
     [...card, ...c.stated].map((fact) => [fact.key, fact] as const)
   )
+  // A card value the owner left as suggested stays the assistant's, unless the plan stated that key.
+  const kept =
+    answered?.meant.kind === "facts" ? (answered.meant.suggested ?? []) : []
+  const suggested = card.filter(
+    (f) => kept.includes(f.key) && !c.stated.some((s) => s.key === f.key)
+  )
   await stateFacts(
     db,
     p.owner,
-    [...byKey.values()],
+    [...byKey.values()].filter((f) => !suggested.includes(f)),
     onboarding.facts as FactRecord[]
   )
-  if (c.chosen.length > 0) {
-    await stateFacts(db, p.owner, c.chosen, undefined, "inferred")
+  if (c.chosen.length + suggested.length > 0) {
+    await stateFacts(
+      db,
+      p.owner,
+      [...suggested, ...c.chosen],
+      undefined,
+      "inferred"
+    )
   }
   return {
     ok: true as const,

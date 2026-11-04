@@ -1476,6 +1476,8 @@ export type Answer =
       changing?: readonly QuoteField[]
       /** The assistant's card answered on the card, `picked` with Pick for me: the reply shows the persona. */
       persona?: "stated" | "picked"
+      /** Keys the owner left as the card suggested them: stored as `inferred`. */
+      suggested?: readonly string[]
     }
   /** The design tray's answers; `settled` once it is finished, not just answered so far, `picked` with Pick for me. */
   | { kind: "design"; facts: FactValue[]; settled: boolean; picked?: true }
@@ -1563,7 +1565,11 @@ export const OUTPUTS = {
  * The facts a details card states: only the step's own keys, each once,
  * every value a `FactValue`. Null to refuse the answer.
  */
-function detailsAnswer(input: AskDetailsInput, output: unknown): Answer | null {
+function detailsAnswer(
+  input: AskDetailsInput,
+  output: unknown,
+  held: readonly Held[]
+): Answer | null {
   const answer = AskDetailsOutput.safeParse(output)
   if (!answer.success) return null
   if (answer.data.answer === "skipped") {
@@ -1578,12 +1584,29 @@ function detailsAnswer(input: AskDetailsInput, output: unknown): Answer | null {
   ) {
     return null
   }
+  if (input.step !== "assistant")
+    return { kind: "facts", facts: answer.data.facts }
+  const picked = answer.data.skip_all === true
+  // What the card sends untouched: its prefill, and with Pick for me the first name idea.
+  const offered = [
+    ...input.prefill,
+    ...(picked && input.ideas?.[0]
+      ? [{ key: "assistant.name", value: { name: input.ideas[0] } }]
+      : []),
+  ]
+  const same = (a: unknown, b: unknown) =>
+    JSON.stringify(a) === JSON.stringify(b)
   return {
     kind: "facts",
     facts: answer.data.facts,
-    ...(input.step === "assistant" && {
-      persona: answer.data.skip_all ? "picked" : "stated",
-    }),
+    persona: picked ? "picked" : "stated",
+    suggested: answer.data.facts
+      .filter(
+        (fact) =>
+          !held.some((h) => h.key === fact.key) &&
+          offered.some((o) => o.key === fact.key && same(o.value, fact.value))
+      )
+      .map((fact) => fact.key),
   }
 }
 
@@ -1730,7 +1753,7 @@ export function cardAnswer(
   }
   if (part.type === "tool-ask_details") {
     const input = AskDetailsInput.safeParse(part.input)
-    return input.success ? detailsAnswer(input.data, output) : null
+    return input.success ? detailsAnswer(input.data, output, held) : null
   }
   if (part.type === "tool-ask_fact") {
     const answer = AskFactOutput.safeParse(output)
@@ -1977,13 +2000,15 @@ function pickFor(part: ToolPart, o: Onboarding): Answer | null {
   const step = stepOf(part)
   // The assistant's card answers as its Pick for me button does: the owner's own kept, the rest as the card opens.
   if (step === "assistant") {
+    const facts = [
+      ...prefillOf(step, o),
+      ...(has(o, "assistant.name") ? [] : pickedPersona(o).slice(0, 1)),
+    ]
     return {
       kind: "facts",
-      facts: [
-        ...prefillOf(step, o),
-        ...(has(o, "assistant.name") ? [] : pickedPersona(o).slice(0, 1)),
-      ],
+      facts,
       persona: "picked",
+      suggested: facts.filter((f) => !has(o, f.key)).map((f) => f.key),
     }
   }
   const palette = firstPalettes(o.orgId)[0] as PaletteId

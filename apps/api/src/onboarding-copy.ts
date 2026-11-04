@@ -555,7 +555,7 @@ export function personaIntro(
           ])
         : pick(v, "persona_intro", [
             `From now on I'm ${p.name}, your business assistant. Here's how I'll come across:`,
-            `${p.name} it is. I'll look after ${v.business} from here on, and this is how I'll introduce myself:`,
+            `${p.name} it is, and here's how I'll introduce myself:`,
             `Thanks${comma(v.owner)}. I'm ${p.name}, your assistant for ${v.business} from now on. Here's a preview:`,
           ])
   )

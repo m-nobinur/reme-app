@@ -755,7 +755,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
     // The conversation's id came from the same source as every other.
     expect(first.id).toBe(`${NS}-0000-4000-8000-000000000001`)
 
-    // Every answer is the owner's, as the profile page will show them.
+    // Every answer is the owner's, as the profile page will show them, but
+    // the pronouns the card suggested and the owner left as they were.
     expect(first.facts.map((f) => [f.key, f.provenance.source]).sort()).toEqual(
       [
         "assistant.name",
@@ -779,7 +780,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         "site.palette",
       ]
         .sort()
-        .map((key) => [key, "owner_stated"])
+        .map((key) => [
+          key,
+          key === "assistant.pronouns" ? "inferred" : "owner_stated",
+        ])
     )
 
     // The staff directory shows the Chief of Staff by the name the owner gave it.

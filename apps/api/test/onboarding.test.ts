@@ -713,6 +713,25 @@ describe("an answer on a card", () => {
     })
   })
 
+  it("marks the persona values the owner left as the card suggested, and only those", () => {
+    const card = cardFor("assistant")
+    const { prefill } = AskDetailsInput.parse(card.input)
+    const tone = { key: "assistant.tone", value: { id: "casual" } }
+    const name = { key: "assistant.name", value: { name: "Ava" } }
+    const touched = [
+      name,
+      ...prefill.filter((f) => f.key !== "assistant.tone"),
+      tone,
+    ]
+    expect(
+      cardAnswer(card, { answer: "stated", facts: touched }, [])
+    ).toMatchObject({ suggested: ["assistant.pronouns", "assistant.avatar"] })
+    // A value already held is the owner's to keep: never turned into a suggestion.
+    expect(
+      cardAnswer(card, { answer: "stated", facts: touched }, [], prefill)
+    ).toMatchObject({ suggested: [] })
+  })
+
   it("refuses a phone on a card that cannot be dialled, so it is never stored", () => {
     const contact = detailsCard("contact", start(), counter())
     const phone = (e164: string) => ({ key: "business.phone", value: { e164 } })
@@ -739,6 +758,7 @@ describe("an answer on a card", () => {
       kind: "facts",
       facts,
       persona: "stated",
+      suggested: ["assistant.pronouns", "assistant.avatar"],
     })
     expect(
       cardAnswer(card, { answer: "stated", facts, skip_all: true }, [])
@@ -746,7 +766,12 @@ describe("an answer on a card", () => {
     // Part of the card is an answer too; the step asks again for the rest.
     expect(
       cardAnswer(card, { answer: "stated", facts: facts.slice(0, 1) }, [])
-    ).toEqual({ kind: "facts", facts: facts.slice(0, 1), persona: "stated" })
+    ).toEqual({
+      kind: "facts",
+      facts: facts.slice(0, 1),
+      persona: "stated",
+      suggested: [],
+    })
     for (const output of [
       { answer: "stated", facts: [PHONE] },
       { answer: "stated", facts: [facts[0], facts[0]] },
@@ -1230,9 +1255,19 @@ describe("a reply Jev read", () => {
           facts: [...input.prefill, ...name],
           skip_all: true,
         },
-        []
+        [],
+        now.facts
       )
-      expect(button).toMatchObject({ persona: "picked" })
+      // Everything Pick for me sent is the assistant's, but a name the owner gave stays theirs.
+      expect(button).toMatchObject({
+        persona: "picked",
+        suggested: [
+          "assistant.pronouns",
+          "assistant.avatar",
+          "assistant.tone",
+          ...(held.length ? [] : ["assistant.name"]),
+        ],
+      })
       expect(decided(card, { kind: "defer" }, now)).toEqual(button)
     }
     // What the business does, its contact details and the build are the owner's.
