@@ -210,9 +210,17 @@ describe("the procedures code loads", () => {
   }
 
   it("loads the top open item's on the hand-over, and what the owner's message is about", () => {
-    expect(skillsDue({ workspace: EMPTY, starting: true })).toEqual([
+    expect(skillsDue({ workspace: EMPTY, starting: "handover" })).toEqual([
       "web-address",
     ])
+    // A new conversation with no site yet has no address to put it on.
+    expect(skillsDue({ workspace: EMPTY, starting: "session" })).toEqual([])
+    expect(
+      skillsDue({
+        workspace: { ...EMPTY, site: { host: "x.reme.site", live_version: 1 } },
+        starting: "session",
+      })
+    ).toEqual(["web-address"])
     expect(
       skillsDue({ workspace: EMPTY, said: "Help me set up my web address" })
     ).toEqual(["web-address"])

@@ -32,7 +32,8 @@ import { reserveSpend, settleSpend } from "./turns.ts"
 
 /**
  * Reflection (ADR-042): after a conversation has gone quiet, or every few
- * owner turns, a cheap model reads what the owner said and the assistant
+ * owner turns with no memory written, a cheap model reads what the owner
+ * said (onboarding's answers on a session's first pass) and the assistant
  * answered, and may add to the owner's profile. It is the main source of
  * wrong memories in the systems it comes from (hermes added an approval
  * gate for it), so the model only proposes: code checks every change
@@ -372,7 +373,13 @@ async function lastPass(db: OrgScopedDb, sessionId: string): Promise<number> {
 export async function reflectAfterTurn(
   kit: Tenancy,
   model: LanguageModel | null,
-  job: AfterTurn
+  job: AfterTurn,
+  /**
+   * What the owner typed in the session before the CoS logged it, onboarding's
+   * answers, read by the caller since the CoS's code never reads the chat's
+   * rows. The session's first pass reads them as the owner's own words.
+   */
+  earlier?: (db: OrgScopedDb, sessionId: string) => Promise<string[]>
 ): Promise<void> {
   const at = { orgId: job.orgId }
   const log = (outcome: string, extra: Record<string, unknown> = {}) =>
@@ -402,7 +409,12 @@ export async function reflectAfterTurn(
     return log("newer_turn")
   }
   const after = await kit.withOrg(at, (db) => lastPass(db, job.sessionId))
-  const window = windowOf(rows, after)
+  const logged = windowOf(rows, after)
+  const before =
+    after < 0 && earlier
+      ? await kit.withOrg(at, (db) => earlier(db, job.sessionId))
+      : []
+  const window = { ...logged, owner: [...before, ...logged.owner] }
   const verdict = verdictOf(window, job.idle === true)
   if (verdict === "wait" || verdict === "short") return log(verdict)
   const pass = (outcome: string, extra: Record<string, unknown> = {}) =>

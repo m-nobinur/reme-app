@@ -150,10 +150,8 @@ export async function continueTurn(
   const sessionId = found.row.refId as string
   const { owner } = found
   const tools = { env, kit, owner, settleCard }
-  const [{ workspace, facts, profile }, prefix] = await Promise.all([
-    loadWorkspace(tools),
-    cosPrefix(),
-  ])
+  const [{ workspace, facts, profile, notes: working }, prefix] =
+    await Promise.all([loadWorkspace(tools), cosPrefix()])
   const reserved = reservation(price)
   const opened = await kit.withOrg({ orgId: job.orgId }, async (db) => {
     const staffId = await chiefStaffId(db)
@@ -187,7 +185,7 @@ export async function continueTurn(
       found.zone,
       new Date(),
       undefined,
-      personaOf(facts, profile),
+      personaOf(facts, profile, working),
       false,
       null,
       facts,

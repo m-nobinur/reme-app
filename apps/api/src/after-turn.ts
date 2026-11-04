@@ -1,4 +1,10 @@
-import { tenancy } from "@workspace/db"
+import {
+  conversationMessages,
+  events,
+  type OrgScopedDb,
+  sql,
+  tenancy,
+} from "@workspace/db"
 import { type ContinueJob, continueTurn, isContinueJob } from "./continue.ts"
 import { LIMITS, openrouterModel } from "./cos/agent.ts"
 import { COMPACTION, compactAfterTurn } from "./cos/compaction.ts"
@@ -52,6 +58,25 @@ export async function enqueueAfterTurn(
 }
 
 /**
+ * What the owner typed in the conversation that the CoS never logged:
+ * onboarding's answers, oldest first, for reflection's first pass.
+ */
+export async function onboardingWords(
+  db: OrgScopedDb,
+  id: string
+): Promise<string[]> {
+  const rows = await db.execute<{ text: string | null }>(sql`
+    select p->>'text' as text
+    from ${conversationMessages} m, jsonb_array_elements(m.content->'parts') p
+    where m.conversation_id = ${id} and m.content->>'role' = 'user'
+      and p->>'type' = 'text'
+      and not exists (select 1 from ${events} e where e.session_id = ${id}
+        and e.type = 'cos.message' and e.payload->'message'->>'id' = m.id)
+    order by m.seq`)
+  return rows.flatMap((r) => (r.text ? [r.text] : []))
+}
+
+/**
  * The work after each closed turn: compaction, then reflection; and a
  * continuation or a proactive turn the orchestrator handed over
  * (`continue.ts`, `wake.ts`). A message whose job threw is retried, after a
@@ -92,7 +117,7 @@ export async function afterTurnBatch(
           )
         } else {
           if (!body.idle) await compactAfterTurn(kit, model, body)
-          await reflectAfterTurn(kit, model, body)
+          await reflectAfterTurn(kit, model, body, onboardingWords)
         }
         message.ack()
       } catch (error) {

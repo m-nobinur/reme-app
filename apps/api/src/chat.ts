@@ -1121,8 +1121,12 @@ export async function chat(
       )
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
-      const { workspace, facts, profile } =
-        loaded ?? (await loadWorkspace(tools))
+      const {
+        workspace,
+        facts,
+        profile,
+        notes: working,
+      } = loaded ?? (await loadWorkspace(tools))
       const granted = await grantedKinds(db)
       const notes = await turnNotes(
         db,
@@ -1138,7 +1142,7 @@ export async function chat(
         zone ?? null,
         new Date(),
         turn.kind === "message" ? parsed.data.intent : undefined,
-        personaOf(facts, profile),
+        personaOf(facts, profile, working),
         turn.kind === "message" && log.fresh,
         // Not waited for: the prompt's own Google rule holds without Jev's line.
         await Promise.race([google, null]),
@@ -1996,7 +2000,7 @@ export async function turnNotes(
   const loaded = await recentSkills(db, id)
   const skills = skillsDue({
     workspace,
-    starting: kind !== undefined,
+    starting: kind ? (handover ? "handover" : "session") : null,
     said,
     scheduled,
   }).flatMap((name) => {

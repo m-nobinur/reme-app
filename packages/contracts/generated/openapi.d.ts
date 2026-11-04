@@ -14813,6 +14813,11 @@ export interface components {
         /** @description A short piece of the existing line that no other line holds. Required for replace and remove. */
         match?: string
       }[]
+      /**
+       * @description profile, the default: about the owner. notes: how this business runs day to day where the facts hold nothing.
+       * @enum {string}
+       */
+      store?: "profile" | "notes"
     }
     RememberOutput:
       | {

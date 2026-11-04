@@ -173,11 +173,9 @@ export async function wakeTurn(
   if (!found) return "gone"
   const { owner, zone } = found
   const tools = { env, kit, owner, settleCard }
-  const [{ workspace, facts, profile }, prefix] = await Promise.all([
-    loadWorkspace(tools),
-    cosPrefix(),
-  ])
-  const persona = personaOf(facts, profile)
+  const [{ workspace, facts, profile, notes: working }, prefix] =
+    await Promise.all([loadWorkspace(tools), cosPrefix()])
+  const persona = personaOf(facts, profile, working)
   const day = today(zone)
   const cap = unpromptedKey(job.orgId, day)
   const trusted = [

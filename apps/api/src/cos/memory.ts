@@ -3,6 +3,7 @@ import {
   MemoryReviewAction,
   MemoryUndo,
   MemoryView,
+  NOTES_MAX_CHARS,
   OWNER_MEMORY_REVIEW_KEY,
   OWNER_PROFILE_KEY,
   OwnerMemoryReview,
@@ -16,6 +17,8 @@ import {
   type RememberOutput,
   STAFF_CORRECTIONS_KEY,
   Uuid,
+  WORKING_NOTES_KEY,
+  WorkingNotes,
 } from "@workspace/contracts"
 import {
   currentFact,
@@ -41,10 +44,28 @@ import type { Turn } from "./turns.ts"
 /** Refusals the same turn may get before `remember` stops answering. */
 export const FULL_REFUSALS = 3
 
-/** The profile as a person reads its fullness: `62%, 930/1,500 chars`. */
-export function fullness(lines: readonly { text: string }[]): string {
+/** One of the CoS's two memories: the owner profile, or its working notes. */
+export type Store = {
+  key: string
+  max: number
+  schema: typeof OwnerProfile | typeof WorkingNotes
+}
+export const STORES = {
+  profile: {
+    key: OWNER_PROFILE_KEY,
+    max: PROFILE_MAX_CHARS,
+    schema: OwnerProfile,
+  },
+  notes: { key: WORKING_NOTES_KEY, max: NOTES_MAX_CHARS, schema: WorkingNotes },
+} as const satisfies Record<string, Store>
+
+/** A store as a person reads its fullness: `62%, 930/1,500 chars`. */
+export function fullness(
+  lines: readonly { text: string }[],
+  max: number = PROFILE_MAX_CHARS
+): string {
   const used = profileText(lines).length
-  return `${Math.round((used / PROFILE_MAX_CHARS) * 100)}%, ${used.toLocaleString("en-GB")}/${PROFILE_MAX_CHARS.toLocaleString("en-GB")} chars`
+  return `${Math.round((used / max) * 100)}%, ${used.toLocaleString("en-GB")}/${max.toLocaleString("en-GB")} chars`
 }
 
 /**
@@ -208,7 +229,8 @@ export function applyOperations(
   source: Source,
   at: string,
   said: readonly string[] | null = null,
-  newId: () => string = () => crypto.randomUUID()
+  newId: () => string = () => crypto.randomUUID(),
+  store: Store = STORES.profile
 ):
   | { ok: true; lines: ProfileLine[] }
   | { ok: false; refusal: Refusal }
@@ -291,18 +313,19 @@ export function applyOperations(
             l.id === hit.id ? { ...l, text: text as string, source, at } : l
           )
   }
-  const parsed = OwnerProfile.safeParse({ lines: held })
+  const parsed = store.schema.safeParse({ lines: held })
   if (!parsed.success) return { ok: false, full: [...lines] }
   return { ok: true, lines: parsed.data.lines }
 }
 
 /** The current profile and its version; none yet is version 0. */
 export async function readProfile(
-  db: OrgScopedDb
+  db: OrgScopedDb,
+  store: Store = STORES.profile
 ): Promise<{ version: number; lines: ProfileLine[] }> {
-  const row = await currentFact(db, OWNER_PROFILE_KEY)
+  const row = await currentFact(db, store.key)
   if (!row) return { version: 0, lines: [] }
-  const parsed = OwnerProfile.safeParse(row.value)
+  const parsed = store.schema.safeParse(row.value)
   if (!parsed.success) {
     console.error(
       JSON.stringify({
@@ -339,11 +362,12 @@ export async function saveProfile(
   provenance: { source: "owner_stated" | "inferred"; confidence: number } = {
     source: "owner_stated",
     confidence: 1,
-  }
+  },
+  store: Store = STORES.profile
 ): Promise<number> {
   const written = await supersedePrivateFact(db, {
     orgId,
-    key: OWNER_PROFILE_KEY,
+    key: store.key,
     factType: "owner",
     value: { lines },
     provenance,
@@ -389,14 +413,17 @@ export async function remember(
         note: "stop retrying memory and continue your reply",
       }
     }
-    await lockProfile(db, owner.orgId)
-    const held = await readProfile(db)
+    const store = STORES[input.store ?? "profile"]
+    await lockProfile(db, owner.orgId, store.key)
+    const held = await readProfile(db, store)
     const result = applyOperations(
       held.lines,
       input.operations,
       "owner_said",
       new Date().toISOString(),
-      await ownerWords(db, turn.sessionId)
+      await ownerWords(db, turn.sessionId),
+      undefined,
+      store
     )
     if ("refusal" in result) {
       return {
@@ -412,15 +439,15 @@ export async function remember(
       return {
         outcome: "full" as const,
         note: "full: merge or remove first",
-        fullness: fullness(result.full),
+        fullness: fullness(result.full, store.max),
         lines: result.full.map((l) => l.text),
       }
     }
-    await saveProfile(db, owner.orgId, result.lines)
+    await saveProfile(db, owner.orgId, result.lines, undefined, store)
     return {
       outcome: "saved" as const,
       note: "Saved. This update is complete; do not repeat it.",
-      fullness: fullness(result.lines),
+      fullness: fullness(result.lines, store.max),
     }
   })
 }

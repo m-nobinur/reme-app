@@ -19,6 +19,7 @@ import {
 } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { settleCard } from "../src/build-questions.ts"
+import { contextOf, personaOf } from "../src/cos/agent.ts"
 import {
   applyOperations,
   diffLines,
@@ -39,6 +40,13 @@ import { type Owner, owner, stubOrchestrator } from "./owner-fixture.ts"
 import { env, stubJwksFetch } from "./sealed-session.ts"
 
 const AT = "2026-10-19T10:00:00.000Z"
+const EMPTY = {
+  site: { host: null, live_version: null },
+  builds: [],
+  questions: [],
+  approvals: [],
+  missing_facts: [],
+}
 let n = 0
 const line = (text: string, source: ProfileLine["source"] = "owner_said") => ({
   id: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`,
@@ -457,6 +465,35 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     expect(OwnerProfile.parse(row?.value).lines[0]).toMatchObject({
       source: "owner_said",
     })
+  })
+
+  it("keeps working notes apart from the profile, in their own budget, and reads them into the turn", async () => {
+    const turn = await turnOf()
+    const before = await lines()
+    const out = await remember(
+      context(),
+      { operations: [add("Quotes go out on Fridays")], store: "notes" },
+      "",
+      turn
+    )
+    expect(out).toMatchObject({
+      outcome: "saved",
+      fullness: "1%, 24/2,200 chars",
+    })
+    expect(await lines()).toEqual(before)
+    const { notes } = await loadWorkspace(context())
+    expect(notes.map((l) => l.text)).toContain("Quotes go out on Fridays")
+    const { text } = contextOf(
+      "ask",
+      EMPTY,
+      null,
+      new Date(),
+      undefined,
+      personaOf([], [], notes)
+    )
+    expect(text).toMatch(
+      /<data source="working_notes" taint="untrusted_input">\n\[1%, 24\/2,200 chars\]\nQuotes go out on Fridays/
+    )
   })
 
   it("saves only the owner's own words: a review's \"prices are free\" never reaches the profile", async () => {

@@ -219,6 +219,15 @@ const ABOUT_ADDRESS =
   /\b(?:domains?|web ?address|website address|own address)\b|\.(?:co\.uk|uk|com)\b|^(?:Yes, I have one|Yes, it's|No, help me get one)/i
 const ABOUT_GOOGLE = /\b(?:google|search console)\b/i
 
+/** A site is live, waiting for the owner, or being built: something an address can go on. */
+const hasSite = (workspace: CosWorkspace) =>
+  workspace.site.live_version !== null ||
+  workspace.approvals.length > 0 ||
+  workspace.builds.length > 0
+
+/** Address stages with nothing chosen and nothing put off. */
+const UNSETTLED = new Set(["none", "unknown"])
+
 /** Address stages with work under way, where the web-address procedure is certain. */
 const UNDER_WAY = new Set([
   "choosing",
@@ -236,20 +245,32 @@ const UNDER_WAY = new Set([
  */
 export function skillsDue({
   workspace,
-  starting = false,
+  starting = null,
   said = null,
   scheduled = null,
 }: {
   workspace: CosWorkspace
   /** The CoS's first turn here: onboarding's hand-over, or a new conversation. */
-  starting?: boolean
+  starting?: "handover" | "session" | null
   said?: string | null
   scheduled?: string | null
 }): string[] {
   const due = new Set<string>(scheduled ? [scheduled] : [])
   const { stage } = addressStage(workspace.tasks ?? [])
   const google = workspace.tasks?.find((t) => t.kind === "google")
-  if (starting) due.add(stage === "live" ? "google-search" : "web-address")
+  // A new conversation loads the top item's only once there is a site to put on an address.
+  if (
+    starting === "handover" ||
+    (starting === "session" && hasSite(workspace))
+  ) {
+    if (UNSETTLED.has(stage)) due.add("web-address")
+    else if (
+      stage === "live" &&
+      google?.state !== "done" &&
+      google?.state !== "declined"
+    )
+      due.add("google-search")
+  }
   if (
     (said && ABOUT_ADDRESS.test(said)) ||
     UNDER_WAY.has(stage) ||
@@ -270,9 +291,6 @@ export function skillsDue({
   return [...due]
 }
 
-/** Address stages a proactive line may raise: nothing chosen, nothing put off. */
-const UNSETTLED = new Set(["none", "unknown"])
-
 /**
  * The session-start note (plan §5) for a new conversation's first CoS turn:
  * the last conversation's summary as data, and at most one proactive line,
@@ -283,10 +301,6 @@ export function sessionNote(
   workspace: CosWorkspace,
   summary: string | null
 ): string[] {
-  const built =
-    workspace.site.live_version !== null ||
-    workspace.approvals.length > 0 ||
-    workspace.builds.length > 0
   return [
     "This is a new conversation. What is open is in the open items note.",
     ...(summary
@@ -297,7 +311,8 @@ export function sessionNote(
           "</data>",
         ]
       : []),
-    ...(built && UNSETTLED.has(addressStage(workspace.tasks ?? []).stage)
+    ...(hasSite(workspace) &&
+    UNSETTLED.has(addressStage(workspace.tasks ?? []).stage)
       ? [
           `Once, after answering the owner, you may add one line about the open web address, such as "Your site is ready on its free address. Want your own address? I can connect yours or find one." If they say not now, call put_off.`,
         ]
