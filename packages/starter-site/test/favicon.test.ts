@@ -136,6 +136,20 @@ describe("the symbol cut from a logo", () => {
     expect(seen?.every((p) => p[2] === 255 && p[0] === 0)).toBe(true)
   })
 
+  test("is the whole logo when it is all symbol, as sparkles over a bucket", async () => {
+    const seen = await pixels(
+      await symbolOf(
+        await picture(300, 400, null, [
+          [110, 20, 80, 80, RED],
+          [40, 120, 220, 260, BLUE],
+        ])
+      )
+    )
+    const solid = seen?.all.filter((p) => p[3] === 255) ?? []
+    expect(solid.some((p) => p[0] === 255 && p[2] === 0)).toBe(true)
+    expect(solid.some((p) => p[2] === 255 && p[0] === 0)).toBe(true)
+  })
+
   test("is nothing for a wide bar alone", async () => {
     expect(
       await symbolOf(await picture(400, 100, null, [[0, 20, 400, 60, RED]]))

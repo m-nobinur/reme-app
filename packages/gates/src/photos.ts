@@ -1,4 +1,53 @@
-import type { Blueprint, GateResult, ImageSlot } from "@workspace/contracts"
+import type {
+  Blueprint,
+  FactRecord,
+  GateResult,
+  ImageSlot,
+} from "@workspace/contracts"
+
+const failed = (node: string, message: string): GateResult => ({
+  gate: "build",
+  passed: false,
+  evidence_key: null,
+  offending_node: node,
+  message,
+})
+
+const EXTENSION: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+}
+
+/**
+ * The owner's logo is the favicon: the starter draws the logo's symbol in
+ * the mark, or marks a logo with none (a wordmark) `data-logo="no-symbol"`
+ * and draws the initial. A favicon with neither, on a site whose owner has
+ * a logo, never found the logo file. Null when it passes or there is no logo.
+ */
+export async function checkFavicon(
+  facts: readonly FactRecord[],
+  files: Record<string, string>,
+  read: (file: string) => Promise<Uint8Array | null>
+): Promise<GateResult | null> {
+  const items = (
+    facts.find((f) => f.key === "media.uploads")?.value as
+      | { items?: { id: string; use?: string; content_type?: string }[] }
+      | undefined
+  )?.items
+  const logo = items?.find((a) => a.use === "logo")
+  if (!logo) return null
+  const favicon = Object.keys(files).find((f) =>
+    /^_astro\/favicon\.[^/]*\.svg$/.test(f)
+  )
+  const bytes = favicon ? await read(favicon) : null
+  const svg = bytes ? new TextDecoder().decode(bytes) : ""
+  if (/<image\b/.test(svg) || svg.includes('data-logo="no-symbol"')) return null
+  return failed(
+    favicon ?? "favicon",
+    `the owner has a logo and the favicon does not draw it: set site.logo in src/site-config.ts to "/uploads/${logo.id}.${EXTENSION[logo.content_type ?? ""] ?? "png"}", the file the build placed`
+  )
+}
 
 /**
  * The site fields a slot's photo and its alt go in, or null for a slot no
@@ -47,11 +96,8 @@ export function checkPlannedPhotos(
   })
   const [first] = missing
   if (!first) return null
-  return {
-    gate: "build",
-    passed: false,
-    evidence_key: null,
-    offending_node: first.slot.id,
-    message: `the Blueprint's photo${missing.length > 1 ? "s" : ""} ${missing.map((m) => m.slot.id).join(", ")} ${missing.length > 1 ? "are" : "is"} not in the build: set ${missing.map((m) => `site.${m.field}`).join(", ")} in src/site-config.ts to the path the Blueprint gives, with its alt, and keep the section that shows it`,
-  }
+  return failed(
+    first.slot.id,
+    `the Blueprint's photo${missing.length > 1 ? "s" : ""} ${missing.map((m) => m.slot.id).join(", ")} ${missing.length > 1 ? "are" : "is"} not in the build: set ${missing.map((m) => `site.${m.field}`).join(", ")} in src/site-config.ts to the path the Blueprint gives, with its alt, and keep the section that shows it`
+  )
 }

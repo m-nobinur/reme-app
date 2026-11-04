@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest"
 import {
   checkBuild,
   checkContent,
+  checkFavicon,
   checkLinks,
   checkPlannedPages,
   checkPlannedPhotos,
@@ -570,6 +571,62 @@ describe("the planned photos", () => {
       passed: false,
       offending_node: "home_hero",
     })
+  })
+})
+
+describe("the favicon", () => {
+  const logo = fact("media.uploads", {
+    items: [
+      {
+        id: "f28b648e-495e-4f39-a521-d6a3ddfc3d90",
+        use: "logo",
+        name: "Logo.png",
+        bytes: 718_020,
+        content_type: "image/png",
+      },
+    ],
+  })
+  const files = { "index.html": "x", "_astro/favicon.27d85b7c.svg": "x" }
+  const reading = (svg: string) => async (file: string) =>
+    file === "_astro/favicon.27d85b7c.svg"
+      ? new TextEncoder().encode(svg)
+      : null
+  const tile = '<rect x="1.5" y="1.5" width="61" height="61" rx="14"/>'
+
+  it("passes a mark that draws the logo, and a wordmark's initial", async () => {
+    expect(
+      await checkFavicon(
+        [logo],
+        files,
+        reading(`<svg viewBox="0 0 64 64">${tile}<image href="data:"/></svg>`)
+      )
+    ).toBeNull()
+    expect(
+      await checkFavicon(
+        [logo],
+        files,
+        reading(`<svg data-logo="no-symbol" viewBox="0 0 64 64">${tile}</svg>`)
+      )
+    ).toBeNull()
+  })
+
+  it("passes the initial when the owner has no logo", async () => {
+    expect(
+      await checkFavicon([], files, reading(`<svg>${tile}<path/></svg>`))
+    ).toBeNull()
+  })
+
+  it("fails the build gate when the owner's logo is not in the favicon", async () => {
+    const result = await checkFavicon(
+      [logo],
+      files,
+      reading(`<svg viewBox="0 0 64 64">${tile}<path d="M36"/></svg>`)
+    )
+    expect(result).toMatchObject({ gate: "build", passed: false })
+    expect(result?.message).toContain(
+      '"/uploads/f28b648e-495e-4f39-a521-d6a3ddfc3d90.png"'
+    )
+    expect(GateResult.parse(result)).toEqual(result)
   })
 })
 
