@@ -611,11 +611,14 @@ export const ChatRequest = z.strictObject({
    */
   time_zone: TimeZone.optional(),
   /**
-   * Set when the owner pressed Request changes on the website panel before
-   * typing: the message describes a change to their website. Read on a
-   * message turn only.
+   * What the owner pressed before the message: Request changes on the
+   * website panel (`site_change`, the message describes a change), or a
+   * Connect button for the web address or Google, whose skill code then
+   * loads. Read on a message turn only.
    */
-  intent: z.enum(["site_change"]).optional(),
+  intent: z
+    .enum(["site_change", "connect_address", "connect_google"])
+    .optional(),
   turn: z.discriminatedUnion("kind", [
     z.strictObject({
       kind: z.literal("message"),

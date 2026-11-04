@@ -1,7 +1,10 @@
-import type {
-  BuildQuestions,
-  CosWorkspace,
-  OwnerTask,
+import {
+  ADDRESS_ASK,
+  addressReply,
+  type BuildQuestions,
+  type CosWorkspace,
+  type OwnerTask,
+  type SkillTrigger,
 } from "@workspace/contracts"
 import { addressStage } from "@workspace/db"
 import { IN_REVIEW, STATE } from "./labels.ts"
@@ -214,11 +217,6 @@ export function openItems(
   ]
 }
 
-/** An owner message about the website's own address: a card reply, or naming a domain. */
-const ABOUT_ADDRESS =
-  /\b(?:domains?|web ?address|website address|own address)\b|\.(?:co\.uk|uk|com)\b|^(?:Yes, I have one|Yes, it's|No, help me get one)/i
-const ABOUT_GOOGLE = /\b(?:google|search console)\b/i
-
 /** A site is live, waiting for the owner, or being built: something an address can go on. */
 const hasSite = (workspace: CosWorkspace) =>
   workspace.site.live_version !== null ||
@@ -228,67 +226,64 @@ const hasSite = (workspace: CosWorkspace) =>
 /** Address stages with nothing chosen and nothing put off. */
 const UNSETTLED = new Set(["none", "unknown"])
 
-/** Address stages with work under way, where the web-address procedure is certain. */
-const UNDER_WAY = new Set([
-  "choosing",
-  "paying",
-  "buying_elsewhere",
-  "bought",
-  "connecting",
-])
+/** A skill code loads, and why. */
+export type SkillLoad = { name: string; part?: string; trigger: SkillTrigger }
 
 /**
- * The procedures state makes certain for this turn (plan §2), by name: the
- * top open item's on the CoS's first turn in a conversation, the address or Google one when the
- * owner's message is about it or its task is under way, builds while one
- * runs or stopped, reviews while a draft waits, and a scheduled run's own.
+ * The waiting line the owner sees while a trigger's skills load, at most 50
+ * characters. A scheduled run's comes from its skill.
+ */
+export const TRIGGER_LINES: Record<
+  Exclude<SkillTrigger, "schedule">,
+  string
+> = {
+  handover: "Using my domain expertise to set up your address",
+  connect_address: "Using my domain expertise to set up your address",
+  address_yes: "Getting your own address connected",
+  address_no: "Drawing on my domain expertise to find a name",
+  connect_google: "Using my SEO skills to connect Google Search",
+}
+
+/**
+ * The skills code loads this turn (plan §3), only on an explicit trigger,
+ * matched by what the owner pressed and never by their words: the CoS's
+ * first turn after onboarding, a Connect button (`intent`), an answer on
+ * the address card as its stored answer and its reply both say, and a
+ * scheduled run. Everything else the model views itself.
  */
 export function skillsDue({
-  workspace,
-  starting = null,
+  handover = false,
+  intent = null,
+  card = null,
   said = null,
   scheduled = null,
 }: {
-  workspace: CosWorkspace
-  /** The CoS's first turn here: onboarding's hand-over, or a new conversation. */
-  starting?: "handover" | "session" | null
+  handover?: boolean
+  intent?: "connect_address" | "connect_google" | null
+  card?: AddressCard | null
+  /** The owner's message, compared only with the card's own reply. */
   said?: string | null
   scheduled?: string | null
-}): string[] {
-  const due = new Set<string>(scheduled ? [scheduled] : [])
-  const { stage } = addressStage(workspace.tasks ?? [])
-  const google = workspace.tasks?.find((t) => t.kind === "google")
-  // A new conversation loads the top item's only once there is a site to put on an address.
-  if (
-    starting === "handover" ||
-    (starting === "session" && hasSite(workspace))
-  ) {
-    if (UNSETTLED.has(stage)) due.add("web-address")
-    else if (
-      stage === "live" &&
-      google?.state !== "done" &&
-      google?.state !== "declined"
-    )
-      due.add("google-search")
+}): SkillLoad[] {
+  if (scheduled) return [{ name: scheduled, trigger: "schedule" }]
+  if (intent === "connect_google")
+    return [{ name: "google-search", trigger: "connect_google" }]
+  if (card?.answer === "no" && said === addressReply(ADDRESS_ASK.no)) {
+    return [
+      { name: "web-address", trigger: "address_no" },
+      { name: "web-address", part: "buy-new", trigger: "address_no" },
+    ]
   }
-  if (
-    (said && ABOUT_ADDRESS.test(said)) ||
-    UNDER_WAY.has(stage) ||
-    (workspace.tips?.length ?? 0) > 0
-  )
-    due.add("web-address")
-  if ((said && ABOUT_GOOGLE.test(said)) || google?.state === "active")
-    due.add("google-search")
-  const inReview = (b: CosWorkspace["builds"][number]) =>
-    IN_REVIEW.has(STATE[b.state])
-  if (
-    workspace.builds.some((b) => !inReview(b)) ||
-    (workspace.stopped?.length ?? 0) > 0
-  )
-    due.add("builds")
-  if (workspace.approvals.length > 0 || workspace.builds.some(inReview))
-    due.add("reviews")
-  return [...due]
+  const named = said?.match(/^Yes, it's (\S+)$/)?.[1]
+  if (card?.answer === "yes" && said === addressReply(ADDRESS_ASK.yes, named)) {
+    return [
+      { name: "web-address", trigger: "address_yes" },
+      { name: "web-address", part: "connect-own", trigger: "address_yes" },
+    ]
+  }
+  if (intent === "connect_address")
+    return [{ name: "web-address", trigger: "connect_address" }]
+  return handover ? [{ name: "web-address", trigger: "handover" }] : []
 }
 
 /**

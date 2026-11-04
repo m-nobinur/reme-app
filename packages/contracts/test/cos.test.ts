@@ -87,7 +87,7 @@ describe("COS_TOOLS", () => {
       "inspect_domain",
       "domain_bought",
       "offer_grant",
-      "read_skill",
+      "skill_view",
       "save_correction",
       "schedule_skill",
       "ask_developer",
@@ -177,13 +177,14 @@ describe("AnswerQuestionInput", () => {
 
 describe("CosToolResult", () => {
   // The branches are written out, so each is checked against its tool.
-  it("has one branch per tool, each with that tool's output, then the retired get_preview", () => {
+  it("has one branch per tool, each with that tool's output, then the retired get_preview and read_skill", () => {
     const branches = CosToolResult.options.map((o) => o.shape)
     expect(branches.map((b) => b.tool.value)).toStrictEqual([
       ...Object.keys(COS_TOOLS),
       "get_preview",
+      "read_skill",
     ])
-    for (const b of branches.slice(0, -1)) {
+    for (const b of branches.slice(0, -2)) {
       expect(b.output).toBe(COS_TOOLS[b.tool.value as CosToolName].output)
     }
   })
@@ -191,6 +192,22 @@ describe("CosToolResult", () => {
   it("refuses one tool's output under another tool's name", () => {
     const crossed = { ...(samples.CosToolResult as object), tool: "get_facts" }
     expect(verdict("CosToolResult", CosToolResult, crossed)).toEqual(REFUSED)
+  })
+})
+
+describe("a turn logged before skill_view replaced read_skill", () => {
+  it("replays its read_skill result", () => {
+    const logged = {
+      turn_id: "01K6A0000000000000000000T1",
+      tool_call_id: "call_skill",
+      tool: "read_skill",
+      output: {
+        outcome: "skill",
+        name: "builds",
+        body: "Builds: what to say.",
+      },
+    }
+    expect(CosToolResult.parse(logged)).toEqual(logged)
   })
 })
 

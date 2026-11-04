@@ -67,14 +67,14 @@ import {
 import {
   CORRECTION_MAX,
   CORRECTIONS_MAX,
-  ReadSkillInput,
   ReadSkillOutput,
   SaveCorrectionInput,
   SaveCorrectionOutput,
   ScheduleSkillInput,
   ScheduleSkillOutput,
-  SKILL_BODY_MAX,
-  SkillName,
+  SkillViewInput,
+  SkillViewOutput,
+  ViewedSkill,
 } from "./skills.ts"
 import { OwnerTask, TaskKind, TipKind } from "./task.ts"
 import { Text, ToolStep } from "./text.ts"
@@ -879,7 +879,7 @@ export const COS_TOOLS = {
   inspect_domain: { input: InspectDomainInput, output: InspectDomainOutput },
   domain_bought: { input: DomainBoughtInput, output: BoughtElsewhereOutput },
   offer_grant: { input: OfferGrantInput, output: OfferGrantOutput },
-  read_skill: { input: ReadSkillInput, output: ReadSkillOutput },
+  skill_view: { input: SkillViewInput, output: SkillViewOutput },
   save_correction: { input: SaveCorrectionInput, output: SaveCorrectionOutput },
   schedule_skill: { input: ScheduleSkillInput, output: ScheduleSkillOutput },
   ask_developer: { input: AskDeveloperInput, output: AskDeveloperOutput },
@@ -893,7 +893,11 @@ export const CosToolName = z.enum(
 )
 
 /** A tool name in a logged payload: a current tool, or one retired since whose turns still replay. */
-const LoggedToolName = z.enum([...CosToolName.options, "get_preview"])
+const LoggedToolName = z.enum([
+  ...CosToolName.options,
+  "get_preview",
+  "read_skill",
+])
 
 const Usage = z.strictObject({
   input_tokens: z.int().nonnegative(),
@@ -1126,8 +1130,8 @@ export const CosToolResult = z.discriminatedUnion("tool", [
   }),
   z.strictObject({
     ...Called,
-    tool: z.literal("read_skill"),
-    output: COS_TOOLS.read_skill.output,
+    tool: z.literal("skill_view"),
+    output: COS_TOOLS.skill_view.output,
   }),
   z.strictObject({
     ...Called,
@@ -1158,6 +1162,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     ...Called,
     tool: z.literal("get_preview"),
     output: GetPreviewOutput,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("read_skill"),
+    output: ReadSkillOutput,
   }),
 ])
 
@@ -1258,16 +1267,30 @@ export const CosEvent = z.strictObject({
 })
 
 /**
- * The `cos.skill` payload: one of the CoS's procedures, loaded by code into
- * the session's history because state made it certainly relevant (plan §2),
- * so the model follows it without a read_skill call.
+ * What made code load a skill: the owner's first CoS turn after onboarding,
+ * a Connect button, an answer on the address card, Connect Search Console,
+ * or a scheduled run. Matched by what the owner pressed, never by words.
  */
-export const CosSkill = z.strictObject({
-  name: SkillName,
-  body: Text(SKILL_BODY_MAX),
-})
+export const SkillTrigger = z.enum([
+  "handover",
+  "connect_address",
+  "address_yes",
+  "address_no",
+  "connect_google",
+  "schedule",
+])
+
+/**
+ * The `cos.skill` payload: a skill code loaded into the session's history on
+ * an explicit trigger, read back as a `skill_view` call and its result, so
+ * the model sees one form. Rows before skill_view hold only name and body.
+ */
+export const CosSkill = ViewedSkill.omit({ by: true })
+  .partial({ status: true })
+  .extend({ trigger: SkillTrigger.optional() })
 
 export type CosSkill = z.infer<typeof CosSkill>
+export type SkillTrigger = z.infer<typeof SkillTrigger>
 export type CosWorkspace = z.infer<typeof CosWorkspace>
 export type CosFacts = z.infer<typeof CosFacts>
 export type CosChangeRequest = z.infer<typeof CosChangeRequest>

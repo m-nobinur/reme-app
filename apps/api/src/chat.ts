@@ -97,6 +97,7 @@ import {
   openItems,
   sessionNote,
   skillsDue,
+  TRIGGER_LINES,
 } from "./cos/notes.ts"
 import { retrying } from "./cos/retry.ts"
 import {
@@ -108,6 +109,7 @@ import {
   streamTurn,
   writtenAt,
 } from "./cos/run.ts"
+import { statusOf, viewOf } from "./cos/skills.ts"
 import { knownZone } from "./cos/time.ts"
 import { loadWorkspace, startOwnerChange } from "./cos/tools.ts"
 import {
@@ -1134,7 +1136,9 @@ export async function chat(
         workspace,
         zone ?? null,
         log.fresh,
-        turn.kind === "message" ? turn.text : null
+        turn.kind === "message" ? turn.text : null,
+        null,
+        turn.kind === "message" ? parsed.data.intent : null
       )
       const context = contextOf(
         mode,
@@ -1190,6 +1194,7 @@ export async function chat(
           !fallback && turn.kind === "message"
             ? await takeChip(db, owner.orgId)
             : null,
+        skillLine: notes.skillLine,
       }
     })
   } catch (error) {
@@ -1279,6 +1284,8 @@ type Opened = {
   typed: Typed | null
   log: LoggedEvent[]
   chip: MemoryChip | null
+  /** The waiting line for the skills code loaded this turn. */
+  skillLine: string | null
 }
 
 /** A typed reply read as the answer to the open card `callId`, with the line that says so. */
@@ -1796,6 +1803,7 @@ async function startModel(
     newMessageId: a.newId,
     lead: tail ? settledLead(messages, tail.id) : answeredChunk(a.opened.typed),
     chip: a.opened.chip,
+    skillLine: a.opened.skillLine,
     reading: a.reading,
     rows,
     // The stream's reader ends after `closeRun`, so the turn is closed here.
@@ -1947,30 +1955,30 @@ async function addressCardOf(
   return row && stack ? cardState(stack, row.here) : null
 }
 
-/** A procedure code loaded is not loaded again within this many CoS turns. */
-const SKILL_TURNS = 3
-
-/** The procedures this session logged within its last `SKILL_TURNS` CoS turns, since its last compaction. */
+/**
+ * The skills, and parts, code loaded in this session since its last
+ * compaction, as `name/part`: a view stays in the history until then.
+ * shortcut: a view the model made itself is not counted, so a trigger after
+ * one loads it again; read `cos.message` parts too if that shows up live.
+ */
 async function recentSkills(db: OrgScopedDb, id: string): Promise<string[]> {
-  const rows = await db.execute<{ name: string }>(sql`
-    select distinct s.payload->>'name' as name from ${events} s
+  const rows = await db.execute<{ key: string }>(sql`
+    select distinct (s.payload->>'name') || '/' || coalesce(s.payload->>'part', '') as key
+    from ${events} s
     where s.session_id = ${id} and s.type = 'cos.skill'
-      and s.seq > coalesce((select c.seq from ${events} c
-        where c.session_id = ${id} and c.type = 'cos.context'
-          and c.payload->>'context_policy_version' not like 'onboarding-%'
-        order by c.seq desc offset ${SKILL_TURNS - 1} limit 1), -1)
       and s.seq > coalesce((select (k.payload->'replaced_range'->>'to_seq')::bigint
         from ${events} k where k.session_id = ${id} and k.type = 'cos.compaction'
         order by k.seq desc limit 1), -1)`)
-  return rows.map((r) => r.name)
+  return rows.map((r) => r.key)
 }
 
 /**
  * What code tells a CoS turn about where things stand (`notes.ts`): the open
  * items every turn; on the CoS's first turn of an onboarding conversation the
  * hand-over, as the `cos.event` the turn logs, and of a new one the session
- * note (`sessionNote`); and the procedures state makes certain (`skillsDue`),
- * as `cos.skill`s, each once within `SKILL_TURNS`.
+ * note (`sessionNote`); and the skills an explicit trigger loads
+ * (`skillsDue`), as `cos.skill`s, each once until the next compaction, with
+ * the waiting line they show.
  */
 export async function turnNotes(
   db: OrgScopedDb,
@@ -1980,12 +1988,16 @@ export async function turnNotes(
   fresh: boolean,
   /** The owner's typed message, or null for a turn they did not type. */
   said: string | null = null,
-  /** The procedure a schedule started this turn for. */
-  scheduled: string | null = null
+  /** The skill a schedule started this turn for. */
+  scheduled: string | null = null,
+  /** The Connect button the owner pressed before this message, if any. */
+  intent: ChatRequest["intent"] | null = null
 ): Promise<{
   lines: string[]
   events: CosEvent[]
   skills: CosSkill[]
+  /** The waiting line for the skills loaded, or null when none were. */
+  skillLine: string | null
   taint: TaintLabel[]
 }> {
   const card = await addressCardOf(db, id)
@@ -1998,29 +2010,41 @@ export async function turnNotes(
     : []
   const handover = kind?.kind === "onboarding"
   const loaded = await recentSkills(db, id)
+  let last: string | undefined
   const skills = skillsDue({
-    workspace,
-    starting: kind ? (handover ? "handover" : "session") : null,
+    handover,
+    intent: intent === "site_change" ? null : intent,
+    card,
     said,
     scheduled,
-  }).flatMap((name) => {
-    const found = loaded.includes(name) ? null : procedure("cos", name)
-    return found ? [{ name, body: found.body }] : []
+  }).flatMap(({ name, part, trigger }): CosSkill[] => {
+    const found = procedure("cos", name)
+    if (!found || loaded.includes(`${name}/${part ?? ""}`)) return []
+    const line =
+      trigger === "schedule"
+        ? (found.status[0] as string)
+        : TRIGGER_LINES[trigger]
+    const view = viewOf(found, part, statusOf(found, line, last))
+    if (!view) return []
+    last = view.status
+    return [{ ...view, trigger }]
   })
+  const skillLine = skills[0]?.status ?? null
   if (kind && !handover) {
     // shortcut: a conversation too short to compact leaves no summary; persist one at its end if that loses too much.
-    const [last] = await db.execute<{ summary: string }>(sql`
+    const [previous] = await db.execute<{ summary: string }>(sql`
       select payload->>'summary' as summary from ${events}
       where type = 'cos.compaction' and session_id <> ${id}
       order by seq desc limit 1`)
     return {
-      lines: [...lines, ...sessionNote(workspace, last?.summary ?? null)],
+      lines: [...lines, ...sessionNote(workspace, previous?.summary ?? null)],
       events: [],
       skills,
-      taint: last ? ["inferred", "untrusted_input"] : [],
+      skillLine,
+      taint: previous ? ["inferred", "untrusted_input"] : [],
     }
   }
-  if (!handover) return { lines, events: [], skills, taint: [] }
+  if (!handover) return { lines, events: [], skills, skillLine, taint: [] }
   const [progress, facts] = await Promise.all([
     readScript(db, id),
     readFacts(db),
@@ -2039,6 +2063,7 @@ export async function turnNotes(
     lines,
     events: [{ source: "handover", summary, evidence: [], wake: false }],
     skills,
+    skillLine,
     taint: [],
   }
 }

@@ -8,6 +8,7 @@ import {
   type MessageReading,
   ONBOARDING_STATUS,
   type OnboardingStatus,
+  SkillViewOutput,
 } from "@workspace/contracts"
 import { lowerNextDue, type OrgScopedDb, scheduledJobs } from "@workspace/db"
 import { scrub } from "@workspace/facade/tee"
@@ -135,6 +136,8 @@ type StreamTurn = {
   lead: UIMessageChunk[]
   /** Memory changes not yet shown: the reply's first part, in the stream, the log and the row. */
   chip: MemoryChip | null
+  /** The waiting line for the skills code loaded this turn, from its trigger. */
+  skillLine?: string | null
   /**
    * Which continuation this run is, for a turn carrying on from one cut off
    * at its limit. Its reply is a new message after the one it continues.
@@ -372,8 +375,11 @@ export async function streamTurn(
   // The general line fills a model's silent thinking; once it writes or a
   // heading comes, that line is the real one.
   const thinking = head.at(-1)?.type.startsWith("reasoning-")
-  const general =
-    reading && thinking ? [status({ kind: "reading", about: reading })] : []
+  const general = input.skillLine
+    ? [status({ kind: "doing", text: input.skillLine })]
+    : reading && thinking
+      ? [status({ kind: "reading", about: reading })]
+      : []
   queued =
     start?.type === "start"
       ? [start, ...(chip ? [chip] : []), ...input.lead, ...general, ...rest]
@@ -404,6 +410,14 @@ export async function streamTurn(
         else if (!chunk.type.startsWith("reasoning-")) {
           if (chunk.type === "error") errored = true
           controller.enqueue(withoutProviderData(chunk))
+          // A skill the model viewed names the work while it goes on.
+          const viewed =
+            chunk.type === "tool-output-available"
+              ? SkillViewOutput.safeParse(chunk.output).data
+              : undefined
+          if (viewed?.outcome === "skill") {
+            queued.push(status({ kind: "doing", text: viewed.status }))
+          }
           return
         }
       }

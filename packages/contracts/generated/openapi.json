@@ -16544,7 +16544,9 @@
           "intent": {
             "type": "string",
             "enum": [
-              "site_change"
+              "site_change",
+              "connect_address",
+              "connect_google"
             ]
           },
           "turn": {
@@ -21646,13 +21648,14 @@
                 "inspect_domain",
                 "domain_bought",
                 "offer_grant",
-                "read_skill",
+                "skill_view",
                 "save_correction",
                 "schedule_skill",
                 "ask_developer",
                 "get_review",
                 "read_site",
-                "get_preview"
+                "get_preview",
+                "read_skill"
               ]
             }
           },
@@ -23292,13 +23295,14 @@
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
-                    "read_skill",
+                    "skill_view",
                     "save_correction",
                     "schedule_skill",
                     "ask_developer",
                     "get_review",
                     "read_site",
-                    "get_preview"
+                    "get_preview",
+                    "read_skill"
                   ]
                 },
                 "description": {
@@ -32952,18 +32956,19 @@
               },
               "tool": {
                 "type": "string",
-                "const": "read_skill"
+                "const": "skill_view"
               },
               "output": {
                 "oneOf": [
                   {
                     "type": "object",
                     "properties": {
-                      "outcome": {
-                        "type": "string",
-                        "const": "skill"
-                      },
                       "name": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+                      },
+                      "part": {
                         "type": "string",
                         "maxLength": 64,
                         "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
@@ -32973,12 +32978,67 @@
                         "minLength": 1,
                         "maxLength": 10000,
                         "pattern": "\\S"
+                      },
+                      "parts": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 64,
+                          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+                        }
+                      },
+                      "status": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 50,
+                        "pattern": "\\S"
+                      },
+                      "by": {
+                        "type": "string",
+                        "const": "code"
+                      },
+                      "outcome": {
+                        "type": "string",
+                        "const": "skill"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "body",
+                      "status",
+                      "outcome"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "unchanged"
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+                      },
+                      "part": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+                      },
+                      "note": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
                       }
                     },
                     "required": [
                       "outcome",
                       "name",
-                      "body"
+                      "note"
                     ],
                     "additionalProperties": false
                   },
@@ -42511,6 +42571,107 @@
               "output"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "read_skill"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "skill"
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+                      },
+                      "body": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 10000,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "name",
+                      "body"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -42646,13 +42807,14 @@
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
-                    "read_skill",
+                    "skill_view",
                     "save_correction",
                     "schedule_skill",
                     "ask_developer",
                     "get_review",
                     "read_site",
-                    "get_preview"
+                    "get_preview",
+                    "read_skill"
                   ]
                 }
               },
@@ -42785,13 +42947,14 @@
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
-                    "read_skill",
+                    "skill_view",
                     "save_correction",
                     "schedule_skill",
                     "ask_developer",
                     "get_review",
                     "read_site",
-                    "get_preview"
+                    "get_preview",
+                    "read_skill"
                   ]
                 }
               },
@@ -42917,13 +43080,14 @@
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
-                    "read_skill",
+                    "skill_view",
                     "save_correction",
                     "schedule_skill",
                     "ask_developer",
                     "get_review",
                     "read_site",
-                    "get_preview"
+                    "get_preview",
+                    "read_skill"
                   ]
                 }
               },
@@ -43056,13 +43220,14 @@
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
-                    "read_skill",
+                    "skill_view",
                     "save_correction",
                     "schedule_skill",
                     "ask_developer",
                     "get_review",
                     "read_site",
-                    "get_preview"
+                    "get_preview",
+                    "read_skill"
                   ]
                 }
               },
@@ -43188,13 +43353,14 @@
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
-                    "read_skill",
+                    "skill_view",
                     "save_correction",
                     "schedule_skill",
                     "ask_developer",
                     "get_review",
                     "read_site",
-                    "get_preview"
+                    "get_preview",
+                    "read_skill"
                   ]
                 }
               },
@@ -43319,13 +43485,14 @@
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
-                    "read_skill",
+                    "skill_view",
                     "save_correction",
                     "schedule_skill",
                     "ask_developer",
                     "get_review",
                     "read_site",
-                    "get_preview"
+                    "get_preview",
+                    "read_skill"
                   ]
                 }
               },
@@ -43450,13 +43617,14 @@
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
-                    "read_skill",
+                    "skill_view",
                     "save_correction",
                     "schedule_skill",
                     "ask_developer",
                     "get_review",
                     "read_site",
-                    "get_preview"
+                    "get_preview",
+                    "read_skill"
                   ]
                 }
               },

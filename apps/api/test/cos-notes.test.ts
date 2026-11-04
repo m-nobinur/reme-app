@@ -199,75 +199,72 @@ describe("the hand-over note", () => {
   })
 })
 
-describe("the procedures code loads", () => {
-  const building = {
-    assignment_id: crypto.randomUUID(),
-    kind: "site.build" as const,
-    state: "implementing" as const,
-    lane: "full" as const,
-    goal: "Build my website",
-    version: null,
-  }
+describe("the skills code loads", () => {
+  const yes = { answer: "yes" as const, waiting: null }
+  const no = { answer: "no" as const, waiting: null }
 
-  it("loads the top open item's on the hand-over, and what the owner's message is about", () => {
-    expect(skillsDue({ workspace: EMPTY, starting: "handover" })).toEqual([
-      "web-address",
+  it("loads on explicit triggers only, never from the owner's words or the workspace", () => {
+    expect(skillsDue({ handover: true })).toEqual([
+      { name: "web-address", trigger: "handover" },
     ])
-    // A new conversation with no site yet has no address to put it on.
-    expect(skillsDue({ workspace: EMPTY, starting: "session" })).toEqual([])
-    expect(
-      skillsDue({
-        workspace: { ...EMPTY, site: { host: "x.reme.site", live_version: 1 } },
-        starting: "session",
-      })
-    ).toEqual(["web-address"])
-    expect(
-      skillsDue({ workspace: EMPTY, said: "Help me set up my web address" })
-    ).toEqual(["web-address"])
-    expect(skillsDue({ workspace: EMPTY, said: ADDRESS_ASK.no })).toEqual([
-      "web-address",
+    expect(skillsDue({ intent: "connect_address" })).toEqual([
+      { name: "web-address", trigger: "connect_address" },
     ])
-    expect(
-      skillsDue({ workspace: EMPTY, said: "Can I get on Google?" })
-    ).toEqual(["google-search"])
-    expect(skillsDue({ workspace: EMPTY, said: "Thanks!" })).toEqual([])
+    expect(skillsDue({ intent: "connect_google" })).toEqual([
+      { name: "google-search", trigger: "connect_google" },
+    ])
+    expect(skillsDue({ scheduled: "weekly-review" })).toEqual([
+      { name: "weekly-review", trigger: "schedule" },
+    ])
+    // Words alone, however close, load nothing: the model views what it needs.
+    expect(skillsDue({ said: "Help me set up my web address" })).toEqual([])
+    expect(skillsDue({ said: "Can I get on Google?" })).toEqual([])
+    expect(skillsDue({ said: ADDRESS_ASK.no })).toEqual([])
+    expect(skillsDue({})).toEqual([])
   })
 
-  it("loads a task's, a build's and a waiting review's while they are under way, and a schedule's own", () => {
-    const choosing = address({
-      steps: [step("find_out", "done"), step("choose", "blocked")],
-    })
-    expect(
-      skillsDue({
-        workspace: {
-          ...EMPTY,
-          tasks: [choosing],
-          builds: [building],
-          approvals: [{ version: 1, expires_at: NOW.toISOString() }],
-        },
-        scheduled: "weekly-review",
-      })
-    ).toEqual(["weekly-review", "web-address", "builds", "reviews"])
+  it("loads the matching part for the address card's answer, only with the card's own reply", () => {
+    expect(skillsDue({ card: no, said: ADDRESS_ASK.no })).toEqual([
+      { name: "web-address", trigger: "address_no" },
+      { name: "web-address", part: "buy-new", trigger: "address_no" },
+    ])
+    for (const said of [ADDRESS_ASK.yes, "Yes, it's sparkleclean.co.uk"]) {
+      expect(skillsDue({ card: yes, said })).toEqual([
+        { name: "web-address", trigger: "address_yes" },
+        { name: "web-address", part: "connect-own", trigger: "address_yes" },
+      ])
+    }
+    // A typed message after the card was answered is the owner's own words.
+    expect(skillsDue({ card: no, said: "What does a domain cost?" })).toEqual(
+      []
+    )
+    expect(skillsDue({ card: yes, said: ADDRESS_ASK.no })).toEqual([])
   })
 
-  it("reads a loaded procedure back as one of the history's events, never the owner's turn", () => {
+  it("reads a loaded skill back after the owner's message, as a skill_view call and its result", () => {
     const turn = "01JD0000000000000000000000"
     const rows = [
       {
         seq: 0,
-        type: "cos.skill",
-        payload: { name: "web-address", body: "Web address: the rules." },
-      },
-      {
-        seq: 1,
         type: "cos.message",
         payload: {
           turn_id: turn,
           message: {
             id: "u1",
             role: "user",
-            parts: [{ type: "text", text: "Hi" }],
+            parts: [{ type: "text", text: ADDRESS_ASK.no }],
           },
+        },
+      },
+      {
+        seq: 1,
+        type: "cos.skill",
+        payload: {
+          name: "web-address",
+          part: "buy-new",
+          body: "# Finding and buying a name",
+          status: "Drawing on my domain expertise to find a name",
+          trigger: "address_no",
         },
       },
       {
@@ -286,13 +283,29 @@ describe("the procedures code loads", () => {
     ]
     const { messages } = deriveCosMessages(rows, CONTEXT_POLICY)
     expect(messages.map((m) => m.id)).toEqual([
-      "event:0",
       `context-${turn}`,
       "u1",
+      "event:1",
     ])
-    expect(JSON.stringify(messages[0])).toContain(
-      "The web-address procedure, loaded by code"
-    )
+    expect(messages[2]).toMatchObject({
+      role: "assistant",
+      parts: [
+        { type: "step-start" },
+        {
+          type: "tool-skill_view",
+          toolCallId: "skill:1",
+          state: "output-available",
+          input: { name: "web-address", part: "buy-new" },
+          output: {
+            outcome: "skill",
+            name: "web-address",
+            part: "buy-new",
+            by: "code",
+          },
+        },
+      ],
+    })
+    expect(JSON.stringify(messages[2])).not.toContain("address_no")
   })
 })
 

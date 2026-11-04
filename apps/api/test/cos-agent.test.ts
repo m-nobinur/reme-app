@@ -331,104 +331,124 @@ const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 
 const PRICE = priceOf(DEFAULT_MODEL)
 
-/** A CoS procedure's body, where a topic's rules live since the core prompt was cut. */
+/** A CoS skill's core, where a topic's rules live since the core prompt was cut. */
 const skill = (name: string) => procedure("cos", name)?.body ?? ""
+
+/** One part of a CoS skill. */
+const skillPart = (name: string, of: string) =>
+  procedure("cos", name)?.parts.find((p) => p.name === of)?.body ?? ""
 
 describe("the CoS's instructions", () => {
   it("tell the model a declined card is the owner's no, and not to propose it again", () => {
     expect(INSTRUCTIONS).toMatch(
-      /owner declines a proposal, its call comes back as "The owner declined"[^\n]*not a refusal: acknowledge it, and don't retry or propose it again unless the owner asks/
+      /A declined proposal comes back as "The owner declined"[^\n]*not a refusal: acknowledge it, and don't retry or propose it again unless they ask/
     )
   })
 
   it("tell the model a talked-over card is neither yes nor no", () => {
     expect(INSTRUCTIONS).toMatch(
-      /"User cancelled tool call by sending a new message\." That is neither yes nor no: don't act on it, and ask about it again only if it still matters/
+      /"User cancelled tool call by sending a new message\." means the owner talked over a proposal: neither yes nor no\. Don't act on it, and ask about it again only if it still matters/
     )
   })
 
   it("tell the model the owner's words are the yes and to speak of the work as its own", () => {
     expect(skill("website-changes")).toMatch(
-      /request_change in the owner's own words, one change per call, as soon as the owner asks for it\. Never ask them to confirm it first, with one exception the procedure gives: new copy you wrote that runs past a line, or a new section or page, is shown as a short draft first/
+      /request_change in the owner's own words, one change per call, as soon as they ask for it\. In Act mode their message is their yes[^\n]*The one exception site-change gives: new copy you wrote that runs past a line, or a new section or page, is shown as a short draft first/
     )
     expect(skill("website-changes")).toMatch(
-      /read the site-change procedure with read_skill and follow it/
+      /view the site-change skill and follow it/
     )
     expect(skill("website-changes")).toMatch(
-      /request_change comes back with outcome "started"[^\n]*never say queued[^\n]*Never ask them to approve it/
+      /request_change comes back with outcome "started", the change has started/
     )
-    expect(skill("website-changes")).toContain(
-      '"I\'m putting your site together"'
+    expect(skill("website-changes")).toMatch(
+      /never say queued[^\n]*Never call request_change again for a change that started/
     )
+    expect(skill("website-changes")).toMatch(
+      /Never ask the owner to confirm or approve a change before it starts/
+    )
+    expect(skill("website-changes")).toContain('"I\'ve started your change"')
     expect(skill("website-changes")).not.toMatch(/such as "It's/)
   })
 
   it("tell the model how to use the chat's markdown, and not to use headings or tables", () => {
     expect(INSTRUCTIONS).toMatch(
-      /renders markdown[^\n]*numbered list for steps[^\n]*bold for the one fact[^\n]*inline code for a DNS value[^\n]*a link[^\n]*No headings, no tables[^\n]*never more than one bold phrase/
+      /renders markdown[^\n]*numbered list for steps[^\n]*bold for the one fact[^\n]*inline code for text they will copy[^\n]*a link[^\n]*No headings, no tables[^\n]*At most one bold phrase per reply/
     )
   })
 
   it("tell the model to promise a report back only while something watches, and never to end on a bare promise", () => {
     expect(INSTRUCTIONS).toMatch(
-      /tell the owner when something happens only while something is watching for it[^\n]*Never end a reply on "I'll\.\.\." with no tool call/
+      /Say you will tell the owner when something happens only while something watches for it[^\n]*Never end a reply on "I'll\.\.\." with no tool call/
     )
   })
 
   describe("on the website's own address and Google", () => {
     it("speak with the why and a benefit in the owner's terms, never the plumbing", () => {
-      expect(skill("web-address")).toMatch(
-        /website's own address or Google, talk like a sharp, helpful assistant[^\n]*what is happening, why it matters to this business[^\n]*what happens next, and the one thing they can do/
+      expect(INSTRUCTIONS).toMatch(
+        /When you set something up for the owner, sound like a sharp assistant, never a form: what is happening, why it matters to this business, what happens next and the one thing they can do/
+      )
+      expect(INSTRUCTIONS).toMatch(
+        /Never say DNS, CNAME, record, SSL, certificate, property, sitemap or propagation to the owner/
+      )
+      expect(INSTRUCTIONS).toMatch(
+        /Open with no "Good news", "Great" or "Nice work", and keep an exclamation mark for a real win/
       )
       expect(skill("web-address")).toMatch(
-        /Never use these words with the owner: DNS, CNAME, record, SSL, certificate, property, sitemap, propagation/
+        /customers trust an address of their own/
       )
-      expect(skill("web-address")).toMatch(
-        /No opener such as "Good news", "Great" or "Nice work", and at most one exclamation mark/
+      expect(skill("google-search")).toMatch(
+        /never promise a ranking, a position, a number of visitors or a date/
       )
     })
 
     it("make the build's address offer when it did not land, once, with its benefit", () => {
       expect(skill("web-address")).toMatch(
-        /When the first build starts, the app offers the address itself[^\n]*still no address task, that offer did not land, so make it in your next reply, once[^\n]*goes live on it the moment they publish/
+        /When the first build starts, the app offers the address itself[^\n]*still no address task, that offer did not land: make it in your next reply, once[^\n]*goes live on it the moment they publish/
       )
     })
 
     it("put the address or Google off on not now, and keep a domain whose setting must wait", () => {
+      expect(INSTRUCTIONS).toMatch(
+        /not now to an offer, call put_off[^\n]*without promising to ask again/
+      )
       expect(skill("web-address")).toMatch(
-        /not now to the address, call put_off with kind address/
+        /not now, call put_off with kind address/
       )
       expect(skill("google-search")).toMatch(
-        /not now to Google, call put_off with kind google/
+        /not now, call put_off with kind google/
       )
       expect(skill("web-address")).toMatch(
-        /setting will have to wait[^\n]*don't put anything off: the domain stays saved[^\n]*goes live on its free address first/
+        /setting will have to wait[^\n]*put nothing off: the domain stays saved[^\n]*goes live on its free address first/
       )
       expect(skill("web-address")).toMatch(
-        /asks to see the setting for a domain that is being connected[^\n]*call connect_domain with that name: it shows the same card again/
+        /asks to see the setting for a domain being connected, call connect_domain with that name: it shows the same card again/
       )
     })
 
     it("leave Google to the offer once the setting is in, and never offer a purchase while buying is off", () => {
       expect(skill("google-search")).toMatch(
-        /Once the owner's setting is in, the app offers Google itself, with a Connect Google button; when that message is in the conversation, don't offer it again/
+        /Once the owner's setting is in, the app offers Google itself, with a Connect Google button\. When that message is in the conversation, don't offer it again/
       )
-      expect(skill("web-address")).toMatch(
-        /When the workspace's buying is false, the card shows where to buy each name, at Cloudflare or GoDaddy[^\n]*never offer to buy it here and never call buy_domain/
+      expect(skillPart("web-address", "buy-new")).toMatch(
+        /When the workspace's buying is false, the card shows where to buy each name, at Cloudflare or GoDaddy/
+      )
+      expect(skillPart("web-address", "buy-new")).toMatch(
+        /While buying is false, never offer to buy a name here and never call buy_domain/
       )
     })
 
     it("look for names at once on No, help me get one, and point at the card only while it is on screen", () => {
-      expect(skill("web-address")).toMatch(
+      expect(skillPart("web-address", "buy-new")).toMatch(
         /"No, help me get one"[^\n]*call find_domain straight away/
       )
-      expect(skill("web-address")).toMatch(
+      expect(skillPart("web-address", "connect-own")).toMatch(
         /open items note says the address card is on screen asking for it, say they can type it on the card/
       )
       expect(INSTRUCTIONS).toMatch(
-        /Point the owner at a card only when it is on screen now/
+        /Point the owner at a card only while it is on screen/
       )
-      expect(skill("web-address")).toMatch(
+      expect(skillPart("web-address", "connect-own")).toMatch(
         /A domain the owner typed connects at once, with no card/
       )
     })
@@ -444,18 +464,21 @@ describe("a tool's schema", () => {
     "get_indexing",
   ]
 
-  it("asks only the slow reads for a step line, at most 60 characters", async () => {
+  it("asks the slow reads for a step line, at most 60 characters, and every skill view for one of 50", async () => {
     const { tools, instructions } = await cosPrefix()
     for (const { name, input_schema } of tools) {
       const props = (input_schema.properties ?? {}) as Record<string, unknown>
       if (STEPPED.includes(name)) {
         expect(props.step, name).toEqual({ type: "string", maxLength: 60 })
         expect(input_schema.required ?? [], name).not.toContain("step")
+      } else if (name === "skill_view") {
+        expect(props.step).toMatchObject({ type: "string", maxLength: 50 })
+        expect(input_schema.required).toContain("step")
       } else {
         expect(Object.keys(props), name).not.toContain("step")
       }
     }
-    expect(instructions).toMatch(/A call's optional step is a few words/)
+    expect(instructions).toMatch(/A call's step is a few words/)
     const change = tools.find((t) => t.name === "request_change")
     // The panel's alone: it posts the owner's words in a conversation.
     expect(Object.keys(change?.input_schema.properties ?? {})).not.toContain(
@@ -463,9 +486,9 @@ describe("a tool's schema", () => {
     )
   })
 
-  it("grows the prefix by under 150 tokens for the step lines", async () => {
+  it("grows the prefix by under 200 tokens for the step lines, the skill view's rules among them", async () => {
     const { tools, instructions } = await cosPrefix()
-    const rule = instructions.match(/^- A call's optional step[^\n]*\n/m)
+    const rule = instructions.match(/^- A call's step[^\n]*\n/m)
     // Each step property as sent: its key, schema and comma.
     const properties = tools.flatMap(
       ({ input_schema }) =>
@@ -478,7 +501,7 @@ describe("a tool's schema", () => {
         0
       )
     // Characters over four, the repo has no tokenizer.
-    expect(added / 4).toBeLessThan(150)
+    expect(added / 4).toBeLessThan(200)
   })
 
   it("sends each schema lean, as the prefix logs it, and Zod still checks the call", async () => {
@@ -605,10 +628,10 @@ describe("the CoS's change kinds", () => {
   it("tells the model to quote the measured wait as a range, not a fixed one", () => {
     expect(skill("website-changes")).toContain("expected_range.quick")
     expect(skill("website-changes")).toContain(
-      "Always a range, never one figure"
+      "Always give a range, never one figure"
     )
     // A quick edit can move to a longer build, so the time is never a promise.
-    expect(skill("website-changes")).toContain("Never promise that time")
+    expect(skill("website-changes")).toContain("Never promise a time")
   })
 
   it("carries each lane's range and each build's lane in the workspace the model reads", () => {
@@ -1032,9 +1055,7 @@ describe("the CoS's model and price", () => {
 
   it("names no business kind and no assistant in the cached instructions", () => {
     expect(INSTRUCTIONS).not.toMatch(/Maya|cleaning/i)
-    expect(INSTRUCTIONS).toMatch(
-      /Tone professional: [^\n]*no exclamation marks/
-    )
+    expect(INSTRUCTIONS).toMatch(/Professional is [^\n]*no exclamation marks/)
   })
 
   it("tells the model a website change mode message is a change to propose, in Act only", () => {
@@ -1792,9 +1813,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "inspect_domain",
       "put_off",
       "read_site",
-      "read_skill",
       "remember",
       "save_correction",
+      "skill_view",
     ])
   })
 
@@ -1804,13 +1825,16 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         .filter((e) => e.type === "cos.tool_result" && e.payload.tool === tool)
         .map((e) => e.payload.output)
 
-    it("given a review, lists review-reply in read_skill and reads its body", async () => {
+    it("given a review, indexes review-reply in the core and views its body", async () => {
       const id = await conversation(me)
       const { model, sent } = scripted(
         calls({
           id: "call_skill_1",
-          tool: "read_skill",
-          input: { name: "review-reply" },
+          tool: "skill_view",
+          input: {
+            name: "review-reply",
+            step: "Using my customer care experience on a reply",
+          },
         }),
         said(
           "Here's a draft: Thanks so much, Priya, we're glad the oven shines."
@@ -1824,14 +1848,14 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         ),
         { model }
       )
-      // The index rides in the system prompt, not in read_skill's description.
+      // The index rides in the system prompt, not in skill_view's description.
       expect(JSON.stringify(sent[0]?.prompt)).toContain(
-        "review-reply: Draft the owner's public reply to a customer review"
+        "- review-reply (customer care): Use when drafting the owner's public reply to a customer's review."
       )
-      expect(await outputsOf(id, "read_skill")).toEqual([
-        expect.objectContaining({ outcome: "skill", name: "review-reply" }),
-      ])
-      expect(wire(sent.slice(1))).toContain("Review reply: a draft")
+      expect(wire(sent.slice(1))).toContain("# Review reply")
+      expect(wire(sent.slice(1))).toContain(
+        "Using my customer care experience on a reply"
+      )
     })
 
     it("saves a Developer correction only in the owner's whole sentence, for the Developer and never the CoS's prompt", async () => {

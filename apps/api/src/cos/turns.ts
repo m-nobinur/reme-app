@@ -26,6 +26,7 @@ import {
 } from "@workspace/db"
 import { constraint } from "../http.ts"
 import { stepMessages } from "./history.ts"
+import { logView } from "./skills.ts"
 
 export {
   DAILY_CAP_USD,
@@ -454,7 +455,7 @@ export type Opening = {
   prefix: CosPrefix | null
   /** Our own records for the log before the messages, such as onboarding's hand-over. */
   events?: CosEvent[]
-  /** Procedures code loaded for this turn, logged after the events. */
+  /** Skills code loaded for this turn, logged after its messages, as a view the model made would be. */
   skills?: CosSkill[]
   messages: { message: CosMessage["message"]; taint: TaintLabel[] }[]
   context: CosContext
@@ -496,15 +497,15 @@ export async function beginTurn(
       payload: CosEvent.parse(event),
       taint: ["inferred"] as TaintLabel[],
     })),
-    ...(opening.skills ?? []).map((skill) => ({
-      type: "cos.skill",
-      payload: CosSkill.parse(skill),
-      taint: [] as TaintLabel[],
-    })),
     ...opening.messages.map(({ message, taint }) => ({
       type: "cos.message",
       payload: CosMessage.parse({ turn_id: turn.turnId, message }),
       taint,
+    })),
+    ...(opening.skills ?? []).map((skill) => ({
+      type: "cos.skill",
+      payload: CosSkill.parse(skill),
+      taint: [] as TaintLabel[],
     })),
     { type: "cos.context", payload: context, taint: opening.contextTaint },
   ]
@@ -512,6 +513,9 @@ export async function beginTurn(
     if ((await append(db, turn, write)) === null) {
       throw new SessionBusy(turn.sessionId)
     }
+  }
+  for (const skill of opening.skills ?? []) {
+    logView(turn, skill, "code", "skill", skill.status ?? null, skill.trigger)
   }
 }
 

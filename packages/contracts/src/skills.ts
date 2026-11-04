@@ -40,18 +40,69 @@ export const StaffCorrections = z.strictObject({
     .max(CORRECTIONS_MAX),
 })
 
-/** `read_skill`'s input: a name from the index in the tool's description. */
-export const ReadSkillInput = z.strictObject({ name: SkillName })
-
-/** The longest procedure body. */
+/** The longest skill core or part. */
 export const SKILL_BODY_MAX = 10_000
 
-/** `read_skill`'s output: the procedure to follow. Refused with `skill.unknown`. */
+/** The longest line the owner sees while a skill is viewed. */
+export const SKILL_STATUS_MAX = 50
+
+/**
+ * `read_skill`'s output, which `skill_view` replaced. Kept so a session
+ * logged before the rename still parses and replays.
+ */
 export const ReadSkillOutput = z.discriminatedUnion("outcome", [
   z.strictObject({
     outcome: z.literal("skill"),
     name: SkillName,
     body: Text(SKILL_BODY_MAX),
+  }),
+  Refused,
+])
+
+/**
+ * `skill_view`'s input. The model is sent `step` as required; a call without
+ * one still runs, and the skill's own status line shows instead.
+ */
+export const SkillViewInput = z.strictObject({
+  name: SkillName,
+  part: SkillName.optional().describe(
+    "A part from the skill's References. Omit it for the core."
+  ),
+  step: z
+    .string()
+    .max(SKILL_STATUS_MAX)
+    .optional()
+    .describe(
+      'What the owner sees while you work, sentence case: "Using my SEO skills to check your Google ranking". Vary the opener (Using my, Drawing on my, Utilising my); never repeat your last line.'
+    ),
+})
+
+/** A skill as `skill_view` returns it, and as code loads one into the history. */
+export const ViewedSkill = z.strictObject({
+  name: SkillName,
+  /** The part viewed; absent for the core. */
+  part: SkillName.optional(),
+  body: Text(SKILL_BODY_MAX),
+  /** The core's parts, by name; the core's References say when to view each. */
+  parts: z.array(SkillName).max(10).optional(),
+  /** The line the owner saw. */
+  status: Text(SKILL_STATUS_MAX),
+  /** Set when code loaded it on an explicit trigger, never the model. */
+  by: z.literal("code").optional(),
+})
+
+/**
+ * `skill_view`'s output: the skill, or `unchanged` when this conversation
+ * already holds the same text, which shows the owner nothing new. Refused
+ * with `skill.unknown` or `skill.no_part`, naming the valid ones.
+ */
+export const SkillViewOutput = z.discriminatedUnion("outcome", [
+  ViewedSkill.extend({ outcome: z.literal("skill") }),
+  z.strictObject({
+    outcome: z.literal("unchanged"),
+    name: SkillName,
+    part: SkillName.optional(),
+    note: Text(200),
   }),
   Refused,
 ])
@@ -89,8 +140,10 @@ export const ScheduleSkillOutput = z.discriminatedUnion("outcome", [
 export type SkillName = z.infer<typeof SkillName>
 export type CorrectedStaff = z.infer<typeof CorrectedStaff>
 export type StaffCorrections = z.infer<typeof StaffCorrections>
-export type ReadSkillInput = z.infer<typeof ReadSkillInput>
 export type ReadSkillOutput = z.infer<typeof ReadSkillOutput>
+export type SkillViewInput = z.infer<typeof SkillViewInput>
+export type SkillViewOutput = z.infer<typeof SkillViewOutput>
+export type ViewedSkill = z.infer<typeof ViewedSkill>
 export type SaveCorrectionInput = z.infer<typeof SaveCorrectionInput>
 export type SaveCorrectionOutput = z.infer<typeof SaveCorrectionOutput>
 export type ScheduleSkillInput = z.infer<typeof ScheduleSkillInput>

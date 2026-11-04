@@ -9,7 +9,6 @@ import {
   INSTRUCTIONS,
   openrouterModel,
 } from "../src/cos/agent.ts"
-import { skillHeader } from "../src/cos/history.ts"
 import { workspaceLabels } from "../src/cos/labels.ts"
 
 /**
@@ -78,10 +77,14 @@ async function turn(tips: ("business_email" | "local_phone")[], said: string) {
     },
     stopWhen: isStepCount(4),
     messages: [
-      // The tips live in web-address, which code loads while tips are listed.
+      // The tips live in web-address's tips part, as the model views it.
       {
         role: "user",
-        content: `${skillHeader("web-address")}\n${procedure("cos", "web-address")?.body}`,
+        content: [
+          procedure("cos", "web-address")?.body,
+          procedure("cos", "web-address")?.parts.find((p) => p.name === "tips")
+            ?.body,
+        ].join("\n\n"),
       },
       {
         role: "user",

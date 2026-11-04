@@ -40,7 +40,7 @@ import { settleCard } from "../src/build-questions.ts"
 import { grantedKinds, offerGrant, saveGrant } from "../src/cos/grants.ts"
 import { remember } from "../src/cos/memory.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
-import { readSkill, saveCorrection, scheduleSkill } from "../src/cos/skills.ts"
+import { saveCorrection, scheduleSkill, skillView } from "../src/cos/skills.ts"
 import { wallToUtc } from "../src/cos/time.ts"
 import {
   answerQuestion as answerTool,
@@ -3318,10 +3318,17 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
   })
 
   describe("skills", () => {
-    it("reads a procedure, saves a quoted correction and schedules the weekly review", async () => {
+    it("views a skill, saves a quoted correction and schedules the weekly review", async () => {
       const read = kept(
-        "read_skill",
-        await readSkill(context(me), { name: "quote-reply" })
+        "skill_view",
+        await skillView(
+          context(me),
+          { name: "quote-reply" },
+          "",
+          await turnOf(me, []),
+          null,
+          []
+        )
       )
       expect(read).toMatchObject({ outcome: "skill", name: "quote-reply" })
       const said = "Always show the van photo on the home page."

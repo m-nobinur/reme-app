@@ -1470,6 +1470,18 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           turn: { kind: "message", message_id, text: "What's next?" },
         })
       }
+      // A Connect press loads its skill by the press; one already loaded is not sent again.
+      for (const [message_id, intent, text] of [
+        ["u_after_3", "connect_address", "Help me set up my web address"],
+        ["u_after_4", "connect_google", "Connect Google to my website"],
+      ] as const) {
+        await talk.send({
+          conversation_id: id,
+          mode: "ask",
+          intent,
+          turn: { kind: "message", message_id, text },
+        })
+      }
       const logged = await kit.withOrg({ orgId: fresh.orgId }, (db) =>
         db
           .select({ type: events.type, payload: events.payload })
@@ -1483,12 +1495,29 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           (e.payload as { source: string }).source === "handover"
       )
       expect(handovers).toHaveLength(1)
-      // The top open item's procedure, loaded once for both turns.
+      // web-address on the hand-over, once for every turn after it; Google on its press.
       expect(
         logged.flatMap((e) =>
-          e.type === "cos.skill" ? [(e.payload as { name: string }).name] : []
+          e.type === "cos.skill"
+            ? [
+                (({ name, trigger, status }) => ({ name, trigger, status }))(
+                  e.payload as Record<string, unknown>
+                ),
+              ]
+            : []
         )
-      ).toEqual(["web-address"])
+      ).toEqual([
+        {
+          name: "web-address",
+          trigger: "handover",
+          status: "Using my domain expertise to set up your address",
+        },
+        {
+          name: "google-search",
+          trigger: "connect_google",
+          status: "Using my SEO skills to connect Google Search",
+        },
+      ])
       expect(handovers[0]?.payload).toHaveProperty(
         "summary",
         expect.stringMatching(
@@ -1503,7 +1532,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
               .context_policy_version
           ).startsWith("onboarding-")
       )
-      expect(contexts).toHaveLength(2)
+      expect(contexts).toHaveLength(4)
       for (const c of contexts)
         expect((c.payload as { text: string }).text).toMatch(
           /Open items, from the records[\s\S]*- Web address: not settled/

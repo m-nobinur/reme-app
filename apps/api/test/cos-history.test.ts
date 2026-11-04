@@ -212,6 +212,7 @@ const RELEASED: Record<
   "18": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "19": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "20": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "21": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
 }
 
 describe("CONTEXT_POLICY", () => {
@@ -575,5 +576,94 @@ describe("deriveCosMessages", () => {
     expect(() =>
       deriveCosMessages(twoTurns(), { ...CONTEXT_POLICY, turns: 0 })
     ).toThrow(/at least one turn/)
+  })
+})
+
+describe("skill views in the history", () => {
+  const T = [
+    "01K6A0000000000000000000S1",
+    "01K6A0000000000000000000S2",
+    "01K6A0000000000000000000S3",
+    "01K6A0000000000000000000S4",
+  ] as const
+  const viewed = (type: string) => ({
+    type,
+    toolCallId: `call_${type}`,
+    state: "output-available",
+    input: { name: "builds" },
+    output: {
+      outcome: "skill",
+      name: "builds",
+      body: "# Builds",
+      status: "Using my web development experience",
+    },
+  })
+
+  it("keeps a skill view in an older turn, as skill_view, where other calls go", () => {
+    const { messages } = deriveCosMessages(
+      session(
+        context(T[0]),
+        said(T[0], "u1", "How is the build?"),
+        replied(T[0], "a1", [
+          { type: "step-start" },
+          viewed("tool-read_skill"),
+          {
+            type: "tool-get_workspace",
+            toolCallId: "call_ws",
+            state: "output-available",
+            input: {},
+            output: workspace,
+          },
+          { type: "text", text: "Three of seven pages.", state: "done" },
+        ]),
+        ...T.slice(1).flatMap((t, i) => [
+          context(t),
+          said(t, `u${i + 2}`, "And?"),
+          replied(t, `a${i + 2}`, [
+            { type: "text", text: "Yes.", state: "done" },
+          ]),
+        ])
+      ),
+      CONTEXT_POLICY
+    )
+    expect(
+      messages.find((m) => m.id === "a1")?.parts.map((p) => p.type)
+    ).toEqual(["step-start", "tool-skill_view", "text"])
+  })
+
+  it("names the skills a summary replaced, so they are viewed again", () => {
+    const { messages } = deriveCosMessages(
+      session(
+        context(T[0]),
+        said(T[0], "u1", "Help me get a domain"),
+        [
+          "cos.skill",
+          {
+            name: "web-address",
+            body: "# Web address",
+            status: "Drawing on my domain expertise to find a name",
+            trigger: "address_no",
+          },
+        ],
+        replied(T[0], "a1", [
+          { type: "step-start" },
+          viewed("tool-skill_view"),
+        ]),
+        [
+          "cos.compaction",
+          {
+            summary: "They want a domain.",
+            replaced_range: { from_seq: 1, to_seq: 3 },
+            dropped_refs: [],
+          },
+        ],
+        context(T[1]),
+        said(T[1], "u2", "Go on")
+      ),
+      CONTEXT_POLICY
+    )
+    expect(JSON.stringify(messages)).toContain(
+      "Skills viewed before this summary: web-address, builds. Their text is no longer here"
+    )
   })
 })

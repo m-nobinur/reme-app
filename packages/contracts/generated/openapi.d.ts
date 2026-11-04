@@ -4715,7 +4715,7 @@ export interface components {
       mode: "ask" | "act"
       time_zone?: string
       /** @enum {string} */
-      intent?: "site_change"
+      intent?: "site_change" | "connect_address" | "connect_google"
       turn:
         | {
             /** @constant */
@@ -6122,13 +6122,14 @@ export interface components {
         | "inspect_domain"
         | "domain_bought"
         | "offer_grant"
-        | "read_skill"
+        | "skill_view"
         | "save_correction"
         | "schedule_skill"
         | "ask_developer"
         | "get_review"
         | "read_site"
         | "get_preview"
+        | "read_skill"
       )[]
       text: string
       reserved_usd: number
@@ -6615,13 +6616,14 @@ export interface components {
           | "inspect_domain"
           | "domain_bought"
           | "offer_grant"
-          | "read_skill"
+          | "skill_view"
           | "save_correction"
           | "schedule_skill"
           | "ask_developer"
           | "get_review"
           | "read_site"
           | "get_preview"
+          | "read_skill"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -9362,13 +9364,25 @@ export interface components {
           turn_id: string
           tool_call_id: string
           /** @constant */
-          tool: "read_skill"
+          tool: "skill_view"
           output:
             | {
+                name: string
+                part?: string
+                body: string
+                parts?: string[]
+                status: string
+                /** @constant */
+                by?: "code"
                 /** @constant */
                 outcome: "skill"
+              }
+            | {
+                /** @constant */
+                outcome: "unchanged"
                 name: string
-                body: string
+                part?: string
+                note: string
               }
             | {
                 /** @constant */
@@ -11633,6 +11647,37 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "read_skill"
+          output:
+            | {
+                /** @constant */
+                outcome: "skill"
+                name: string
+                body: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosToolStarted: {
       tool_call_id: string
       approval_id: string
@@ -11681,13 +11726,14 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11733,13 +11779,14 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11783,13 +11830,14 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11834,13 +11882,14 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11884,13 +11933,14 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11934,13 +11984,14 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11984,13 +12035,14 @@ export interface components {
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
           )[]
           steps: number
           first_chunk_ms: number | null
