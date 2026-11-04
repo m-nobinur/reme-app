@@ -160,12 +160,14 @@ export async function logoRound(
   if (!read.success) return undefined
   const { rounds } = read.data
   const last = rounds.at(-1)
-  if (last?.status === "drawing") {
+  // The tray shows a round's designs as they land, while its ideas are still
+  // being read and the round stays "drawing"; the panel says the same.
+  if (last?.status === "drawing" && last.variants.length < LOGO_VARIANTS) {
     return { status: "drawing", options: LOGO_VARIANTS }
   }
   const kept = logoOf(facts)?.id
   const picked = rounds.some((r) => r.variants.some((v) => v.id === kept))
-  return last?.status === "ready" && last.variants.length > 0 && !picked
+  return last && last.status !== "failed" && last.variants.length > 0 && !picked
     ? { status: "ready", options: last.variants.length }
     : undefined
 }
