@@ -481,6 +481,56 @@ function Fold({ open, children }: { open: boolean; children: ReactNode }) {
   )
 }
 
+/**
+ * A button's label that fades into the next when its `kind` changes, the old
+ * one fading out over it for the length of the fade; none with reduced
+ * motion. Both sit in one grid cell, so the button's width is its own.
+ */
+function SwapLabel({ kind, children }: { kind: string; children: ReactNode }) {
+  const [shown, setShown] = useState(kind)
+  const [leaving, setLeaving] = useState<ReactNode>(null)
+  // The label the last render drew, which is what leaves.
+  const last = useRef<ReactNode>(children)
+  if (shown !== kind) {
+    setShown(kind)
+    setLeaving(last.current)
+  }
+  useEffect(() => {
+    last.current = children
+  })
+  useEffect(() => {
+    if (leaving === null) return
+    const timer = setTimeout(() => setLeaving(null), 150)
+    return () => clearTimeout(timer)
+  }, [leaving])
+  const label =
+    "col-start-1 row-start-1 flex items-center gap-1.5 duration-fast"
+  return (
+    <span className="grid place-items-center">
+      {leaving === null ? null : (
+        <span
+          aria-hidden
+          className={cn(
+            label,
+            "motion-safe:fade-out-0 motion-safe:animate-out motion-safe:fill-mode-forwards motion-reduce:hidden"
+          )}
+        >
+          {leaving}
+        </span>
+      )}
+      <span
+        className={cn(
+          label,
+          leaving !== null && "motion-safe:fade-in-0 motion-safe:animate-in"
+        )}
+        key={kind}
+      >
+        {children}
+      </span>
+    </span>
+  )
+}
+
 /** A settled section as one row: what it is, what was chosen, and a tap to reopen it. */
 function Summary({
   label,
@@ -1043,11 +1093,14 @@ type TrayFrameProps = {
    * The primary button. With `form` it submits that form, so Enter in a
    * field submits too; without, Enter in a field presses it. It reads Next
    * on each page and Done on the last; a step that acts differently, such
-   * as an upload, passes its own label.
+   * as an upload, passes its own label. A `swap` names the label's kind:
+   * the button then keeps one width, and a change of kind fades one label
+   * into the other.
    */
   submit?:
     | {
         label?: ReactNode
+        swap?: string
         onSubmit?: () => void
         form?: string
         disabled?: boolean
@@ -1324,13 +1377,19 @@ function TrayFrame({
               ) : null}
               {submit ? (
                 <Button
-                  className="px-5"
+                  className={submit.swap ? "w-44 px-3" : "px-5"}
                   disabled={submit.disabled}
                   form={submit.form}
                   onClick={submit.form ? undefined : submit.onSubmit}
                   type={submit.form ? "submit" : "button"}
                 >
-                  {submit.label ?? forward}
+                  {submit.swap ? (
+                    <SwapLabel kind={submit.swap}>
+                      {submit.label ?? forward}
+                    </SwapLabel>
+                  ) : (
+                    (submit.label ?? forward)
+                  )}
                 </Button>
               ) : null}
             </div>
@@ -1644,6 +1703,7 @@ function QuestionTray({
           ? undefined
           : designsSubmit || {
               label: finishing ? "Done" : undefined,
+              swap: "next",
               onSubmit: next,
               disabled: !ready,
             }

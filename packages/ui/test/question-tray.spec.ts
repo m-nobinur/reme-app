@@ -194,6 +194,39 @@ test("a design read that fails says so and stops asking until Try again", async 
   }
 })
 
+test("Next turns into Redesign my logo at one width, and the brief opens with the change", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  const picked = state(page, "Logo, a design picked")
+  const primary = picked.getByRole("button", { name: "Next", exact: true })
+  const before = await primary.boundingBox()
+  await picked.getByRole("button", { name: "Old-school feel" }).click()
+  const redesign = picked.getByRole("button", { name: "Redesign my logo" })
+  await expect(redesign).toBeEnabled()
+  // The old label has left once the fade is over.
+  await expect(picked.getByRole("button", { name: /^Next/ })).toHaveCount(0)
+  expect((await redesign.boundingBox())?.width).toBe(before?.width)
+  await expect(
+    picked.getByRole("textbox", { name: "What should change?" })
+  ).toBeVisible()
+})
+
+test("the swap has no fade with reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await open(page, "QuestionTray")
+  const picked = state(page, "Logo, a design picked")
+  await picked.getByRole("button", { name: "Old-school feel" }).click()
+  const footer = picked.getByRole("button", { name: "Redesign my logo" })
+  await expect(footer).toBeEnabled()
+  await expect(footer.locator("[aria-hidden]")).toHaveCount(0)
+  expect(
+    await footer.evaluate(
+      (button) => button.getAnimations({ subtree: true }).length
+    )
+  ).toBe(0)
+})
+
 test("layout tiles are their pictures alone, each still named for a screen reader", async ({
   page,
 }) => {

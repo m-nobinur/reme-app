@@ -69,9 +69,9 @@ import {
  * quick answers, nothing picked, a tap moving on to the second. Yes there is
  * the upload. With no logo held, a first round draws as the tray opens, one
  * design in each of the three directions chosen for the business, so No
- * has designs at once, the first picked; each says what its kind of logo is
- * for. Under them sit ideas for a redesign read from the picked design, and
- * the brief as one line that opens it to edit. An idea, or the owner's own
+ * has designs at once, the first picked, each named by its kind of logo.
+ * Under them sit ideas for a redesign read from the picked design, and a
+ * button that opens the brief to change. An idea, or the owner's own
  * words, turns the tray's primary into Redesign my logo, which draws a round
  * from the picked design. Rounds are saved by the api, so a reload reads
  * them back. Picking a design keeps it as the logo and answers the
@@ -681,6 +681,7 @@ function TrayLogo({
                 {designLabel}
               </>
             ),
+            swap: "redesign",
             onSubmit: () => design.current(),
             disabled: designDisabled,
           }
@@ -881,7 +882,7 @@ function TrayLogo({
         ) : null}
       </Fold>
 
-      {/* Ideas for a redesign of the picked design, then the brief as one line. */}
+      {/* Ideas for a redesign of the picked design, then the button that opens the brief. */}
       <Fold open={create && !unread && redesigning && ideas !== null}>
         <ReplyPills label="Ideas for a redesign">
           {(ideas ?? []).map((idea) =>
