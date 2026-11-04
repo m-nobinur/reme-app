@@ -67,7 +67,7 @@ describe("the generated OpenRouter models", () => {
 
   it("throw naming the declared ids when the generated entries are gone", () => {
     expect(() => openrouterModels([])).toThrow(
-      /deepseek\/deepseek-v4.1-flash, x-ai\/grok-4.6, z-ai\/glm-5.3-flash/
+      /deepseek\/deepseek-v4.1-flash, deepseek\/deepseek-v4.1-flash-1017, x-ai\/grok-4.6, z-ai\/glm-5.3-flash/
     )
   })
 
