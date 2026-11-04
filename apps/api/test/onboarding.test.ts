@@ -64,6 +64,7 @@ import {
   retry,
   say,
   started,
+  townOf,
   type Voice,
 } from "../src/onboarding-copy.ts"
 import { voiceProblems } from "../src/voice.ts"
@@ -1269,7 +1270,7 @@ describe("Pick for me, answered by the script", () => {
       expect(rest).toEqual(step.slice(1))
       leads.add(next)
     }
-    expect(leads.size).toBe(3)
+    expect(leads.size).toBe(2)
     // The owner's own answer: Maya introduces herself, the persona, then the question with no thanks.
     const intros = new Set<string>()
     for (const orgId of ORGS) {
@@ -1557,6 +1558,7 @@ const voice = (over: Partial<Voice> = {}): Voice => ({
   ownLook: null,
   ownColour: null,
   services: null,
+  area: "Leeds and about 15 miles around it",
   ...over,
 })
 
@@ -1701,15 +1703,48 @@ describe("the onboarding copy", () => {
     }
   })
 
-  it("offers the website, with its quote page, as one thing it can do", () => {
-    for (const org of ORGS) {
-      expect(question("build_for_me", voice({ org }))).toContain(
-        "Request a quote"
+  it("offers the website with what it does for the business, then asks", () => {
+    const offers = (over: Partial<Voice>) =>
+      new Set(
+        ORGS.map((org) => question("build_for_me", voice({ org, ...over })))
       )
-      expect(question("build_for_me", voice({ org }))).toContain(
-        `Would you like me to build a website for ${BUSINESS}?`
-      )
+    const biopeck = {
+      business: "BioPeck Clean",
+      owner: "",
+      industry: { name: "Cleaning company", category: null },
+      area: "Leeds and 15 miles around it, we'll go as far as York",
     }
+    expect([...offers(biopeck)]).toEqual(
+      expect.arrayContaining([
+        "Thanks.\n\nPeople who can't find you online often go to someone they can. A website puts BioPeck Clean in front of people looking for a cleaning company in Leeds, and every quote request comes straight to me with the details you need.\n\nShall I build a website?",
+        "Thanks.\n\nWhen people look for a cleaning company in Leeds, a website is how they find BioPeck Clean. Every quote request comes straight to me with the details you need.\n\nShall I build a website?",
+      ])
+    )
+    expect([
+      ...offers({ ...biopeck, area: "Within 20 miles of home" }),
+    ]).toContain(
+      "Thanks.\n\nPeople who can't find you online often go to someone they can. A website puts BioPeck Clean in front of people looking for a cleaning company, and every quote request comes straight to me with the details you need.\n\nShall I build a website?"
+    )
+    expect([...offers({ ...biopeck, industry: null, picked: true })]).toEqual(
+      expect.arrayContaining([
+        "People who can't find you online often go to someone they can. A website puts BioPeck Clean in front of people searching online, and every quote request comes straight to me with the details you need.\n\nShall I build a website?",
+        "When people search online, a website is how they find BioPeck Clean. Every quote request comes straight to me with the details you need.\n\nShall I build a website?",
+      ])
+    )
+    expect(
+      [...offers({ industry: { name: "Electrician", category: null } })].join()
+    ).toContain("people looking for an electrician in Leeds")
+  })
+
+  it("reads the town from the start of the owner's area, or none", () => {
+    expect(townOf("Leeds and about 15 miles")).toBe("Leeds")
+    expect(townOf("Milton Keynes, Bedford and Luton")).toBe("Milton Keynes")
+    expect(townOf("Newcastle upon Tyne 10 miles")).toBe("Newcastle upon Tyne")
+    expect(townOf("Bristol.")).toBe("Bristol")
+    expect(townOf("Within 20 miles of Leeds")).toBeNull()
+    expect(townOf("anywhere in Yorkshire")).toBeNull()
+    expect(townOf("Leeds plus Bradford")).toBeNull()
+    expect(townOf(null)).toBeNull()
   })
 
   it("asks what a quote needs in words, without the website", () => {
@@ -1725,7 +1760,7 @@ describe("the onboarding copy", () => {
     for (const org of ORGS) {
       for (const pronouns of ["he_him", "she_her", "they_them"] as const) {
         const text = question("build_for_me", voice({ org, pronouns }))
-        expect(text).toContain("Would you like me to build")
+        expect(text).toContain("Shall I build a website?")
         expect(text).not.toMatch(/\b(He|She|They) can have\b/)
       }
     }
@@ -1739,7 +1774,6 @@ describe("the onboarding copy", () => {
     expect(say(voice({ tone: "friendly" }), "Lovely!")).toBe("Lovely!")
     expect(say(voice({ tone: "professional" }), "Lovely!")).toBe("Lovely.")
     expect(at("professional")).not.toMatch(/\bI'm\b|\bit's\b/i)
-    expect(at("casual")).toMatch(/\bWant me to build\b/)
   })
 
   it("contracts a model's words in the casual tone, and only before a past participle for I have", () => {

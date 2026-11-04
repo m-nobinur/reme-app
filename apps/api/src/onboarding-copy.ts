@@ -40,6 +40,8 @@ export type Voice = {
   ownColour: string | null
   /** The services as a short phrase written in the background, such as "your wedding cars". */
   services: string | null
+  /** Where the business works, in the owner's words. */
+  area: string | null
   /** The assistant just said what it picked or introduced its persona, so a line leaves out its acknowledgement. */
   picked?: boolean
 }
@@ -216,6 +218,29 @@ type Asked = Exclude<StepId, "upload" | "build" | "manual_builder" | "recap">
 /** "your services", or the phrase written for this business. */
 const services = (v: Voice) => v.services ?? "your services"
 
+/** "a cleaning company" from the trade's name, or null without one. */
+const tradeOf = (v: Voice) => {
+  const name = v.industry?.name.trim().toLowerCase()
+  return name ? `${/^[aeiou]/.test(name) ? "an" : "a"} ${name}` : null
+}
+
+/** Capitalised words that start an area but name no place. */
+const NOT_A_TOWN =
+  /^(?:Within|Anywhere|All|Around|Across|Based|Mainly|Mostly|Most|The|Up|Our|My|We|I|Any|North|South|East|West|Central)$/
+
+/**
+ * The first place in the owner's area, such as "Leeds" from "Leeds and about
+ * 15 miles", or null when the words do not start with one that reads cleanly.
+ */
+export function townOf(area: string | null): string | null {
+  const found = area
+    ?.trim()
+    .match(
+      /^([A-Z][\p{L}'-]*(?: (?:upon |on |under )?[A-Z][\p{L}'-]*)*)(?=\s+and\b|\s*,|\s*\d|\s*[.!]?$)/u
+    )?.[1]
+  return found && !NOT_A_TOWN.test(found.split(" ")[0] ?? "") ? found : null
+}
+
 const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   "business.name": () => [
     "One quick check. What's your business called, as you'd like customers to see it?",
@@ -289,16 +314,16 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   ],
   // Phase 2 to 3: the new identity, then the website and the quote page.
   build_for_me: (v) => {
-    const ask = `Would you like me to build a website for ${v.business}?`
-    const thanks = (line: string) => (v.picked ? "" : `${line}\n\n`)
+    const thanks = v.picked ? "" : `Thanks${comma(v.owner)}.\n\n`
+    const trade = tradeOf(v)
+    const town = townOf(v.area)
+    const where = town ? ` in ${town}` : ""
+    const ask = "Shall I build a website?"
     return [
-      `${thanks(`Thanks${comma(v.owner)}.`)}I can also build ${v.business} a website, with a Request a quote page that sends each enquiry straight to me with the details you need to reply.
+      `${thanks}People who can't find you online often go to someone they can. A website puts ${v.business} in front of ${trade ? `people looking for ${trade}${where}` : "people searching online"}, and every quote request comes straight to me with the details you need.
 
 ${ask}`,
-      `${thanks(`Thanks${comma(v.owner)}.`)}One more thing I can do: build a website for ${v.business}. Every page would point visitors to Request a quote, and each enquiry would reach me with what you need to quote the job.
-
-${ask}`,
-      `${thanks(`Thanks${comma(v.owner)}.`)}If ${v.business} needs a website, I can build it. It would have a Request a quote page, so customers describe the job and the enquiry comes to me ready for a quote. If you already have one, say so and I'll stick to enquiries and quotes.
+      `${thanks}${trade ? `When people look for ${trade}${where}` : "When people search online"}, a website is how they find ${v.business}. Every quote request comes straight to me with the details you need.
 
 ${ask}`,
     ]

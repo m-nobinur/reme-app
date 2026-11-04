@@ -247,6 +247,7 @@ export function voiceOf(o: Onboarding): Voice {
       direction?.custom ?? factValue(o.facts, "site.font")?.custom ?? null,
     ownColour: palette?.brand ?? palette?.custom ?? null,
     services: o.prepared?.services_phrase ?? null,
+    area: factValue(o.facts, "service_area.text")?.text ?? null,
     picked: o.picked === true,
   }
 }
