@@ -32,7 +32,6 @@ import {
   heldPhotosAnswer,
   TrayPhotos,
 } from "@workspace/ui/components/assistant/tray-photos"
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
@@ -41,7 +40,7 @@ import {
   useRevealWaiting,
 } from "@workspace/ui/hooks/use-reveal-waiting"
 import { trayItem, trayOthers } from "@workspace/ui/lib/activity-copy"
-import { OPTION, OPTION_TILE } from "@workspace/ui/lib/card"
+import { OPTION, OPTION_TILE, PICKED_LINE } from "@workspace/ui/lib/card"
 import {
   faceStack as face,
   faceCss,
@@ -123,7 +122,7 @@ export function ShowFoldedQuestion({ className }: { className?: string }) {
   return (
     <button
       className={cn(
-        "rounded-sm text-foreground underline decoration-muted-foreground/60 underline-offset-3 outline-none hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring",
+        "rounded-sm text-foreground underline decoration-muted-foreground/60 underline-offset-3 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring",
         className
       )}
       onClick={folded.open}
@@ -227,7 +226,6 @@ function StackSteps(steps: ReturnType<typeof useStacked>) {
         aria-label={
           steps.newerName ? `Newer: ${trayItem(steps.newerName)}` : "Newer"
         }
-        className={ACCENT_RING}
         disabled={!steps.newer}
         onClick={steps.newer}
         size="icon-sm"
@@ -240,7 +238,6 @@ function StackSteps(steps: ReturnType<typeof useStacked>) {
         aria-label={
           steps.olderName ? `Older: ${trayItem(steps.olderName)}` : "Older"
         }
-        className={ACCENT_RING}
         disabled={!steps.older}
         onClick={steps.older}
         size="icon-sm"
@@ -374,38 +371,20 @@ function TrayNote({ name, error }: { name: string; error?: string | null }) {
   )
 }
 
-/**
- * The tray's focus ring is the accent, as the site and the buttons around it
- * draw theirs, not the neutral grey of the shared token. Each control that
- * can take focus in the tray carries it.
- */
-const ACCENT_RING = "focus-visible:border-primary focus-visible:ring-primary"
-
-/**
- * An option tile in the tray, a label over a native radio or checkbox.
- * Picked is a 2px line in the text colour: a border and an inset ring of
- * one pixel each.
- */
-const TRAY_TILE = cn(
-  OPTION,
-  OPTION_TILE,
-  "rounded-xl has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
-  "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:checked]:bg-card"
-)
+/** An option tile in the tray, a label over a native radio or checkbox. */
+const TRAY_TILE = cn(OPTION, OPTION_TILE, "rounded-xl", PICKED_LINE)
 
 /** A tile that answers on a tap, its answer shown pressed: the tray tile as a button. */
 const QUICK_TILE = cn(
   OPTION,
   OPTION_TILE,
-  "rounded-xl text-left outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary",
-  "aria-pressed:inset-ring-1 aria-pressed:inset-ring-foreground aria-pressed:border-foreground"
+  "rounded-xl text-left outline-hidden focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring",
+  "aria-pressed:border-foreground aria-pressed:outline-1 aria-pressed:outline-foreground aria-pressed:outline-solid aria-pressed:-outline-offset-2 aria-pressed:focus-visible:border-foreground"
 )
 
-/** A field in the tray: the option tiles' radius, border and focus ring. */
-const TRAY_FIELD = cn(
-  "rounded-xl border-border bg-card focus-visible:ring-3",
-  ACCENT_RING
-)
+/** A field in the tray: the option tiles' radius and border, and the shared Input's focus, a border and no ring. */
+const TRAY_FIELD =
+  "rounded-xl border-border bg-card focus-visible:border-field-focus"
 
 /** A dashed tile that takes dropped files or opens the file chooser. */
 function DropTile({
@@ -437,7 +416,7 @@ function DropTile({
     <label
       className={cn(
         "flex cursor-pointer items-center gap-3 rounded-xl border border-border border-dashed bg-card px-4 py-3 transition-colors duration-150",
-        "hover:border-primary/50 has-[:focus-visible]:border-primary has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-primary",
+        "hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
         over && "border-primary bg-primary/5",
         className
       )}
@@ -514,7 +493,7 @@ function Summary({
 }) {
   return (
     <button
-      className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary"
+      className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring"
       onClick={onOpen}
       type="button"
     >
@@ -626,15 +605,6 @@ function Ways<Way extends string>({
     <div aria-label={label} className={grid} role="radiogroup">
       {tiles}
     </div>
-  )
-}
-
-/** The tag on an option chosen for this business. */
-function Suggested({ name }: { name: string }) {
-  return (
-    <Badge className="max-w-full truncate" variant="secondary">
-      Suggested for {name}
-    </Badge>
   )
 }
 
@@ -1236,7 +1206,7 @@ function TrayFrame({
       {collapsed ? (
         <button
           aria-expanded={false}
-          className="flex w-full items-center gap-3 rounded-[var(--composer-radius,var(--radius-4xl))] px-5 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-primary"
+          className="flex w-full items-center gap-3 rounded-[var(--composer-radius,var(--radius-4xl))] px-5 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring"
           onClick={() => onCollapsedChange(false)}
           type="button"
         >
@@ -1275,7 +1245,6 @@ function TrayFrame({
               aria-controls={`${id}-body`}
               aria-expanded
               aria-label="Collapse"
-              className={ACCENT_RING}
               onClick={collapse}
               size="icon-sm"
               type="button"
@@ -1318,7 +1287,6 @@ function TrayFrame({
               {paged ? (
                 <Button
                   aria-label="Previous question"
-                  className={ACCENT_RING}
                   disabled={!onBack}
                   onClick={onBack}
                   size="icon"
@@ -1336,7 +1304,6 @@ function TrayFrame({
               </span>
               {skip ? (
                 <Button
-                  className={ACCENT_RING}
                   disabled={skip.disabled}
                   onClick={skip.onSkip}
                   type="button"
@@ -1347,7 +1314,6 @@ function TrayFrame({
               ) : null}
               {pick ? (
                 <Button
-                  className={ACCENT_RING}
                   disabled={pick.disabled}
                   onClick={pick.onPick}
                   type="button"
@@ -1357,12 +1323,8 @@ function TrayFrame({
                 </Button>
               ) : null}
               {submit ? (
-                // Filled with the accent, so its ring stands off the fill.
                 <Button
-                  className={cn(
-                    ACCENT_RING,
-                    "px-5 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-                  )}
+                  className="px-5"
                   disabled={submit.disabled}
                   form={submit.form}
                   onClick={submit.form ? undefined : submit.onSubmit}
@@ -1775,8 +1737,7 @@ function QuestionTray({
                 className={cn(
                   TRAY_TILE,
                   look && "p-2",
-                  swatch &&
-                    "gap-0 overflow-hidden p-0 has-[:checked]:ring-2 has-[:checked]:ring-foreground"
+                  swatch && "gap-0 overflow-hidden p-0"
                 )}
                 key={option.id}
               >
@@ -1823,9 +1784,6 @@ function QuestionTray({
                     {option.hint}
                   </span>
                 ) : null}
-                {option.id === question.suggested ? (
-                  <Suggested name={name} />
-                ) : null}
               </label>
             )
           })}
@@ -1835,7 +1793,7 @@ function QuestionTray({
       !allPairs &&
       shown.length < question.card.options.length ? (
         <button
-          className="self-start rounded-sm text-muted-foreground text-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-primary"
+          className="self-start rounded-sm text-muted-foreground text-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
           onClick={() => setAllPairs(true)}
           type="button"
         >
@@ -1889,13 +1847,11 @@ export type {
   TrayFrameProps,
 }
 export {
-  ACCENT_RING,
   Docked,
   DropTile,
   Fold,
   QuestionTray,
   RadioTile,
-  Suggested,
   Summary,
   Swatches,
   sentence,

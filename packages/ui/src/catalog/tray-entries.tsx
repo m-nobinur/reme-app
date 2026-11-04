@@ -767,19 +767,6 @@ const trayCatalog: CatalogEntry[] = [
     })
   ),
   {
-    // The tag on what was chosen for the business: a lettering, a logo type and style.
-    name: "Suggested",
-    render: () => (
-      <States
-        name="Suggested"
-        states={only(
-          "Lettering, may be skipped",
-          "Logo, the brief open: surprise me picked"
-        )}
-      />
-    ),
-  },
-  {
     // Only there while a tray is folded, as the waiting line and the panel show it.
     name: "ShowFoldedQuestion",
     render: () => (

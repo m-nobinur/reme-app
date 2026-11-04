@@ -282,7 +282,9 @@ it("going back to the designs draws them at once, with no yes or no first and no
   const shown = tray.designs()
   expect(shown?.closest("[style*='display: none']")).toBeNull()
   expect(shown?.querySelector("input:checked")).not.toBeNull()
-  expect(shown?.querySelector("img")?.getAttribute("alt")).toBe("Design 1")
+  expect(shown?.querySelector("img")?.getAttribute("alt")).toBe(
+    "Design 1, symbol and name"
+  )
 })
 
 it("draws a changed brief before moving on, then moves on from the new round", async () => {
@@ -388,7 +390,7 @@ it("answers the logo question on one tap: nothing picked first, no Next", async 
   expect(tray.designs()).not.toBeNull()
 })
 
-it("draws one design per suggested direction first, each captioned for its kind", async () => {
+it("draws one design per suggested direction first, each named by its kind and none captioned", async () => {
   const fake = fakes()
   const tray = await render(fake.services, { input: SUGGESTED })
   await vi.waitFor(() => expect(fake.drawn).toHaveLength(1))
@@ -399,12 +401,48 @@ it("draws one design per suggested direction first, each captioned for its kind"
     style: "hand_drawn",
   })
   await tray.press("No, create one for me")
-  expect(tray.container.textContent).toContain(
-    "A badge for vans, signs and uniforms"
+  const names = [...(tray.designs()?.querySelectorAll("img") ?? [])].map(
+    (each) => each.getAttribute("alt")
   )
-  expect(tray.container.textContent).toContain(
-    "Your brief: symbol and name, hand-drawn,"
+  expect(names).toEqual([
+    "Design 1, symbol and name",
+    "Design 2, symbol only",
+    "Design 3, badge",
+  ])
+  expect(tray.container.textContent).not.toContain("A badge for vans")
+  expect(tray.container.textContent).not.toContain("Your brief")
+  expect(tray.control("Change the brief")).toBeDefined()
+})
+
+it("says when the designs cannot be read, stops asking, and reads them on Try again", async () => {
+  const fake = fakes([OLD])
+  let reads = 0
+  const api: { down: boolean } = { down: true }
+  const services: TrayServices = {
+    ...fake.services,
+    logoRounds: async () => {
+      reads += 1
+      if (api.down) throw new Error("Not read")
+      return fake.services.logoRounds("call")
+    },
+  }
+  const tray = await render(services, { input: SUGGESTED })
+  await tray.press("No, create one for me")
+  await vi.waitFor(() =>
+    expect(tray.container.textContent).toContain("Your designs did not load.")
   )
+  expect(tray.designs()).toBeNull()
+  expect(fake.drawn).toHaveLength(0)
+  expect(tray.control("Redesign my logo")).toBeUndefined()
+  const before = reads
+  await new Promise((resolve) => setTimeout(resolve, 2800))
+  expect(reads).toBe(before)
+
+  api.down = false
+  await tray.press("Try again")
+  await vi.waitFor(() => expect(tray.designs()).not.toBeNull())
+  expect(tray.container.textContent).not.toContain("did not load")
+  expect(fake.drawn).toHaveLength(0)
 })
 
 it("an idea adds its words and sets its option, a second tap takes both back, and Redesign sends them on the picked design", async () => {
@@ -454,12 +492,12 @@ it("offers the fixed ideas when the picked design's own are late", async () => {
   expect(tray.control("Other colours")).toBeDefined()
 })
 
-it("Edit opens the brief on What should change?, with the field focused", async () => {
+it("Change the brief opens the brief on What should change?, with the field focused", async () => {
   const fake = fakes()
   const tray = await render(fake.services, { input: SUGGESTED })
   await tray.press("No, create one for me")
   await vi.waitFor(() => expect(fake.kept).toEqual([uuid(10)]))
-  await tray.press("Edit")
+  await tray.press("Change the brief")
   const field = tray.container.querySelector<HTMLTextAreaElement>("textarea")
   expect(field?.placeholder).toBe(
     "For example: bolder lettering, a leaf instead of a tree, darker green"
@@ -471,7 +509,7 @@ it("Edit opens the brief on What should change?, with the field focused", async 
   await vi.waitFor(() => expect(document.activeElement).toBe(field))
 })
 
-it("shows four fitted letterings, the suggested one tagged, and all of them on More styles", async () => {
+it("shows four fitted letterings, none tagged, and all of them on More styles", async () => {
   const pairs = ["a", "b", "c", "d", "e", "f", "g", "h"].map((id) => ({
     id,
     label: `Pair ${id}`,
@@ -503,7 +541,7 @@ it("shows four fitted letterings, the suggested one tagged, and all of them on M
   })
   const radios = () => tray.container.querySelectorAll('input[type="radio"]')
   expect(radios()).toHaveLength(4)
-  expect(tray.container.textContent).toContain("Suggested for Pruning Co")
+  expect(tray.container.textContent).not.toContain("Suggested for")
   await tray.press("More styles")
   expect(radios()).toHaveLength(8)
   expect(tray.control("More styles")).toBeUndefined()

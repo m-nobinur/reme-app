@@ -27,13 +27,11 @@ import {
   PALETTES,
 } from "@workspace/contracts"
 import {
-  ACCENT_RING,
   DropTile,
   Fold,
   type OfferedPalette,
   RadioTile,
   type Stops,
-  Suggested,
   Swatches,
   sentence,
   TRAY_FIELD,
@@ -53,7 +51,7 @@ import {
 import { Button } from "@workspace/ui/components/button"
 import { Diffusing } from "@workspace/ui/components/diffusing"
 import { StateIcon } from "@workspace/ui/components/status-line"
-import { FIELD_ERROR } from "@workspace/ui/lib/card"
+import { FIELD_ERROR, PICKED_LINE } from "@workspace/ui/lib/card"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
 import {
@@ -120,20 +118,21 @@ const framesOf = (dir: "logo-types" | "logo-styles", name: string) =>
   )
 
 /**
- * A type or style tile: a border that firms on hover and turns the accent,
- * with a soft ring, when picked. The pictures are transparent and drawn to
- * read on light and dark alike, so they sit on the tile itself.
+ * A type or style tile: a border that firms on hover, the picked line when
+ * picked and the shared ring on focus. The pictures are transparent and drawn
+ * to read on light and dark alike, so they sit on the tile itself.
  */
-const PICK_TILE =
-  "group flex cursor-pointer rounded-xl border border-border bg-card transition-all duration-150 hover:border-foreground/25 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-card has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20"
+const PICK_TILE = cn(
+  "group flex cursor-pointer rounded-xl border border-border bg-card transition-all duration-150 hover:border-foreground/25 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
+  PICKED_LINE
+)
 const PICK_LABEL =
   "font-medium text-muted-foreground transition-colors group-has-[:checked]:text-foreground"
 
 const NO_SERVICES = "Logos cannot be uploaded or made here."
 
-/** A colour tile, edge to edge like the palette page's, with a 2px line when picked. */
-const COLOUR_TILE =
-  "gap-0 overflow-hidden p-0 has-[:checked]:ring-2 has-[:checked]:ring-foreground"
+/** A colour tile, edge to edge like the palette page's. */
+const COLOUR_TILE = "gap-0 overflow-hidden p-0"
 /** Random and Custom inside a colour tile: an icon and a name, a palette's height. */
 const NAMED_TILE =
   "flex h-10 items-center justify-center gap-1.5 font-medium text-muted-foreground text-xs"
@@ -209,17 +208,7 @@ export type LogoStart = {
   editing?: boolean
 }
 
-/** The line under each design of a round of directions: code's words for its kind, never a model's. */
-const CAPTIONS: Record<LogoType, string> = {
-  lockup: "Your symbol and name, clear at any size",
-  icon: "A symbol that stands on its own",
-  wordmark: "Your name as the logo, simple and confident",
-  monogram: "Your initials as a mark",
-  emblem: "A badge for vans, signs and uniforms",
-  abstract: "A shape that stands for the business",
-}
-
-/** Each type as the brief's line says it. */
+/** Each type as a design's name says it, such as "Design 1, symbol and name". */
 const TYPE_WORDS: Record<LogoType, string> = {
   lockup: "symbol and name",
   icon: "symbol only",
@@ -228,13 +217,6 @@ const TYPE_WORDS: Record<LogoType, string> = {
   emblem: "badge",
   abstract: "abstract mark",
 }
-
-const styleWords = (style: LogoBrief["style"]) =>
-  style === "surprise"
-    ? "mixed styles"
-    : style === "three_d"
-      ? "3D"
-      : STYLE_LABELS[style].toLowerCase()
 
 /** Up to two colours by their plain names, such as "forest green and cream". */
 const colourWords = (colors: readonly string[]) =>
@@ -276,23 +258,6 @@ const secondsLeft = (startedAt: string) =>
       (LOGO_ROUND_SECONDS - (Date.now() - Date.parse(startedAt)) / 1000) / 5
     ) * 5
   )
-
-/** A few colours as overlapping dots, for the brief's line. */
-function Dots({ colors }: { colors: readonly string[] }) {
-  return (
-    <span aria-hidden className="inline-flex shrink-0 align-middle">
-      {colors.map((color, at) => (
-        <span
-          // The outline keeps a colour near the card's own visible in either theme.
-          className="-ml-1 size-3.5 rounded-full border border-foreground/20 ring-2 ring-card first:ml-0"
-          // biome-ignore lint/suspicious/noArrayIndexKey: two colours may match
-          key={at}
-          style={{ backgroundColor: color }}
-        />
-      ))}
-    </span>
-  )
-}
 
 /** What went wrong, and a button to try again. */
 function Retry({
@@ -382,7 +347,7 @@ function TrayLogo({
   const [, tick] = useState(0)
   const replace = useRef<HTMLInputElement>(null)
   const field = useRef<HTMLTextAreaElement>(null)
-  // Edit asks for the field to take focus once its section has opened.
+  // Change the brief asks for the field to take focus once its section has opened.
   const focusField = useRef<boolean>(false)
   // The colours an idea replaced, so a second tap puts them back.
   const coloursBefore = useRef<Colours | null>(null)
@@ -486,10 +451,6 @@ function TrayLogo({
     : latest?.brief
   const changed =
     wanted !== null && own !== undefined && !sameBrief(wanted, own)
-  // A round of directions draws a different kind of logo in each design.
-  const directed =
-    round !== undefined &&
-    new Set(round.variants.map((v) => v.direction.type)).size > 1
 
   const send = async (chosen: File) => {
     if (!services) return setError(NO_SERVICES)
@@ -678,21 +639,13 @@ function TrayLogo({
   }
   const custom = colours && "custom" in colours ? colours.custom : null
 
-  // The brief comes into view once its fold has eased open, and Edit's
-  // field takes the keyboard.
-  const page = useRef<HTMLDivElement>(null)
+  // The brief opens where its button was, in the frame the button goes, and
+  // Change the brief's field takes the keyboard without moving the page.
   useEffect(() => {
-    if (!editing) return
-    const timer = setTimeout(() => {
-      const still = window.matchMedia("(prefers-reduced-motion: reduce)")
-      page.current?.querySelector(`[data-part="brief"]`)?.scrollIntoView({
-        block: "nearest",
-        behavior: still.matches ? "auto" : "smooth",
-      })
-      if (focusField.current) field.current?.focus()
-      focusField.current = false
-    }, FOLD_MS)
-    return () => clearTimeout(timer)
+    if (editing && focusField.current) {
+      field.current?.focus({ preventScroll: true })
+    }
+    focusField.current = false
   }, [editing])
 
   // With no round yet, a brief changed since the picked design, or words
@@ -800,19 +753,8 @@ function TrayLogo({
     )
   }
 
-  // The parts of the brief that differ from the picked design read darker.
-  const part = (text: string, moved: boolean) => (
-    <span className={cn(moved && "font-medium text-foreground")}>{text}</span>
-  )
-  const suggestedType =
-    brief.type !== null &&
-    (suggestion?.directions ?? []).some((d) => d.type === brief.type)
-  const suggestedStyle =
-    brief.style !== null &&
-    (suggestion?.directions ?? []).some((d) => d.style === brief.style)
-
   return (
-    <div className="-my-1.5 flex shrink-0 flex-col" ref={page}>
+    <div className="-my-1.5 flex shrink-0 flex-col">
       {/* The designs, once a round has started: first, so the pick needs no scroll. */}
       <Fold open={step === "designs" && unread}>
         {unread ? (
@@ -830,7 +772,6 @@ function TrayLogo({
               <div className="flex items-center gap-1">
                 <Button
                   aria-label="Earlier designs"
-                  className={ACCENT_RING}
                   disabled={shownAt === 0}
                   onClick={() => setAt(shownAt - 1)}
                   size="icon-sm"
@@ -844,7 +785,6 @@ function TrayLogo({
                 </span>
                 <Button
                   aria-label="Later designs"
-                  className={ACCENT_RING}
                   disabled={shownAt === rounds.length - 1}
                   onClick={() => setAt(shownAt + 1)}
                   size="icon-sm"
@@ -871,10 +811,6 @@ function TrayLogo({
               >
                 {Array.from({ length: LOGO_VARIANTS }, (_, place) => {
                   const variant = round.variants[place]
-                  const caption =
-                    directed && variant
-                      ? CAPTIONS[variant.direction.type]
-                      : null
                   return (
                     <RadioTile
                       checked={variant !== undefined && kept === variant.id}
@@ -888,7 +824,7 @@ function TrayLogo({
                       <span className="relative">
                         {variant ? (
                           <img
-                            alt={`Design ${place + 1}`}
+                            alt={`Design ${place + 1}, ${TYPE_WORDS[variant.direction.type]}`}
                             // Lands from a blur, as tw-animate-css draws it.
                             className="motion-safe:fade-in aspect-square w-full rounded-lg object-contain p-2 duration-slow ease-standard motion-safe:animate-in motion-safe:blur-in-md"
                             key={variant.id}
@@ -917,11 +853,6 @@ function TrayLogo({
                           </span>
                         ) : null}
                       </span>
-                      {caption ? (
-                        <span className="px-1 pb-0.5 text-muted-foreground text-xs leading-snug">
-                          {caption}
-                        </span>
-                      ) : null}
                     </RadioTile>
                   )
                 })}
@@ -971,35 +902,20 @@ function TrayLogo({
         </ReplyPills>
       </Fold>
       <Fold open={create && !unread && briefReady && !editing}>
-        <p className="text-muted-foreground text-sm">
-          Your brief:{" "}
-          {brief.type
-            ? part(TYPE_WORDS[brief.type], brief.type !== own?.type)
-            : null}
-          {", "}
-          {brief.style
-            ? part(styleWords(brief.style), brief.style !== own?.style)
-            : null}
-          {", "}
-          <Dots colors={colors} />{" "}
-          {part(
-            colourWords(colors),
-            own !== undefined && colors.join() !== own.colors.join()
-          )}
-          {" · "}
-          <button
-            aria-controls={`${id}-brief`}
-            aria-expanded={editing}
-            className="rounded-sm text-foreground underline underline-offset-2 outline-none hover:text-primary focus-visible:ring-3 focus-visible:ring-primary"
-            onClick={() => {
-              focusField.current = true
-              setEditing(true)
-            }}
-            type="button"
-          >
-            Edit
-          </button>
-        </p>
+        <Button
+          aria-controls={`${id}-brief`}
+          aria-expanded={editing}
+          className="self-start"
+          onClick={() => {
+            focusField.current = true
+            setEditing(true)
+          }}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          Change the brief
+        </Button>
       </Fold>
 
       {/* Yes: the upload. */}
@@ -1035,7 +951,6 @@ function TrayLogo({
             {busy !== "upload" ? (
               file ? (
                 <Button
-                  className={ACCENT_RING}
                   onClick={() => void send(file.file)}
                   size="sm"
                   type="button"
@@ -1045,7 +960,6 @@ function TrayLogo({
                 </Button>
               ) : (
                 <Button
-                  className={ACCENT_RING}
                   onClick={() => replace.current?.click()}
                   size="sm"
                   type="button"
@@ -1179,7 +1093,7 @@ function TrayLogo({
                 {random ? (
                   <button
                     aria-label="Another random palette"
-                    className="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-foreground shadow-sm outline-none transition-colors hover:bg-card focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+                    className="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-foreground shadow-sm outline-none transition-colors hover:bg-card focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
                     onClick={roll}
                     type="button"
                   >
@@ -1209,10 +1123,7 @@ function TrayLogo({
           </fieldset>
 
           <fieldset className="flex flex-col gap-2">
-            <legend className="mb-2 flex flex-wrap items-center gap-2 font-medium text-sm">
-              Logo type
-              {suggestedType ? <Suggested name={businessName} /> : null}
-            </legend>
+            <legend className="mb-2 font-medium text-sm">Logo type</legend>
             {/* As many to a row as fit whole: three on a wide tray, one on the narrowest, so no name wraps. */}
             <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2">
               {LOGO_TYPES.map((type) => (
@@ -1232,10 +1143,7 @@ function TrayLogo({
           </fieldset>
 
           <fieldset className="flex flex-col gap-2">
-            <legend className="mb-2 flex flex-wrap items-center gap-2 font-medium text-sm">
-              Style
-              {suggestedStyle ? <Suggested name={businessName} /> : null}
-            </legend>
+            <legend className="mb-2 font-medium text-sm">Style</legend>
             <div className="grid @md:grid-cols-4 grid-cols-3 gap-2">
               {LOGO_STYLES.map((style) => (
                 <PickTile
@@ -1271,7 +1179,7 @@ function TrayLogo({
             <Button
               aria-controls={`${id}-brief`}
               aria-expanded
-              className={cn(ACCENT_RING, "self-start")}
+              className="self-start"
               onClick={() => setEditing(false)}
               size="sm"
               type="button"
@@ -1303,9 +1211,6 @@ function TrayLogo({
     </div>
   )
 }
-
-/** How long a section takes to fold, as `Fold` eases it. */
-const FOLD_MS = 220
 
 /** The width a custom colour opens to: its picker, its code and a remove. */
 const OPEN_COLOUR = "flex-[0_0_11rem]"
@@ -1397,7 +1302,6 @@ function CustomColours({
               {alone ? null : (
                 <Button
                   aria-label={`Remove colour ${place + 1}`}
-                  className={ACCENT_RING}
                   onClick={() => {
                     setEditing(null)
                     onChange(colours.filter((_, slot) => slot !== place))
@@ -1414,13 +1318,7 @@ function CustomColours({
         ))}
       </fieldset>
       {colours.length < CUSTOM_MAX ? (
-        <Button
-          className={ACCENT_RING}
-          onClick={add}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
+        <Button onClick={add} size="sm" type="button" variant="ghost">
           <PlusIcon aria-hidden />
           Add colour
         </Button>

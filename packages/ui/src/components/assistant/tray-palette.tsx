@@ -5,7 +5,6 @@ import {
   UPLOAD_TYPES,
 } from "@workspace/contracts"
 import {
-  ACCENT_RING,
   DropTile,
   Swatches,
   sentence,
@@ -126,7 +125,7 @@ function PalettePicture({
         <label
           className={cn(
             buttonVariants({ variant: "ghost", size: "sm" }),
-            "cursor-pointer self-start has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-primary"
+            "cursor-pointer self-start has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring"
           )}
         >
           <ImageIcon aria-hidden />
@@ -270,10 +269,7 @@ function LogoPalettes({
       >
         {shown.map((palette) => (
           <label
-            className={cn(
-              TRAY_TILE,
-              "gap-0 overflow-hidden p-0 has-[:checked]:ring-2 has-[:checked]:ring-foreground"
-            )}
+            className={cn(TRAY_TILE, "gap-0 overflow-hidden p-0")}
             key={`${palette.name}${palette.stops.primary}`}
           >
             <input
@@ -331,7 +327,7 @@ function PendingSwatches() {
 function Surprise({ onClick }: { onClick: () => void }) {
   return (
     <Button
-      className={cn("self-end", ACCENT_RING)}
+      className="self-end"
       onClick={onClick}
       size="sm"
       type="button"
