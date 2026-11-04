@@ -5,6 +5,8 @@ import {
   type PronounId,
   TONES,
   type ToneId,
+  townOf,
+  tradeOf,
 } from "@workspace/contracts"
 import type { StepId } from "./onboarding.ts"
 
@@ -125,31 +127,56 @@ export const firstName = (owner: string) =>
     .split(/\s+/)
     .find((word) => !TITLE.test(word)) ?? ""
 
+/** "morning", "afternoon" or "evening" in `zone` at `now`, or null before 5 AM or with no zone. */
+function partOfDay(zone: string | null, now: Date) {
+  if (!zone) return null
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: zone,
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(now)
+  )
+  if (hour < 5) return null
+  return hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"
+}
+
 /**
- * The first message, written at sign-up with no model: the owner's new
- * assistant saying what it will take on from now on (a website only if they
- * want one), then the first question, which asks for detail and says why.
- * It has no name yet and does not know the trade. Text only, so it ends on
- * the question's reason.
+ * The first message, written at sign-up with no model and stored with the
+ * conversation: a greeting, who the assistant is and what it brings to the
+ * owner, then the first question in its own paragraph. Each slot's wording
+ * is picked per org, so a new owner gets their own mix. `zone` is the
+ * owner's time zone when known, for a greeting by the time of day.
  */
-export function opener(v: Voice): string {
+export function opener(
+  v: Voice,
+  zone: string | null = null,
+  now = new Date()
+): string {
   const name = firstName(v.owner)
   const b = v.business
-  const hi = `Hi${name ? ` ${name}` : ""}, good to meet you.`
+  const day = partOfDay(zone, now)
+  const to = name ? ` ${name}` : ""
+  const greeting = pick(v, "opener.greeting", [
+    `Hi${to}, good to meet you.`,
+    `Hello${to}, lovely to meet you.`,
+    day ? `Good ${day}${comma(name)}.` : `Hi${to}, it's good to meet you.`,
+  ])
+  const brings = pick(v, "opener.brings", [
+    "Anything that needs you, I'll bring to you with everything ready.",
+    "When something needs your decision, I'll bring it to you with everything ready.",
+    "Whenever something needs you, it'll come to you with everything ready.",
+  ])
+  const ask = pick(v, "opener.ask", [
+    `First, tell me about ${b}, in as much detail as you like. What jobs do you take on, and is there anything you'd rather not do?`,
+    `Let's start with ${b}. Tell me as much as you like: what work do you do, and is there anything you don't take on?`,
+    `To begin, I'd love to hear about ${b}, in as much detail as you can. What jobs do you do, and what do you turn down?`,
+  ])
   return say(
     v,
-    pick(v, "opener", [
-      `${hi} I'll be looking after enquiries and quotes for ${b} from now on, and I can build you a website too if you need one. First I'd like to get to know the business.
+    `${greeting} I'm your new business assistant. I'll look after your customers for you: answering them the moment they get in touch, day or night, preparing quotes, following up and keeping bookings on track. ${brings}
 
-What does ${b} do? Tell me the way you'd explain it to a new customer: the main jobs, and anything you don't take on.
-
-The more detail you give me, the better I can answer your customers.`,
-      `${hi} From now on I'll handle enquiries and quotes for ${b}, and if you need a website, I can build that too. To start, I'd like to get to know the business.
-
-What does ${b} do? Describe it the way you would to a new customer: the main jobs, and anything you don't take on.
-
-The more you tell me, the better I can answer for you.`,
-    ])
+${ask}`
   )
 }
 
@@ -236,29 +263,6 @@ type Asked = Exclude<StepId, "upload" | "build" | "manual_builder" | "recap">
 /** "your services", or the phrase written for this business. */
 const services = (v: Voice) => v.services ?? "your services"
 
-/** "a cleaning company" from the trade's name, or null without one. */
-const tradeOf = (v: Voice) => {
-  const name = v.industry?.name.trim().toLowerCase()
-  return name ? `${/^[aeiou]/.test(name) ? "an" : "a"} ${name}` : null
-}
-
-/** Capitalised words that start an area but name no place. */
-const NOT_A_TOWN =
-  /^(?:Within|Anywhere|All|Around|Across|Based|Mainly|Mostly|Most|The|Up|Our|My|We|I|Any|North|South|East|West|Central)$/
-
-/**
- * The first place in the owner's area, such as "Leeds" from "Leeds and about
- * 15 miles", or null when the words do not start with one that reads cleanly.
- */
-export function townOf(area: string | null): string | null {
-  const found = area
-    ?.trim()
-    .match(
-      /^([A-Z][\p{L}'-]*(?: (?:upon |on |under )?[A-Z][\p{L}'-]*)*)(?=\s+and\b|\s*,|\s*\d|\s*[.!]?$)/u
-    )?.[1]
-  return found && !NOT_A_TOWN.test(found.split(" ")[0] ?? "") ? found : null
-}
-
 const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   "business.name": () => [
     "One quick check. What's your business called, as you'd like customers to see it?",
@@ -333,7 +337,7 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   // Phase 2 to 3: the new identity, then the website and the quote page.
   build_for_me: (v) => {
     const thanks = v.picked ? "" : `Thanks${comma(v.owner)}.\n\n`
-    const trade = tradeOf(v)
+    const trade = tradeOf(v.industry)
     const town = townOf(v.area)
     const where = town ? ` in ${town}` : ""
     const ask = "Shall I build a website?"
@@ -551,7 +555,7 @@ export function personaIntro(
           ])
         : pick(v, "persona_intro", [
             `From now on I'm ${p.name}, your business assistant. Here's how I'll come across:`,
-            `${p.name} it is. I'll look after ${v.business} from here on, and this is how I'll introduce myself:`,
+            `${p.name} it is, and here's how I'll introduce myself:`,
             `Thanks${comma(v.owner)}. I'm ${p.name}, your assistant for ${v.business} from now on. Here's a preview:`,
           ])
   )

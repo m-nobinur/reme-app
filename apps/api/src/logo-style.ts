@@ -218,9 +218,21 @@ export function logoPrompt(input: {
 }
 
 /**
+ * How each variant of a round of changes takes the change. Told only to
+ * change what was asked, all three came back near copies (2026-11-04), so
+ * the first keeps close to the picked logo and the others move further.
+ */
+const TAKES = [
+  "Change only that. Keep the same logo identity, layout, colours and letterforms.",
+  "Make that change the heart of a bolder version: rework the symbol and its shapes around it, keeping the colours and the name, so it looks clearly different from this picture.",
+  "Make that change in a fresh take on this logo: a new arrangement or framing of the same idea, keeping the colours and the name, so it looks clearly different from this picture and from a bolder rework.",
+] as const
+
+/**
  * The prompt for a round of changes. With a base the image model is handed
- * that picture and told to change only what was asked; without one the
- * changes ride on a fresh first-round prompt.
+ * that picture and the change asked for, each variant taking it its own way
+ * (`take`, the variant's place in the round); without one the changes ride
+ * on a fresh first-round prompt.
  */
 export function changesPrompt(input: {
   subject: LogoSubject
@@ -228,12 +240,13 @@ export function changesPrompt(input: {
   /** The style this variant is drawn in. */
   style: LogoStyle
   changes: string
+  take: number
 }): string {
   const { subject, brief, style } = input
   const name = quoted(subject.name)
   return [
     `Change this logo for "${name}": ${scrub(quoted(input.changes))}`,
-    "Change only that. Keep the same logo identity, layout, colours and letterforms.",
+    TAKES[input.take % TAKES.length],
     letteringLine(brief.type, name),
     colourLine(brief.type, style, brief.colors),
     FORMAT_LINE,

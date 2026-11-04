@@ -273,7 +273,7 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
       (orgId) => `address.offer:${orgId}`
     )
     expect(offered.text).toMatch(
-      /^Your website is coming along nicely\. While it builds/
+      /^While it builds, let's sort out its address\./
     )
     expect(offered.asks).toBe(true)
     const tasks = await pool.withOrg({ orgId: offered.orgId }, readTasks)

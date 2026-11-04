@@ -190,22 +190,31 @@ describe("the logo prompt", () => {
     expect(prompt).toContain(`"The 'Best' Clean"`)
   })
 
-  it("asks a round of changes to change only what was asked", () => {
-    const prompt = changesPrompt({
-      subject,
-      brief,
-      style: "minimal",
-      changes: "Make the roof red",
-    })
-    expect(prompt).toContain("Make the roof red")
-    expect(prompt).toContain("Change only that.")
-    expect(prompt).toContain('"Bright Homes"')
+  it("asks a round of changes for the change, taken three clearly different ways", () => {
+    const takes = [0, 1, 2].map((take) =>
+      changesPrompt({
+        subject,
+        brief,
+        style: "minimal",
+        changes: "Make the roof red",
+        take,
+      })
+    )
+    for (const prompt of takes) {
+      expect(prompt).toContain("Make the roof red")
+      expect(prompt).toContain('"Bright Homes"')
+    }
+    expect(takes[0]).toContain("Change only that.")
+    expect(takes[1]).toMatch(/bolder[\s\S]*clearly different/)
+    expect(takes[2]).toMatch(/fresh take[\s\S]*clearly different/)
+    expect(new Set(takes).size).toBe(3)
     expect(
       changesPrompt({
         subject,
         brief: { ...brief, type: "icon" },
         style: "minimal",
         changes: "Bigger",
+        take: 0,
       })
     ).toContain("no lettering")
   })
