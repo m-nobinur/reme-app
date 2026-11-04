@@ -159,35 +159,57 @@ export type Change = {
 }
 
 const LINES_MAX = 4
-const quoted = (text: string) =>
-  `"${text.length > 60 ? `${text.slice(0, 57).trimEnd()}...` : text}"`
+const NAME_MAX = 80
+
+/**
+ * What a change list calls a line, whole and never cut: the line when it is
+ * short, else its label before a colon ("Send a quote request: Use the form
+ * to..."), else its first sentence; "" when none is short enough to quote.
+ */
+const nameOf = (text: string) =>
+  [
+    text,
+    /^([^:]{1,60}):\s/.exec(text)?.[1],
+    /^.+?[.!?](?=\s|$)/.exec(text)?.[0],
+  ].find((t) => t && t.length <= NAME_MAX) ?? ""
+
+/** Where a change is: Home, a page by its name, or a service's page by the service. */
 const onPage = (pages: readonly string[]) => {
-  const page = pages[0] ?? "/"
-  const name =
-    page === "/" ? "Home" : page.replace(/^\/|\/$/g, "").replace(/[-/]/g, " ")
-  return `on ${name.charAt(0).toUpperCase()}${name.slice(1)}`
+  const parts = (pages[0] ?? "/").split("/").filter(Boolean)
+  const last = (parts.at(-1) ?? "home").replace(/-/g, " ")
+  const name = `${last.charAt(0).toUpperCase()}${last.slice(1)}`
+  return parts.length > 1 ? `on the ${name} page` : `on ${name}`
 }
 
 type Pair = { before: string; after: string; pages: string[] }
 
-const pairLine = ({ before, after, pages }: Pair) =>
-  !before
-    ? `Added ${quoted(after)} ${onPage(pages)}`
-    : !after
-      ? `Took off ${quoted(before)} ${onPage(pages)}`
-      : `Changed ${quoted(before)} to ${quoted(after)} ${onPage(pages)}`
+function pairLine({ before, after, pages }: Pair): string {
+  const was = nameOf(before)
+  const now = nameOf(after)
+  const where = onPage(pages)
+  if (!before)
+    return now ? `Added "${now}" ${where}` : `Added new text ${where}`
+  if (!after)
+    return was ? `Took off "${was}" ${where}` : `Took off some text ${where}`
+  if (was && now && was !== now) return `Changed "${was}" to "${now}" ${where}`
+  return was || now
+    ? `Reworded "${was || now}" ${where}`
+    : `Reworded some text ${where}`
+}
 
-/** One block record in plain words: what was added, taken off, reworded or moved, and where. */
+/** One block record in plain words: what was added, taken off, reworded or moved, and where. A block with no words to name says nothing. */
 function blockLine(b: BlockChange): string | null {
   const pages = [routeOf(b.page)]
-  if (b.change === "moved")
-    return `Moved ${quoted(titleOf(b.after))} ${b.above ? `above ${quoted(b.above)}` : "to the end"} ${onPage(pages)}`
-  if (b.change !== "changed")
-    return pairLine({
-      before: titleOf(b.before),
-      after: titleOf(b.after),
-      pages,
-    })
+  if (b.change === "moved") {
+    const moved = nameOf(titleOf(b.after))
+    const above = b.above ? nameOf(b.above) : ""
+    return `Moved ${moved ? `"${moved}"` : "a section"} ${above ? `above "${above}"` : b.above ? "up" : "to the end"} ${onPage(pages)}`
+  }
+  if (b.change !== "changed") {
+    const before = titleOf(b.before)
+    const after = titleOf(b.after)
+    return before || after ? pairLine({ before, after, pages }) : null
+  }
   const was = b.before.split("\n").map(plainLine).filter(Boolean)
   const now = b.after.split("\n").map(plainLine).filter(Boolean)
   const before = was.find((l) => !now.includes(l)) ?? ""
