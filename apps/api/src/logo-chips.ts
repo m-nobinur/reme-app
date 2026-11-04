@@ -95,7 +95,7 @@ const DETAILS: Entry[] = [
   ),
   detail(
     "one_line",
-    "Name on one line",
+    "One-line name",
     "the whole name on one line",
     "The logo's lettering is split over two or more lines."
   ),
