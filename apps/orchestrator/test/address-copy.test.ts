@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest"
+import { addressOfferText } from "@workspace/contracts"
+import { supersedeFact } from "@workspace/db"
+import { afterAll, describe, expect, it } from "vitest"
 import {
+  aboutOf,
   addressOfferOwn,
   domainTakesOver,
   googleOffer,
@@ -15,6 +18,7 @@ import {
   padlockLine,
 } from "../src/address-copy.ts"
 import { JARGON, overLimit, type Update } from "../src/heartbeat-write.ts"
+import { freshOrg, kit } from "./fixture.ts"
 
 const DOX = { business: "DOX Cleaning", trade: "Cleaning", area: "London" }
 const BARE = {}
@@ -109,3 +113,38 @@ it("says the padlock line in plain words, with no promise to report back", () =>
     "Your setting for www.dox.co.uk is in, so it just needs its security padlock now, which usually takes a few minutes."
   )
 })
+
+describe.skipIf(!process.env.DATABASE_URL)(
+  "the business read from the facts",
+  () => {
+    afterAll(() => kit.close())
+
+    it("carries the industry's category, so the fallback offer names a cleaning company", async () => {
+      const orgId = await freshOrg(kit)
+      await kit.withOrg({ orgId }, async (db) => {
+        for (const [key, value] of [
+          [
+            "business.industry",
+            {
+              name: "Domestic and end of tenancy cleaning",
+              category: "cleaning",
+            },
+          ],
+          ["service_area.text", { text: "Stockport" }],
+        ] as const)
+          await supersedeFact(db, {
+            orgId,
+            key,
+            factType: key.split(".")[0] as string,
+            value,
+            provenance: { source: "owner_stated", confidence: 1 },
+          })
+      })
+      const about = await aboutOf(kit, orgId)
+      expect(about).toMatchObject({ category: "cleaning" })
+      expect(addressOfferText(about)).toContain(
+        "**a cleaning company in Stockport**"
+      )
+    })
+  }
+)
