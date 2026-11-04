@@ -19,6 +19,7 @@ import {
   failureCode,
   type OrgScopedDb,
   openTask,
+  postAssistantMessage,
   putOff,
   type SQL,
   setStep,
@@ -227,6 +228,10 @@ async function stateOffer(
   })
 }
 
+/** The one line Skip for now on the address card gets (owner, 2026-11-05). */
+export const ADDRESS_SKIPPED =
+  "No problem. Your site can go live on its free address, and you can add your own any time from the Connect button."
+
 /** How long a Not now holds the address question back. */
 const ADDRESS_LATER_DAYS = 7
 
@@ -361,5 +366,21 @@ export async function answerQuestions(
   })
   if (!stack) return questionNotFound()
   await startOffer(env, kit, owner, messageId, stack)
+  const [ask] = stack.questions
+  if (
+    stack.kind === "address" &&
+    ask?.id === questionId &&
+    ask.input.kind === "choice" &&
+    answer.kind === "value" &&
+    ask.input.options.indexOf(String(answer.value)) === 2
+  ) {
+    // Busy or waiting posts nothing: the open items note still says it was skipped.
+    await postAssistantMessage(kit, {
+      orgId: owner.orgId,
+      key: `address.skipped:${messageId}`,
+      conversationId: id,
+      message: { text: [ADDRESS_SKIPPED] },
+    })
+  }
   return Response.json(stack)
 }
