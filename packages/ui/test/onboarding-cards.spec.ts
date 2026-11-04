@@ -211,7 +211,7 @@ test("the ready card sits at the end of the thread and never claims an approval 
 }) => {
   await open(page, "SiteReady")
   const cards = page.locator('[data-slot="site-ready"]')
-  await expect(cards).toHaveCount(6)
+  await expect(cards).toHaveCount(8)
   const ready = cards.nth(0)
   await expect(
     ready.getByRole("heading", { name: "Brightclean website" })
@@ -235,6 +235,25 @@ test("the ready card sits at the end of the thread and never claims an approval 
   await expect(cards.nth(3).getByRole("link")).toHaveCount(0)
   await expect(cards.nth(4).getByRole("link")).toHaveCount(0)
   await expect(cards.nth(5)).toHaveText("Approved, publishing your website")
+  // A step beside Publish, on the same row, for the web address and then Search Console.
+  for (const [at, label] of [
+    [6, "Connect"],
+    [7, "Connect Search Console"],
+  ] as const) {
+    const publish = await cards
+      .nth(at)
+      .getByRole("button", { name: "Publish" })
+      .boundingBox()
+    const connect = cards
+      .nth(at)
+      .getByRole("button", { name: label, exact: true })
+    const beside = await connect.boundingBox()
+    expect(publish && beside && Math.abs(publish.y - beside.y) < 8).toBe(true)
+    expect(publish && beside && beside.x + beside.width <= publish.x).toBe(true)
+  }
+  await expect(
+    cards.nth(0).getByRole("button", { name: /^Connect/ })
+  ).toHaveCount(0)
 })
 
 test("a docked ready card is one row above the composer that opens in place", async ({

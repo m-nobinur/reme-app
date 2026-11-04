@@ -1,5 +1,7 @@
+import { pageAction } from "@workspace/ui/lib/activity-copy"
 import type { Workspace } from "./api/types"
 import { dueLine } from "./reminders"
+import { ownDomainClaimed } from "./website-checklist"
 
 /**
  * The chat's "your website is ready" card, from the polled workspace. It is
@@ -37,6 +39,24 @@ export function readyForReview(
     }
   }
   return newest
+}
+
+/**
+ * The draft the card shows: the newest review, else the last one seen while
+ * an update build is at work on it. Asking for changes pauses the first build
+ * and takes its approval away until the update lands with a new one, and the
+ * draft card stays in the chat meanwhile. It goes once nothing is building,
+ * or that version is live.
+ */
+export function draftReview(
+  workspace: Workspace | null,
+  last: ReadyReview | null
+): ReadyReview | null {
+  const ready = readyForReview(workspace)
+  if (ready) return ready
+  return workspace?.open && last && (workspace.live ?? 0) < last.version
+    ? last
+    : null
 }
 
 /** How long a new review's card waits for the ready line, from when this tab first saw the review. */
@@ -113,4 +133,25 @@ export function readyCard(
       ? published
       : saidAt !== null && Date.parse(saidAt) > Date.parse(approvedHere.at)
   return gone ? null : { kind: "approved", version, published }
+}
+
+/**
+ * The ready card's one extra step beside Publish: setting up the web address
+ * while the owner has none, then connecting Search Console once they do, and
+ * nothing once Google is connected or while the api has not said.
+ */
+export function readySlot(
+  workspace: Workspace | null
+): { label: string; ask: string } | null {
+  const standing = workspace?.activity?.standing
+  if (!standing) return null
+  if (!ownDomainClaimed(standing, workspace.host)) {
+    return { label: "Connect", ask: "Help me set up my web address" }
+  }
+  return standing.some((s) => s.kind === "google" && s.state === "done")
+    ? null
+    : {
+        label: "Connect Search Console",
+        ask: pageAction("google").ask,
+      }
 }

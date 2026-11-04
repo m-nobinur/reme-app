@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 import type { AttentionItem, Workspace } from "./api/types"
-import { awaitsReadyLine, readyCard, readyForReview } from "./site-ready"
+import {
+  awaitsReadyLine,
+  draftReview,
+  readyCard,
+  readyForReview,
+  readySlot,
+} from "./site-ready"
 
 const approval = (
   id: string,
@@ -151,4 +157,49 @@ describe("awaitsReadyLine", () => {
   ])("%s", (_case, reviewAt, saidAt, seenAt, now, waits) => {
     expect(awaitsReadyLine(reviewAt, saidAt, seenAt, now)).toBe(waits)
   })
+})
+
+const DRAFT = {
+  approvalId: "a",
+  revisionId: "rev-a",
+  version: 1,
+  assignmentId: null,
+  at: "2026-10-01T09:00:00Z",
+}
+
+it("keeps the last draft while an update build is at work, and lets it go after", () => {
+  const building = {
+    attention: [],
+    open: true,
+    live: null,
+  } as unknown as Workspace
+  expect(draftReview(building, DRAFT)).toBe(DRAFT)
+  // Nothing building, or that version live, or nothing seen: no card.
+  expect(
+    draftReview({ ...building, open: false } as Workspace, DRAFT)
+  ).toBeNull()
+  expect(draftReview({ ...building, live: 1 } as Workspace, DRAFT)).toBeNull()
+  expect(draftReview(building, null)).toBeNull()
+  // The update's own review replaces it.
+  const update = workspace([approval("b", 2, "2026-10-01T10:00:00Z")])
+  expect(draftReview(update, DRAFT)?.approvalId).toBe("b")
+})
+
+it("offers the web address, then Search Console, then nothing beside Publish", () => {
+  const standing = (segments: object[], host: string | null = null) =>
+    ({ host, activity: { standing: segments } }) as unknown as Workspace
+  const address = { kind: "address", state: "done", steps: [] }
+  expect(readySlot(null)).toBeNull()
+  expect(readySlot({ activity: undefined } as unknown as Workspace)).toBeNull()
+  expect(readySlot(standing([]))).toEqual({
+    label: "Connect",
+    ask: "Help me set up my web address",
+  })
+  expect(readySlot(standing([address]))).toEqual({
+    label: "Connect Search Console",
+    ask: "Connect Google to my website",
+  })
+  expect(
+    readySlot(standing([address, { kind: "google", state: "done", steps: [] }]))
+  ).toBeNull()
 })
