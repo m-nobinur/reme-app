@@ -43,6 +43,8 @@ type PendingAuth = {
    * can act on it.
    */
   orgName?: string
+  /** The browser's zone from the signup form, for the opener's greeting. */
+  timeZone?: string
 }
 
 const NAME = "reme-auth-flow"

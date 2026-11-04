@@ -22,6 +22,7 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 const { insertAssignment } = await import("../src/app.ts")
 const { fallbackBlueprint, planRound } = await import("../src/planner.ts")
 const {
+  addressLine,
   afterFailure,
   decide,
   NARRATED_PER_HOUR,
@@ -120,6 +121,31 @@ describe("what the owner reads", () => {
     expect(line).toBe(
       "I couldn't change the small label above your hero title exactly as you asked, so I made the nearest change I could. Have a look, and tell me if you'd like it done another way."
     )
+  })
+
+  it("names the open web address after the first draft, and nothing once it is settled", () => {
+    const line = (stage: Parameters<typeof addressLine>[0]["stage"]) =>
+      addressLine({ stage })
+    for (const stage of [
+      "none",
+      "unknown",
+      "choosing",
+      "buying_elsewhere",
+    ] as const)
+      expect(line(stage), stage).toBe(
+        "When you'd like to set up your own address, tap Connect on the card."
+      )
+    expect(line("bought")).toBe(
+      "When you're ready to connect your new address, tap Connect on the card."
+    )
+    for (const stage of [
+      "put_off",
+      "declined",
+      "paying",
+      "connecting",
+      "live",
+    ] as const)
+      expect(line(stage), stage).toBe("")
   })
 
   it("says a change it could not make left the site as it was", () => {
@@ -593,7 +619,9 @@ live("a failed owner build's retry", () => {
     const ready = await readyNote(kit, ids)
     await readyNote(kit, ids)
     expect(ready?.key).toBe(`site.ready:${ids.assignmentId}`)
-    expect(ready?.text).toMatch(/^Your draft is ready, with /)
+    expect(ready?.text).toMatch(
+      /^Your draft is ready, with .* When you'd like to set up your own address, tap Connect on the card\.$/
+    )
     const done = (await notesOf(orgId, ids.assignmentId)).filter(
       (n) => n.kind === "done"
     )

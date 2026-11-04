@@ -15,6 +15,8 @@ import {
   TONES,
 } from "@workspace/contracts"
 import {
+  type AddressStage,
+  addressStage,
   appendEvent,
   assignments,
   currentFact,
@@ -25,6 +27,7 @@ import {
   type Posted,
   pgCode,
   postAssistantMessage,
+  readTasks,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -315,6 +318,19 @@ export function readyText(
   ].join(" ")
 }
 
+/**
+ * One line after the first draft while the owner's own address is still
+ * open: nothing once they put it off, said no, are paying or connecting, or
+ * it is live.
+ */
+export function addressLine({ stage }: AddressStage): string {
+  if (stage === "bought")
+    return "When you're ready to connect your new address, tap Connect on the card."
+  return ["none", "unknown", "choosing", "buying_elsewhere"].includes(stage)
+    ? "When you'd like to set up your own address, tap Connect on the card."
+    : ""
+}
+
 /** A chat line to post. */
 export type Note = { key: string; text: string }
 
@@ -552,18 +568,19 @@ const reviewOpen = async (kit: Tenancy, ids: Ids) => {
 export async function readyNote(kit: Tenancy, ids: Ids): Promise<Note | null> {
   const row = await reviewOpen(kit, ids)
   if (!row) return null
-  const { retry_of, change } = await kit.withOrg(
+  const revise = row.kind === "site.revise"
+  const { retry_of, change, address } = await kit.withOrg(
     { orgId: ids.orgId },
     async (db) => ({
       ...(await creationChoices(db, ids)),
-      change: row.kind === "site.revise" ? await changeOf(db, ids) : {},
+      change: revise ? await changeOf(db, ids) : {},
+      address: revise ? "" : addressLine(addressStage(await readTasks(db))),
     })
   )
   const { named, each } = plannedPages(row.blueprint)
-  const pages =
-    row.kind === "site.revise"
-      ? []
-      : [...named, ...(each ? ["A page for each service"] : [])].slice(0, 12)
+  const pages = revise
+    ? []
+    : [...named, ...(each ? ["A page for each service"] : [])].slice(0, 12)
   const attempt = retry_of ? 2 : 1
   const note: AgentNote = {
     kind: "done",
@@ -579,7 +596,12 @@ export async function readyNote(kit: Tenancy, ids: Ids): Promise<Note | null> {
   await writeNote(kit, ids.orgId, note)
   return {
     key: note.key,
-    text: readyText(row.kind, row.blueprint, change, ids.assignmentId),
+    text: [
+      readyText(row.kind, row.blueprint, change, ids.assignmentId),
+      address,
+    ]
+      .filter(Boolean)
+      .join(" "),
   }
 }
 

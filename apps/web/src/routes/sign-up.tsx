@@ -11,6 +11,7 @@ import { Logo } from "@workspace/ui/components/logo"
 import { PasswordField } from "@workspace/ui/components/password-field"
 import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { PASSWORD_POLICY } from "@workspace/ui/lib/password-policy"
+import { browserZone } from "@workspace/ui/lib/zone"
 import { signUp } from "@/lib/auth/actions"
 import { leaveIfSignedIn } from "@/lib/auth/signed-in"
 import { useSubmit } from "@/lib/auth/use-submit"
@@ -56,6 +57,7 @@ function SignUp() {
               businessName: values.businessName,
               email: values.email,
               password: values.password,
+              timeZone: browserZone(),
             },
           })
           if (outcome.status !== "failed") {

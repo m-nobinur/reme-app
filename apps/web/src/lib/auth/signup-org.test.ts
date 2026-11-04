@@ -121,6 +121,32 @@ describe("the organisation a signup asked for", () => {
     )
   })
 
+  it("carries the browser's zone with the name, across the hop to email verification", async () => {
+    await authenticate(
+      async () => {
+        throw Object.assign(new Error("verify"), {
+          code: "email_verification_required",
+          pendingAuthenticationToken: "pending",
+          rawData: { email: "probe@example.net", user: { id: "user_probe" } },
+        })
+      },
+      {
+        email: "probe@example.net",
+        orgName: "Sparkle Clean",
+        timeZone: "Europe/London",
+      }
+    )
+    readPending.mockResolvedValue(setPending.mock.calls[0]?.[0])
+
+    await authenticate(async () => signedIn(), { email: "probe@example.net" })
+    expect(createOrgForSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Sparkle Clean",
+        timeZone: "Europe/London",
+      })
+    )
+  })
+
   it("is not created again for a session that already has one", async () => {
     readPending.mockResolvedValue({
       token: "pending",

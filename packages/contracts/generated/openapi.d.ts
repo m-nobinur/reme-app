@@ -12286,6 +12286,7 @@ export interface components {
     }
     CreateOrgRequest: {
       name: string
+      time_zone?: string
     }
     CreateReminderInput: {
       title: string

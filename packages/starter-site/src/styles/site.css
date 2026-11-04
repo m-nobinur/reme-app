@@ -2407,6 +2407,32 @@ picture {
   accent-color: var(--brand-text);
 }
 
+/* As buttons, the radio stays in the form and the tab order, and its chip
+   draws it: the ring on focus, the brand colour once picked. */
+.quote-buttons .quote-option {
+  position: relative;
+  justify-content: center;
+  min-width: 6rem;
+  font-weight: 500;
+}
+
+.quote-buttons .quote-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (forced-colors: active) {
+  .quote-buttons .quote-option:has(input:checked) {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
 /* The file input is the whole zone, so a dropped photo always lands on it,
    and the browser's own line under the words says what was chosen. The
    words sit at the start, in line with the button the browser draws. */

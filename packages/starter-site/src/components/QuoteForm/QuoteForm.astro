@@ -61,6 +61,12 @@ const questions: Control[] = quoteFields.map((field) => ({
   autocomplete: AUTOCOMPLETE[field.type],
 }))
 
+/** A pick of a few short options reads as buttons, as the onboarding preview draws it. */
+const asButtons = (field: Control) =>
+  (field.type === "radio" || field.type === "select") &&
+  field.options.length <= 3 &&
+  field.options.every((option) => option.length <= 20)
+
 const groups = [
   { legend: site.quoteContactLegend, fields: contact },
   { legend: site.quoteRequestLegend, fields: questions },
@@ -110,7 +116,8 @@ const INPUT: Record<string, InputType> = { datetime: "datetime-local" }
             {field.hint}
           </p>
         )
-        if (field.type === "radio" || field.type === "checkbox") {
+        const buttons = asButtons(field)
+        if (field.type === "radio" || field.type === "checkbox" || buttons) {
           // shortcut: a checkbox group cannot be required without
           // script, so only a radio group is; check it on the endpoint.
           return (
@@ -120,15 +127,15 @@ const INPUT: Record<string, InputType> = { datetime: "datetime-local" }
                 {optional}
               </legend>
               {hintLine}
-              <div class="quote-options">
+              <div class:list={["quote-options", buttons && "quote-buttons"]}>
                 {field.options.map((option, i) => (
                   <label class="quote-option" for={`${field.id}-${i}`}>
                     <input
                       id={`${field.id}-${i}`}
                       name={field.name}
-                      type={field.type === "radio" ? "radio" : "checkbox"}
+                      type={field.type === "checkbox" ? "checkbox" : "radio"}
                       value={option}
-                      required={field.type === "radio" && field.required}
+                      required={field.type !== "checkbox" && field.required}
                     />
                     <span>{option}</span>
                   </label>

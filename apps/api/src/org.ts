@@ -24,6 +24,7 @@ import {
   users,
 } from "@workspace/db"
 import { firstMessage } from "./chat.ts"
+import { knownZone } from "./cos/time.ts"
 import { firstName } from "./onboarding-copy.ts"
 import { readFacts } from "./workspace.ts"
 
@@ -167,6 +168,8 @@ export async function createOrg(
     workosUserId: string
     email: string
     displayName: string | null
+    /** The browser's zone; one `Intl` does not know is dropped. */
+    timeZone?: string
   },
   newId: () => string = () => crypto.randomUUID(),
   waitMs = SIGNUP_WAIT_MS
@@ -289,6 +292,8 @@ async function writeOrg(
       userId: input.workosUserId,
     }))
 
+  const zone =
+    input.timeZone && knownZone(input.timeZone) ? input.timeZone : null
   const identity = {
     workosUserId: input.workosUserId,
     workosOrganizationId: organization.id,
@@ -311,6 +316,8 @@ async function writeOrg(
           slug: slugFor(input.name, orgId),
           name: input.name,
           workosOrganizationId: organization.id,
+          // As `PUT /time-zone` would offer it, so that later sync changes nothing.
+          ...(zone && { timeZone: zone, timeZoneSource: "browser" }),
         })
         .onConflictDoNothing()
       // Someone else mirrored this organization between the resolve above and
@@ -371,7 +378,12 @@ async function writeOrg(
         conversationId,
         orgId,
         ...firstMessage(
-          { orgId, orgName: input.name, ownerName: input.displayName ?? "" },
+          {
+            orgId,
+            orgName: input.name,
+            ownerName: input.displayName ?? "",
+            zone,
+          },
           await readFacts(db),
           newId
         ),

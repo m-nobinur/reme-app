@@ -89,7 +89,8 @@ async function resolveUserId(
  */
 async function provisionOrg(
   response: AuthenticationResponse,
-  orgName: string | undefined
+  orgName: string | undefined,
+  timeZone: string | undefined
 ): Promise<string> {
   const sealedSession = response.sealedSession as string
   // Nothing to create: no signup started this, or the session already resolves
@@ -103,6 +104,7 @@ async function provisionOrg(
       sealedSession,
       workosUserId: response.user.id,
       name: orgName,
+      timeZone,
     })
   } catch (error) {
     // The message and nothing else. This runs a line after a sealed session
@@ -139,6 +141,7 @@ export async function authenticate(
     email: string
     returnTo?: unknown
     orgName?: string
+    timeZone?: string
     nameBusiness?: boolean
   }
 ): Promise<AuthOutcome> {
@@ -160,7 +163,13 @@ export async function authenticate(
       return { status: "failed", failure: unlisted }
     }
     const orgName = options.orgName ?? pending?.orgName
-    await writeSession(await provisionOrg(response, orgName))
+    await writeSession(
+      await provisionOrg(
+        response,
+        orgName,
+        options.timeZone ?? pending?.timeZone
+      )
+    )
     await clearPending()
     if (options.nameBusiness && !response.organizationId && !orgName) {
       return {
@@ -192,6 +201,7 @@ export async function authenticate(
           returnTo,
           organizations,
           orgName: options.orgName ?? pending?.orgName,
+          timeZone: options.timeZone ?? pending?.timeZone,
         })
         return { status: "next", redirectTo: STEP_PATH[code] }
       }

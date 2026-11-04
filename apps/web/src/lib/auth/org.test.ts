@@ -97,6 +97,25 @@ describe("the org write signup sends", () => {
     expect(keys[0]).toContain(USER)
   })
 
+  it("carries the browser's zone, and drops one that is not a zone rather than failing the signup", async () => {
+    globalThis.fetch = stub()
+    const { createOrgForSession } = await import("./org")
+    for (const timeZone of ["Europe/London", "not a zone"])
+      await createOrgForSession({
+        sealedSession: SEALED,
+        workosUserId: USER,
+        name: "Sparkle Clean",
+        timeZone,
+      })
+    const sent = calls
+      .filter((call) => call.url === `${API}/org`)
+      .map((call) => JSON.parse(call.init.body as string))
+    expect(sent).toEqual([
+      { name: "Sparkle Clean", time_zone: "Europe/London" },
+      { name: "Sparkle Clean" },
+    ])
+  })
+
   it("names no organisation, in any spelling", async () => {
     globalThis.fetch = stub()
     await write()
