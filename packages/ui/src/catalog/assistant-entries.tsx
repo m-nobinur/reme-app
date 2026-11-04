@@ -444,9 +444,9 @@ const answeredStep = (
 /** An `ask_open` call in one of its states. */
 const askOpen = (
   about: string,
-  extra: { result?: unknown; isError?: boolean } = {}
+  extra: { result?: unknown; isError?: boolean; skippable?: boolean } = {}
 ) => ({
-  args: { about },
+  args: { about, ...(extra.skippable ? { skippable: true } : {}) },
   isError: extra.isError,
   result: extra.result,
   toolCallId: `open_${about}_${extra.isError ? "error" : extra.result ? "done" : "open"}`,
@@ -722,6 +722,52 @@ const askChoice = (
   toolName: "ask_choice",
   type: "tool-call" as const,
 })
+
+/** The quick reply rows above the composer: each thread ends on the question its row answers. */
+const QUICK_REPLIES: [string, ThreadMessageLike][] = [
+  [
+    "Recap",
+    {
+      content: [
+        question(
+          "Here's what I have for BioPeck Clean:\n\n- **Services:** regular house cleaning, end of tenancy cleans and oven cleaning\n- **Not taken on:** offices or commercial sites\n- **Area:** Leeds and 15 miles around it\n- **Quote form:** 8 questions\n- **Contact:** 0113 496 0123, hello@biopeck.example\n\nHave I got that right?"
+        ),
+        askOpen("recap"),
+      ],
+      role: "assistant",
+      status: WAITING,
+    },
+  ],
+  [
+    "Website offer",
+    {
+      content: [
+        question(
+          "People who can't find you online often go to someone they can. A website puts BioPeck Clean in front of people looking for a cleaning company in Leeds, and every quote request comes straight to me with the details you need.\n\nShall I build a website?"
+        ),
+        askChoice("build_for_me", [
+          { id: "yes", label: "Yes, build my website" },
+          { id: "skip", label: "No, I already have one" },
+        ]),
+      ],
+      role: "assistant",
+      status: WAITING,
+    },
+  ],
+  [
+    "Skip this one",
+    {
+      content: [
+        question(
+          "Who's behind BioPeck Clean, and what sets it apart? Years trading, insurance or a guarantee all help."
+        ),
+        askOpen("business.proof", { skippable: true }),
+      ],
+      role: "assistant",
+      status: WAITING,
+    },
+  ],
+]
 
 const chosen = (ids: string[], other: string | null = null) => ({
   result: { answer: "chosen", ids, other },
@@ -3385,6 +3431,21 @@ const assistantCatalog = [
   {
     name: "Onboarding",
     render: () => <OwnerThread height="h-[44rem]" messages={ONBOARDING} />,
+  },
+  {
+    name: "QuickReplies",
+    render: () => (
+      <div className="flex flex-col gap-8">
+        {QUICK_REPLIES.map(([title, message]) => (
+          <section className="flex flex-col gap-2" key={title}>
+            <h3 className="font-medium text-muted-foreground text-sm">
+              {title}
+            </h3>
+            <OwnerThread height="h-[26rem]" messages={[message]} />
+          </section>
+        ))}
+      </div>
+    ),
   },
   {
     name: "Thread",
