@@ -265,7 +265,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
     const picked = answer?.kind === "value" ? answer.value : undefined
     return (
       <Docked name="build-questions">
-        <ReplyPills label={question.text}>
+        <ReplyPills composer label={question.text}>
           {[
             ...input.options,
             ...(question.skippable && open ? [SKIP_REPLY] : []),
@@ -277,7 +277,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
               disabled={!open || sending}
               key={option}
               onClick={() =>
-                void answerWith(
+                answerWith(
                   option === SKIP_REPLY
                     ? { kind: "skipped" }
                     : { kind: "value", value: option }

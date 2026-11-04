@@ -1627,6 +1627,7 @@ const STEP_LABELS: Partial<
     customers: "Customers",
     proof: "What sets you apart",
     contact: "Contact details",
+    recap: "Check the details",
     assistant: "Name, pronouns and tone",
     website: "Website",
     quote_form: "Quote questions",

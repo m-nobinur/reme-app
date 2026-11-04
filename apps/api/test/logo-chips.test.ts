@@ -89,6 +89,31 @@ describe("redesign chips for one design", () => {
     expect(LogoChip.safeParse(dark).success).toBe(true)
   })
 
+  it("only writes chips the tray can read: every catalog chip and colour chip passes LogoChip", () => {
+    for (const { kind, label, change, set } of CATALOG) {
+      const chip = { kind, label, change, ...(set ? { set } : {}) }
+      expect(LogoChip.safeParse(chip), label).toMatchObject({ success: true })
+    }
+    const steps = [0, 51, 102, 153, 204, 255]
+    const hexes = [
+      ...PALETTES.flatMap((each) => each.swatches),
+      ...steps.flatMap((r) =>
+        steps.flatMap((g) =>
+          steps.map(
+            (b) =>
+              `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`
+          )
+        )
+      ),
+    ]
+    for (const hex of hexes) {
+      const chip = colourChip([hex])
+      expect(LogoChip.safeParse(chip), `${hex} ${chip?.label}`).toMatchObject({
+        success: true,
+      })
+    }
+  })
+
   it("asks Jev one question per catalog chip, with the picture last", async () => {
     expect(Object.keys(CHIP_QUESTIONS)).toEqual(CATALOG.map((e) => e.id))
     let body = ""

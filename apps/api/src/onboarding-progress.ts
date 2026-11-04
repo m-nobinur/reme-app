@@ -42,6 +42,7 @@ export const ONBOARDING_STEPS = [
   "proof",
   "quote_form",
   "contact",
+  "recap",
   "assistant",
   "website",
   "look",
@@ -58,6 +59,7 @@ const STEP_OF: Record<string, StepId> = {
   "business.audience": "customers",
   "business.proof": "proof",
   contact: "contact",
+  recap: "recap",
   assistant: "assistant",
   build_for_me: "website",
   quote_form: "quote_form",
@@ -73,6 +75,7 @@ const STEP_FACTS: Record<StepId, readonly string[]> = {
   proof: ["business.proof"],
   quote_form: ["quote.form"],
   contact: ["business.phone", "business.email"],
+  recap: [],
   assistant: ["assistant.name", "assistant.pronouns", "assistant.tone"],
   website: ["site.build_mode"],
   look: [...DESIGN, "site.direction"],
@@ -128,6 +131,8 @@ function settled(
   if (name && fact("assistant.pronouns") && fact("assistant.tone")) {
     out.assistant = done(name)
   }
+  // Checked once the owner replied to the recap, as the script reads it.
+  if (o.closed.includes("recap") || out.assistant) out.recap = done()
   if (quote) {
     out.quote_form = done(
       `${quote.length} ${quote.length === 1 ? "question" : "questions"}`
@@ -166,7 +171,7 @@ function settled(
 /**
  * Every step with where it stands: `done` or `skipped` once settled, then
  * the one open now as `now` (or `waiting` when a question for the owner is
- * open in the chat), the rest `next`. The list is the same eleven steps for
+ * open in the chat), the rest `next`. The list is the same steps for
  * every run from its first moment; only their states move.
  *
  * The step open now is the one the script is on, so the panel and the

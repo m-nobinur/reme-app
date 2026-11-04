@@ -26,7 +26,7 @@ test("only the open asks show a tray; answered and skipped ones give way", async
   )
 })
 
-test("the contact tray checks the phone, then offers the sign-in email without filling it", async ({
+test("the contact tray checks the phone, then offers the sign-in email on the label's row while the field is empty", async ({
   page,
 }) => {
   await open(page, "AskDetails")
@@ -39,17 +39,40 @@ test("the contact tray checks the phone, then offers the sign-in email without f
   // The field to fix takes the focus.
   const phone = contact.getByRole("textbox", { name: "Phone number" })
   await expect(phone).toBeFocused()
+  await expect(
+    contact.getByText("A UK number. We add the +44 for you.")
+  ).toBeVisible()
   await phone.fill("07700 900123")
   // Enter in the field moves on, as Next does.
   await page.keyboard.press("Enter")
   await expect(contact.getByText("2 of 2", { exact: true })).toBeVisible()
+  // The phone was checked by Next: the empty email is not flagged yet.
+  await expect(contact.getByRole("alert")).toHaveCount(0)
   const email = contact.getByRole("textbox", { name: "Email address" })
   await expect(email).toHaveValue("")
-  await contact
-    .getByRole("button", { name: "Use sam@brightclean.example" })
-    .click()
+  const use = contact.getByRole("button", {
+    name: "Use sam@brightclean.example",
+  })
+  // On the label's row, at its end.
+  const label = await contact
+    .locator("label", { hasText: /^Email address$/ })
+    .boundingBox()
+  const pill = await use.boundingBox()
+  const field = await email.boundingBox()
+  expect(pill && label && field).toBeTruthy()
+  if (pill && label && field) {
+    expect(pill.y + pill.height).toBeLessThanOrEqual(field.y)
+    expect(pill.y).toBeLessThan(label.y + label.height)
+    expect(pill.x + pill.width).toBeCloseTo(field.x + field.width, 0)
+  }
+  await use.click()
   await expect(email).toHaveValue("sam@brightclean.example")
   await expect(email).toBeFocused()
+  await expect(use).toHaveCount(0)
+  // Cleared, the field offers it again.
+  await email.fill("")
+  await expect(use).toBeVisible()
+  await use.click()
   await expect(
     contact.getByText(
       "Shown on your website. Use a business address if you have one."

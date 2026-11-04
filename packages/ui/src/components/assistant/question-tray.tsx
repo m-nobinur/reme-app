@@ -32,7 +32,6 @@ import {
   heldPhotosAnswer,
   TrayPhotos,
 } from "@workspace/ui/components/assistant/tray-photos"
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
@@ -41,7 +40,7 @@ import {
   useRevealWaiting,
 } from "@workspace/ui/hooks/use-reveal-waiting"
 import { trayItem, trayOthers } from "@workspace/ui/lib/activity-copy"
-import { OPTION, OPTION_TILE } from "@workspace/ui/lib/card"
+import { OPTION, OPTION_TILE, PICKED_LINE } from "@workspace/ui/lib/card"
 import {
   faceStack as face,
   faceCss,
@@ -123,7 +122,7 @@ export function ShowFoldedQuestion({ className }: { className?: string }) {
   return (
     <button
       className={cn(
-        "rounded-sm text-foreground underline decoration-muted-foreground/60 underline-offset-3 outline-none hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring",
+        "rounded-sm text-foreground underline decoration-muted-foreground/60 underline-offset-3 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring",
         className
       )}
       onClick={folded.open}
@@ -227,7 +226,6 @@ function StackSteps(steps: ReturnType<typeof useStacked>) {
         aria-label={
           steps.newerName ? `Newer: ${trayItem(steps.newerName)}` : "Newer"
         }
-        className={ACCENT_RING}
         disabled={!steps.newer}
         onClick={steps.newer}
         size="icon-sm"
@@ -240,7 +238,6 @@ function StackSteps(steps: ReturnType<typeof useStacked>) {
         aria-label={
           steps.olderName ? `Older: ${trayItem(steps.olderName)}` : "Older"
         }
-        className={ACCENT_RING}
         disabled={!steps.older}
         onClick={steps.older}
         size="icon-sm"
@@ -374,38 +371,20 @@ function TrayNote({ name, error }: { name: string; error?: string | null }) {
   )
 }
 
-/**
- * The tray's focus ring is the accent, as the site and the buttons around it
- * draw theirs, not the neutral grey of the shared token. Each control that
- * can take focus in the tray carries it.
- */
-const ACCENT_RING = "focus-visible:border-primary focus-visible:ring-primary"
-
-/**
- * An option tile in the tray, a label over a native radio or checkbox.
- * Picked is a 2px line in the text colour: a border and an inset ring of
- * one pixel each.
- */
-const TRAY_TILE = cn(
-  OPTION,
-  OPTION_TILE,
-  "rounded-xl has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
-  "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:checked]:bg-card"
-)
+/** An option tile in the tray, a label over a native radio or checkbox. */
+const TRAY_TILE = cn(OPTION, OPTION_TILE, "rounded-xl", PICKED_LINE)
 
 /** A tile that answers on a tap, its answer shown pressed: the tray tile as a button. */
 const QUICK_TILE = cn(
   OPTION,
   OPTION_TILE,
-  "rounded-xl text-left outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary",
-  "aria-pressed:inset-ring-1 aria-pressed:inset-ring-foreground aria-pressed:border-foreground"
+  "rounded-xl text-left outline-hidden focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring",
+  "aria-pressed:border-foreground aria-pressed:outline-1 aria-pressed:outline-foreground aria-pressed:outline-solid aria-pressed:-outline-offset-2 aria-pressed:focus-visible:border-foreground"
 )
 
-/** A field in the tray: the option tiles' radius, border and focus ring. */
-const TRAY_FIELD = cn(
-  "rounded-xl border-border bg-card focus-visible:ring-3",
-  ACCENT_RING
-)
+/** A field in the tray: the option tiles' radius and border, and the shared Input's focus, a border and no ring. */
+const TRAY_FIELD =
+  "rounded-xl border-border bg-card focus-visible:border-field-focus"
 
 /** A dashed tile that takes dropped files or opens the file chooser. */
 function DropTile({
@@ -437,7 +416,7 @@ function DropTile({
     <label
       className={cn(
         "flex cursor-pointer items-center gap-3 rounded-xl border border-border border-dashed bg-card px-4 py-3 transition-colors duration-150",
-        "hover:border-primary/50 has-[:focus-visible]:border-primary has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-primary",
+        "hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
         over && "border-primary bg-primary/5",
         className
       )}
@@ -502,6 +481,56 @@ function Fold({ open, children }: { open: boolean; children: ReactNode }) {
   )
 }
 
+/**
+ * A button's label that fades into the next when its `kind` changes, the old
+ * one fading out over it for the length of the fade; none with reduced
+ * motion. Both sit in one grid cell, so the button's width is its own.
+ */
+function SwapLabel({ kind, children }: { kind: string; children: ReactNode }) {
+  const [shown, setShown] = useState(kind)
+  const [leaving, setLeaving] = useState<ReactNode>(null)
+  // The label the last render drew, which is what leaves.
+  const last = useRef<ReactNode>(children)
+  if (shown !== kind) {
+    setShown(kind)
+    setLeaving(last.current)
+  }
+  useEffect(() => {
+    last.current = children
+  })
+  useEffect(() => {
+    if (leaving === null) return
+    const timer = setTimeout(() => setLeaving(null), 150)
+    return () => clearTimeout(timer)
+  }, [leaving])
+  const label =
+    "col-start-1 row-start-1 flex items-center gap-1.5 duration-fast"
+  return (
+    <span className="grid place-items-center">
+      {leaving === null ? null : (
+        <span
+          aria-hidden
+          className={cn(
+            label,
+            "motion-safe:fade-out-0 motion-safe:animate-out motion-safe:fill-mode-forwards motion-reduce:hidden"
+          )}
+        >
+          {leaving}
+        </span>
+      )}
+      <span
+        className={cn(
+          label,
+          leaving !== null && "motion-safe:fade-in-0 motion-safe:animate-in"
+        )}
+        key={kind}
+      >
+        {children}
+      </span>
+    </span>
+  )
+}
+
 /** A settled section as one row: what it is, what was chosen, and a tap to reopen it. */
 function Summary({
   label,
@@ -514,7 +543,7 @@ function Summary({
 }) {
   return (
     <button
-      className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary"
+      className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring"
       onClick={onOpen}
       type="button"
     >
@@ -626,15 +655,6 @@ function Ways<Way extends string>({
     <div aria-label={label} className={grid} role="radiogroup">
       {tiles}
     </div>
-  )
-}
-
-/** The tag on an option chosen for this business. */
-function Suggested({ name }: { name: string }) {
-  return (
-    <Badge className="max-w-full truncate" variant="secondary">
-      Suggested for {name}
-    </Badge>
   )
 }
 
@@ -934,18 +954,31 @@ const pictureStops = ({ paper, tint, primary, ink }: PaletteStops): Stops => [
 
 /**
  * The options a page shows: the card's `initial` ones when it has them, with
- * a pick from the rest (Surprise me) first in place of the last.
+ * a pick from the rest (Surprise me) in the place of the last. The pick stays
+ * there while another is chosen, so no tile moves; `held` is the one Surprise
+ * me brought, else the answer's own when it is not one of the first.
  */
-function shownOptions(question: Question, answer: Answer | undefined) {
+function shownOptions(
+  question: Question,
+  answer: Answer | undefined,
+  held?: string | null
+) {
   const { options, initial } = question.card
   if (!initial) return options
   const shown = options.filter((each) => initial.includes(each.id))
-  const picked =
-    answer && "choice" in answer && !initial.includes(answer.choice)
-      ? options.find((each) => each.id === answer.choice)
-      : undefined
-  return picked ? [picked, ...shown.slice(0, -1)] : shown
+  const beyond =
+    held ??
+    (answer && "choice" in answer && !initial.includes(answer.choice)
+      ? answer.choice
+      : undefined)
+  const extra = options.find(
+    (each) => each.id === beyond && !initial.includes(each.id)
+  )
+  return extra ? [...shown.slice(0, -1), extra] : shown
 }
+
+/** How long Surprise me shows its pick before the tray moves on. */
+const SURPRISE_MS = 400
 
 /**
  * The palettes the tray offers, the site's own first: the one the owner
@@ -1073,11 +1106,14 @@ type TrayFrameProps = {
    * The primary button. With `form` it submits that form, so Enter in a
    * field submits too; without, Enter in a field presses it. It reads Next
    * on each page and Done on the last; a step that acts differently, such
-   * as an upload, passes its own label.
+   * as an upload, passes its own label. A `swap` names the label's kind:
+   * the button then keeps one width, and a change of kind fades one label
+   * into the other.
    */
   submit?:
     | {
         label?: ReactNode
+        swap?: string
         onSubmit?: () => void
         form?: string
         disabled?: boolean
@@ -1220,7 +1256,7 @@ function TrayFrame({
       aria-label={collapsed ? question : undefined}
       aria-labelledby={collapsed ? undefined : `${id}-question`}
       className={cn(
-        "@container flex max-h-[min(36rem,max(15rem,45dvh))] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground max-sm:max-h-[60svh]",
+        "@container flex max-h-[min(40rem,70dvh)] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground max-sm:max-h-[60svh]",
         className
       )}
       data-collapsed={collapsed || undefined}
@@ -1236,7 +1272,7 @@ function TrayFrame({
       {collapsed ? (
         <button
           aria-expanded={false}
-          className="flex w-full items-center gap-3 rounded-[var(--composer-radius,var(--radius-4xl))] px-5 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-primary"
+          className="flex w-full items-center gap-3 rounded-[var(--composer-radius,var(--radius-4xl))] px-5 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring"
           onClick={() => onCollapsedChange(false)}
           type="button"
         >
@@ -1275,7 +1311,6 @@ function TrayFrame({
               aria-controls={`${id}-body`}
               aria-expanded
               aria-label="Collapse"
-              className={ACCENT_RING}
               onClick={collapse}
               size="icon-sm"
               type="button"
@@ -1318,7 +1353,6 @@ function TrayFrame({
               {paged ? (
                 <Button
                   aria-label="Previous question"
-                  className={ACCENT_RING}
                   disabled={!onBack}
                   onClick={onBack}
                   size="icon"
@@ -1336,7 +1370,6 @@ function TrayFrame({
               </span>
               {skip ? (
                 <Button
-                  className={ACCENT_RING}
                   disabled={skip.disabled}
                   onClick={skip.onSkip}
                   type="button"
@@ -1347,7 +1380,6 @@ function TrayFrame({
               ) : null}
               {pick ? (
                 <Button
-                  className={ACCENT_RING}
                   disabled={pick.disabled}
                   onClick={pick.onPick}
                   type="button"
@@ -1357,18 +1389,20 @@ function TrayFrame({
                 </Button>
               ) : null}
               {submit ? (
-                // Filled with the accent, so its ring stands off the fill.
                 <Button
-                  className={cn(
-                    ACCENT_RING,
-                    "px-5 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-                  )}
+                  className={submit.swap ? "w-40 px-2" : "px-5"}
                   disabled={submit.disabled}
                   form={submit.form}
                   onClick={submit.form ? undefined : submit.onSubmit}
                   type={submit.form ? "submit" : "button"}
                 >
-                  {submit.label ?? forward}
+                  {submit.swap ? (
+                    <SwapLabel kind={submit.swap}>
+                      {submit.label ?? forward}
+                    </SwapLabel>
+                  ) : (
+                    (submit.label ?? forward)
+                  )}
                 </Button>
               ) : null}
             </div>
@@ -1511,6 +1545,12 @@ function QuestionTray({
   )
   // Every lettering, past the four that fit the business.
   const [allPairs, setAllPairs] = useState(false)
+  // The palette Surprise me brought into the last tile, and whether it is
+  // still being shown before the tray moves on.
+  const [brought, setBrought] = useState<string | null>(null)
+  const [holding, setHolding] = useState(false)
+  const holdTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(holdTimer.current), [])
   const focusComposer = useFocusComposer()
 
   const step = pages[index]
@@ -1552,7 +1592,13 @@ function QuestionTray({
     setAnswers(now)
     return now
   }
+  /** The owner's own move ends Surprise me's pause. */
+  const stopHold = () => {
+    clearTimeout(holdTimer.current)
+    setHolding(false)
+  }
   const go = (to: number, skipping: boolean, chosen = answer) => {
+    stopHold()
     settle(skipping, chosen)
     setIndex(to)
   }
@@ -1560,6 +1606,7 @@ function QuestionTray({
   // or the upload on Yes, and the logo kept there finishes. A logo brief
   // changed since its designs is the owner's too: it is drawn first.
   const finish = (skipAll: boolean, chosen = answer) => {
+    stopHold()
     if (logo && logoSubmit && !logoSubmit.disabled) {
       setIndex(designs)
       setFinishing(true)
@@ -1609,14 +1656,25 @@ function QuestionTray({
   const shown =
     allPairs && question.visual === "font_pair"
       ? question.card.options
-      : shownOptions(question, answer)
-  // Any palette but the one picked, from every one offered, not only those shown.
+      : shownOptions(question, answer, brought)
+  const unseen = question.card.options.filter(
+    (each) => !shown.some((one) => one.id === each.id)
+  )
+  /** Shows what Surprise me picked as picked for a moment, then moves on as Next would. */
+  const showThenMoveOn = (chosen: Answer) => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return onward(chosen)
+    }
+    setHolding(true)
+    holdTimer.current = setTimeout(() => onward(chosen), SURPRISE_MS)
+  }
+  // A palette from those not shown, in the last tile, picked.
   const surprise = () => {
-    const rest = question.card.options.filter(
-      (each) => !(answer && "choice" in answer && answer.choice === each.id)
-    )
-    const lucky = rest[Math.floor(Math.random() * rest.length)]
-    if (lucky) pick(lucky.id)
+    const lucky = unseen[Math.floor(Math.random() * unseen.length)]
+    if (!lucky) return
+    setBrought(lucky.id)
+    pick(lucky.id)
+    showThenMoveOn({ choice: lucky.id })
   }
   const ownPage = question.visual === "logo" || question.visual === "photos"
   // With a logo the palettes come from it; the presets are the fallback.
@@ -1629,6 +1687,11 @@ function QuestionTray({
   const ticks = answer && "choices" in answer ? answer.choices : []
   const pick = (value: string) =>
     setAnswers((now) => ({ ...now, [question.id]: { choice: value } }))
+  // A tap on a tile picks that tile and nothing else moves.
+  const tap = (value: string) => {
+    stopHold()
+    pick(value)
+  }
   // A tick toggles; the options keep their order, and none ticked is unanswered.
   const toggle = (value: string) =>
     setAnswers((now) => {
@@ -1682,6 +1745,7 @@ function QuestionTray({
           ? undefined
           : designsSubmit || {
               label: finishing ? "Done" : undefined,
+              swap: logo ? "next" : undefined,
               onSubmit: next,
               disabled: !ready,
             }
@@ -1724,9 +1788,19 @@ function QuestionTray({
       ) : null}
       {logoLed ? (
         <LogoPalettes
+          brought={brought}
           group={`${id}-${question.id}`}
+          holding={holding}
           label={question.question ?? "Choose one"}
-          onPick={(palette) => set({ palette })}
+          onPick={(palette) => {
+            stopHold()
+            set({ palette })
+          }}
+          onSurprise={(palette) => {
+            setBrought(palette.name)
+            set({ palette })
+            showThenMoveOn({ palette })
+          }}
           picked={pickedFromLogo}
           read={fromLogo}
         />
@@ -1768,15 +1842,14 @@ function QuestionTray({
                 "choice" in answer &&
                 answer.choice === option.id
             const look = layoutLook(option)
-            // A palette is its colours alone: the name is for screen readers.
+            // A palette, a lettering and a layout are their pictures alone: the name is for screen readers.
             const swatch = option.visual?.kind === "swatches"
             return (
               <label
                 className={cn(
                   TRAY_TILE,
-                  look && "p-2",
-                  swatch &&
-                    "gap-0 overflow-hidden p-0 has-[:checked]:ring-2 has-[:checked]:ring-foreground"
+                  look && "gap-0 p-2",
+                  swatch && "gap-0 overflow-hidden p-0"
                 )}
                 key={option.id}
               >
@@ -1785,22 +1858,19 @@ function QuestionTray({
                   className="sr-only"
                   name={`${id}-${question.id}`}
                   onChange={() =>
-                    multiple ? toggle(option.id) : pick(option.id)
+                    multiple ? toggle(option.id) : tap(option.id)
                   }
                   type={multiple ? "checkbox" : "radio"}
                   value={option.id}
                 />
                 <Picture name={name} option={option} stops={stops} />
-                <span
-                  className={cn(
-                    "flex items-center gap-1.5 font-medium text-sm",
-                    look && "text-xs"
-                  )}
-                >
-                  {question.visual === "font_pair" || swatch ? (
-                    <span className="sr-only">{option.label}</span>
+                <span className="flex items-center gap-1.5 font-medium text-sm">
+                  {question.visual === "font_pair" || swatch || look ? (
+                    <span className="sr-only">
+                      {look?.hero ?? option.label}
+                    </span>
                   ) : (
-                    (look?.hero ?? option.label)
+                    option.label
                   )}
                   {/* A box, ticked or not, so a card of many reads apart from a card of one. */}
                   {multiple ? (
@@ -1823,9 +1893,6 @@ function QuestionTray({
                     {option.hint}
                   </span>
                 ) : null}
-                {option.id === question.suggested ? (
-                  <Suggested name={name} />
-                ) : null}
               </label>
             )
           })}
@@ -1835,7 +1902,7 @@ function QuestionTray({
       !allPairs &&
       shown.length < question.card.options.length ? (
         <button
-          className="self-start rounded-sm text-muted-foreground text-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-primary"
+          className="self-start rounded-sm text-muted-foreground text-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
           onClick={() => setAllPairs(true)}
           type="button"
         >
@@ -1844,7 +1911,9 @@ function QuestionTray({
       ) : null}
       {question.visual === "palette" ? (
         <>
-          {logoLed ? null : <Surprise onClick={surprise} />}
+          {logoLed || unseen.length === 0 ? null : (
+            <Surprise disabled={holding} onClick={surprise} />
+          )}
           <PalettePicture
             checked={
               answer !== undefined &&
@@ -1853,7 +1922,10 @@ function QuestionTray({
               samePalette(answer.palette, picture)
             }
             group={`${id}-${question.id}`}
-            onPick={(palette) => set({ palette })}
+            onPick={(palette) => {
+              stopHold()
+              set({ palette })
+            }}
             // A logo palette picked is the logo's, never a picture's.
             read={
               picture && !logoPick({ palette: picture }, logoPalettes)
@@ -1889,13 +1961,11 @@ export type {
   TrayFrameProps,
 }
 export {
-  ACCENT_RING,
   Docked,
   DropTile,
   Fold,
   QuestionTray,
   RadioTile,
-  Suggested,
   Summary,
   Swatches,
   sentence,

@@ -11,6 +11,7 @@ import {
   type OnboardingStatus,
   PERSONA_CARD,
   RECAP_REPLY,
+  SKIP_REPLY,
   StaffDirectory,
 } from "@workspace/contracts"
 import {
@@ -2170,6 +2171,53 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(next.calls[0]).toContain(
         '\\"waiting_card\\":{\\"card\\":\\"ask_open\\",\\"about\\":\\"business.audience\\"}'
       )
+    }, 60_000)
+
+    it("answers the Skip this one pill by the script at once, the question stored as skipped, and leaves a typed skip to the planner", async () => {
+      const who = await owner(kit, url as string, "chat-skip-pill")
+      const asked = planner([
+        plan({
+          facts: { "business.offerings": { items: ["Weddings"] } },
+          say: "Weddings, lovely. Who's behind the business?",
+          next: { kind: "ask_open", about: "business.proof" },
+        }),
+      ])
+      const id = await talker(who, undefined, {
+        planner: asked.model,
+      }).onboarding()
+      await talker(who, undefined, { planner: asked.model }).turn(id, {
+        turn: { kind: "message", message_id: "u_skip_0", text: "Weddings" },
+      })
+      const unused = planner([plan({ say: "never sent" })])
+      const skipped = await talker(who, undefined, {
+        planner: unused.model,
+      }).turn(id, {
+        turn: { kind: "message", message_id: "u_skip_1", text: SKIP_REPLY },
+      })
+      expect(unused.calls).toHaveLength(0)
+      expect((skipped.after.parts[1] as { text: string }).text).toMatch(
+        /^(Leaving that one\.|We can come back to that\.)\n\n/
+      )
+      const rows = await talker(who).rows(id)
+      const card = rows
+        .flatMap((r) => (r.content as { parts: { type: string }[] }).parts)
+        .find((p) => p.type === "tool-ask_open")
+      expect(card).toMatchObject({
+        state: "output-available",
+        output: { answer: "skipped" },
+      })
+      // Skip in other words is the owner talking: the planner reads it.
+      const typed = planner([
+        plan({ pending_card: "unanswered", say: "Leaving that." }),
+      ])
+      await talker(who, undefined, { planner: typed.model }).turn(id, {
+        turn: {
+          kind: "message",
+          message_id: "u_skip_2",
+          text: "skip that too",
+        },
+      })
+      expect(typed.calls).toHaveLength(1)
     }, 60_000)
 
     it("keeps the owner's message at the time it was sent, though its row is written after the planner", async () => {

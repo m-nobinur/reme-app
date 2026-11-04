@@ -120,7 +120,8 @@ async function recapThread() {
 it("Change something starts a correction in the composer, the caret after it, and sends nothing", async () => {
   const { pill, composer, sent } = await recapThread()
   await act(async () => pill("Change something")?.click())
-  expect(composer.value).toBe("Change ")
+  // The pill slides into the composer first, then its words are there.
+  await vi.waitFor(() => expect(composer.value).toBe("Change "))
   expect(document.activeElement).toBe(composer)
   expect(composer.selectionStart).toBe("Change ".length)
   expect(composer.selectionEnd).toBe("Change ".length)
@@ -131,8 +132,8 @@ it("Change something keeps a draft the owner already typed", async () => {
   const { pill, composer, runtime } = await recapThread()
   await act(async () => runtime.thread.composer.setText("The area is wrong"))
   await act(async () => pill("Change something")?.click())
+  await vi.waitFor(() => expect(document.activeElement).toBe(composer))
   expect(composer.value).toBe("The area is wrong")
-  expect(document.activeElement).toBe(composer)
 })
 
 it("All correct sends its message straight away", async () => {
@@ -140,4 +141,35 @@ it("All correct sends its message straight away", async () => {
   await act(async () => pill(RECAP_REPLY)?.click())
   await vi.waitFor(() => expect(sent).toHaveLength(1))
   expect(sent[0]?.content).toEqual([{ type: "text", text: RECAP_REPLY }])
+})
+
+it("fades the row out while the composer holds words, and back once it is empty", async () => {
+  const { pill, runtime } = await recapThread()
+  const row = () =>
+    pill(RECAP_REPLY)?.closest('[data-slot="reply-pills"]')?.parentElement
+  expect(row()?.hasAttribute("data-away")).toBe(false)
+  await act(async () => runtime.thread.composer.setText("Also Selby"))
+  expect(row()?.getAttribute("data-away")).toBe("true")
+  expect(row()?.className).toContain("invisible")
+  await act(async () => runtime.thread.composer.setText(""))
+  expect(row()?.hasAttribute("data-away")).toBe(false)
+})
+
+it("with reduced motion, a pill acts at once with no slide", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("reduce"),
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }))
+  const { pill, composer } = await recapThread()
+  const before = Element.prototype.animate
+  const animate = vi.fn()
+  Element.prototype.animate = animate
+  try {
+    await act(async () => pill("Change something")?.click())
+    expect(composer.value).toBe("Change ")
+    expect(animate).not.toHaveBeenCalled()
+  } finally {
+    Element.prototype.animate = before
+  }
 })

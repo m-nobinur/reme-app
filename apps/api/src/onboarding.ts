@@ -71,6 +71,7 @@ import {
   type RetryReason,
   recap,
   retry,
+  skipped,
   started,
   type Voice,
 } from "./onboarding-copy.ts"
@@ -247,6 +248,7 @@ export function voiceOf(o: Onboarding): Voice {
       direction?.custom ?? factValue(o.facts, "site.font")?.custom ?? null,
     ownColour: palette?.brand ?? palette?.custom ?? null,
     services: o.prepared?.services_phrase ?? null,
+    area: factValue(o.facts, "service_area.text")?.text ?? null,
     picked: o.picked === true,
   }
 }
@@ -1290,8 +1292,10 @@ export function recapOf(o: Onboarding): string {
   const phone = factValue(o.facts, "business.phone")?.e164
   return recap(voiceOf(o), {
     services: factValue(o.facts, "business.offerings")?.items ?? [],
+    excluded: factValue(o.facts, "business.disclaimer")?.text ?? null,
     area: factValue(o.facts, "service_area.text")?.text ?? null,
     customers: factValue(o.facts, "business.audience")?.text ?? null,
+    questions: factValue(o.facts, "quote.form")?.fields.length ?? null,
     phone: phone ? phoneText(phone) : null,
     email: factValue(o.facts, "business.email")?.address ?? null,
   })
@@ -2111,7 +2115,9 @@ export function withChoice(
       )
     : answer?.kind === "design"
       ? answer.picked && pickedLook(v)
-      : answer?.kind === "facts" && answer.chose && chose(v, answer.chose)
+      : answer?.kind === "passed"
+        ? SKIPPABLE.includes(answer.step as FactValueKey) && skipped(v)
+        : answer?.kind === "facts" && answer.chose && chose(v, answer.chose)
   const at = step.findIndex((p) => p.type === "text")
   const lead = step[at]
   if (lead?.type !== "text") {

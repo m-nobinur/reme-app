@@ -500,6 +500,7 @@ describe("POST /palettes/from-logo", () => {
       { SITES } as unknown as Env,
       books_.kit,
       owner,
+      () => undefined,
       { model: live.model }
     )
     await live.started
@@ -529,6 +530,56 @@ describe("POST /palettes/from-logo", () => {
     ])
   })
 
+  it("holds and costs the palettes after the response has gone, then serves the next from what was held", async () => {
+    const SITES = sites()
+    const live = writing()
+    const books_ = books()
+    // As the worker does: the kit closes once the work the route registered settles.
+    let closed = false
+    const kit = {
+      withOrg: (at: unknown, run: unknown) => {
+        if (closed) throw new Error("CONNECTION_ENDED")
+        return books_.kit.withOrg(at as never, run as never)
+      },
+    } as unknown as Tenancy
+    const running: Promise<unknown>[] = []
+    const pending = logoPalettes(
+      ask(),
+      { SITES } as unknown as Env,
+      kit,
+      owner,
+      (promise) => running.push(promise),
+      { model: live.model }
+    )
+    await live.started
+    live.write(`{"palettes": [${JSON.stringify(harbour)}, `)
+    const response = await pending
+    const settled = Promise.allSettled(running).then(() => {
+      closed = true
+    })
+    live.write(`${JSON.stringify(clay)}]}`)
+    live.end()
+    expect((await response.text()).trim().split("\n")).toHaveLength(2)
+    await settled
+    expect(SITES.objects.has(key)).toBe(true)
+    expect(books_.rows.map((r) => r.type)).toEqual([
+      "cos.background_reserve",
+      "cos.background_step",
+    ])
+
+    const again = writing()
+    const served = await logoPalettes(
+      ask(),
+      { SITES } as unknown as Env,
+      books().kit,
+      owner,
+      () => undefined,
+      { model: again.model }
+    )
+    expect((await served.text()).trim().split("\n")).toHaveLength(2)
+    expect(again.model.doStreamCalls).toHaveLength(0)
+  })
+
   it("serves what was held a palette a line, with no call", async () => {
     const SITES = sites()
     const live = writing()
@@ -544,6 +595,7 @@ describe("POST /palettes/from-logo", () => {
       { SITES } as unknown as Env,
       books().kit,
       owner,
+      () => undefined,
       { model: live.model }
     )
     expect(response.headers.get("content-type")).toBe(LOGO_PALETTES_LINES)
@@ -561,6 +613,7 @@ describe("POST /palettes/from-logo", () => {
       { SITES } as unknown as Env,
       books().kit,
       owner,
+      () => undefined,
       { model: live.model }
     )
     await live.started
@@ -581,6 +634,7 @@ describe("POST /palettes/from-logo", () => {
       { SITES: sites() } as unknown as Env,
       books(DAILY_CAP_USD).kit,
       owner,
+      () => undefined,
       { model: live.model }
     )
     expect(response.status).toBe(429)
@@ -596,6 +650,7 @@ describe("POST /palettes/from-logo", () => {
       { SITES } as unknown as Env,
       books().kit,
       owner,
+      () => undefined,
       { model: live.model }
     )
     await live.started
@@ -621,6 +676,7 @@ describe("POST /palettes/from-logo", () => {
       { SITES: sites() } as unknown as Env,
       books().kit,
       owner,
+      () => undefined,
       { model: null }
     )
     expect(response.status).toBe(400)

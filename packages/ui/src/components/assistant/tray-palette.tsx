@@ -5,7 +5,6 @@ import {
   UPLOAD_TYPES,
 } from "@workspace/contracts"
 import {
-  ACCENT_RING,
   DropTile,
   Swatches,
   sentence,
@@ -126,7 +125,7 @@ function PalettePicture({
         <label
           className={cn(
             buttonVariants({ variant: "ghost", size: "sm" }),
-            "cursor-pointer self-start has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-primary"
+            "cursor-pointer self-start has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring"
           )}
         >
           <ImageIcon aria-hidden />
@@ -220,21 +219,30 @@ function logoPick(
 }
 
 /**
- * Surprise me moves another palette from the same logo into first place, so
- * every suggestion stays in the logo's colours.
+ * Surprise me brings another palette from the same logo into the last tile
+ * and picks it, so every suggestion stays in the logo's colours and no tile
+ * moves; the tray moves on after a moment.
  */
 function LogoPalettes({
   read,
   picked,
+  brought,
   group,
+  holding,
   label,
   onPick,
+  onSurprise,
 }: {
   read: Extract<LogoRead, { state: "reading" | "ready" }>
   picked: PaletteFromImage | undefined
+  /** The name of the palette Surprise me brought, which the last tile keeps while others are picked. */
+  brought: string | null
   group: string
+  /** Surprise me's pick is being shown before the tray moves on. */
+  holding: boolean
   label: string
   onPick: (palette: PaletteFromImage) => void
+  onSurprise: (palette: PaletteFromImage) => void
 }) {
   if (read.state === "reading" && read.palettes.length === 0) {
     return (
@@ -253,12 +261,15 @@ function LogoPalettes({
   }
   const { palettes } = read
   const first = palettes.slice(0, LOGO_SHOWN)
+  const within = (list: readonly PaletteFromImage[], one: PaletteFromImage) =>
+    list.some((each) => samePalette(each, one))
+  const beyond = palettes.find((each) => each.name === brought) ?? picked
   const shown =
-    picked && !first.includes(picked) ? [picked, ...first.slice(0, -1)] : first
-  const others = palettes.filter((each) => each !== picked)
+    beyond && !within(first, beyond) ? [...first.slice(0, -1), beyond] : first
+  const unseen = palettes.filter((each) => !within(shown, each))
   const surprise = () => {
-    const lucky = others[Math.floor(Math.random() * others.length)]
-    if (lucky) onPick(lucky)
+    const lucky = unseen[Math.floor(Math.random() * unseen.length)]
+    if (lucky) onSurprise(lucky)
   }
   return (
     <>
@@ -270,10 +281,7 @@ function LogoPalettes({
       >
         {shown.map((palette) => (
           <label
-            className={cn(
-              TRAY_TILE,
-              "gap-0 overflow-hidden p-0 has-[:checked]:ring-2 has-[:checked]:ring-foreground"
-            )}
+            className={cn(TRAY_TILE, "gap-0 overflow-hidden p-0")}
             key={`${palette.name}${palette.stops.primary}`}
           >
             <input
@@ -303,8 +311,8 @@ function LogoPalettes({
           )
         )}
       </div>
-      {read.state === "ready" && others.length > 0 ? (
-        <Surprise onClick={surprise} />
+      {read.state === "ready" && unseen.length > 0 ? (
+        <Surprise disabled={holding} onClick={surprise} />
       ) : null}
     </>
   )
@@ -327,11 +335,18 @@ function PendingSwatches() {
   )
 }
 
-/** Another palette in first place, at the right under the palettes. */
-function Surprise({ onClick }: { onClick: () => void }) {
+/** Another palette picked in the last tile, at the right under the palettes. */
+function Surprise({
+  disabled,
+  onClick,
+}: {
+  disabled?: boolean
+  onClick: () => void
+}) {
   return (
     <Button
-      className={cn("self-end", ACCENT_RING)}
+      className="self-end"
+      disabled={disabled}
       onClick={onClick}
       size="sm"
       type="button"

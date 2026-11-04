@@ -73,7 +73,7 @@ const DIRECTIONS = [
 const IDEAS: LogoChip[] = [
   {
     kind: "detail",
-    label: "Name on one line",
+    label: "One-line name",
     change: "the whole name on one line",
   },
   {
@@ -192,6 +192,30 @@ const waiting = (rounds: LogoRound[], seconds: number) => ({
       next_at: new Date(Date.now() + seconds * 1000).toISOString(),
     }),
 })
+
+/** The api's reads in turn, the last one repeating: rounds as drawn, or an error as a failed read. */
+const reads = (...answers: (LogoRound[] | Error)[]) => {
+  let at = 0
+  return {
+    logoRounds: () => {
+      const next = answers[Math.min(at++, answers.length - 1)] ?? []
+      return next instanceof Error
+        ? Promise.reject(next)
+        : later({ rounds: next })
+    },
+  }
+}
+
+const UNREAD = new Error("The designs could not be read")
+const HALF_DRAWN: LogoRound[] = [
+  {
+    round: 1,
+    status: "drawing",
+    started_at: new Date().toISOString(),
+    variants: [variant(0)],
+    brief: DRAWN,
+  },
+]
 
 /** A round asked for early, refused as the api refuses it. */
 const refused = {
@@ -524,6 +548,21 @@ const STATES: State[] = [
       },
     ],
   },
+  {
+    title: "Logo, the designs could not be read",
+    start: {
+      index: DESIGNS,
+      answers: { logo: { logo: KEPT } },
+      logo: { path: "create", brief: PICKED },
+    },
+    // Strict mode runs a page's first read twice, so the first answer is spent.
+    services: reads(UNREAD, UNREAD, [ROUND]),
+  },
+  {
+    title: "Logo, a read failed while drawing",
+    start: { logo: { path: "create", brief: PICKED } },
+    services: reads(HALF_DRAWN, HALF_DRAWN, UNREAD, [ROUND]),
+  },
   { title: "Palette, nothing picked", start: { index: PALETTE } },
   {
     title: "Palette, one picked",
@@ -727,19 +766,6 @@ const trayCatalog: CatalogEntry[] = [
       ),
     })
   ),
-  {
-    // The tag on what was chosen for the business: a lettering, a logo type and style.
-    name: "Suggested",
-    render: () => (
-      <States
-        name="Suggested"
-        states={only(
-          "Lettering, may be skipped",
-          "Logo, the brief open: surprise me picked"
-        )}
-      />
-    ),
-  },
   {
     // Only there while a tray is folded, as the waiting line and the panel show it.
     name: "ShowFoldedQuestion",
