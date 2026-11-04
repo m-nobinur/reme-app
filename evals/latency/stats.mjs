@@ -81,7 +81,7 @@ const PHOTO_ESTIMATE = { "1K": 0.034, "2K": 0.05 }
 export function photosOf(text) {
   const out = new Map()
   const billed = new Map()
-  for (const t of turnsOf(text).filter((t) => t.role === "photos"))
+  for (const t of turnsOf(text).filter((r) => r.role === "photos"))
     billed.set(t.assignment, (billed.get(t.assignment) ?? 0) + t.cost)
   for (const o of objects(text).filter((e) => e.type === "site.photos")) {
     const p = o.payload ?? {}
