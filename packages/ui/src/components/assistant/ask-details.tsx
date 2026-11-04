@@ -18,6 +18,7 @@ import {
 import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import { DoneIcon } from "@workspace/ui/components/status-line"
+import { Hint } from "@workspace/ui/components/tooltip"
 import { answerValue, FACT_INPUTS } from "@workspace/ui/lib/answer"
 import {
   FIELD_ERROR,
@@ -41,7 +42,8 @@ import { type FocusEvent, type FormEvent, useId, useRef, useState } from "react"
  * assistant's name page offers Pick for me while the name is empty, which
  * sends at once with the first name idea and the prefill for anything left
  * empty, and the owner's reply reads Pick for me. The business email starts
- * empty, with a chip that fills in the sign-in email.
+ * empty, with a chip on its label's row that fills in the sign-in email while
+ * the field is empty.
  * Once answered or skipped it shows nothing: the owner's reply after it says
  * what they gave.
  */
@@ -73,11 +75,14 @@ type DetailsKey = (typeof DETAILS_KEYS)[keyof typeof DETAILS_KEYS][number]
 
 const isPick = (key: string): key is PickKey => key in PICKS
 
-/** A line under a field that says where the answer ends up: the email is public. */
+/** A line under a field that says what happens to the answer. */
 const HINT: Partial<Record<string, string>> = {
   "business.email":
     "Shown on your website. Use a business address if you have one.",
 }
+
+const CHIP =
+  "h-7 max-w-full truncate rounded-full border border-border bg-card px-3 text-xs transition-colors hover:border-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
 
 /** The names written for this business, or the house ones without them. */
 const nameIdeas = (written: readonly string[] | undefined) =>
@@ -87,13 +92,10 @@ const nameIdeas = (written: readonly string[] | undefined) =>
 function FillChips({
   label,
   values,
-  text = (value) => value,
   onPick,
 }: {
   label: string
   values: readonly string[]
-  /** What a chip says, its value by default. */
-  text?: (value: string) => string
   onPick: (value: string) => void
 }) {
   if (values.length === 0) return null
@@ -101,12 +103,8 @@ function FillChips({
     <ul aria-label={label} className="flex flex-wrap gap-2 pt-1">
       {values.map((value) => (
         <li key={value}>
-          <button
-            className="h-7 max-w-full truncate rounded-full border border-border bg-card px-3 text-xs transition-colors hover:border-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            onClick={() => onPick(value)}
-            type="button"
-          >
-            {text(value)}
+          <button className={CHIP} onClick={() => onPick(value)} type="button">
+            {value}
           </button>
         </li>
       ))}
@@ -308,6 +306,10 @@ function DetailsTray({
   const [assistantName, setName] = useState(() =>
     String(startOf("assistant.name", "name") ?? "")
   )
+  // The sign-in email chip shows only while the email field is empty.
+  const [email, setEmail] = useState(() =>
+    String(startOf("business.email", fieldOf("business.email")) ?? "")
+  )
 
   /** What every field holds now, by name. */
   const values = () =>
@@ -361,10 +363,12 @@ function DetailsTray({
 
   // Leaving a filled field checks it, so a wrong number shows before Next;
   // an empty one waits for Next or Submit, and focus stays where it went.
+  // A field whose page Next just hid was checked by Next, and `key` is the
+  // new page's: checking it would flag the next field before it is typed in.
   const checkOnLeave = (event: FocusEvent<HTMLFormElement>) => {
     const field = event.target
     if (!(field instanceof HTMLInputElement) || isPick(key)) return
-    if (!field.value.trim()) return
+    if (!field.value.trim() || field.closest("[hidden]")) return
     const result = read(key, values())
     setProblem("error" in result ? result.error : null)
   }
@@ -393,6 +397,7 @@ function DetailsTray({
     if (!field) return
     field.value = value
     if (each === "assistant.name") setName(value)
+    if (each === "business.email") setEmail(value)
     setProblem(null)
     save({ page, values: values() })
     field.focus()
@@ -450,6 +455,8 @@ function DetailsTray({
             setPronouns(field.value as PronounId)
           } else if (field.name === fieldOf("assistant.name")) {
             setName(field.value)
+          } else if (field.name === fieldOf("business.email")) {
+            setEmail(field.value)
           }
         }}
         onSubmit={submit}
@@ -483,18 +490,39 @@ function DetailsTray({
                 />
               ) : (
                 <>
-                  <AnswerInputs
-                    id={`${id}-${each}`}
-                    invalid={invalid !== undefined}
-                    prefill={Object.fromEntries(
-                      FACT_INPUTS[each].fields.map((field) => [
-                        field.name,
-                        startOf(each, field.name),
-                      ])
-                    )}
-                    spec={{ kind: "fact", key: each }}
-                    title={factLabel(each)}
-                  />
+                  <div className="relative">
+                    <AnswerInputs
+                      id={`${id}-${each}`}
+                      invalid={invalid !== undefined}
+                      prefill={Object.fromEntries(
+                        FACT_INPUTS[each].fields.map((field) => [
+                          field.name,
+                          startOf(each, field.name),
+                        ])
+                      )}
+                      spec={{ kind: "fact", key: each }}
+                      title={factLabel(each)}
+                    />
+                    {each === "business.email" &&
+                    input.sign_in_email &&
+                    !email.trim() ? (
+                      <Hint label={input.sign_in_email} side="top">
+                        <button
+                          className={cn(
+                            CHIP,
+                            "absolute -top-1 right-0 h-6 max-w-[60%]"
+                          )}
+                          data-slot="sign-in-email"
+                          onClick={() =>
+                            fill(each, input.sign_in_email as string)
+                          }
+                          type="button"
+                        >
+                          Use {input.sign_in_email}
+                        </button>
+                      </Hint>
+                    ) : null}
+                  </div>
                   {each === "assistant.name" ? (
                     <FillChips
                       label="Name ideas"
@@ -502,14 +530,6 @@ function DetailsTray({
                       values={ideas.filter(
                         (idea) => idea !== assistantName.trim()
                       )}
-                    />
-                  ) : null}
-                  {each === "business.email" && input.sign_in_email ? (
-                    <FillChips
-                      label="Your sign-in email"
-                      onPick={(value) => fill(each, value)}
-                      text={(value) => `Use ${value}`}
-                      values={[input.sign_in_email]}
                     />
                   ) : null}
                   {HINT[each] ? (
