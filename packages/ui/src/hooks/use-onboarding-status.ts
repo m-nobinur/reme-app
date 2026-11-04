@@ -20,8 +20,22 @@ const subscribe = (listener: () => void) => {
   return () => listeners.delete(listener)
 }
 
+/** The line changes at most this often, so it never flickers. */
+export const GAP_MS = 1_000
+
+let shownAt = Number.NEGATIVE_INFINITY
+let held: ReturnType<typeof setTimeout> | undefined
+
+/** A status that comes within `GAP_MS` of the last waits, and only the newest shows. */
 const set = (on: OnboardingStatus["on"] | null) => {
+  clearTimeout(held)
+  const wait = shownAt + GAP_MS - Date.now()
+  if (on !== null && wait > 0) {
+    held = setTimeout(() => set(on), wait)
+    return
+  }
   latest = on
+  shownAt = on === null ? Number.NEGATIVE_INFINITY : Date.now()
   for (const listener of listeners) listener()
 }
 

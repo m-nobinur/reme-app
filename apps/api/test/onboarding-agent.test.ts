@@ -2,6 +2,7 @@ import {
   type AskDesignInput,
   type FactValue,
   OnboardingPlan,
+  type OnboardingStatus,
   PERSONA_CARD,
   type OnboardingPlan as Plan,
   RECAP_REPLY,
@@ -23,6 +24,7 @@ import {
   reopenCard,
 } from "../src/onboarding.ts"
 import {
+  ANSWER_LINE,
   askedSoFar,
   buildMissing,
   checkPlan,
@@ -39,6 +41,7 @@ import {
   sayProblems,
   transcriptOf,
   turnData,
+  turnLine,
   typedOverForm,
   warmPlanner,
 } from "../src/onboarding-agent.ts"
@@ -1905,7 +1908,7 @@ describe("a planned turn", () => {
     expect(out.calls[0]?.costUsd).toBe(unraced.calls[0]?.costUsd)
   })
 
-  it("lets a thinking call keep its time, and sends its thoughts' headings", async () => {
+  it("lets a thinking call keep its time, and shows nothing of its thoughts", async () => {
     const seen: unknown[] = []
     const thinker = planner([
       {
@@ -1932,11 +1935,11 @@ describe("a planned turn", () => {
     expect(out).toMatchObject({ ok: true })
     // Past the hedge, but thinking: never raced.
     expect(thinker.prompts).toHaveLength(1)
-    expect(seen[0]).toEqual({
-      on: { kind: "thinking", text: "Evaluating service models" },
-      facts: [],
-    })
-    expect(JSON.stringify(seen)).not.toContain("regular cleans")
+    // The turn's line is code's, then the plan's: a thought is never one.
+    expect(seen.map((s) => (s as OnboardingStatus).on.kind)).not.toContain(
+      "thinking"
+    )
+    expect(JSON.stringify(seen)).not.toMatch(/regular cleans|service models/i)
   })
 
   it("never lets the owner's instructions past the checks", async () => {
@@ -2525,9 +2528,43 @@ describe("a streamed turn", () => {
     })
     expect(doingLine("")).toBeNull()
     expect(doingLine("Saving business.audience")).toBeNull()
+    expect(doingLine("Checking the JSON schema")).toBeNull()
     expect(doingLine("  Drafting quote   questions ")).toBe(
       "Drafting quote questions"
     )
+    expect(doingLine("Prioritizing Your Services")).toBe(
+      "Prioritising your services"
+    )
+  })
+
+  it("keeps code's line when the plan's own line says something internal", async () => {
+    const seen: OnboardingStatus[] = []
+    await planTurn(
+      planner([
+        JSON.stringify({
+          doing: "Updating the facts json",
+          ...JSON.parse(
+            ordered(
+              plan({
+                facts: {
+                  "business.offerings": { items: ["Weddings", "Proms"] },
+                },
+                say: "Weddings and proms. Who books you most?",
+                next: { kind: "ask_open", about: "business.audience" },
+              })
+            )
+          ),
+        }),
+      ]).model,
+      PRICE,
+      typed("We do weddings and proms"),
+      undefined,
+      () => undefined,
+      undefined,
+      { send: (status) => seen.push(status), commit: async () => [] }
+    )
+    // No doing line: the fact and the move follow code's first line.
+    expect(seen.map((s) => s.on.kind)).toEqual(["fact", "next"])
   })
 
   it("writes no facts ahead of a build, and still says it is getting ready", async () => {
@@ -2657,6 +2694,110 @@ describe("a streamed turn", () => {
     expect(out.ok).toBe(true)
     // Shown whole once the plan passed, never while it was written.
     expect(said).toEqual([p.say])
+  })
+})
+
+describe("the turn's first line", () => {
+  const card = (type: string, input: object) =>
+    ({ type, toolCallId: "c1", state: "input-available", input }) as ToolPart
+  const answered = (part: ToolPart): PlanState => ({
+    onboarding: onboarding(),
+    pending: null,
+    input: { kind: "card", card: part, output: {} },
+    rows: [],
+  })
+
+  it("names the job of the step being answered, by card or in words over it", () => {
+    expect(
+      turnLine(
+        typed(
+          "We do end of tenancy",
+          onboarding(),
+          card("tool-ask_open", { about: "business.offerings" })
+        )
+      )
+    ).toBe("Noting your services")
+    expect(
+      turnLine(
+        typed(
+          "Leeds and 20 miles out",
+          onboarding(),
+          card("tool-ask_open", { about: "service_area.text" })
+        )
+      )
+    ).toBe("Checking your area")
+    expect(
+      turnLine(
+        typed(
+          "The address and rooms",
+          onboarding(),
+          card("tool-ask_open", { about: "quote.form" })
+        )
+      )
+    ).toBe("Setting up your quote questions")
+    expect(
+      turnLine(
+        typed(
+          "Drop the date",
+          onboarding(),
+          card("tool-review_quote_form", { fields: FIELDS })
+        )
+      )
+    ).toBe("Setting up your quote questions")
+    expect(
+      turnLine(answered(card("tool-ask_details", { step: "contact" })))
+    ).toBe("Saving your phone and email")
+    expect(turnLine(answered(card("tool-ask_upload", {})))).toBe(
+      "Looking at your photos"
+    )
+    expect(
+      turnLine(answered(card("tool-ask_choice", { step: "build_for_me" })))
+    ).toBe("Noting your website choice")
+  })
+
+  it("reads a recap correction as one, and a yes as a check", () => {
+    const recap = card("tool-ask_open", { about: "recap" })
+    expect(turnLine(typed("We don't do ovens", onboarding(), recap))).toBe(
+      "Reading your correction"
+    )
+    expect(turnLine(typed(RECAP_REPLY, onboarding(), recap))).toBe(
+      "Checking the details"
+    )
+  })
+
+  it("falls back to a plain line when nothing names the step", () => {
+    expect(turnLine(typed("hello"))).toBe(ANSWER_LINE)
+    expect(
+      turnLine(
+        typed(
+          "go",
+          onboarding(),
+          card("tool-request_change", { text: "Build" })
+        )
+      )
+    ).toBe(ANSWER_LINE)
+    expect(
+      turnLine(answered(card("tool-ask_open", { about: "business.tagline" })))
+    ).toBe(ANSWER_LINE)
+  })
+
+  it("is sentence case, British and free of internal words, in every line", () => {
+    const lines = [
+      ANSWER_LINE,
+      "Reading your correction",
+      "Checking the details",
+      ...[
+        "business.name",
+        "business.offerings",
+        "service_area.text",
+        "business.audience",
+        "business.proof",
+        "quote.form",
+      ].map((about) =>
+        turnLine(typed("x", onboarding(), card("tool-ask_open", { about })))
+      ),
+    ]
+    for (const line of lines) expect(doingLine(line), line).toBe(line)
   })
 })
 

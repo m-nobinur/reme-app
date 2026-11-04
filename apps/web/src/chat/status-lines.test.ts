@@ -162,9 +162,11 @@ describe("every onboarding step, move and fact", () => {
     }
   })
 
-  it("never shows the model's own words", () => {
-    const said = "Reading about your rates — and the van_id"
-    expect(onboardingLine({ kind: "doing", text: said })).not.toContain("rates")
+  it("shows the turn's own line as the api filtered it, and never a thought", () => {
+    expect(onboardingLine({ kind: "doing", text: "Checking your area" })).toBe(
+      "Checking your area"
+    )
+    const said = "Reading about your rates"
     expect(onboardingLine({ kind: "thinking", text: said })).not.toContain(
       "rates"
     )

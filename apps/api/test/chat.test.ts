@@ -50,7 +50,6 @@ import {
   type Part,
   readScript,
   type Script,
-  stepStatus,
   type ToolPart,
 } from "../src/chat.ts"
 import { DAILY_CAP_USD } from "../src/cos/turns.ts"
@@ -61,11 +60,7 @@ import {
   opening,
   stepOf,
 } from "../src/onboarding.ts"
-import {
-  PLANNER,
-  PLANNER_VERSION,
-  type PlanState,
-} from "../src/onboarding-agent.ts"
+import { PLANNER, PLANNER_VERSION } from "../src/onboarding-agent.ts"
 import {
   type Owner,
   owner,
@@ -172,49 +167,6 @@ describe("the script's next step", () => {
       { type: "step-start" },
       { type: "text", text: expect.stringMatching(/\?/), state: "done" },
     ])
-  })
-})
-
-describe("the step a planned turn starts on", () => {
-  const card = (type: string, input: object) =>
-    ({ type, toolCallId: "c1", state: "input-available", input }) as ToolPart
-  const on = (
-    input: PlanState["input"],
-    pending: ToolPart | null = null,
-    onboarding = state()
-  ) => stepStatus({ onboarding, pending, input, rows: [] })?.on
-  const typed = { kind: "message", text: "We do end of tenancy" } as const
-  const answered = (part: ToolPart) =>
-    ({ kind: "card", card: part, output: {} }) as const
-
-  it("names the card just answered", () => {
-    expect(on(answered(card("tool-ask_details", { step: "contact" })))).toEqual(
-      { kind: "step", step: "contact", answered: true }
-    )
-    expect(on(answered(card("tool-ask_upload", {})))).toEqual({
-      kind: "step",
-      step: "upload",
-      answered: true,
-    })
-    expect(
-      on(answered(card("tool-ask_open", { about: "business.tagline" })))
-    ).toEqual({ kind: "step", step: "business.tagline", answered: true })
-  })
-
-  it("names no step for a typed message, whatever card is in view", () => {
-    expect(on(typed)).toBeUndefined()
-    expect(
-      on(typed, card("tool-ask_open", { about: "quote.form" }))
-    ).toBeUndefined()
-    expect(
-      on(typed, card("tool-ask_choice", { step: "build_for_me" }))
-    ).toBeUndefined()
-  })
-
-  it("names nothing for a call no line is for", () => {
-    expect(on(typed, card("tool-request_change", { text: "Build" }))).toBe(
-      undefined
-    )
   })
 })
 

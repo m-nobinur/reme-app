@@ -15,7 +15,6 @@ import {
   type OnboardingStatus,
   PAGES,
   PALETTES,
-  PLAN_DOING_MAX,
   PLAN_FACT_KEYS,
   PLANNER_TURN_MS,
   type PlanFactKey,
@@ -86,7 +85,7 @@ import {
   OPTIONAL_ASKS,
   onboardingSteps,
 } from "./onboarding-progress.ts"
-import { thoughtHeadings } from "./thinking.ts"
+import { thoughtLine } from "./thinking.ts"
 import { VOICE } from "./voice.ts"
 
 /**
@@ -1835,9 +1834,6 @@ export async function planTurn(
           parts: result.fullStream[Symbol.asyncIterator](),
           stop,
           wrote: false as boolean,
-          think: thoughtHeadings((line) =>
-            tell({ on: { kind: "thinking", text: line }, facts: [] })
-          ),
         }
         begun.push(c)
         return c
@@ -1855,14 +1851,14 @@ export async function planTurn(
         }
       }
       // A call's parts up to its first text, or its end, whichever comes
-      // first. Its thoughts' headings go out as they come.
+      // first. Its thoughts are never shown: the turn's line is code's
+      // (`turnLine`), then the plan's own `doing`.
       const opening = async (c: Call) => {
         const seen = []
         for (;;) {
           const next = await nextPart(c)
           if (next.done) return { c, seen }
           seen.push(next.value)
-          if (next.value.type === "reasoning-delta") c.think(next.value.text)
           if (/^(text|reasoning)-/.test(next.value.type)) c.wrote = true
           if (!QUIET.has(next.value.type)) return { c, seen }
         }
@@ -2016,16 +2012,56 @@ export async function planTurn(
   return { ok: false, reason: "invalid", calls, ...out }
 }
 
-/** The plan's `doing` line when safe to show; null lets the web write its own. */
+/** The plan's `doing` line when safe to show, or null, which keeps the line before it. */
 export function doingLine(value: unknown): string | null {
-  if (typeof value !== "string") return null
-  const line = value
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/[.…]+$/, "")
-  if (!line || line.length > PLAN_DOING_MAX) return null
-  if (/[_{}<>[\]]|\b[a-z]+\.[a-z]+\b|https?:/i.test(line)) return null
-  return line
+  if (typeof value !== "string" || /\b[a-z]+\.[a-z]+\b/i.test(value)) {
+    return null
+  }
+  return thoughtLine(value)
+}
+
+/** What a turn answering each step is doing: the job, never a state of mind. */
+const STEP_LINES: Partial<Record<string, string>> = {
+  "business.name": "Saving your business name",
+  industry: "Noting what you do",
+  "business.industry": "Noting what you do",
+  "business.offerings": "Noting your services",
+  "service_area.text": "Checking your area",
+  "business.audience": "Noting who you work for",
+  "business.proof": "Noting what sets you apart",
+  "quote.form": "Setting up your quote questions",
+  quote_form: "Setting up your quote questions",
+  contact: "Saving your phone and email",
+  assistant: "Setting up your assistant",
+  build_for_me: "Noting your website choice",
+  design: "Noting your design choices",
+  template: "Noting your design choices",
+  palette: "Noting your design choices",
+  font: "Noting your design choices",
+  pages: "Noting your design choices",
+  upload: "Looking at your photos",
+}
+
+/** The turn's line when nothing names its step. */
+export const ANSWER_LINE = "Reading your answer"
+
+/**
+ * The turn's first line, before the plan writes a key, built here from the
+ * step it answers (the card used, or the one waiting under a typed
+ * message) and the owner's words, so no model has to stream anything for
+ * the owner to see what the turn is doing.
+ */
+export function turnLine(s: PlanState): string {
+  const card = s.input.kind === "card" ? s.input.card : s.pending
+  if (!card) return ANSWER_LINE
+  const about =
+    card.type === "tool-ask_open" ? (card.input as AskOpenInput).about : null
+  if (about === "recap") {
+    return s.input.kind === "message" && s.input.text.trim() !== RECAP_REPLY
+      ? "Reading your correction"
+      : "Checking the details"
+  }
+  return STEP_LINES[about ?? stepOf(card) ?? ""] ?? ANSWER_LINE
 }
 
 /** The least time a retry needs: two slow calls measured about 6 s each. */

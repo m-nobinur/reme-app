@@ -1,6 +1,5 @@
 import {
   ADDRESS_ASK,
-  type AskOpenInput,
   type BuildQuestions,
   BuildQuestionsPart,
   BuildSummary,
@@ -19,7 +18,6 @@ import {
   ONBOARDING_STATUS,
   OnboardingPlan,
   type OnboardingStatus,
-  OnboardingStep,
   PERSONA_CARD,
   type PersonaCard,
   RequestChangeOutput,
@@ -155,7 +153,6 @@ import {
   progressOf,
   type ScriptRow,
   ended as scriptEnded,
-  stepOf,
   text as textPart,
   trayLogoPath,
   trayOption,
@@ -181,6 +178,7 @@ import {
   planReservation,
   planTurn,
   turnData,
+  turnLine,
   typedOverForm,
 } from "./onboarding-agent.ts"
 import { notStarted } from "./onboarding-copy.ts"
@@ -2804,24 +2802,6 @@ function planned(job: PlanJob, p: Planning): Response {
   })
 }
 
-/**
- * The step a planned turn is on, for the waiting line before the planner
- * writes: the card just answered. Null for a typed message, whose step a
- * card in view only guesses, and for a step no line names.
- */
-export function stepStatus(s: PlanState): OnboardingStatus | null {
-  if (s.input.kind !== "card") return null
-  const { card } = s.input
-  const about =
-    card.type === "tool-ask_open" ? (card.input as AskOpenInput).about : null
-  const on = OnboardingStep.safeParse(
-    about === "quote.form" ? "quote_form" : (about ?? stepOf(card))
-  )
-  return on.success
-    ? { on: { kind: "step", step: on.data, answered: true }, facts: [] }
-    : null
-}
-
 async function plannedTurn(
   job: PlanJob,
   p: Planning,
@@ -2833,12 +2813,11 @@ async function plannedTurn(
   const continued =
     turn.kind === "results" && !turn.reply ? (job.tail?.id ?? null) : null
   write({ type: "start", messageId: continued ?? p.rowId })
-  // The waiting line names an answered card's step at once; the plan's own
-  // lines follow.
+  // The waiting line names what the turn is doing at once, from its step;
+  // the plan's own lines follow.
   const status = (data: OnboardingStatus) =>
     write({ type: ONBOARDING_STATUS, data, transient: true })
-  const on = stepStatus(job.state)
-  if (on) status(on)
+  status({ on: { kind: "doing", text: turnLine(job.state) }, facts: [] })
   let stepOpen = false
   let textOpen = false
   // A plan's line or word has shown: a general line would be a step back.
@@ -2856,8 +2835,9 @@ async function plannedTurn(
   // has shown, or the planner is done, Jev is ignored.
   const stop = new AbortController()
   let planning = true
+  // A plain answer adds nothing to the step's own line.
   void p.reading?.then((about) => {
-    if (about && planning && !real) {
+    if (about && about !== "answer" && planning && !real) {
       status({ on: { kind: "reading", about }, facts: [] })
     }
   })

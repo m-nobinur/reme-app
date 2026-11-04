@@ -190,9 +190,10 @@ export const MessageReading = z.enum(["answer", "change", "question"])
 
 /**
  * The `ONBOARDING_STATUS` chunk, sent as the turn starts and as the plan's
- * keys close. `on` is the plan's own `doing` line, the heading of the
- * thought a reasoning model is on (any turn, the Chief of Staff's too), or a
- * step, reading, fact or move the web words itself. `facts`
+ * keys close. `on` is the turn's `doing` line, which the web shows as sent
+ * (the api's own from the step it answers, then the plan's, filtered), the
+ * heading of the thought a reasoning model is on (the Chief of Staff's
+ * turns), or a step, reading, fact or move the web words itself. `facts`
  * lists the keys just stated, for the checklist to tick at once.
  */
 export const OnboardingStatus = z.strictObject({

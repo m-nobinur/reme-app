@@ -1035,12 +1035,13 @@ const READING_LINE: Record<MessageReading, string> = {
 }
 
 /**
- * A status's line. The planner's `doing` and a reasoning heading carry model
- * text, which is never shown: they read as the catalogue's own lines.
+ * A status's line. `doing` names what the turn is doing, built by the api
+ * from the step or the plan's own line through its filter, so it shows as
+ * sent. A reasoning heading is never shown: it reads as the catalogue's.
  */
 export const onboardingLine = (on: OnboardingStatus["on"]) =>
   on.kind === "doing"
-    ? NEXT_LINE.answer_only
+    ? on.text
     : on.kind === "thinking"
       ? reasoningLine(true)
       : on.kind === "step"

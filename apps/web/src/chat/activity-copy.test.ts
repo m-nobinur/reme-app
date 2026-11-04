@@ -278,10 +278,10 @@ describe("the first line of each kind of turn", () => {
     expect(first({ kind: "reading", about: "question" }).label).toBe(
       "Looking into your question"
     )
-    // The plan's own line is model text, so the catalogue words it.
+    // The turn's own line, built or filtered by the api, shows as sent.
     expect(first({ kind: "doing", text: "Reading about your rates" })).toEqual({
       kind: "planning",
-      label: "Working on your answer",
+      label: "Reading about your rates",
     })
     expect(first({ kind: "thinking", text: "Weighing the van rates" })).toEqual(
       { kind: "thinking", label: "Thinking it through" }
