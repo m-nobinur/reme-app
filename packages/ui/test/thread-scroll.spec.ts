@@ -113,3 +113,34 @@ for (const width of [1024, 390]) {
     ).toEqual([])
   })
 }
+
+// Scrolled up to read, a tray that grows between pages leaves the view where
+// it is, as chat apps do. At the bottom it follows (measured on a long thread).
+test("a tray growing leaves a reader who scrolled up where they are", async ({
+  page,
+}) => {
+  const entry = "ThreadSendStreamed"
+  await open(page, entry, 390)
+  const root = page.locator(`[data-entry="${entry}"]`)
+  const viewport = root.locator('[data-slot="aui_thread-viewport"]')
+  // A box shorter than the conversation, so there is somewhere to read.
+  await viewport.evaluate((box) => {
+    box.style.height = "220px"
+    box.style.flex = "none"
+  })
+  await page.waitForTimeout(500)
+  await viewport.hover()
+  await page.mouse.wheel(0, -2000)
+  await page.waitForTimeout(500)
+  const top = await viewport.evaluate((box) => box.scrollTop)
+  expect(top, "the reader is scrolled up").toBeLessThan(
+    await viewport.evaluate((box) => box.scrollHeight - box.clientHeight)
+  )
+  await root.locator(".aui-thread-viewport-footer").evaluate((footer) => {
+    const grown = document.createElement("div")
+    grown.style.height = "160px"
+    footer.append(grown)
+  })
+  await page.waitForTimeout(800)
+  expect(await viewport.evaluate((box) => box.scrollTop)).toBe(top)
+})
