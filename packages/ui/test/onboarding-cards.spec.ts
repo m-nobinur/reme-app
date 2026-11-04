@@ -256,6 +256,24 @@ test("the ready card sits at the end of the thread and never claims an approval 
   ).toHaveCount(0)
 })
 
+test("the ready cards with a step beside Publish fit a phone and pass axe", async ({
+  page,
+}) => {
+  await open(page, "SiteReady", 390)
+  await axe(page, "SiteReady 390")
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
+    )
+  ).toBe(false)
+  const card = page.locator('[data-slot="site-ready"]').nth(7)
+  const box = await card.boundingBox()
+  const connect = await card
+    .getByRole("button", { name: "Connect Search Console" })
+    .boundingBox()
+  expect(box && connect && connect.x >= box.x).toBe(true)
+})
+
 test("a docked ready card is one row above the composer that opens in place", async ({
   page,
 }) => {
