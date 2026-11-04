@@ -1228,6 +1228,29 @@ describe("a reply Jev read", () => {
       expect(decided(cardFor(step), { kind: "defer" }, start())).toBeNull()
     }
   })
+
+  it("leads the next question with a short line after a skip, and nothing after a confirmed recap", () => {
+    const next = [
+      { type: "text" as const, text: "Next question?", state: "done" as const },
+    ]
+    const lines = new Set<string>()
+    for (const orgId of ORGS) {
+      const parts = withChoice(
+        { kind: "passed", step: "business.proof" },
+        start({ orgId }),
+        next
+      )
+      const said = (parts[0] as { text: string }).text
+      expect(said).toMatch(
+        /^(Leaving that one\.|We can come back to that\.)\n\nNext question\?$/
+      )
+      lines.add(said)
+    }
+    expect(lines.size).toBe(2)
+    expect(
+      withChoice({ kind: "passed", step: "recap" }, start(), next)
+    ).toEqual(next)
+  })
 })
 
 describe("Pick for me, answered by the script", () => {

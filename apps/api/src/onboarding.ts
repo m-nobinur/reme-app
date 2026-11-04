@@ -71,6 +71,7 @@ import {
   type RetryReason,
   recap,
   retry,
+  skipped,
   started,
   type Voice,
 } from "./onboarding-copy.ts"
@@ -2112,7 +2113,9 @@ export function withChoice(
       )
     : answer?.kind === "design"
       ? answer.picked && pickedLook(v)
-      : answer?.kind === "facts" && answer.chose && chose(v, answer.chose)
+      : answer?.kind === "passed"
+        ? SKIPPABLE.includes(answer.step as FactValueKey) && skipped(v)
+        : answer?.kind === "facts" && answer.chose && chose(v, answer.chose)
   const at = step.findIndex((p) => p.type === "text")
   const lead = step[at]
   if (lead?.type !== "text") {

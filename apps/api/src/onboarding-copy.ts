@@ -474,6 +474,14 @@ export function chose(v: Voice, what: string): string {
   )
 }
 
+/** An optional question the owner skipped, said before the next one. */
+export function skipped(v: Voice): string {
+  return say(
+    v,
+    pick(v, "skipped", ["Leaving that one.", "We can come back to that."])
+  )
+}
+
 /**
  * The assistant introducing who it is now, just above its persona card and
  * before the next question: what it chose when the owner pressed Pick for
