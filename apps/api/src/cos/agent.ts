@@ -1587,7 +1587,8 @@ function toolsFor(run: AgentTurn, allowed: readonly CosToolName[] | null) {
         return await runTool(
           run,
           name,
-          withoutStep(input),
+          // A view's step is the owner's waiting line, which the tool vets.
+          name === "skill_view" ? input : withoutStep(input),
           toolCallId,
           approvalFor(messages, toolCallId),
           messages

@@ -396,6 +396,8 @@ export async function streamTurn(
   const think = thoughtHeadings((text) =>
     queued.push(status({ kind: "thinking", text }))
   )
+  // The owner's first word, apart from `first_chunk_ms`, which a skill view now often is.
+  let worded = false
   const body = new ReadableStream<UIMessageChunk>({
     async pull(controller) {
       for (;;) {
@@ -409,6 +411,16 @@ export async function streamTurn(
         else if (chunk.type === "reasoning-delta") think(chunk.delta)
         else if (!chunk.type.startsWith("reasoning-")) {
           if (chunk.type === "error") errored = true
+          if (chunk.type === "text-delta" && !worded) {
+            worded = true
+            console.log(
+              JSON.stringify({
+                code: "cos.first_word",
+                turn_id: run.turn.turnId,
+                ms: Date.now() - started,
+              })
+            )
+          }
           controller.enqueue(withoutProviderData(chunk))
           // A skill the model viewed names the work while it goes on.
           const viewed =

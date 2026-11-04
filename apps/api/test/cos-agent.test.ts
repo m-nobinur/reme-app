@@ -1840,7 +1840,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
           "Here's a draft: Thanks so much, Priya, we're glad the oven shines."
         )
       )
-      await turn(
+      const log = vi.spyOn(console, "log")
+      const { chunks } = await turn(
         me,
         typed(
           id,
@@ -1848,6 +1849,32 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         ),
         { model }
       )
+      // The waiting line names the work once the view lands; the reply's first word is timed apart.
+      expect(chunks).toContainEqual(
+        expect.objectContaining({
+          type: "data-onboarding_status",
+          data: {
+            on: {
+              kind: "doing",
+              text: "Using my customer care experience on a reply",
+            },
+            facts: [],
+          },
+        })
+      )
+      const lines = log.mock.calls.map((c) => String(c[0]))
+      log.mockRestore()
+      expect(lines.some((l) => l.includes('"code":"cos.first_word"'))).toBe(
+        true
+      )
+      expect(
+        lines.some(
+          (l) =>
+            l.includes('"code":"cos.skill_view"') &&
+            l.includes('"name":"review-reply"') &&
+            l.includes('"by":"model"')
+        )
+      ).toBe(true)
       // The index rides in the system prompt, not in skill_view's description.
       expect(JSON.stringify(sent[0]?.prompt)).toContain(
         "- review-reply (customer care): Use when drafting the owner's public reply to a customer's review."
