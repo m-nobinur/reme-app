@@ -11,6 +11,7 @@ import {
   cardState,
   handoverNote,
   openItems,
+  sessionNote,
   skillsDue,
 } from "../src/cos/notes.ts"
 
@@ -209,7 +210,7 @@ describe("the procedures code loads", () => {
   }
 
   it("loads the top open item's on the hand-over, and what the owner's message is about", () => {
-    expect(skillsDue({ workspace: EMPTY, handover: true })).toEqual([
+    expect(skillsDue({ workspace: EMPTY, starting: true })).toEqual([
       "web-address",
     ])
     expect(
@@ -284,5 +285,22 @@ describe("the procedures code loads", () => {
     expect(JSON.stringify(messages[0])).toContain(
       "The web-address procedure, loaded by code"
     )
+  })
+})
+
+describe("the session-start note", () => {
+  it("carries the last summary as data, and one proactive line only while the address is open, not put off, and a site exists", () => {
+    const live = { ...EMPTY, site: { host: "x.reme.site", live_version: 1 } }
+    const note = sessionNote(live, "Talked about <b>prices</b>.")
+    expect(note[0]).toMatch(/This is a new conversation/)
+    expect(note.join("\n")).toContain(
+      '<data source="summary" taint="inferred untrusted_input">'
+    )
+    expect(note.join("\n")).toContain("\\u003cb>prices")
+    expect(note.at(-1)).toMatch(/Want your own address\?[^\n]*call put_off/)
+    // Put off, or nothing built yet: no proactive line.
+    const later = address({ state: "later", later_until: NOW.toISOString() })
+    expect(sessionNote({ ...live, tasks: [later] }, null)).toHaveLength(1)
+    expect(sessionNote(EMPTY, null)).toHaveLength(1)
   })
 })

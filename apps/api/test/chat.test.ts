@@ -1298,6 +1298,23 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         },
       ])
       expect((await me.rows(id))[0]?.parentId).toBeNull()
+      // Only the conversation's first CoS turn carries the session-start note.
+      const notes = await kit.withOrg({ orgId: who.orgId }, (db) =>
+        db
+          .select({ payload: events.payload })
+          .from(events)
+          .where(
+            sql`${events.sessionId} = ${id} and ${events.type} = 'cos.context'`
+          )
+          .orderBy(events.seq)
+      )
+      expect(
+        notes.map((n) =>
+          (n.payload as { text: string }).text.includes(
+            "This is a new conversation."
+          )
+        )
+      ).toEqual([true, false])
     })
 
     it("offers its own quote form for a typed answer no model read, and builds once it is confirmed", async () => {

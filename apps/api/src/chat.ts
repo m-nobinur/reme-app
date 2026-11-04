@@ -25,6 +25,7 @@ import {
   type PersonaCard,
   RequestChangeOutput,
   SKIP_REPLY,
+  type TaintLabel,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import {
@@ -94,6 +95,7 @@ import {
   cardState,
   handoverNote,
   openItems,
+  sessionNote,
   skillsDue,
 } from "./cos/notes.ts"
 import { retrying } from "./cos/retry.ts"
@@ -1161,7 +1163,7 @@ export async function chat(
           text: context.text,
           reserved_usd: fallback ? 0 : reserve,
         },
-        contextTaint: context.taint,
+        contextTaint: [...new Set([...context.taint, ...notes.taint])],
       })
       if (turn.kind === "message") {
         await putRow(db, owner, id, {
@@ -1961,9 +1963,10 @@ async function recentSkills(db: OrgScopedDb, id: string): Promise<string[]> {
 
 /**
  * What code tells a CoS turn about where things stand (`notes.ts`): the open
- * items every turn; on the first CoS turn of an onboarding conversation the
- * hand-over, as the `cos.event` the turn logs; and the procedures state makes
- * certain (`skillsDue`), as `cos.skill`s, each once within `SKILL_TURNS`.
+ * items every turn; on the CoS's first turn of an onboarding conversation the
+ * hand-over, as the `cos.event` the turn logs, and of a new one the session
+ * note (`sessionNote`); and the procedures state makes certain (`skillsDue`),
+ * as `cos.skill`s, each once within `SKILL_TURNS`.
  */
 export async function turnNotes(
   db: OrgScopedDb,
@@ -1975,7 +1978,12 @@ export async function turnNotes(
   said: string | null = null,
   /** The procedure a schedule started this turn for. */
   scheduled: string | null = null
-): Promise<{ lines: string[]; events: CosEvent[]; skills: CosSkill[] }> {
+): Promise<{
+  lines: string[]
+  events: CosEvent[]
+  skills: CosSkill[]
+  taint: TaintLabel[]
+}> {
   const card = await addressCardOf(db, id)
   const lines = openItems(workspace, card, new Date(), zone)
   const [kind] = fresh
@@ -1986,13 +1994,29 @@ export async function turnNotes(
     : []
   const handover = kind?.kind === "onboarding"
   const loaded = await recentSkills(db, id)
-  const skills = skillsDue({ workspace, handover, said, scheduled }).flatMap(
-    (name) => {
-      const found = loaded.includes(name) ? null : procedure("cos", name)
-      return found ? [{ name, body: found.body }] : []
+  const skills = skillsDue({
+    workspace,
+    starting: kind !== undefined,
+    said,
+    scheduled,
+  }).flatMap((name) => {
+    const found = loaded.includes(name) ? null : procedure("cos", name)
+    return found ? [{ name, body: found.body }] : []
+  })
+  if (kind && !handover) {
+    // shortcut: a conversation too short to compact leaves no summary; persist one at its end if that loses too much.
+    const [last] = await db.execute<{ summary: string }>(sql`
+      select payload->>'summary' as summary from ${events}
+      where type = 'cos.compaction' and session_id <> ${id}
+      order by seq desc limit 1`)
+    return {
+      lines: [...lines, ...sessionNote(workspace, last?.summary ?? null)],
+      events: [],
+      skills,
+      taint: last ? ["inferred", "untrusted_input"] : [],
     }
-  )
-  if (!handover) return { lines, events: [], skills }
+  }
+  if (!handover) return { lines, events: [], skills, taint: [] }
   const [progress, facts] = await Promise.all([
     readScript(db, id),
     readFacts(db),
@@ -2011,6 +2035,7 @@ export async function turnNotes(
     lines,
     events: [{ source: "handover", summary, evidence: [], wake: false }],
     skills,
+    taint: [],
   }
 }
 

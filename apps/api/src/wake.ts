@@ -302,7 +302,7 @@ export async function wakeTurn(
         text: context.text,
         reserved_usd: reserved,
       },
-      contextTaint: context.taint,
+      contextTaint: [...new Set([...context.taint, ...notes.taint])],
     })
     return {
       turn,
