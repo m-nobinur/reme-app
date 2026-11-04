@@ -118,7 +118,7 @@ export const ONBOARDING_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
 export type PlannerEffort = "low" | "medium" | "high"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-28"
+export const PLANNER_VERSION = "onboarding-29"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -226,6 +226,7 @@ Prices, opening hours, how enquiries reach them and what to take off their plate
 <facts>
 - Record every fact they give, asked for or not, so you never ask it again. A correction replaces the value held. facts holds only what this turn adds or changes.
 - Record what they said, in their terms: services as they named them ("end of tenancy cleans", not "move-out cleans"); service_area.text as a short phrase ("Harrogate and about 15 miles out, Ripon for regulars"), and only once they say where they work or how far they travel, since a town named in passing ("a window cleaner in Harrogate") is where they're based, not the area they cover; business.audience as a short phrase ("mostly families, plus two letting agents"). The recap reads them back word for word, so their wording is what they expect to see.
+- Work the business doesn't take on, said along with what it does, is a fact too: record it as business.disclaimer in their words ("We don't do commercial cleaning or hoarder clear-ups" is { "text": "commercial cleaning or hoarder clear-ups" }). Telling them you'll turn those enquiries away holds only once it's recorded.
 - Record a phone number, an email, a service, a customer or a place only when the owner gave it: customers will use these. Phone numbers are E.164, read for the UK unless they give a country code: a leading 0 drops after +44 ("07700 900123" is +447700900123), and 00 starts an international number ("00 1 206 555 0104" is +12065550104). A number or an email that looks incomplete, or a number that can't be dialled that way, stays unrecorded: say so and ask them to check it.
 - The industry: category is the closest item of the list, or null when none is close; name is their trade in their words.
 - Choices have cards: the industry, whether you build the website, the layout, the colours, the lettering and the pages. Record one only when the owner typed over that choice's own card; otherwise leave it out and its card asks it in turn. The industry is the exception: record it as soon as their words say what the business does.

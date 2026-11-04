@@ -174,15 +174,18 @@ export const PERSONAS = [
   {
     id: "cleaner",
     signIn: { orgName: "Sparkle & Shine", ownerName: "Maria Lopes" },
-    sheet: `You are Maria, you run Sparkle & Shine, a domestic cleaning company in Reading, UK, with 6 cleaners. Services: weekly and fortnightly cleans, deep cleans, end of tenancy cleans, oven cleaning. Customers: busy professionals and families, landlords. A job: free home visit, agree a schedule, same cleaner every time. Area: Reading, Wokingham and Bracknell. Phone 0118 496 0777. Email hello@sparkleshine.invalid. Slogan: "Your home, our passion". Assistant: Mia, she/her, friendly. Call you Maria. To quote you need the number of bedrooms and bathrooms, how often, and whether there are pets. What sets you apart: all cleaners are vetted and insured, and if something is missed you come back within 24 hours.`,
+    sheet: `You are Maria, you run Sparkle & Shine, a domestic cleaning company in Reading, UK, with 6 cleaners. Services: weekly and fortnightly cleans, deep cleans, end of tenancy cleans, oven cleaning. You don't do commercial or office cleaning, or biohazard and hoarder clean-ups. Customers: busy professionals and families, landlords. A job: free home visit, agree a schedule, same cleaner every time. Area: Reading, Wokingham and Bracknell. Phone 0118 496 0777. Email hello@sparkleshine.invalid. Slogan: "Your home, our passion". Assistant: Mia, she/her, friendly. Call you Maria. To quote you need the number of bedrooms and bathrooms, how often, and whether there are pets. What sets you apart: all cleaners are vetted and insured, and if something is missed you come back within 24 hours.`,
     style: "Friendly, normal sentences.",
     truth: {
       name: /sparkle/i,
       phone: "+441184960777",
       email: "hello@sparkleshine.invalid",
       assistant: /mia/i,
+      disclaimer: /commercial|office/i,
     },
     turns: {
+      // #688: exclusions said with the services were acknowledged and not stored.
+      1: "We're a domestic cleaning company in Reading with six cleaners: weekly and fortnightly cleans, deep cleans, end of tenancy cleans and oven cleaning. We don't do commercial or office cleaning, and we don't take on biohazard or hoarder clean-ups.",
       6: "Oh sorry, I gave you the wrong email earlier. It's bookings@sparkleshine.invalid, not hello@.",
     },
     truthAfter: { email: "bookings@sparkleshine.invalid" },
