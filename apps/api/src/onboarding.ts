@@ -1586,27 +1586,17 @@ function detailsAnswer(
   }
   if (input.step !== "assistant")
     return { kind: "facts", facts: answer.data.facts }
-  const picked = answer.data.skip_all === true
-  // What the card sends untouched: its prefill, and with Pick for me the first name idea.
-  const offered = [
-    ...input.prefill,
-    ...(picked && input.ideas?.[0]
-      ? [{ key: "assistant.name", value: { name: input.ideas[0] } }]
-      : []),
-  ]
-  const same = (a: unknown, b: unknown) =>
-    JSON.stringify(a) === JSON.stringify(b)
+  const changed = answer.data.changed ?? []
   return {
     kind: "facts",
     facts: answer.data.facts,
-    persona: picked ? "picked" : "stated",
+    persona: answer.data.skip_all ? "picked" : "stated",
+    // The card names what the owner changed; the rest is its suggestion, unless the org already held it.
     suggested: answer.data.facts
+      .map((fact) => fact.key)
       .filter(
-        (fact) =>
-          !held.some((h) => h.key === fact.key) &&
-          offered.some((o) => o.key === fact.key && same(o.value, fact.value))
-      )
-      .map((fact) => fact.key),
+        (key) => !changed.includes(key) && !held.some((h) => h.key === key)
+      ),
   }
 }
 

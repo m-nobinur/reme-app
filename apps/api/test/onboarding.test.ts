@@ -723,12 +723,22 @@ describe("an answer on a card", () => {
       ...prefill.filter((f) => f.key !== "assistant.tone"),
       tone,
     ]
+    const changed = ["assistant.name", "assistant.tone"]
+    expect(
+      cardAnswer(card, { answer: "stated", facts: touched, changed }, [])
+    ).toMatchObject({ suggested: ["assistant.pronouns", "assistant.avatar"] })
+    // A plain Done on the defaults names nothing changed: all of it is suggested.
     expect(
       cardAnswer(card, { answer: "stated", facts: touched }, [])
-    ).toMatchObject({ suggested: ["assistant.pronouns", "assistant.avatar"] })
+    ).toMatchObject({ suggested: touched.map((f) => f.key) })
     // A value already held is the owner's to keep: never turned into a suggestion.
     expect(
-      cardAnswer(card, { answer: "stated", facts: touched }, [], prefill)
+      cardAnswer(
+        card,
+        { answer: "stated", facts: touched, changed },
+        [],
+        prefill
+      )
     ).toMatchObject({ suggested: [] })
   })
 
@@ -754,7 +764,8 @@ describe("an answer on a card", () => {
   it("states a details card's facts, only the step's own keys, each once, and never a skip", () => {
     const card = cardFor("assistant")
     const facts = FACTS.assistant as FactValue[]
-    expect(cardAnswer(card, { answer: "stated", facts }, [])).toEqual({
+    const changed = ["assistant.name", "assistant.tone"]
+    expect(cardAnswer(card, { answer: "stated", facts, changed }, [])).toEqual({
       kind: "facts",
       facts,
       persona: "stated",
@@ -765,7 +776,11 @@ describe("an answer on a card", () => {
     ).toMatchObject({ persona: "picked" })
     // Part of the card is an answer too; the step asks again for the rest.
     expect(
-      cardAnswer(card, { answer: "stated", facts: facts.slice(0, 1) }, [])
+      cardAnswer(
+        card,
+        { answer: "stated", facts: facts.slice(0, 1), changed },
+        []
+      )
     ).toEqual({
       kind: "facts",
       facts: facts.slice(0, 1),

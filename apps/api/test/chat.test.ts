@@ -323,7 +323,14 @@ const answerFor = (card: ToolPart): unknown => {
     return { answer: "chosen", ids: CHOSEN[step], other: null }
   }
   if (card.type === "tool-ask_details") {
-    return { answer: "stated", facts: DETAILS[step] }
+    // The owner typed the name and picked a tone; the pronouns stay as offered.
+    return step === "assistant"
+      ? {
+          answer: "stated",
+          facts: DETAILS[step],
+          changed: ["assistant.name", "assistant.tone"],
+        }
+      : { answer: "stated", facts: DETAILS[step] }
   }
   const fact = FACTS[step]
   return fact ? { answer: "stated", fact } : { answer: "skipped" }
