@@ -1,9 +1,11 @@
-import { ReadSkillOutput, SkillName } from "@workspace/contracts"
+import { readdirSync, readFileSync } from "node:fs"
+import { SkillName, SkillViewOutput } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import {
   indexOf,
   PROCEDURES,
   procedure,
+  readSkillFile,
   scheduledBy,
   skillsFor,
 } from "../src/index.ts"
@@ -19,17 +21,80 @@ const corrections = {
   ],
 }
 
+const ROOT = new URL("../cos/", import.meta.url)
+const dirs = readdirSync(ROOT)
+
+describe("skill files", () => {
+  it("bundles every skill directory, and only those", () => {
+    expect(PROCEDURES.map((p) => p.name).sort()).toEqual([...dirs].sort())
+  })
+
+  it.each(dirs)("%s is a well-formed SKILL.md", (dir) => {
+    const text = readFileSync(new URL(`${dir}/SKILL.md`, ROOT), "utf8")
+    const refs = readdirSync(new URL(`${dir}/`, ROOT)).includes("references")
+      ? readdirSync(new URL(`${dir}/references/`, ROOT))
+      : []
+    const read = readSkillFile(
+      text,
+      Object.fromEntries(
+        refs.map((f) => [
+          f.replace(/\.md$/, ""),
+          readFileSync(new URL(`${dir}/references/${f}`, ROOT), "utf8"),
+        ])
+      )
+    )
+    expect(read.name).toBe(dir)
+    expect(SkillName.safeParse(read.name).success).toBe(true)
+    expect(read.description).toMatch(/^Use (when|for|before) .+\.$/)
+    expect(read.description.length).toBeLessThanOrEqual(90)
+    expect(read.expertise.split(" ").length).toBeLessThanOrEqual(2)
+    expect(read.status).toHaveLength(2)
+    for (const line of read.status) {
+      expect(line.length).toBeLessThanOrEqual(50)
+      expect(line).toMatch(/^[A-Z][^.!?]*$/)
+    }
+    expect(read.body).toMatch(
+      /^# .+\n\n.+\n\n## When to use\n[\s\S]+\n## Procedure\n/
+    )
+    for (const part of read.parts) expect(part.when).toMatch(/^Read it when /)
+    expect(read.parts.map((p) => p.name).sort()).toEqual(
+      refs.map((f) => f.replace(/\.md$/, "")).sort()
+    )
+  })
+
+  it("refuses a listed part with no file, and a file nobody lists", () => {
+    const text = readFileSync(new URL("google-search/SKILL.md", ROOT), "utf8")
+    expect(() => readSkillFile(text, { connect: "x" })).toThrow(
+      /lists performance with no file/
+    )
+    expect(() =>
+      readSkillFile(text, { connect: "x", performance: "y", stray: "z" })
+    ).toThrow(/unlisted parts stray/)
+  })
+})
+
 describe("skills", () => {
-  it.each(PROCEDURES)("$name fits the index and read_skill's output", (p) => {
-    expect(SkillName.safeParse(p.name).success).toBe(true)
-    expect(p.description.length).toBeLessThanOrEqual(90)
+  it.each(PROCEDURES)("$name fits skill_view's output", (p) => {
     expect(
-      ReadSkillOutput.safeParse({
+      SkillViewOutput.safeParse({
         outcome: "skill",
         name: p.name,
         body: p.body,
+        parts: p.parts.map((x) => x.name),
+        status: p.status[0],
       }).success
     ).toBe(true)
+    for (const part of p.parts) {
+      expect(
+        SkillViewOutput.safeParse({
+          outcome: "skill",
+          name: p.name,
+          part: part.name,
+          body: part.body,
+          status: p.status[0],
+        }).success
+      ).toBe(true)
+    }
   })
 
   it("lists the CoS's procedures and none of the Developer's corrections", () => {
@@ -47,6 +112,9 @@ describe("skills", () => {
       "review-reply",
       "weekly-review",
     ])
+    expect(indexOf(cos)[0]).toBe(
+      "- web-address (domains): Use when the owner talks about a domain or their web address."
+    )
     expect(indexOf(cos).join("\n")).not.toContain("stock photos")
   })
 
@@ -73,5 +141,9 @@ describe("skills", () => {
       schedule: { kind: "weekly_report", rule: "0 8 * * 1" },
     })
     expect(scheduledBy("heartbeat")).toBeNull()
+    expect(procedure("cos", "weekly-review")?.schedule).toEqual({
+      kind: "weekly_report",
+      rule: "0 8 * * 1",
+    })
   })
 })

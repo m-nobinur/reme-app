@@ -4,8 +4,9 @@ import { fileURLToPath } from "node:url"
 import { isMainThread } from "node:worker_threads"
 
 /**
- * Lets the api's `import x from "./y.json"` load under bare node, as the
- * bundler does, for scripts that import the api's source:
+ * Lets the api's `import x from "./y.json"` and the skills' `.md` imports
+ * load under bare node, as the bundler does, for scripts that import the
+ * api's source:
  *
  *   node --import ./evals/json-imports.mjs --experimental-transform-types <script>
  */
@@ -15,6 +16,14 @@ export async function load(url, context, nextLoad) {
   if (url.endsWith(".json") && !context.importAttributes?.type) {
     const source = await readFile(fileURLToPath(url), "utf8")
     return { format: "json", source, shortCircuit: true }
+  }
+  if (url.endsWith(".md")) {
+    const text = await readFile(fileURLToPath(url), "utf8")
+    return {
+      format: "module",
+      source: `export default ${JSON.stringify(text)}`,
+      shortCircuit: true,
+    }
   }
   return nextLoad(url, context)
 }

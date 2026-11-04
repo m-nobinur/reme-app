@@ -13,7 +13,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
-import { scheduledBy } from "@workspace/skills"
+import { scheduledBy } from "@workspace/skills/registry"
 import { withKit } from "./domain-flow.ts"
 import { heartbeatJob } from "./heartbeat.ts"
 import { redriveQueued } from "./publish.ts"
