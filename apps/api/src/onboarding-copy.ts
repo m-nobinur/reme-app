@@ -165,6 +165,33 @@ const bare = (text: string) =>
       ""
     )
 
+/** The owner's "we" and "our" as the assistant says them back: "you" and "your". */
+const yours = (text: string) =>
+  text.replace(
+    /\b(we|our|ours|us)(?:'(ll|re|ve|d))?\b/gi,
+    (found, word: string, tail?: string) => {
+      const to = { we: "you", our: "your", ours: "yours", us: "you" }[
+        word.toLowerCase()
+      ] as string
+      const said = tail ? `${to}'${tail}` : to
+      return found.charAt(0) === found.charAt(0).toUpperCase()
+        ? capital(said)
+        : said
+    }
+  )
+
+/** What the business does not take on, as a list item reads: no lead-in, no closing stop. */
+const notTakenOn = (text: string) =>
+  lower(
+    yours(text)
+      .trim()
+      .replace(/[.!]+$/, "")
+      .replace(
+        /^(?:(?:you|i) (?:don'?t|do not|never|won'?t) (?:do|take on|cover|offer)|no|not)\s+/i,
+        ""
+      )
+  )
+
 /**
  * The business read back before the assistant's own setup, from the facts
  * exactly as held, one labelled bullet each, so the owner sees what was
@@ -174,16 +201,20 @@ export function recap(
   v: Voice,
   held: {
     services: readonly string[]
+    excluded: string | null
     area: string | null
     customers: string | null
+    questions: number | null
     phone: string | null
     email: string | null
   }
 ): string {
   const rows = [
     ["Services", listed(held.services.map(lower))],
-    ["Area", held.area && bare(held.area)],
+    ["Not taken on", held.excluded && notTakenOn(held.excluded)],
+    ["Area", held.area && yours(bare(held.area))],
     ["Customers", held.customers && lower(bare(held.customers))],
+    ["Quote form", held.questions ? `${held.questions} questions` : null],
     ["Contact", [held.phone, held.email].filter(Boolean).join(", ")],
   ].flatMap(([label, value]) => (value ? [`- **${label}:** ${md(value)}`] : []))
   return say(

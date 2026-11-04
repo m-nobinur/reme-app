@@ -1292,8 +1292,10 @@ export function recapOf(o: Onboarding): string {
   const phone = factValue(o.facts, "business.phone")?.e164
   return recap(voiceOf(o), {
     services: factValue(o.facts, "business.offerings")?.items ?? [],
+    excluded: factValue(o.facts, "business.disclaimer")?.text ?? null,
     area: factValue(o.facts, "service_area.text")?.text ?? null,
     customers: factValue(o.facts, "business.audience")?.text ?? null,
+    questions: factValue(o.facts, "quote.form")?.fields.length ?? null,
     phone: phone ? phoneText(phone) : null,
     email: factValue(o.facts, "business.email")?.address ?? null,
   })

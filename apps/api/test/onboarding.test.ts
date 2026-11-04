@@ -35,6 +35,7 @@ import {
   detailsCard,
   ended,
   factCard,
+  factValue,
   firstPalettes,
   ONBOARDING_GOAL,
   type Onboarding,
@@ -379,15 +380,22 @@ describe("the onboarding steps", () => {
       { key: "business.audience", value: { text: "Mostly families." } },
       {
         key: "service_area.text",
-        value: { text: "We cover Bristol and Bath." },
+        value: {
+          text: "We cover Bristol and Bath, and we'll go to Wells for our regulars.",
+        },
+      },
+      {
+        key: "business.disclaimer",
+        value: { text: "No offices or commercial sites." },
       },
       PHONE,
       EMAIL,
     ]
     const [said, card, ...rest] = onboardingStep(start({ facts }), counter())
     expect(rest).toEqual([])
+    const questions = factValue(facts, "quote.form")?.fields.length
     expect((said as { text: string }).text).toBe(
-      `Here's what I have for ${BUSINESS}:\n\n- **Services:** end of tenancy cleans, oven cleaning and MOT tests\n- **Area:** Bristol and Bath\n- **Customers:** mostly families\n- **Contact:** 01632 960001, hello@brightclean.invalid\n\nHave I got that right?`
+      `Here's what I have for ${BUSINESS}:\n\n- **Services:** end of tenancy cleans, oven cleaning and MOT tests\n- **Not taken on:** offices or commercial sites\n- **Area:** Bristol and Bath, and you'll go to Wells for your regulars\n- **Customers:** mostly families\n- **Quote form:** ${questions} questions\n- **Contact:** 01632 960001, hello@brightclean.invalid\n\nHave I got that right?`
     )
     expect(card).toMatchObject({
       type: "tool-ask_open",
@@ -1605,8 +1613,10 @@ const lines = (v: Voice): [string, string][] => [
     "recap",
     recap(v, {
       services: ["End of tenancy cleans", "Oven cleaning", "Regular cleans"],
+      excluded: "We don't take on commercial work.",
       area: "Bristol and about 15 miles out.",
       customers: "Mostly families, plus two letting agents",
+      questions: 6,
       phone: "0117 496 0321",
       email: "hello@freshstart.invalid",
     }),
@@ -1707,8 +1717,10 @@ describe("the onboarding copy", () => {
     expect(
       recap(voice({ business: "Sparkle_Clean" }), {
         services: ["*Deep* cleans", "Ovens"],
+        excluded: null,
         area: null,
         customers: "Mostly families — and two letting agents",
+        questions: null,
         phone: null,
         email: "first_last@sparkle.invalid",
       })
