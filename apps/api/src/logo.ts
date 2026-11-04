@@ -851,6 +851,7 @@ export async function drawRound(
               brief,
               style,
               changes: manifest.changes as string,
+              take: i,
             })
           : logoPrompt({
               subject: manifest.subject,
