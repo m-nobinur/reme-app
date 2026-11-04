@@ -6,6 +6,7 @@ import {
   CosEvent,
   CosMessage,
   CosPrefix,
+  CosSkill,
   CosStep,
   CosToolResult,
   CosToolStarted,
@@ -453,6 +454,8 @@ export type Opening = {
   prefix: CosPrefix | null
   /** Our own records for the log before the messages, such as onboarding's hand-over. */
   events?: CosEvent[]
+  /** Procedures code loaded for this turn, logged after the events. */
+  skills?: CosSkill[]
   messages: { message: CosMessage["message"]; taint: TaintLabel[] }[]
   context: CosContext
   contextTaint: TaintLabel[]
@@ -492,6 +495,11 @@ export async function beginTurn(
       type: "cos.event",
       payload: CosEvent.parse(event),
       taint: ["inferred"] as TaintLabel[],
+    })),
+    ...(opening.skills ?? []).map((skill) => ({
+      type: "cos.skill",
+      payload: CosSkill.parse(skill),
+      taint: [] as TaintLabel[],
     })),
     ...opening.messages.map(({ message, taint }) => ({
       type: "cos.message",

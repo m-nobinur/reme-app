@@ -73,6 +73,8 @@ import {
   SaveCorrectionOutput,
   ScheduleSkillInput,
   ScheduleSkillOutput,
+  SKILL_BODY_MAX,
+  SkillName,
 } from "./skills.ts"
 import { OwnerTask, TaskKind, TipKind } from "./task.ts"
 import { Text, ToolStep } from "./text.ts"
@@ -1255,6 +1257,17 @@ export const CosEvent = z.strictObject({
   message_id: ConversationMessage.shape.id.optional(),
 })
 
+/**
+ * The `cos.skill` payload: one of the CoS's procedures, loaded by code into
+ * the session's history because state made it certainly relevant (plan §2),
+ * so the model follows it without a read_skill call.
+ */
+export const CosSkill = z.strictObject({
+  name: SkillName,
+  body: Text(SKILL_BODY_MAX),
+})
+
+export type CosSkill = z.infer<typeof CosSkill>
 export type CosWorkspace = z.infer<typeof CosWorkspace>
 export type CosFacts = z.infer<typeof CosFacts>
 export type CosChangeRequest = z.infer<typeof CosChangeRequest>

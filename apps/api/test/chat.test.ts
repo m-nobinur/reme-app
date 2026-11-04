@@ -1424,6 +1424,12 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           (e.payload as { source: string }).source === "handover"
       )
       expect(handovers).toHaveLength(1)
+      // The top open item's procedure, loaded once for both turns.
+      expect(
+        logged.flatMap((e) =>
+          e.type === "cos.skill" ? [(e.payload as { name: string }).name] : []
+        )
+      ).toEqual(["web-address"])
       expect(handovers[0]?.payload).toHaveProperty(
         "summary",
         expect.stringMatching(

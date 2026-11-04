@@ -6,7 +6,13 @@ import {
 } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import { contextOf } from "../src/cos/agent.ts"
-import { cardState, handoverNote, openItems } from "../src/cos/notes.ts"
+import { CONTEXT_POLICY, deriveCosMessages } from "../src/cos/history.ts"
+import {
+  cardState,
+  handoverNote,
+  openItems,
+  skillsDue,
+} from "../src/cos/notes.ts"
 
 const NOW = new Date("2026-11-05T10:00:00.000Z")
 const EMPTY: CosWorkspace = {
@@ -180,5 +186,94 @@ describe("the hand-over note", () => {
       /Skipped by the owner or left for later: what sets the business apart\./
     )
     expect(note).toMatch(/the owner chose Skip for now\./)
+  })
+})
+
+describe("the procedures code loads", () => {
+  const building = {
+    assignment_id: crypto.randomUUID(),
+    kind: "site.build" as const,
+    state: "implementing" as const,
+    lane: "full" as const,
+    goal: "Build my website",
+    version: null,
+  }
+
+  it("loads the top open item's on the hand-over, and what the owner's message is about", () => {
+    expect(skillsDue({ workspace: EMPTY, handover: true })).toEqual([
+      "web-address",
+    ])
+    expect(
+      skillsDue({ workspace: EMPTY, said: "Help me set up my web address" })
+    ).toEqual(["web-address"])
+    expect(skillsDue({ workspace: EMPTY, said: ADDRESS_ASK.no })).toEqual([
+      "web-address",
+    ])
+    expect(
+      skillsDue({ workspace: EMPTY, said: "Can I get on Google?" })
+    ).toEqual(["google-search"])
+    expect(skillsDue({ workspace: EMPTY, said: "Thanks!" })).toEqual([])
+  })
+
+  it("loads a task's, a build's and a waiting review's while they are under way, and a schedule's own", () => {
+    const choosing = address({
+      steps: [step("find_out", "done"), step("choose", "blocked")],
+    })
+    expect(
+      skillsDue({
+        workspace: {
+          ...EMPTY,
+          tasks: [choosing],
+          builds: [building],
+          approvals: [{ version: 1, expires_at: NOW.toISOString() }],
+        },
+        scheduled: "weekly-review",
+      })
+    ).toEqual(["weekly-review", "web-address", "builds", "reviews"])
+  })
+
+  it("reads a loaded procedure back as one of the history's events, never the owner's turn", () => {
+    const turn = "01JD0000000000000000000000"
+    const rows = [
+      {
+        seq: 0,
+        type: "cos.skill",
+        payload: { name: "web-address", body: "Web address: the rules." },
+      },
+      {
+        seq: 1,
+        type: "cos.message",
+        payload: {
+          turn_id: turn,
+          message: {
+            id: "u1",
+            role: "user",
+            parts: [{ type: "text", text: "Hi" }],
+          },
+        },
+      },
+      {
+        seq: 2,
+        type: "cos.context",
+        payload: {
+          turn_id: turn,
+          prefix_sha256: "a".repeat(64),
+          context_policy_version: CONTEXT_POLICY.version,
+          mode: "ask",
+          active_tools: [],
+          text: "Mode: ask.",
+          reserved_usd: 0,
+        },
+      },
+    ]
+    const { messages } = deriveCosMessages(rows, CONTEXT_POLICY)
+    expect(messages.map((m) => m.id)).toEqual([
+      "event:0",
+      `context-${turn}`,
+      "u1",
+    ])
+    expect(JSON.stringify(messages[0])).toContain(
+      "The web-address procedure, loaded by code"
+    )
   })
 })

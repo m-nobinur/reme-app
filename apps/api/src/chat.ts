@@ -9,6 +9,7 @@ import {
   CosChangeRequest,
   type CosEvent,
   type CosRoute,
+  type CosSkill,
   type CosToolName,
   type CosTurn,
   type CosWorkspace,
@@ -43,6 +44,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
+import { procedure } from "@workspace/skills"
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -92,6 +94,7 @@ import {
   cardState,
   handoverNote,
   openItems,
+  skillsDue,
 } from "./cos/notes.ts"
 import { retrying } from "./cos/retry.ts"
 import {
@@ -1119,7 +1122,14 @@ export async function chat(
       const { workspace, facts, profile } =
         loaded ?? (await loadWorkspace(tools))
       const granted = await grantedKinds(db)
-      const notes = await turnNotes(db, id, workspace, zone ?? null, log.fresh)
+      const notes = await turnNotes(
+        db,
+        id,
+        workspace,
+        zone ?? null,
+        log.fresh,
+        turn.kind === "message" ? turn.text : null
+      )
       const context = contextOf(
         mode,
         workspace,
@@ -1140,6 +1150,7 @@ export async function chat(
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
         events: notes.events,
+        skills: notes.skills,
         messages: opening.messages,
         context: {
           turn_id: cosTurn.turnId,
@@ -1930,18 +1941,41 @@ async function addressCardOf(
   return row && stack ? cardState(stack, row.here) : null
 }
 
+/** A procedure code loaded is not loaded again within this many CoS turns. */
+const SKILL_TURNS = 3
+
+/** The procedures this session logged within its last `SKILL_TURNS` CoS turns, since its last compaction. */
+async function recentSkills(db: OrgScopedDb, id: string): Promise<string[]> {
+  const rows = await db.execute<{ name: string }>(sql`
+    select distinct s.payload->>'name' as name from ${events} s
+    where s.session_id = ${id} and s.type = 'cos.skill'
+      and s.seq > coalesce((select c.seq from ${events} c
+        where c.session_id = ${id} and c.type = 'cos.context'
+          and c.payload->>'context_policy_version' not like 'onboarding-%'
+        order by c.seq desc offset ${SKILL_TURNS - 1} limit 1), -1)
+      and s.seq > coalesce((select (k.payload->'replaced_range'->>'to_seq')::bigint
+        from ${events} k where k.session_id = ${id} and k.type = 'cos.compaction'
+        order by k.seq desc limit 1), -1)`)
+  return rows.map((r) => r.name)
+}
+
 /**
  * What code tells a CoS turn about where things stand (`notes.ts`): the open
- * items every turn, and on the first CoS turn of an onboarding conversation
- * the hand-over, as its context's lines and as the `cos.event` the turn logs.
+ * items every turn; on the first CoS turn of an onboarding conversation the
+ * hand-over, as the `cos.event` the turn logs; and the procedures state makes
+ * certain (`skillsDue`), as `cos.skill`s, each once within `SKILL_TURNS`.
  */
 export async function turnNotes(
   db: OrgScopedDb,
   id: string,
   workspace: CosWorkspace,
   zone: string | null,
-  fresh: boolean
-): Promise<{ lines: string[]; events: CosEvent[] }> {
+  fresh: boolean,
+  /** The owner's typed message, or null for a turn they did not type. */
+  said: string | null = null,
+  /** The procedure a schedule started this turn for. */
+  scheduled: string | null = null
+): Promise<{ lines: string[]; events: CosEvent[]; skills: CosSkill[] }> {
   const card = await addressCardOf(db, id)
   const lines = openItems(workspace, card, new Date(), zone)
   const [kind] = fresh
@@ -1950,7 +1984,15 @@ export async function turnNotes(
         .from(conversations)
         .where(eq(conversations.id, id))
     : []
-  if (kind?.kind !== "onboarding") return { lines, events: [] }
+  const handover = kind?.kind === "onboarding"
+  const loaded = await recentSkills(db, id)
+  const skills = skillsDue({ workspace, handover, said, scheduled }).flatMap(
+    (name) => {
+      const found = loaded.includes(name) ? null : procedure("cos", name)
+      return found ? [{ name, body: found.body }] : []
+    }
+  )
+  if (!handover) return { lines, events: [], skills }
   const [progress, facts] = await Promise.all([
     readScript(db, id),
     readFacts(db),
@@ -1968,6 +2010,7 @@ export async function turnNotes(
   return {
     lines,
     events: [{ source: "handover", summary, evidence: [], wake: false }],
+    skills,
   }
 }
 

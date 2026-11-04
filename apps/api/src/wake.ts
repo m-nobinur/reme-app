@@ -262,7 +262,15 @@ export async function wakeTurn(
     const state = await sessionState(db, sessionId, prefix.sha256, null)
     if (state.frozen) return "frozen" as const
     if (!(await withinCap(db, job.orgId, reserved))) return "over_cap" as const
-    const notes = await turnNotes(db, sessionId, workspace, zone, state.fresh)
+    const notes = await turnNotes(
+      db,
+      sessionId,
+      workspace,
+      zone,
+      state.fresh,
+      null,
+      job.skill ?? null
+    )
     const context = contextOf(
       "ask",
       workspace,
@@ -283,6 +291,7 @@ export async function wakeTurn(
     await beginTurn(db, turn, {
       prefix: state.prefixLogged ? null : prefix,
       events: notes.events,
+      skills: notes.skills,
       messages: [],
       context: {
         turn_id: turn.turnId,

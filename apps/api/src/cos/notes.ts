@@ -211,3 +211,57 @@ export function openItems(
     `- ${cardLine(card)}`,
   ]
 }
+
+/** An owner message about the website's own address: a card reply, or naming a domain. */
+const ABOUT_ADDRESS =
+  /\b(?:domains?|web ?address|website address|own address)\b|\.(?:co\.uk|uk|com)\b|^(?:Yes, I have one|Yes, it's|No, help me get one)/i
+const ABOUT_GOOGLE = /\b(?:google|search console)\b/i
+
+/** Address stages with work under way, where the web-address procedure is certain. */
+const UNDER_WAY = new Set([
+  "choosing",
+  "paying",
+  "buying_elsewhere",
+  "connecting",
+])
+
+/**
+ * The procedures state makes certain for this turn (plan §2), by name: the
+ * top open item's on the hand-over, the address or Google one when the
+ * owner's message is about it or its task is under way, builds while one
+ * runs or stopped, reviews while a draft waits, and a scheduled run's own.
+ */
+export function skillsDue({
+  workspace,
+  handover = false,
+  said = null,
+  scheduled = null,
+}: {
+  workspace: CosWorkspace
+  handover?: boolean
+  said?: string | null
+  scheduled?: string | null
+}): string[] {
+  const due = new Set<string>(scheduled ? [scheduled] : [])
+  const { stage } = addressStage(workspace.tasks ?? [])
+  const google = workspace.tasks?.find((t) => t.kind === "google")
+  if (handover) due.add(stage === "live" ? "google-search" : "web-address")
+  if (
+    (said && ABOUT_ADDRESS.test(said)) ||
+    UNDER_WAY.has(stage) ||
+    (workspace.tips?.length ?? 0) > 0
+  )
+    due.add("web-address")
+  if ((said && ABOUT_GOOGLE.test(said)) || google?.state === "active")
+    due.add("google-search")
+  const inReview = (b: CosWorkspace["builds"][number]) =>
+    IN_REVIEW.has(STATE[b.state])
+  if (
+    workspace.builds.some((b) => !inReview(b)) ||
+    (workspace.stopped?.length ?? 0) > 0
+  )
+    due.add("builds")
+  if (workspace.approvals.length > 0 || workspace.builds.some(inReview))
+    due.add("reviews")
+  return [...due]
+}
