@@ -2680,9 +2680,15 @@ async function callEvents(turn: Turn, calls: PlanCall[]) {
 
 type PlanEnded = "answered" | "fallback" | "gated" | "error"
 
+/** As `CosTurn` bounds them. */
+const REASONS_MAX = 8
+const REASON_MAX = 300
+
 /**
  * The planner turn's `cos.turn`: `fallback` when the script answered it,
- * `gated` when it answered with Jev's decision and the planner was stopped.
+ * `gated` when it answered with Jev's decision and the planner was stopped,
+ * `refused_after_stream` when every plan was refused after words showed and
+ * code showed the waiting card again.
  */
 function planEnd(
   turn: Turn,
@@ -2694,7 +2700,12 @@ function planEnd(
     outcome.calls.reduce((total, c) => total + pick(c), 0)
   const ran = {
     turn_id: turn.turnId,
-    model: modelId,
+    // The model that answered, which OpenRouter's fallback can change.
+    model:
+      outcome.calls
+        .map((c) => c.model)
+        .filter(Boolean)
+        .at(-1) ?? modelId,
     usage: {
       input_tokens: sum((c) => c.usage.input_tokens),
       cached_input_tokens: sum((c) => c.usage.cached_input_tokens),
@@ -2711,9 +2722,19 @@ function planEnd(
         ? outcome.calls.reduce((total, c) => total + c.ms, 0)
         : null),
   }
-  return ended === "fallback"
-    ? { ...ran, outcome: "fallback", reason: "provider" }
-    : { ...ran, outcome: ended }
+  if (ended === "fallback") {
+    return { ...ran, outcome: "fallback", reason: "provider" }
+  }
+  if (ended === "answered" && outcome.ok && outcome.refused) {
+    return {
+      ...ran,
+      outcome: "refused_after_stream",
+      reasons: outcome.refused
+        .slice(0, REASONS_MAX)
+        .map((r) => r.slice(0, REASON_MAX)),
+    }
+  }
+  return { ...ran, outcome: ended }
 }
 
 /** The words of an error chunk the owner sees when a planned turn fails after it began. */
@@ -2888,7 +2909,8 @@ async function plannedTurn(
             }
             return planFacts(db, held, job, checked.plan, p)
           })
-          return written?.keys ?? []
+          if (!written) return []
+          return written.ok ? written.keys : { errors: written.errors }
         } catch (error) {
           console.error(
             JSON.stringify({
@@ -3115,11 +3137,11 @@ async function startPlannedBuild(
  * answers) when it no longer holds.
  */
 /**
- * A plan's facts and a card answer's, written as the owner's, with the
- * state the plan was checked again against and the keys written. Null when
- * the plan no longer fits. Its message is not checked again: `planTurn`
- * checked it against the turn's state, and facts this function wrote
- * earlier in the turn would make a correction read as no change.
+ * A plan's facts and a card answer's, written as the owner's, with the keys
+ * written, or the errors of the plan checked again. It is checked against
+ * the facts as the turn began, with the card's answer (`job.state`): facts
+ * this function wrote earlier in the turn would make a correction read as
+ * no change (2026-11-04). Its message is not checked again.
  */
 async function planFacts(
   db: OrgScopedDb,
@@ -3134,12 +3156,8 @@ async function planFacts(
   const answered =
     turn.kind === "results" ? answerOf(held, turn, onboarding) : null
   if (turn.kind === "results" && !answered) throw new Refusal(stale())
-  const state: PlanState = {
-    ...job.state,
-    onboarding: answered ? withAnswer(onboarding, answered.meant) : onboarding,
-  }
-  const rechecked = checkPlan(plan, state, false)
-  if (!rechecked.ok) return null
+  const rechecked = checkPlan(plan, job.state, false)
+  if (!rechecked.ok) return rechecked
   const c = rechecked.checked
   const card = answered?.meant.kind === "facts" ? answered.meant.facts : []
   const byKey = new Map(
@@ -3155,8 +3173,8 @@ async function planFacts(
     await stateFacts(db, p.owner, c.chosen, undefined, "inferred")
   }
   return {
+    ok: true as const,
     answered,
-    state,
     c,
     keys: [...byKey.keys(), ...c.chosen.map((f) => f.key)],
   }
@@ -3170,11 +3188,9 @@ async function commitPlan(
   p: Planning
 ): Promise<Staged | null> {
   const facts = await planFacts(db, held, job, outcome.checked.plan, p)
-  if (!facts) return null
+  if (!facts.ok) return null
   const { answered, c } = facts
   const { turn } = p.request
-  // The turn's own start, not `state`: facts written mid-stream are already
-  // in that read, which would hide what this turn changed.
   const parts = planParts(c, job.state, p.newId)
   // A build's message goes after its outcome, unless it already streamed.
   const step =

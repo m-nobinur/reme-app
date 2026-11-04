@@ -11794,6 +11794,57 @@ export interface components {
         }
       | {
           /** @constant */
+          outcome: "refused_after_stream"
+          reasons: string[]
+          turn_id: string
+          model: string
+          /** @enum {string} */
+          route?: "owner_turn" | "card_click" | "deferred"
+          usage: {
+            input_tokens: number
+            cached_input_tokens: number
+            output_tokens: number
+            cache_write_tokens?: number
+            reasoning_tokens?: number
+          }
+          cost_usd: number
+          tools: (
+            | "get_workspace"
+            | "get_facts"
+            | "get_change"
+            | "request_change"
+            | "answer_question"
+            | "create_reminder"
+            | "update_reminder"
+            | "delete_reminder"
+            | "set_time_zone"
+            | "record_review"
+            | "check_domain"
+            | "connect_domain"
+            | "remove_domain"
+            | "find_domain"
+            | "buy_domain"
+            | "connect_google"
+            | "get_search_performance"
+            | "get_indexing"
+            | "remember"
+            | "put_off"
+            | "inspect_domain"
+            | "domain_bought"
+            | "offer_grant"
+            | "read_skill"
+            | "save_correction"
+            | "schedule_skill"
+            | "ask_developer"
+            | "get_review"
+            | "read_site"
+            | "get_preview"
+          )[]
+          steps: number
+          first_chunk_ms: number | null
+        }
+      | {
+          /** @constant */
           outcome: "error"
           turn_id: string
           model: string

@@ -929,6 +929,16 @@ export const CosTurn = z.discriminatedUnion("outcome", [
   }),
   /** An onboarding turn the script answered from Jev's decision, its planner stopped. */
   z.strictObject({ outcome: z.literal("gated"), ...Ran }),
+  /**
+   * An onboarding turn whose every plan was refused after the owner read
+   * some of its message; code showed the waiting card again. `reasons` are
+   * the checks' findings.
+   */
+  z.strictObject({
+    outcome: z.literal("refused_after_stream"),
+    reasons: z.array(z.string().max(300)).max(8),
+    ...Ran,
+  }),
   z.strictObject({ outcome: z.literal("error"), ...Ran }),
   z.strictObject({ outcome: z.literal("integrity"), ...Ran }),
   /** Cut off by its time limit after content streamed; its message is kept, marked `stopped`. */

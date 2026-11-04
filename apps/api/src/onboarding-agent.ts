@@ -152,6 +152,11 @@ export const PLANNER = {
    * same request sent raw never passed 5 s; the slow mode is a host stalling.
    */
   hedgeMs: 5_000,
+  /**
+   * A call that has begun writing and then sends nothing for this long is
+   * stopped and asked once more. Unmeasured: check in the live test.
+   */
+  stallMs: 15_000,
   totalMs: PLANNER_TURN_MS,
   /**
    * The newest conversation rows the model reads. The facts and the
@@ -1470,11 +1475,14 @@ const describe = (move: Move) =>
 /**
  * A streamed turn's status (`planTurn`): `send` writes one status part, and
  * `commit` writes a checked plan's facts, with any card answer's, and
- * returns the keys it wrote.
+ * returns the keys it wrote, or the errors of its own check, which refuse
+ * the plan as `checkPlan`'s do.
  */
 export type PlanStatus = {
   send: (status: OnboardingStatus) => void
-  commit: (checked: Checked) => Promise<readonly string[]>
+  commit: (
+    checked: Checked
+  ) => Promise<readonly string[] | { errors: string[] }>
 }
 
 const isPlanFactKey = (key: string): key is PlanFactKey =>
@@ -1491,16 +1499,20 @@ export type PlanCall = {
   ms: number
   /** The checks' findings, or the failure, for a call whose plan was refused. */
   errors: string[]
+  /** The model that answered, as the provider named it: OpenRouter's fallback shows here. */
+  model?: string
 }
 
 /**
  * A turn's planning. `shown` is the message text the owner has already
  * read, sent through `onSay` as it streamed, whatever the outcome: a
  * fallback after it must keep it. `firstChunkMs` is when its first words
- * went, from the turn's start, or null when none did.
+ * went, from the turn's start, or null when none did. `refused` holds why
+ * every call was refused when the plan is code's own after words showed
+ * (`reshown`).
  */
 export type PlanOutcome = (
-  | { ok: true; checked: Checked }
+  | { ok: true; checked: Checked; refused?: string[] }
   | { ok: false; reason: "invalid" | "provider" | "timeout" }
 ) & { calls: PlanCall[]; shown: string; firstChunkMs: number | null }
 
@@ -1621,10 +1633,15 @@ export async function warmPlanner(model: LanguageModel): Promise<void> {
 }
 
 /**
- * The turn's plan: up to `PLANNER.attempts` calls, retried only while a
- * whole call still fits. A provider error is asked once more; a second, or a
- * timeout, hands the turn to the script, since more retries only keep the
- * owner waiting. A plan refused only for its message is `salvaged`.
+ * The turn's plan: up to `PLANNER.attempts` refused plans, retried only
+ * while a whole call still fits. Provider errors and timeouts have budgets
+ * of their own: a provider error is asked once more (OpenRouter has already
+ * tried the fallback model), and a call that timed out or went quiet after
+ * it began writing once more, continuing what was read; a second, or a
+ * timeout before any word, hands the turn to the script, since more retries
+ * only keep the owner waiting. A plan refused only for its message is
+ * `salvaged`; once words have shown and every plan was refused, the last
+ * resort is `reshown`.
  *
  * With `onSay`, the message streams as the model writes it, a whole
  * sentence at a time, and never a word the checks would refuse later:
@@ -1644,13 +1661,20 @@ export async function warmPlanner(model: LanguageModel): Promise<void> {
  * With `status` as well, what the plan is on goes out before its message
  * (`OnboardingStatus`): a fact it stated once `facts` is written, then its
  * move once `next` is, and when the plan passes its checks its facts are
- * committed first, so that status names the keys a read already holds.
+ * committed first, so that status names the keys a read already holds. A
+ * commit that refuses the plan refuses it as the checks do, inside this
+ * loop.
  */
 export async function planTurn(
   model: LanguageModel,
   price: Price,
   s: PlanState,
-  limits: { callMs: number; totalMs: number; hedgeMs?: number } = PLANNER,
+  limits: {
+    callMs: number
+    totalMs: number
+    hedgeMs?: number
+    stallMs?: number
+  } = PLANNER,
   onSay?: (text: string) => void,
   cancel?: AbortSignal,
   status?: PlanStatus
@@ -1677,16 +1701,29 @@ export async function planTurn(
   const tell = (part: OnboardingStatus) => {
     if (!cancel?.aborted) status?.send(part)
   }
-  let last: OnboardingPlan | null = null
+  const plans: OnboardingPlan[] = []
   let providerRetried = false
+  let stallRetried = false
   let doingShown = false
-  for (let attempt = 0; attempt < PLANNER.attempts; attempt++) {
+  const stallMs = limits.stallMs ?? PLANNER.stallMs
+  // The next call reads its last answer and exactly why it went no further.
+  const feedBack = (raw: string, what: string, errors: string[]) => {
+    const heard = out.shown
+      ? `\nThe owner has already read the start of your message: ${JSON.stringify(out.shown)}. say must begin with exactly that text, then go on from it.`
+      : ""
+    messages.push(
+      { role: "assistant", content: raw || "(no answer)" },
+      {
+        role: "user",
+        content: `${what}, so ${out.shown ? "nothing more" : "nothing"} was sent to the owner:\n- ${errors.join("\n- ")}${heard}\nWrite the whole plan again with these fixed.`,
+      }
+    )
+  }
+  for (let refusals = 0; refusals < PLANNER.attempts; ) {
     const left = limits.totalMs - (Date.now() - began)
-    if (left <= 1_000 || cancel?.aborted) {
-      return { ok: false, reason: "timeout", calls, ...out }
-    }
+    if (cancel?.aborted) return { ok: false, reason: "timeout", calls, ...out }
     // A retry needs room for a whole call, or the owner only waits longer.
-    if (attempt > 0 && left < RETRY_ROOM_MS) break
+    if (left <= 1_000 || (calls.length > 0 && left < RETRY_ROOM_MS)) break
     const sent = [...messages]
     const started = Date.now()
     const signal = AbortSignal.any([
@@ -1696,7 +1733,19 @@ export async function planTurn(
     let raw = ""
     let usage: Usage = NO_USAGE
     let cost = 0
+    let answeredBy: string | undefined
     let errors: string[] = []
+    // This call's facts went through `status.commit`, and what it refused.
+    let committed = false
+    let commitErrors: string[] | null = null
+    const commit = async (c: Checked): Promise<readonly string[]> => {
+      if (!status || committed || c.plan.next.kind === "start_build") return []
+      committed = true
+      const written = await status.commit(c)
+      if (Array.isArray(written)) return written
+      commitErrors = (written as { errors: string[] }).errors
+      return []
+    }
     // This attempt's calls, and whether each began writing: one stopped
     // before its first byte bills nothing (measured 2026-10-26).
     const begun: { wrote: boolean }[] = []
@@ -1739,10 +1788,11 @@ export async function planTurn(
         }
         const { next } = checked.checked.plan
         // A build's facts are written with it, after its message is held.
-        const written =
-          status && next.kind !== "start_build"
-            ? await status.commit(checked.checked)
-            : []
+        const written = await commit(checked.checked)
+        if (commitErrors) {
+          gate = "shut"
+          return
+        }
         tell({
           on: {
             kind: "next",
@@ -1793,12 +1843,23 @@ export async function planTurn(
         return c
       }
       type Call = ReturnType<typeof begin>
+      // A call that began writing and then goes quiet is stopped, as a
+      // timeout stops it, so its retry still fits in the turn.
+      const nextPart = async (c: Call) => {
+        if (!c.wrote) return c.parts.next()
+        const quiet = setTimeout(() => c.stop.abort(), stallMs)
+        try {
+          return await c.parts.next()
+        } finally {
+          clearTimeout(quiet)
+        }
+      }
       // A call's parts up to its first text, or its end, whichever comes
       // first. Its thoughts' headings go out as they come.
       const opening = async (c: Call) => {
         const seen = []
         for (;;) {
-          const next = await c.parts.next()
+          const next = await nextPart(c)
           if (next.done) return { c, seen }
           seen.push(next.value)
           if (next.value.type === "reasoning-delta") c.think(next.value.text)
@@ -1834,7 +1895,7 @@ export async function planTurn(
       }
       for (const part of won.seen) await handle(part)
       for (;;) {
-        const next = await won.c.parts.next()
+        const next = await nextPart(won.c)
         if (next.done) break
         await handle(next.value)
       }
@@ -1843,6 +1904,7 @@ export async function planTurn(
         providerMetadata: await won.c.result.providerMetadata,
       }
       usage = usageOf(step.usage)
+      answeredBy = (await won.c.result.response).modelId
       // A raced call that began writing may still bill, so it counts at its worst.
       const kept = won.c
       cost =
@@ -1855,6 +1917,7 @@ export async function planTurn(
         (error instanceof Error &&
           (error.name === "TimeoutError" || error.name === "AbortError"))
       const chars = instructions.length + JSON.stringify(sent).length
+      const wrote = begun.some((c) => c.wrote)
       calls.push({
         messages: sent,
         raw,
@@ -1864,11 +1927,26 @@ export async function planTurn(
         ms: Date.now() - started,
         errors: [timedOut ? "timeout" : "provider error"],
       })
-      // A 429 or 5xx is often passing, so it gets one more try; a timeout does not.
       const room = limits.totalMs - (Date.now() - began)
+      // A 429 or 5xx is often passing, so it gets one more try.
       if (!timedOut && !providerRetried && room >= RETRY_ROOM_MS) {
         providerRetried = true
         await new Promise((resolve) => setTimeout(resolve, PROVIDER_PAUSE_MS))
+        continue
+      }
+      // A call cut off mid-answer gets one more, which continues what was
+      // read; one that never began would only keep the owner waiting.
+      if (
+        timedOut &&
+        wrote &&
+        !stallRetried &&
+        !cancel?.aborted &&
+        room >= RETRY_ROOM_MS
+      ) {
+        stallRetried = true
+        feedBack(raw, "That answer was cut off before it ended", [
+          "the answer stopped before it was finished",
+        ])
         continue
       }
       return {
@@ -1881,10 +1959,12 @@ export async function planTurn(
 
     const read = planOf(raw)
     if ("plan" in read) {
-      last = read.plan
+      plans.push(read.plan)
       const checked = checkPlan(read.plan, s)
       const said = read.plan.say.trim()
-      if (checked.ok && said.startsWith(out.shown)) {
+      const fits = checked.ok && said.startsWith(out.shown)
+      if (fits) await commit(checked.checked)
+      if (fits && !commitErrors) {
         // A held message waits for its parts, unless some of it is read.
         if (out.shown || !paced(checked.checked)) {
           show(said.slice(out.shown.length))
@@ -1896,14 +1976,15 @@ export async function planTurn(
           costUsd: cost,
           ms: Date.now() - started,
           errors: [],
+          model: answeredBy,
         })
         return { ok: true, checked: checked.checked, calls, ...out }
       }
-      errors = checked.ok
-        ? [
+      errors = !checked.ok
+        ? checked.errors
+        : (commitErrors ?? [
             `say must begin with exactly the words the owner has already read: ${JSON.stringify(out.shown)}`,
-          ]
-        : checked.errors
+          ])
     } else {
       errors = read.errors
     }
@@ -1914,22 +1995,23 @@ export async function planTurn(
       costUsd: cost,
       ms: Date.now() - started,
       errors,
+      model: answeredBy,
     })
-    const heard = out.shown
-      ? `\nThe owner has already read the start of your message: ${JSON.stringify(out.shown)}. say must begin with exactly that text, then go on from it.`
-      : ""
-    messages.push(
-      { role: "assistant", content: raw || "(no answer)" },
-      {
-        role: "user",
-        content: `That plan was refused, so ${out.shown ? "nothing more" : "nothing"} was sent to the owner:\n- ${errors.join("\n- ")}${heard}\nWrite the whole plan again with these fixed.`,
-      }
-    )
+    refusals++
+    feedBack(raw, "That plan was refused", errors)
   }
+  const last = plans.at(-1)
   const kept = last && !cancel?.aborted ? salvaged(last, s, out.shown) : null
   if (kept) {
     if (out.shown || !paced(kept)) show(kept.plan.say.slice(out.shown.length))
     return { ok: true, checked: kept, calls, ...out }
+  }
+  // What was read stays, and code shows what the turn needed.
+  const again =
+    out.shown && !cancel?.aborted ? reshown(plans, s, out.shown) : null
+  if (again) {
+    const refused = [...new Set(calls.flatMap((c) => c.errors))]
+    return { ok: true, checked: again, refused, calls, ...out }
   }
   return { ok: false, reason: "invalid", calls, ...out }
 }
@@ -1989,6 +2071,41 @@ export function salvaged(
     shown ? `${shown.trimEnd()}\n\n${ask}` : ask,
   ]) {
     const checked = checkPlan({ ...plan, say }, s)
+    if (checked.ok) return checked.checked
+  }
+  return null
+}
+
+/**
+ * The last resort once the owner has read some of the message and every
+ * plan was refused: what they read, then the card that was waiting shown again,
+ * with the facts of the newest plan whose facts still fit, so a recap
+ * shown again holds the change the words named. Null when no card was
+ * waiting; the script then answers after what was read. Observed
+ * 2026-11-04: "Here's the recap with that in." then "Sorry, I didn't
+ * quite catch that." and no recap.
+ */
+export function reshown(
+  plans: readonly OnboardingPlan[],
+  s: PlanState,
+  shown: string
+): Checked | null {
+  if (s.input.kind !== "message" || !s.pending) return null
+  const tried: Pick<OnboardingPlan, "facts" | "chosen_for_owner">[] = [
+    ...[...plans].reverse(),
+    { facts: {}, chosen_for_owner: [] },
+  ]
+  for (const { facts, chosen_for_owner } of tried) {
+    const checked = checkPlan(
+      {
+        facts,
+        chosen_for_owner,
+        pending_card: "unanswered",
+        next: { kind: "answer_only" },
+        say: shown.trim(),
+      },
+      s
+    )
     if (checked.ok) return checked.checked
   }
   return null
@@ -2057,6 +2174,10 @@ export function planParts(
         plan.pending_card === "unanswered"
         ? [
             ...lead,
+            ...(s.pending.type === "tool-ask_open" &&
+            (s.pending.input as AskOpenInput).about === "recap"
+              ? [text(recapOf(after))]
+              : []),
             s.pending.type === "tool-ask_design"
               ? designCard(after, newId, trayLogoPath(s.pending))
               : call(s.pending.type, s.pending.input, newId),

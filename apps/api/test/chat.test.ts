@@ -3387,6 +3387,63 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       ).toEqual(["text", PERSONA_CARD, "text", "tool-ask_choice"])
     }, 60_000)
 
+    it("reads the recap back again after a correction, though its fact was written mid-stream", async () => {
+      const who = await owner(kit, url as string, "chat-recap-fix")
+      await who.call(stubOrchestrator(), "/facts", {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          facts: [
+            ...UP_TO_PHOTOS.filter(
+              (f) =>
+                !f.key.startsWith("site.") && !f.key.startsWith("assistant.")
+            ),
+            QUOTE_FORM,
+          ],
+        }),
+      })
+      const recap = planner([
+        plan({
+          say: "Here is the business.",
+          next: { kind: "ask_open", about: "recap" },
+        }),
+      ])
+      const fix = planner([
+        plan({
+          facts: { "business.disclaimer": { text: "Ovens" } },
+          pending_card: "answered",
+          say: "Added that you don't do ovens.",
+          next: { kind: "ask_open", about: "recap" },
+        }),
+      ])
+      const id = await talker(who).onboarding()
+      await talker(who, undefined, { planner: recap.model }).turn(id, {
+        turn: { kind: "message", message_id: "u_fix_0", text: "Hello" },
+      })
+      const done = await talker(who, undefined, { planner: fix.model }).turn(
+        id,
+        {
+          turn: {
+            kind: "message",
+            message_id: "u_fix_1",
+            text: "We don't do ovens, add that",
+          },
+        }
+      )
+      expect(fix.calls).toHaveLength(1)
+      const parts = done.after.parts.filter((p) => p.type !== "step-start")
+      expect(parts.map((p) => p.type)).toEqual([
+        "text",
+        "text",
+        "tool-ask_open",
+      ])
+      expect((parts[1] as { text: string }).text).toMatch(/ovens/i)
+      expect(JSON.stringify(parts)).not.toMatch(/didn't quite catch/)
+      expect((await logged(who, id)).at(-1)?.payload).toMatchObject({
+        outcome: "answered",
+      })
+    }, 60_000)
+
     it("keeps what the owner read when the provider fails after it, and lets the script finish the turn", async () => {
       const who = await owner(kit, url as string, "chat-dropped")
       const dropped = planner(
