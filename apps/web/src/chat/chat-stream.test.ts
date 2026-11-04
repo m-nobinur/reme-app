@@ -66,7 +66,9 @@ vi.mock("@tanstack/react-start/server", () => ({
 
 /** The location state a panel action set, as the chat page reads it. */
 const location = vi.hoisted(() => ({
-  state: {} as { send?: { text: string; key: string } },
+  state: {} as {
+    send?: { text: string; key: string; intent?: "connect_address" }
+  },
 }))
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
@@ -206,11 +208,17 @@ afterEach(async () => {
 /** What Retry sends, as the chat page holds it. */
 const retry: { current: (() => void) | null } = { current: null }
 
+/** The intent the next send carries, as the chat page holds it. */
+const intent: { current: "site_change" | "connect_address" | undefined } = {
+  current: undefined,
+}
+
 /** The runtime the chat page builds per thread. */
 const useThreadRuntime = () =>
   useConversationRuntime({
     onFinish: () => undefined,
     retry,
+    intent,
     // On offer, as the page offers them on a new chat; a stored
     // conversation must never show one.
     suggestions: [{ prompt: "Build my website" }],
@@ -239,7 +247,7 @@ function Chat() {
   return createElement(
     AssistantRuntimeProvider,
     { runtime },
-    createElement(SendAsked, { conversation: ID }),
+    createElement(SendAsked, { conversation: ID, intent }),
     createElement(ServerButtonUI),
     createElement(ChangeAskedUI),
     createElement(PersonaCardUI),
@@ -711,14 +719,18 @@ it("a stored conversation sends nothing until it is the thread on screen, then s
   await matches(container, FIXTURE.histories.typed)
 })
 
-it("sends a panel action into the stored conversation once its history is in, once", async () => {
+it("sends a panel action into the stored conversation once its history is in, once, with its intent", async () => {
   const release: { open?: () => void } = {}
   hold = new Promise<void>((resolve) => {
     release.open = resolve
   })
   stored = FIXTURE.histories.start
   location.state = {
-    send: { text: "Help me connect my web address", key: "press-1" },
+    send: {
+      text: "Help me connect my web address",
+      key: "press-1",
+      intent: "connect_address",
+    },
   }
   turns.push(sse(FIXTURE.streams.typed))
   const container = document.createElement("div")
@@ -739,6 +751,8 @@ it("sends a panel action into the stored conversation once its history is in, on
   await vi.waitFor(() => expect(sent).toHaveLength(1))
   expect(JSON.stringify(sent[0])).toContain("Help me connect my web address")
   expect(JSON.stringify(sent[0])).toContain(ID)
+  expect(sent[0]).toMatchObject({ intent: "connect_address" })
+  expect(intent.current).toBeUndefined()
   // As a typed message does, it overtakes the open card, and the reply asks again.
   await vi.waitFor(() =>
     expect(transcript(container)).toEqual([

@@ -474,6 +474,9 @@ function ToolFallbackApproval({
   )
 }
 
+/** Calls the thread draws no row for: `read_skill` is `skill_view`'s old name. */
+const SILENT = new Set(["skill_view", "read_skill"])
+
 const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   toolName,
   toolCallId,
@@ -501,7 +504,8 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
     if (isRequiresAction) setOpen(true)
   }
 
-  if (repeat) return null
+  // A skill view names the work on the waiting line instead, and says nothing once done.
+  if (repeat || SILENT.has(toolName)) return null
 
   if (!isRequiresAction) {
     return (

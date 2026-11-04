@@ -194,10 +194,12 @@ it("offers the web address, then Search Console, then nothing beside Publish", (
   expect(readySlot(standing([]))).toEqual({
     label: "Connect",
     ask: "Help me set up my web address",
+    intent: "connect_address",
   })
   expect(readySlot(standing([address]))).toEqual({
     label: "Connect Search Console",
     ask: "Connect Google to my website",
+    intent: "connect_google",
   })
   expect(
     readySlot(standing([address, { kind: "google", state: "done", steps: [] }]))

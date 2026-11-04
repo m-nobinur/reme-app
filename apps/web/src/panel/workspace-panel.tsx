@@ -44,7 +44,7 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
 import { Hint } from "@workspace/ui/components/tooltip"
-import { pageAction } from "@workspace/ui/lib/activity-copy"
+import { type AskIntent, pageAction } from "@workspace/ui/lib/activity-copy"
 import { useSiteName } from "@workspace/ui/lib/site-name"
 import { cn, META } from "@workspace/ui/lib/utils"
 import { browserZone } from "@workspace/ui/lib/zone"
@@ -276,10 +276,14 @@ function Website({
 
 /** Connect, which asks the assistant for help with a web address, as any other message would. */
 function ConnectAddress() {
-  const { label, ask } = pageAction("own")
+  const { label, ask, intent } = pageAction("own")
   const askInChat = useAskInChat()
   return (
-    <button className={NEXT_STEP} onClick={() => askInChat(ask)} type="button">
+    <button
+      className={NEXT_STEP}
+      onClick={() => askInChat(ask, intent)}
+      type="button"
+    >
       {label}
     </button>
   )
@@ -288,13 +292,14 @@ function ConnectAddress() {
 /**
  * Says `text` as the owner's message in the conversation on screen, or in
  * their most recent one from any other page, so the assistant keeps the
- * context. With no conversation yet, a new chat opens with it.
+ * context, with the button's `intent` when it has one. With no conversation
+ * yet, a new chat opens with it.
  */
 export function useAskInChat() {
   const router = useRouter()
   const { conversations } = frame.useLoaderData()
-  return (text: string) => {
-    const send = { text, key: crypto.randomUUID() }
+  return (text: string, intent?: AskIntent) => {
+    const send = { text, key: crypto.randomUUID(), intent }
     const inChat = router.state.matches.some(
       (match) => match.routeId === "/app/_conversation"
     )
@@ -304,7 +309,10 @@ export function useAskInChat() {
         ? { to: ".", state: { send } }
         : chat
           ? { to: "/app/c/$id", params: { id: chat.id }, state: { send } }
-          : { to: "/app", state: { chat: crypto.randomUUID(), ask: text } }
+          : {
+              to: "/app",
+              state: { chat: crypto.randomUUID(), ask: text, intent },
+            }
     )
   }
 }

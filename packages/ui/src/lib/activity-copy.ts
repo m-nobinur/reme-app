@@ -577,11 +577,11 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: ["Saved your choice"],
     fail: ["save your choice"],
   },
-  read_skill: {
+  skill_view: {
     kind: "thinking",
-    working: ["Going over how I do this", "Checking my notes on this"],
-    done: ["Checked my notes on this"],
-    fail: ["go over my notes"],
+    working: ["Drawing on my experience", "Utilising my skills on this"],
+    done: ["Used my experience"],
+    fail: ["draw on my experience"],
   },
   save_correction: {
     kind: "thinking",
@@ -2063,15 +2063,27 @@ export function workLine(segment: ActivitySegment): string | null {
 
 export type PageActionKey = "own" | "dns" | "pay" | "google" | "failed"
 
+/** The Connect buttons' intents, which `ChatRequest.intent` carries. */
+export type AskIntent = "connect_address" | "connect_google"
+
 /**
- * A row's one next action: the button, and what the owner says to the
- * assistant when they press it. `subject` is the domain, or "Google".
+ * A row's one next action: the button, what the owner says to the
+ * assistant when they press it, and for a Connect button the intent the
+ * message carries, so the api loads its skill by the press, not the words.
+ * `subject` is the domain, or "Google".
  */
-export function pageAction(key: PageActionKey, subject?: string | null) {
+export function pageAction(
+  key: PageActionKey,
+  subject?: string | null
+): { label: string; ask: string; intent?: AskIntent } {
   const what = cleanArg(subject, "text", 60) ?? "my domain"
   switch (key) {
     case "own":
-      return { label: "Connect", ask: "Help me connect my web address" }
+      return {
+        label: "Connect",
+        ask: "Help me connect my web address",
+        intent: "connect_address",
+      }
     case "dns":
       return {
         label: "Show the change",
@@ -2083,7 +2095,11 @@ export function pageAction(key: PageActionKey, subject?: string | null) {
         ask: `Open the payment form for ${what}`,
       }
     case "google":
-      return { label: "Connect Google", ask: "Connect Google to my website" }
+      return {
+        label: "Connect Google",
+        ask: "Connect Google to my website",
+        intent: "connect_google",
+      }
     case "failed":
       return { label: "Ask what happened", ask: `What happened with ${what}?` }
   }

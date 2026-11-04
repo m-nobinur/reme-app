@@ -11,6 +11,7 @@ import {
   useParams,
   useRouter,
 } from "@tanstack/react-router"
+import type { ChatRequest } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
@@ -114,9 +115,11 @@ export function ChatPage() {
         : undefined,
     [siteChange]
   )
-  const intent = useRef<"site_change" | undefined>(undefined)
+  const intent = useRef<ChatRequest["intent"]>(undefined)
   const retry = useRef<(() => void) | null>(null)
-  intent.current = siteChange ? "site_change" : undefined
+  // A button's intent stays until its send takes it; the mode follows the chip.
+  if (siteChange) intent.current = "site_change"
+  else if (intent.current === "site_change") intent.current = undefined
   // A message the assistant posted on its own, named by the polled tag. Set
   // here, where the workspace re-renders, for the runtime hook to follow.
   const tail = useRef<{ current: string | null; moved?: () => void }>({
@@ -170,6 +173,9 @@ export function ChatPage() {
   // conversation, whose thread is a placeholder until its history is in.
   const fresh = useLocation({ select: (location) => location.state.chat })
   const ask = useLocation({ select: (location) => location.state.ask })
+  const askIntent = useLocation({
+    select: (location) => location.state.intent,
+  })
   const seen = useRef(fresh)
   useEffect(() => {
     const press = startsNewChat(seen.current, fresh)
@@ -178,9 +184,12 @@ export function ChatPage() {
     if (send && fresh) asked.add(fresh)
     void (async () => {
       if (press) await runtime.threads.switchToNewThread()
-      if (send) runtime.thread.append(send)
+      if (send) {
+        intent.current = askIntent
+        runtime.thread.append(send)
+      }
     })()
-  }, [id, fresh, ask, runtime])
+  }, [id, fresh, ask, askIntent, runtime])
 
   const missing = useSyncExternalStore(
     missingConversations.subscribe,
@@ -216,7 +225,7 @@ export function ChatPage() {
       <MemoryChipUI />
       <PersonaCardUI />
       <EnquiryCardUI />
-      <SendAsked conversation={id} />
+      <SendAsked conversation={id} intent={intent} />
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">
         {missing ? (

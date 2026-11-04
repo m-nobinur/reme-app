@@ -1,5 +1,6 @@
 import { type ActivitySegment, searchConsoleUrl } from "@workspace/contracts"
 import {
+  type AskIntent,
   type CopyContext,
   notStarted,
   PAGE_WORDS,
@@ -64,7 +65,7 @@ export const ownDomainClaimed = (
 export type RowAction =
   | { kind: "visit"; label: string; href: string }
   | { kind: "review"; label: string }
-  | { kind: "ask"; label: string; ask: string }
+  | { kind: "ask"; label: string; ask: string; intent?: AskIntent }
   | { kind: "google"; label: string }
 
 export type CheckRow = {

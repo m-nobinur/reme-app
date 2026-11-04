@@ -98,7 +98,7 @@ function RowActionLink({ action }: { action: RowAction }) {
       return (
         <button
           className={LINK}
-          onClick={() => askInChat(action.ask)}
+          onClick={() => askInChat(action.ask, action.intent)}
           type="button"
         >
           {action.label}

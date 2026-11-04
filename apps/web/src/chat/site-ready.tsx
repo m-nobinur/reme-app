@@ -64,7 +64,7 @@ export function SiteReadyCard({
   const slot = readySlot(live.workspace)
   const connect = slot && {
     label: slot.label,
-    onClick: () => askInChat(slot.ask),
+    onClick: () => askInChat(slot.ask, slot.intent),
   }
   const [approved, setApproved] = useState<Approved | null>(null)
   const [pending, setPending] = useState(false)

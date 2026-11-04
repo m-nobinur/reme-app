@@ -328,6 +328,7 @@ export function useConversationRuntime({
       addToolOutput,
       sendMessage: (message, options) => {
         const carried = intent?.current
+        if (intent) intent.current = undefined
         // Typed while a proposed quote form waits: the words answer it, and
         // go out as the owner's reply.
         const changes = quoteChanges(

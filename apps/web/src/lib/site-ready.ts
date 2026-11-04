@@ -1,4 +1,4 @@
-import { pageAction } from "@workspace/ui/lib/activity-copy"
+import { type AskIntent, pageAction } from "@workspace/ui/lib/activity-copy"
 import type { Workspace } from "./api/types"
 import { dueLine } from "./reminders"
 import { ownDomainClaimed } from "./website-checklist"
@@ -142,16 +142,21 @@ export function readyCard(
  */
 export function readySlot(
   workspace: Workspace | null
-): { label: string; ask: string } | null {
+): { label: string; ask: string; intent: AskIntent } | null {
   const standing = workspace?.activity?.standing
   if (!standing) return null
   if (!ownDomainClaimed(standing, workspace.host)) {
-    return { label: "Connect", ask: "Help me set up my web address" }
+    return {
+      label: "Connect",
+      ask: "Help me set up my web address",
+      intent: "connect_address",
+    }
   }
   return standing.some((s) => s.kind === "google" && s.state === "done")
     ? null
     : {
         label: "Connect Search Console",
         ask: pageAction("google").ask,
+        intent: "connect_google",
       }
 }
