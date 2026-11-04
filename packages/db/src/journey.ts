@@ -39,7 +39,8 @@ export type Latch = { key: string; at: string }
 
 export type JourneyInput = {
   tasks: readonly OwnerTask[]
-  website: {
+  /** Left out where only the address matters, as for the draft-ready line. */
+  website?: {
     live: boolean
     building: boolean
     /** Drafts waiting on the owner: their review's id and when it opened. */
@@ -50,6 +51,12 @@ export type JourneyInput = {
   visit?: OwnerVisit | null
   latches?: readonly Latch[]
   now?: Date
+}
+
+const NOTHING: NonNullable<JourneyInput["website"]> = {
+  live: false,
+  building: false,
+  drafts: [],
 }
 
 /** Something that happened while the owner was away, told once. */
@@ -82,6 +89,11 @@ const OFFERS: Partial<
   buying_elsewhere: "connect",
   bought: "connect_bought",
 }
+
+/** The Connect an address stage offers: the one rule the stack, the draft-ready line and the notes read. */
+export const offerOf = (
+  stage: Journey["address"]["stage"]
+): Journey["address"]["offer"] => OFFERS[stage] ?? null
 
 function googleOf(
   tasks: readonly OwnerTask[],
@@ -132,10 +144,11 @@ function changesOf(
 ): JourneyChange[] {
   const after = (at: string | null | undefined): at is string =>
     !!at && at > since
-  const found: JourneyChange[] = input.website.drafts.flatMap((d) =>
-    after(d.at)
-      ? [{ key: `draft:${d.id}`, kind: "draft_ready" as const, at: d.at }]
-      : []
+  const found: JourneyChange[] = (input.website ?? NOTHING).drafts.flatMap(
+    (d) =>
+      after(d.at)
+        ? [{ key: `draft:${d.id}`, kind: "draft_ready" as const, at: d.at }]
+        : []
   )
   for (const task of input.tasks) {
     if (task.kind === "address") {
@@ -188,7 +201,12 @@ function changesOf(
 export function journeyOf(input: JourneyInput): JourneyState {
   const now = input.now ?? new Date()
   const { stage, name, until } = addressStage(input.tasks)
-  const { website: site, card = null, visit = null, latches = [] } = input
+  const {
+    website: site = NOTHING,
+    card = null,
+    visit = null,
+    latches = [],
+  } = input
   const website: Journey["website"] = site.live
     ? "published"
     : site.drafts.length > 0
@@ -196,7 +214,7 @@ export function journeyOf(input: JourneyInput): JourneyState {
       : site.building
         ? "building"
         : "none"
-  const offer = OFFERS[stage] ?? null
+  const offer = offerOf(stage)
   const open = stage === "none" || stage === "unknown"
   const waiting =
     card?.waiting === "have" && open

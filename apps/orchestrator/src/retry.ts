@@ -11,18 +11,18 @@ import {
   ChangeChecked,
   CompletionReport,
   type GateName,
+  type Journey,
   PLANNED_PAGES,
   TONES,
 } from "@workspace/contracts"
 import {
-  type AddressStage,
-  addressStage,
   appendEvent,
   assignments,
   currentFact,
   eq,
   events,
   failureCode,
+  journeyOf,
   type OrgScopedDb,
   type Posted,
   pgCode,
@@ -319,14 +319,16 @@ export function readyText(
 }
 
 /**
- * One line after the first draft while the owner's own address is still
- * open: nothing once they put it off, said no, are paying or connecting, or
+ * One line after the first draft while the journey offers Connect: nothing
+ * once the owner put the address off, said no, is paying or connecting, or
  * it is live.
  */
-export function addressLine({ stage }: AddressStage): string {
-  if (stage === "bought")
+export function addressLine({
+  offer,
+}: Pick<Journey["address"], "offer">): string {
+  if (offer === "connect_bought")
     return "When you're ready to connect your new address, tap Connect on the card."
-  return ["none", "unknown", "choosing", "buying_elsewhere"].includes(stage)
+  return offer === "connect"
     ? "When you'd like to set up your own address, tap Connect on the card."
     : ""
 }
@@ -574,7 +576,9 @@ export async function readyNote(kit: Tenancy, ids: Ids): Promise<Note | null> {
     async (db) => ({
       ...(await creationChoices(db, ids)),
       change: revise ? await changeOf(db, ids) : {},
-      address: revise ? "" : addressLine(addressStage(await readTasks(db))),
+      address: revise
+        ? ""
+        : addressLine(journeyOf({ tasks: await readTasks(db) }).address),
     })
   )
   const { named, each } = plannedPages(row.blueprint)

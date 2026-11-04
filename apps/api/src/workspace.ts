@@ -17,6 +17,7 @@ import {
   FactValue,
   FactValueKey,
   InformationRequest,
+  type Journey,
   type OwnerTask,
   PLANNED_PAGES,
   SiteFields,
@@ -32,6 +33,9 @@ import {
   currentFacts,
   domains,
   events,
+  type JourneyInput,
+  type JourneyState,
+  journeyOf,
   type OrgScopedDb,
   openApprovals,
   orgs,
@@ -1006,6 +1010,31 @@ export function deriveReminders(
   ]
 }
 
+/** The website as `journeyOf` reads it: live, a build under way, the drafts waiting on the owner. */
+export const websiteOf = (
+  site: WorkspaceStatus["site"],
+  builds: readonly BuildSummary[],
+  approvals: readonly Extract<AttentionItem, { kind: "approval" }>[]
+): JourneyInput["website"] => ({
+  live: site.live !== null,
+  building: builds.some((b) => b.state !== "awaiting_review"),
+  drafts: approvals.map(({ request }) => ({
+    id: request.approval_id,
+    at: request.requested_at,
+  })),
+})
+
+/** The journey every reader shares, without what only a turn reads. */
+const shared = ({ website, address, google }: JourneyState): Journey => ({
+  website,
+  address: {
+    stage: address.stage,
+    ...(address.name && { name: address.name }),
+    offer: address.offer,
+  },
+  google,
+})
+
 /** Reports and alerts stay in the panel for a day; `/activity` keeps 30. */
 const PANEL_HOURS = 24
 
@@ -1070,6 +1099,11 @@ export async function statusWithFacts(
     db.select({ zone: orgs.timeZone }).from(orgs).limit(1),
   ])
   const missing = missingFacts(current)
+  // Rows come newest first, so each kind's first is its latest, a finished
+  // one included: the assistant reads the address task's end to time Google.
+  const tasks = TaskKind.options.flatMap(
+    (kind) => rows.tasks.find((t) => t.kind === kind) ?? []
+  )
   const status = WorkspaceStatus.parse({
     site,
     builds,
@@ -1101,12 +1135,14 @@ export async function statusWithFacts(
       },
       now
     ),
+    journey: shared(
+      journeyOf({
+        tasks,
+        website: websiteOf(site, builds, approvalItems),
+        now,
+      })
+    ),
   })
-  // Rows come newest first, so each kind's first is its latest, a finished
-  // one included: the assistant reads the address task's end to time Google.
-  const tasks = TaskKind.options.flatMap(
-    (kind) => rows.tasks.find((t) => t.kind === kind) ?? []
-  )
   return {
     status,
     facts: current,

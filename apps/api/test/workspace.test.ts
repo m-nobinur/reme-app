@@ -319,6 +319,11 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         derived: [{ rule: "facts_missing", keys: REQUIRED }],
       },
       time_zone: null,
+      journey: {
+        website: "none",
+        address: { stage: "none", offer: "connect" },
+        google: "waiting_for_domain",
+      },
     })
   })
 

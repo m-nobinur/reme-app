@@ -1,4 +1,9 @@
-import { AGENT_NOTE, Blueprint, BUILD_FAILURES } from "@workspace/contracts"
+import {
+  AddressStageName,
+  AGENT_NOTE,
+  Blueprint,
+  BUILD_FAILURES,
+} from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
@@ -6,6 +11,7 @@ import {
   eq,
   events,
   newUlid,
+  offerOf,
   sql,
   supersedeFact,
 } from "@workspace/db"
@@ -123,9 +129,9 @@ describe("what the owner reads", () => {
     )
   })
 
-  it("names the open web address after the first draft, and nothing once it is settled", () => {
-    const line = (stage: Parameters<typeof addressLine>[0]["stage"]) =>
-      addressLine({ stage })
+  it("names the open web address after the first draft by the journey's offer, and nothing once it is settled", () => {
+    const line = (stage: AddressStageName) =>
+      addressLine({ offer: offerOf(stage) })
     for (const stage of [
       "none",
       "unknown",
@@ -146,6 +152,8 @@ describe("what the owner reads", () => {
       "live",
     ] as const)
       expect(line(stage), stage).toBe("")
+    for (const stage of AddressStageName.options)
+      expect(line(stage) !== "", stage).toBe(offerOf(stage) !== null)
   })
 
   it("says a change it could not make left the site as it was", () => {

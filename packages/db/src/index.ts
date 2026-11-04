@@ -60,6 +60,7 @@ export {
   journeyOf,
   type Latch,
   type OwnerVisit,
+  offerOf,
   SITTING_GAP_MS,
 } from "./journey.ts"
 export * from "./map.ts"
