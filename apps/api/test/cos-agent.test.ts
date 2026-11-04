@@ -45,6 +45,7 @@ import ids from "@workspace/facade/models/openrouter.ids.json" with {
 import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
+import { procedure } from "@workspace/skills"
 import {
   asSchema,
   type FlexibleSchema,
@@ -330,6 +331,9 @@ const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 
 const PRICE = priceOf(DEFAULT_MODEL)
 
+/** A CoS procedure's body, where a topic's rules live since the core prompt was cut. */
+const skill = (name: string) => procedure("cos", name)?.body ?? ""
+
 describe("the CoS's instructions", () => {
   it("tell the model a declined card is the owner's no, and not to propose it again", () => {
     expect(INSTRUCTIONS).toMatch(
@@ -344,17 +348,19 @@ describe("the CoS's instructions", () => {
   })
 
   it("tell the model the owner's words are the yes and to speak of the work as its own", () => {
-    expect(INSTRUCTIONS).toMatch(
+    expect(skill("website-changes")).toMatch(
       /request_change in the owner's own words, one change per call, as soon as the owner asks for it\. Never ask them to confirm it first, with one exception the procedure gives: new copy you wrote that runs past a line, or a new section or page, is shown as a short draft first/
     )
-    expect(INSTRUCTIONS).toMatch(
+    expect(skill("website-changes")).toMatch(
       /read the site-change procedure with read_skill and follow it/
     )
-    expect(INSTRUCTIONS).toMatch(
+    expect(skill("website-changes")).toMatch(
       /request_change comes back with outcome "started"[^\n]*never say queued[^\n]*Never ask them to approve it/
     )
-    expect(INSTRUCTIONS).toContain('"I\'m putting your site together"')
-    expect(INSTRUCTIONS).not.toMatch(/such as "It's/)
+    expect(skill("website-changes")).toContain(
+      '"I\'m putting your site together"'
+    )
+    expect(skill("website-changes")).not.toMatch(/such as "It's/)
   })
 
   it("tell the model how to use the chat's markdown, and not to use headings or tables", () => {
@@ -371,52 +377,58 @@ describe("the CoS's instructions", () => {
 
   describe("on the website's own address and Google", () => {
     it("speak with the why and a benefit in the owner's terms, never the plumbing", () => {
-      expect(INSTRUCTIONS).toMatch(
+      expect(skill("web-address")).toMatch(
         /website's own address or Google, talk like a sharp, helpful assistant[^\n]*what is happening, why it matters to this business[^\n]*what happens next, and the one thing they can do/
       )
-      expect(INSTRUCTIONS).toMatch(
+      expect(skill("web-address")).toMatch(
         /Never use these words with the owner: DNS, CNAME, record, SSL, certificate, property, sitemap, propagation/
       )
-      expect(INSTRUCTIONS).toMatch(
+      expect(skill("web-address")).toMatch(
         /No opener such as "Good news", "Great" or "Nice work", and at most one exclamation mark/
       )
     })
 
     it("make the build's address offer when it did not land, once, with its benefit", () => {
-      expect(INSTRUCTIONS).toMatch(
+      expect(skill("web-address")).toMatch(
         /When the first build starts, the app offers the address itself[^\n]*still no address task, that offer did not land, so make it in your next reply, once[^\n]*goes live on it the moment they publish/
       )
     })
 
     it("put the address or Google off on not now, and keep a domain whose setting must wait", () => {
-      expect(INSTRUCTIONS).toMatch(
-        /not now to the address or to Google, call put_off with that kind/
+      expect(skill("web-address")).toMatch(
+        /not now to the address, call put_off with kind address/
       )
-      expect(INSTRUCTIONS).toMatch(
+      expect(skill("google-search")).toMatch(
+        /not now to Google, call put_off with kind google/
+      )
+      expect(skill("web-address")).toMatch(
         /setting will have to wait[^\n]*don't put anything off: the domain stays saved[^\n]*goes live on its free address first/
       )
-      expect(INSTRUCTIONS).toMatch(
+      expect(skill("web-address")).toMatch(
         /asks to see the setting for a domain that is being connected[^\n]*call connect_domain with that name: it shows the same card again/
       )
     })
 
     it("leave Google to the offer once the setting is in, and never offer a purchase while buying is off", () => {
-      expect(INSTRUCTIONS).toMatch(
+      expect(skill("google-search")).toMatch(
         /Once the owner's setting is in, the app offers Google itself, with a Connect Google button; when that message is in the conversation, don't offer it again/
       )
-      expect(INSTRUCTIONS).toMatch(
+      expect(skill("web-address")).toMatch(
         /When the workspace's buying is false, the card shows where to buy each name, at Cloudflare or GoDaddy[^\n]*never offer to buy it here and never call buy_domain/
       )
     })
 
-    it("look for names at once on No, help me get one, and never ask in words for a name the card asks", () => {
-      expect(INSTRUCTIONS).toMatch(
+    it("look for names at once on No, help me get one, and point at the card only while it is on screen", () => {
+      expect(skill("web-address")).toMatch(
         /"No, help me get one"[^\n]*call find_domain straight away/
       )
-      expect(INSTRUCTIONS).toMatch(
-        /address card asking "What is it\?" is still waiting, never ask for the name in words/
+      expect(skill("web-address")).toMatch(
+        /open items note says the address card is on screen asking for it, say they can type it on the card/
       )
       expect(INSTRUCTIONS).toMatch(
+        /Point the owner at a card only when it is on screen now/
+      )
+      expect(skill("web-address")).toMatch(
         /A domain the owner typed connects at once, with no card/
       )
     })
@@ -439,11 +451,11 @@ describe("a tool's schema", () => {
       if (STEPPED.includes(name)) {
         expect(props.step, name).toEqual({ type: "string", maxLength: 60 })
         expect(input_schema.required ?? [], name).not.toContain("step")
-        expect(instructions).toContain(name)
       } else {
         expect(Object.keys(props), name).not.toContain("step")
       }
     }
+    expect(instructions).toMatch(/A call's optional step is a few words/)
     const change = tools.find((t) => t.name === "request_change")
     // The panel's alone: it posts the owner's words in a conversation.
     expect(Object.keys(change?.input_schema.properties ?? {})).not.toContain(
@@ -453,7 +465,7 @@ describe("a tool's schema", () => {
 
   it("grows the prefix by under 150 tokens for the step lines", async () => {
     const { tools, instructions } = await cosPrefix()
-    const rule = instructions.match(/^- find_domain, check_domain[^\n]*\n/m)
+    const rule = instructions.match(/^- A call's optional step[^\n]*\n/m)
     // Each step property as sent: its key, schema and comma.
     const properties = tools.flatMap(
       ({ input_schema }) =>
@@ -591,10 +603,12 @@ describe("the CoS's change kinds", () => {
   })
 
   it("tells the model to quote the measured wait as a range, not a fixed one", () => {
-    expect(INSTRUCTIONS).toContain("expected_range.quick")
-    expect(INSTRUCTIONS).toContain("Always a range, never one figure")
+    expect(skill("website-changes")).toContain("expected_range.quick")
+    expect(skill("website-changes")).toContain(
+      "Always a range, never one figure"
+    )
     // A quick edit can move to a longer build, so the time is never a promise.
-    expect(INSTRUCTIONS).toContain("Never promise that time")
+    expect(skill("website-changes")).toContain("Never promise that time")
   })
 
   it("carries each lane's range and each build's lane in the workspace the model reads", () => {
@@ -912,7 +926,9 @@ describe("the CoS's model and price", () => {
     expect(prices.length).toBeGreaterThan(160)
     expect(text).toContain(`business.prices: ${prices}\n`)
     expect(text).toContain(`business.disclaimer: ${"x".repeat(160)}… (cut)`)
-    expect(INSTRUCTIONS).toMatch(/business\.prices in the facts[^\n]*quote/)
+    expect(skill("quotes-and-prices")).toMatch(
+      /business\.prices in the facts[^\n]*quote/
+    )
   })
 
   it("prints facts that hold objects as words, never [object Object]", () => {
@@ -1808,11 +1824,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         ),
         { model }
       )
-      const tools = (sent[0]?.tools ?? []) as {
-        name: string
-        description?: string
-      }[]
-      expect(tools.find((t) => t.name === "read_skill")?.description).toContain(
+      // The index rides in the system prompt, not in read_skill's description.
+      expect(JSON.stringify(sent[0]?.prompt)).toContain(
         "review-reply: Draft the owner's public reply to a customer review"
       )
       expect(await outputsOf(id, "read_skill")).toEqual([

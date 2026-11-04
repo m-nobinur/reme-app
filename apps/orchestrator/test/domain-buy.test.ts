@@ -388,7 +388,7 @@ describe("the registrar's phone form", () => {
 })
 
 describe.skipIf(!url)("buying a domain against a database", () => {
-  it("offers only names the configured registrar sells: .co.uk live, not in the sandbox", async () => {
+  it("offers only names the configured registrar sells, and the sandbox's UK endings from the registry", async () => {
     const site = await published()
     const checks = Object.fromEntries(
       (
@@ -407,7 +407,8 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     const sandboxNet = stubNet(false, sandboxChecks)
     const { env } = buyEnv(site.store)
     const sandbox = await find(env, kit, site.orgId, {})
-    // The sandbox is asked about .com only, and its rows show nothing else.
+    // The sandbox is asked about .com only; .co.uk and .uk come from the
+    // registry, free with no price, so a UK business still sees them first.
     expect(sandbox).toEqual({
       outcome: "found",
       rows: [
@@ -415,7 +416,18 @@ describe.skipIf(!url)("buying a domain against a database", () => {
           stem: "brightclean",
           why: "matches your business name",
           endings: {
+            "co.uk": { state: "free" },
+            uk: { state: "free" },
             com: { state: "free", price_gbp_year: 12, registrar_usd: 10.46 },
+          },
+        },
+        {
+          stem: "brightcleanuk",
+          why: "your name with uk, for a UK business",
+          endings: {
+            "co.uk": { state: "free" },
+            uk: { state: "free" },
+            com: { state: "taken" },
           },
         },
       ],
@@ -481,6 +493,7 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     // Each suggestion adds a word the business never used.
     expect(rows.map((r) => [r.stem, r.why])).toEqual([
       ["brightclean", "matches your business name"],
+      ["brightcleanuk", "your name with uk, for a UK business"],
     ])
   })
 
@@ -488,20 +501,21 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     const site = await published()
     stubNet(false, { "brightclean.com": priced("brightclean.com", "99.00") })
     const { env } = buyEnv(site.store)
-    expect(await find(env, kit, site.orgId, {})).toMatchObject({
-      rows: [
-        {
-          stem: "brightclean",
-          endings: { com: { state: "free", registrar_usd: 99 } },
-        },
-      ],
+    const capped = await find(env, kit, site.orgId, {})
+    expect((capped as { rows: unknown[] }).rows[0]).toMatchObject({
+      stem: "brightclean",
+      endings: { com: { state: "free", registrar_usd: 99 } },
     })
     vi.unstubAllGlobals()
     stubNet(false)
+    // With no registry to read the UK endings from, nothing is free.
+    rdap.unlisted.add("co.uk").add("uk")
     expect(await find(env, kit, site.orgId, {})).toMatchObject({
       refused: true,
       code: "domain.unavailable",
     })
+    rdap.unlisted.delete("co.uk")
+    rdap.unlisted.delete("uk")
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(null, { status: 500 }))

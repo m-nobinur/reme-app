@@ -7,9 +7,12 @@ import {
   ChatRequest,
   type ChatResult,
   CosChangeRequest,
+  type CosEvent,
   type CosRoute,
+  type CosSkill,
   type CosToolName,
   type CosTurn,
+  type CosWorkspace,
   ErrorEnvelope,
   type FactRecord,
   GrantKind,
@@ -22,6 +25,7 @@ import {
   type PersonaCard,
   RequestChangeOutput,
   SKIP_REPLY,
+  type TaintLabel,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import {
@@ -41,6 +45,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
+import { procedure } from "@workspace/skills"
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -85,6 +90,14 @@ import {
   sha256,
 } from "./cos/history.ts"
 import { takeChip } from "./cos/memory.ts"
+import {
+  type AddressCard,
+  cardState,
+  handoverNote,
+  openItems,
+  sessionNote,
+  skillsDue,
+} from "./cos/notes.ts"
 import { retrying } from "./cos/retry.ts"
 import {
   closeTurn,
@@ -183,6 +196,7 @@ import {
 } from "./onboarding-agent.ts"
 import { notStarted } from "./onboarding-copy.ts"
 import { prepare, readPrepared } from "./onboarding-prepare.ts"
+import { onboardingSteps } from "./onboarding-progress.ts"
 import { type Pace, pace } from "./pacing.ts"
 import { ownerStaffId } from "./staff.ts"
 import { rememberZone, zoneFromArea } from "./time-zone.ts"
@@ -1107,16 +1121,28 @@ export async function chat(
       )
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
-      const { workspace, facts, profile } =
-        loaded ?? (await loadWorkspace(tools))
+      const {
+        workspace,
+        facts,
+        profile,
+        notes: working,
+      } = loaded ?? (await loadWorkspace(tools))
       const granted = await grantedKinds(db)
+      const notes = await turnNotes(
+        db,
+        id,
+        workspace,
+        zone ?? null,
+        log.fresh,
+        turn.kind === "message" ? turn.text : null
+      )
       const context = contextOf(
         mode,
         workspace,
         zone ?? null,
         new Date(),
         turn.kind === "message" ? parsed.data.intent : undefined,
-        personaOf(facts, profile),
+        personaOf(facts, profile, working),
         turn.kind === "message" && log.fresh,
         // Not waited for: the prompt's own Google rule holds without Jev's line.
         await Promise.race([google, null]),
@@ -1124,10 +1150,13 @@ export async function chat(
         turn.kind === "message" && SETS_RULE.test(turn.text),
         null,
         granted,
-        await offerable(db, granted)
+        await offerable(db, granted),
+        notes.lines
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
+        events: notes.events,
+        skills: notes.skills,
         messages: opening.messages,
         context: {
           turn_id: cosTurn.turnId,
@@ -1138,7 +1167,7 @@ export async function chat(
           text: context.text,
           reserved_usd: fallback ? 0 : reserve,
         },
-        contextTaint: context.taint,
+        contextTaint: [...new Set([...context.taint, ...notes.taint])],
       })
       if (turn.kind === "message") {
         await putRow(db, owner, id, {
@@ -1870,19 +1899,148 @@ async function unloggedPosts(db: OrgScopedDb, id: string) {
     role: row.role,
     parts: row.parts.flatMap((p): Part[] => {
       if (p.type === "step-start" || p.type === "text") return [p]
-      // A card's questions, as the words the owner read, so a typed answer is recognised.
-      const asked = BuildQuestionsPart.safeParse(p).data?.data.questions
-      return asked
-        ? [
-            {
-              type: "text",
-              text: `On a card I asked: ${asked.map((q) => q.text).join(" ")}`,
-              state: "done",
-            },
-          ]
-        : []
+      // A card's questions, as the words the owner read, so a typed answer
+      // is recognised, and the option they picked: one of ours, never their text.
+      const stack = BuildQuestionsPart.safeParse(p).data?.data
+      if (!stack) return []
+      const picked = stack.questions.flatMap((q) =>
+        q.input.kind === "choice" &&
+        q.answer?.kind === "value" &&
+        q.input.options.includes(String(q.answer.value))
+          ? [String(q.answer.value)]
+          : []
+      )
+      return [
+        {
+          type: "text",
+          text: [
+            `On a card I asked: ${stack.questions.map((q) => q.text).join(" ")}`,
+            ...(picked.length > 0
+              ? [`The owner picked: ${picked.join(", ")}.`]
+              : []),
+          ].join(" "),
+          state: "done",
+        },
+      ]
     }),
   }))
+}
+
+/**
+ * The org's newest address card as `cardState` reads it, here since the
+ * CoS's code never reads the conversation's messages. Null when none was
+ * ever shown.
+ */
+async function addressCardOf(
+  db: OrgScopedDb,
+  id: string
+): Promise<AddressCard | null> {
+  const [row] = await db.execute<{ here: boolean; data: unknown }>(sql`
+    select m.conversation_id = ${id} as here, p->'data' as data
+    from ${conversationMessages} m
+    cross join lateral jsonb_array_elements(m.content->'parts') p
+    where m.content->'parts' @> '[{"type":"data-build_questions","data":{"kind":"address"}}]'::jsonb
+      and p->>'type' = 'data-build_questions'
+    order by m.seq desc
+    limit 1`)
+  const stack = BuildQuestionsPart.shape.data.safeParse(row?.data).data
+  return row && stack ? cardState(stack, row.here) : null
+}
+
+/** A procedure code loaded is not loaded again within this many CoS turns. */
+const SKILL_TURNS = 3
+
+/** The procedures this session logged within its last `SKILL_TURNS` CoS turns, since its last compaction. */
+async function recentSkills(db: OrgScopedDb, id: string): Promise<string[]> {
+  const rows = await db.execute<{ name: string }>(sql`
+    select distinct s.payload->>'name' as name from ${events} s
+    where s.session_id = ${id} and s.type = 'cos.skill'
+      and s.seq > coalesce((select c.seq from ${events} c
+        where c.session_id = ${id} and c.type = 'cos.context'
+          and c.payload->>'context_policy_version' not like 'onboarding-%'
+        order by c.seq desc offset ${SKILL_TURNS - 1} limit 1), -1)
+      and s.seq > coalesce((select (k.payload->'replaced_range'->>'to_seq')::bigint
+        from ${events} k where k.session_id = ${id} and k.type = 'cos.compaction'
+        order by k.seq desc limit 1), -1)`)
+  return rows.map((r) => r.name)
+}
+
+/**
+ * What code tells a CoS turn about where things stand (`notes.ts`): the open
+ * items every turn; on the CoS's first turn of an onboarding conversation the
+ * hand-over, as the `cos.event` the turn logs, and of a new one the session
+ * note (`sessionNote`); and the procedures state makes certain (`skillsDue`),
+ * as `cos.skill`s, each once within `SKILL_TURNS`.
+ */
+export async function turnNotes(
+  db: OrgScopedDb,
+  id: string,
+  workspace: CosWorkspace,
+  zone: string | null,
+  fresh: boolean,
+  /** The owner's typed message, or null for a turn they did not type. */
+  said: string | null = null,
+  /** The procedure a schedule started this turn for. */
+  scheduled: string | null = null
+): Promise<{
+  lines: string[]
+  events: CosEvent[]
+  skills: CosSkill[]
+  taint: TaintLabel[]
+}> {
+  const card = await addressCardOf(db, id)
+  const lines = openItems(workspace, card, new Date(), zone)
+  const [kind] = fresh
+    ? await db
+        .select({ kind: conversations.kind })
+        .from(conversations)
+        .where(eq(conversations.id, id))
+    : []
+  const handover = kind?.kind === "onboarding"
+  const loaded = await recentSkills(db, id)
+  const skills = skillsDue({
+    workspace,
+    starting: kind ? (handover ? "handover" : "session") : null,
+    said,
+    scheduled,
+  }).flatMap((name) => {
+    const found = loaded.includes(name) ? null : procedure("cos", name)
+    return found ? [{ name, body: found.body }] : []
+  })
+  if (kind && !handover) {
+    // shortcut: a conversation too short to compact leaves no summary; persist one at its end if that loses too much.
+    const [last] = await db.execute<{ summary: string }>(sql`
+      select payload->>'summary' as summary from ${events}
+      where type = 'cos.compaction' and session_id <> ${id}
+      order by seq desc limit 1`)
+    return {
+      lines: [...lines, ...sessionNote(workspace, last?.summary ?? null)],
+      events: [],
+      skills,
+      taint: last ? ["inferred", "untrusted_input"] : [],
+    }
+  }
+  if (!handover) return { lines, events: [], skills, taint: [] }
+  const [progress, facts] = await Promise.all([
+    readScript(db, id),
+    readFacts(db),
+  ])
+  const summary = handoverNote(
+    onboardingSteps({
+      ...progress,
+      orgId: "",
+      facts,
+      orgName: "",
+      ownerName: "",
+    }),
+    card
+  )
+  return {
+    lines,
+    events: [{ source: "handover", summary, evidence: [], wake: false }],
+    skills,
+    taint: [],
+  }
 }
 
 /** A message id is written once. A retried send is refused, never merged. */

@@ -73,6 +73,8 @@ import {
   SaveCorrectionOutput,
   ScheduleSkillInput,
   ScheduleSkillOutput,
+  SKILL_BODY_MAX,
+  SkillName,
 } from "./skills.ts"
 import { OwnerTask, TaskKind, TipKind } from "./task.ts"
 import { Text, ToolStep } from "./text.ts"
@@ -1242,18 +1244,30 @@ export const CosCompaction = z.strictObject({
  * The `cos.event` payload: something that happened away from the chat,
  * logged in the CoS session when it happened so the next turn reads it: a
  * staff result, a notice posted in the chat, a scheduled run's outcome, a
- * quote request from the business's website. A notice names the message it
+ * quote request from the business's website, or the hand-over from
+ * onboarding on the first CoS turn after it. A notice names the message it
  * posted. `wake` asks for a turn of its own. Labelled by the text `summary`
  * carries.
  */
 export const CosEvent = z.strictObject({
-  source: z.enum(["staff", "notice", "schedule", "enquiry"]),
+  source: z.enum(["staff", "notice", "schedule", "enquiry", "handover"]),
   summary: Text(1500),
   evidence: z.array(Evidence).max(4),
   wake: z.boolean(),
   message_id: ConversationMessage.shape.id.optional(),
 })
 
+/**
+ * The `cos.skill` payload: one of the CoS's procedures, loaded by code into
+ * the session's history because state made it certainly relevant (plan §2),
+ * so the model follows it without a read_skill call.
+ */
+export const CosSkill = z.strictObject({
+  name: SkillName,
+  body: Text(SKILL_BODY_MAX),
+})
+
+export type CosSkill = z.infer<typeof CosSkill>
 export type CosWorkspace = z.infer<typeof CosWorkspace>
 export type CosFacts = z.infer<typeof CosFacts>
 export type CosChangeRequest = z.infer<typeof CosChangeRequest>

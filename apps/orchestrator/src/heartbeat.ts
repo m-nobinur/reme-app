@@ -224,11 +224,18 @@ const STEP_WORDS: Record<TaskStepName, string> = {
 /** `task:{id}:{step}:{state}`: a follow-up's ledger key and its `task_followups` row. */
 const isFollowUp = (item: DigestItem) => item.key.startsWith("task:")
 
+/** What a task put off is for, in the owner's words. */
+const LATER_WORDS = {
+  address: "your own web address",
+  google: "getting your website on Google",
+} as const
+
 /**
  * Follow-ups: each step of an active task that has waited on the owner longer
  * than `FOLLOW_UP_AFTER`, unless one was sent for it before, with its note
  * and the task's steps done in the last day (longer than any gap between
- * beats, quiet hours included).
+ * beats, quiet hours included); and a task the owner put off, once its date
+ * has passed, once for that date.
  */
 const followUps: Source = async (db, now) => {
   const sent = new Set(
@@ -239,6 +246,24 @@ const followUps: Source = async (db, now) => {
     ).map((row) => row.fingerprint)
   )
   return (await readTasks(db)).flatMap((task) => {
+    if (task.state === "later") {
+      const key = `task:${task.id}:later:${task.later_until}`
+      return task.later_until &&
+        task.later_until <= now.toISOString() &&
+        !sent.has(key)
+        ? [
+            {
+              key,
+              since: task.later_until,
+              facts: {
+                waiting_for: LATER_WORDS[task.kind],
+                put_off_until: task.later_until,
+              },
+              trusted: [] as string[],
+            },
+          ]
+        : []
+    }
     if (task.state !== "active") return []
     const name = task.kind === "address" ? task.detail.name : undefined
     const done = task.steps

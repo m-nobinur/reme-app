@@ -22,7 +22,7 @@ const corrections = {
 describe("skills", () => {
   it.each(PROCEDURES)("$name fits the index and read_skill's output", (p) => {
     expect(SkillName.safeParse(p.name).success).toBe(true)
-    expect(p.description.length).toBeLessThanOrEqual(60)
+    expect(p.description.length).toBeLessThanOrEqual(90)
     expect(
       ReadSkillOutput.safeParse({
         outcome: "skill",
@@ -35,10 +35,17 @@ describe("skills", () => {
   it("lists the CoS's procedures and none of the Developer's corrections", () => {
     const cos = skillsFor("cos", corrections)
     expect(cos.map((s) => s.name)).toEqual([
-      "weekly-review",
-      "review-reply",
-      "quote-reply",
+      "web-address",
+      "google-search",
+      "website-changes",
       "site-change",
+      "builds",
+      "reviews",
+      "reminders-and-time",
+      "quotes-and-prices",
+      "quote-reply",
+      "review-reply",
+      "weekly-review",
     ])
     expect(indexOf(cos).join("\n")).not.toContain("stock photos")
   })

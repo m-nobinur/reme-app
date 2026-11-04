@@ -12,6 +12,13 @@ import { Text } from "./text.ts"
 /** The profile's fact key. The profile is data about the person, not the business. */
 export const OWNER_PROFILE_KEY = "owner.profile"
 
+/**
+ * The CoS's working notes (plan §6, after Hermes's MEMORY.md): how this
+ * business runs day to day where the facts hold nothing, such as where the
+ * keys are kept, in the owner's words. Private like the profile.
+ */
+export const WORKING_NOTES_KEY = "assistant.working_notes"
+
 /** The owner's "Ask me before saving" choice, the changes reflection proposed, and how far the chat has shown the profile's changes. */
 export const OWNER_MEMORY_REVIEW_KEY = "owner.memory_review"
 
@@ -24,6 +31,7 @@ export const OWNER_MEMORY_REVIEW_KEY = "owner.memory_review"
  */
 export const PRIVATE_FACT_KEYS: readonly string[] = [
   OWNER_PROFILE_KEY,
+  WORKING_NOTES_KEY,
   OWNER_MEMORY_REVIEW_KEY,
   BUSINESS_ADDRESS_KEY,
   STAFF_CORRECTIONS_KEY,
@@ -33,6 +41,8 @@ export const PRIVATE_FACT_KEYS: readonly string[] = [
 /** The most the profile may hold, counted on its rendered text. */
 export const PROFILE_MAX_CHARS = 1_500
 export const PROFILE_LINE_MAX = 300
+/** The most the working notes may hold, counted the same way. */
+export const NOTES_MAX_CHARS = 2_200
 
 /** How a line came to be there. Only `owner_said` is protected from reflection. */
 export const ProfileSource = z.enum([
@@ -57,6 +67,13 @@ export const OwnerProfile = z
   .strictObject({ lines: z.array(ProfileLine).max(40) })
   .refine((p) => profileText(p.lines).length <= PROFILE_MAX_CHARS, {
     message: `The profile holds at most ${PROFILE_MAX_CHARS} characters.`,
+  })
+
+/** `assistant.working_notes`'s value: the profile's shape with its own budget. */
+export const WorkingNotes = z
+  .strictObject({ lines: z.array(ProfileLine).max(40) })
+  .refine((p) => profileText(p.lines).length <= NOTES_MAX_CHARS, {
+    message: `The working notes hold at most ${NOTES_MAX_CHARS} characters.`,
   })
 
 /**
@@ -106,6 +123,12 @@ export const RememberOperation = z.strictObject({
 /** `remember`'s input: every change in one call, applied together or not at all. */
 export const RememberInput = z.strictObject({
   operations: z.array(RememberOperation).min(1).max(8),
+  store: z
+    .enum(["profile", "notes"])
+    .optional()
+    .describe(
+      "profile, the default: about the owner. notes: how this business runs day to day where the facts hold nothing."
+    ),
 })
 
 /**

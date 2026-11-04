@@ -43,12 +43,15 @@ export const StaffCorrections = z.strictObject({
 /** `read_skill`'s input: a name from the index in the tool's description. */
 export const ReadSkillInput = z.strictObject({ name: SkillName })
 
+/** The longest procedure body. */
+export const SKILL_BODY_MAX = 10_000
+
 /** `read_skill`'s output: the procedure to follow. Refused with `skill.unknown`. */
 export const ReadSkillOutput = z.discriminatedUnion("outcome", [
   z.strictObject({
     outcome: z.literal("skill"),
     name: SkillName,
-    body: Text(4_000),
+    body: Text(SKILL_BODY_MAX),
   }),
   Refused,
 ])

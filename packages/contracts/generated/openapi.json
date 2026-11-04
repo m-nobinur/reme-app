@@ -21686,7 +21686,8 @@
               "staff",
               "notice",
               "schedule",
-              "enquiry"
+              "enquiry",
+              "handover"
             ]
           },
           "summary": {
@@ -32970,7 +32971,7 @@
                       "body": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 4000,
+                        "maxLength": 10000,
                         "pattern": "\\S"
                       }
                     },
@@ -53513,6 +53514,14 @@
               ],
               "additionalProperties": false
             }
+          },
+          "store": {
+            "description": "profile, the default: about the owner. notes: how this business runs day to day where the facts hold nothing.",
+            "type": "string",
+            "enum": [
+              "profile",
+              "notes"
+            ]
           }
         },
         "required": [

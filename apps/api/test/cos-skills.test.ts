@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   activeTools,
   contextOf,
-  cosPrefix,
   INSTRUCTIONS,
   skillLine,
 } from "../src/cos/agent.ts"
@@ -32,33 +31,26 @@ describe("the CoS's skills", () => {
     expect(activeTools("act")).toContain("schedule_skill")
   })
 
-  it("lists every procedure by name and one line in read_skill's description", async () => {
-    const { tools } = await cosPrefix()
-    const read = tools.find((t) => t.name === "read_skill")?.description
+  it("lists every procedure by name and its trigger in the core instructions", () => {
     for (const line of [
       "weekly-review: Monday round-up of the week, once the owner turns it on",
       "review-reply: Draft the owner's public reply to a customer review",
       "quote-reply: Draft the owner's reply to a customer's quote request",
+      "web-address: Use when the owner mentions a domain, a web address, or publishing on their own name",
     ])
-      expect(read).toContain(line)
+      expect(INSTRUCTIONS).toContain(line)
+    expect(INSTRUCTIONS).toMatch(
+      /even partly relevant, read it with read_skill/
+    )
   })
 
-  it("grows the prefix by under 600 tokens for the skills", async () => {
-    const { tools } = await cosPrefix()
-    const lines = INSTRUCTIONS.split("\n").filter((l) =>
-      /read_skill lists|save_correction/.test(l)
+  it("keeps the skill index under 400 tokens", () => {
+    const index = INSTRUCTIONS.slice(
+      INSTRUCTIONS.indexOf("<skills>"),
+      INSTRUCTIONS.indexOf("</skills>")
     )
-    expect(lines).toHaveLength(2)
-    const added =
-      lines.join("\n").length +
-      ", read_skill".length +
-      JSON.stringify(
-        tools.filter((t) =>
-          ["read_skill", "save_correction", "schedule_skill"].includes(t.name)
-        )
-      ).length
-    // Characters over four, the repo has no tokenizer.
-    expect(added / 4).toBeLessThan(600)
+    // Characters over four, as the prompt surface test counts.
+    expect(index.length / 4).toBeLessThan(400)
   })
 
   it("returns a procedure's body, and refuses a name it does not hold", async () => {

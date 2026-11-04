@@ -1298,6 +1298,23 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         },
       ])
       expect((await me.rows(id))[0]?.parentId).toBeNull()
+      // Only the conversation's first CoS turn carries the session-start note.
+      const notes = await kit.withOrg({ orgId: who.orgId }, (db) =>
+        db
+          .select({ payload: events.payload })
+          .from(events)
+          .where(
+            sql`${events.sessionId} = ${id} and ${events.type} = 'cos.context'`
+          )
+          .orderBy(events.seq)
+      )
+      expect(
+        notes.map((n) =>
+          (n.payload as { text: string }).text.includes(
+            "This is a new conversation."
+          )
+        )
+      ).toEqual([true, false])
     })
 
     it("offers its own quote form for a typed answer no model read, and builds once it is confirmed", async () => {
@@ -1402,6 +1419,53 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         builder: null,
         siteSkipped: true,
       })
+      // The first CoS turn after it logs the hand-over once, and every turn
+      // carries the open items.
+      for (const message_id of ["u_after_1", "u_after_2"]) {
+        await talk.send({
+          conversation_id: id,
+          mode: "ask",
+          turn: { kind: "message", message_id, text: "What's next?" },
+        })
+      }
+      const logged = await kit.withOrg({ orgId: fresh.orgId }, (db) =>
+        db
+          .select({ type: events.type, payload: events.payload })
+          .from(events)
+          .where(eq(events.sessionId, id))
+          .orderBy(events.seq)
+      )
+      const handovers = logged.filter(
+        (e) =>
+          e.type === "cos.event" &&
+          (e.payload as { source: string }).source === "handover"
+      )
+      expect(handovers).toHaveLength(1)
+      // The top open item's procedure, loaded once for both turns.
+      expect(
+        logged.flatMap((e) =>
+          e.type === "cos.skill" ? [(e.payload as { name: string }).name] : []
+        )
+      ).toEqual(["web-address"])
+      expect(handovers[0]?.payload).toHaveProperty(
+        "summary",
+        expect.stringMatching(
+          /Skipped by the owner or left for later:[^.]*whether to build the website/
+        )
+      )
+      const contexts = logged.filter(
+        (e) =>
+          e.type === "cos.context" &&
+          !String(
+            (e.payload as { context_policy_version: string })
+              .context_policy_version
+          ).startsWith("onboarding-")
+      )
+      expect(contexts).toHaveLength(2)
+      for (const c of contexts)
+        expect((c.payload as { text: string }).text).toMatch(
+          /Open items, from the records[\s\S]*- Web address: not settled/
+        )
     })
 
     it("stores the browser's zone on a turn while the org has none, and moves the org's recurring jobs only then", async () => {

@@ -10,11 +10,12 @@ import {
   postAssistantMessage,
   readTasks,
   serverMessageId,
+  sql,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { fits, storable } from "../src/build-questions.ts"
+import { ADDRESS_SKIPPED, fits, storable } from "../src/build-questions.ts"
 import {
   type Owner,
   owner,
@@ -94,7 +95,7 @@ describe.skipIf(!url)("answering a question card, on a live connection", () => {
         },
         body: JSON.stringify({ message_id: serverMessageId(key), ...body }),
       })
-    return { reply }
+    return { reply, id }
   }
 
   const build = crypto.randomUUID()
@@ -293,11 +294,18 @@ describe.skipIf(!url)("answering a question card, on a live connection", () => {
 
   it("puts the address task off for a week on Not now, and leaves a Yes to the reply", async () => {
     const { have, stack } = addressStack()
-    const { reply } = await posted(stack)
+    const { reply, id } = await posted(stack)
     await reply(stubOrchestrator(), {
       question_id: have,
       answer: { kind: "value", value: ADDRESS_ASK.later },
     })
+    const said = await kit.withOrg({ orgId: who.orgId }, (db) =>
+      db.execute<{ text: string }>(
+        sql`select content->'parts'->1->>'text' as text from conversation_messages
+          where conversation_id = ${id} order by seq desc limit 1`
+      )
+    )
+    expect(said[0]?.text).toBe(ADDRESS_SKIPPED)
     const task = await addressTask()
     expect(task?.state).toBe("later")
     const days =

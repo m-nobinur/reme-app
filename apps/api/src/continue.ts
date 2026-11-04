@@ -20,7 +20,7 @@ import type { LanguageModel } from "ai"
 import { enqueueAfterTurn } from "./after-turn.ts"
 import { settleCard } from "./build-questions.ts"
 import type { Owner } from "./changes.ts"
-import { cosModel, putRow } from "./chat.ts"
+import { cosModel, putRow, turnNotes } from "./chat.ts"
 import {
   type AgentTurn,
   activeTools,
@@ -150,10 +150,8 @@ export async function continueTurn(
   const sessionId = found.row.refId as string
   const { owner } = found
   const tools = { env, kit, owner, settleCard }
-  const [{ workspace, facts, profile }, prefix] = await Promise.all([
-    loadWorkspace(tools),
-    cosPrefix(),
-  ])
+  const [{ workspace, facts, profile, notes: working }, prefix] =
+    await Promise.all([loadWorkspace(tools), cosPrefix()])
   const reserved = reservation(price)
   const opened = await kit.withOrg({ orgId: job.orgId }, async (db) => {
     const staffId = await chiefStaffId(db)
@@ -187,13 +185,15 @@ export async function continueTurn(
       found.zone,
       new Date(),
       undefined,
-      personaOf(facts, profile),
+      personaOf(facts, profile, working),
       false,
       null,
       facts,
       false,
       job.unknown || unknownAfter(log, continued.seq) ? "unknown" : "cut",
-      await grantedKinds(db)
+      await grantedKinds(db),
+      [],
+      (await turnNotes(db, sessionId, workspace, found.zone, false)).lines
     )
     const turn: Turn = { ...session, turnId: newUlid() }
     await beginTurn(db, turn, {

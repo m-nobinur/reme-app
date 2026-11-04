@@ -135,6 +135,7 @@ import {
   inOwnersWords,
   ownerWords,
   readProfile,
+  STORES,
 } from "./memory.ts"
 import { knownZone, wallToUtc, zonedIso } from "./time.ts"
 import { tipsDue } from "./tips.ts"
@@ -371,37 +372,48 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   facts: FactRecord[]
   /** What the owner told the CoS about themselves. */
   profile: ProfileLine[]
+  /** The CoS's working notes on how the business runs. */
+  notes: ProfileLine[]
 }> {
   const now = new Date()
-  const [read, rows, { lines: profile }, reports, repairs, lives, given] =
-    await kit.withOrg({ orgId: owner.orgId }, (db) =>
-      Promise.all([
-        statusWithFacts(db, env, now),
-        db
-          .select({
-            name: domains.name,
-            state: domains.state,
-            lastCheck: domains.lastCheck,
-          })
-          .from(domains)
-          .where(live)
-          .orderBy(sql`${domains.createdAt} desc`)
-          .limit(10),
-        readProfile(db),
-        // Each build's last check report from the day, for what a stopped one failed.
-        db.execute<{ assignment_id: string; gates: unknown }>(
-          sql`select distinct on (assignment_id) assignment_id, payload->'gates' as gates from events where type = 'assignment.validation_reported' and occurred_at > now() - interval '24 hours' order by assignment_id, event_id desc`
-        ),
-        db.execute<{ assignment_id: string; rounds: number }>(
-          sql`select assignment_id, count(*)::int as rounds from events where type = 'assignment.state_changed' and payload->>'to' = 'repairing' and occurred_at > now() - interval '24 hours' group by assignment_id`
-        ),
-        // Each open build's last logged work and last resume, for its pace.
-        db.execute<Life & { assignment_id: string }>(
-          sql`select e.assignment_id, (extract(epoch from max(e.occurred_at) filter (where e.type <> ${AGENT_NOTE})) * 1000)::float8 as work_ms, (extract(epoch from max(e.occurred_at) filter (where ${resumed})) * 1000)::float8 as resumed_ms, (array_agg(e.payload->>'cause' order by e.event_id desc) filter (where ${resumed}))[1] as cause from events e join assignments a on a.id = e.assignment_id where a.kind in ('site.build', 'site.revise') and a.state not in ${TERMINAL_STATES} group by e.assignment_id`
-        ),
-        readTipsGiven(db),
-      ])
-    )
+  const [
+    read,
+    rows,
+    { lines: profile },
+    reports,
+    repairs,
+    lives,
+    given,
+    { lines: notes },
+  ] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    Promise.all([
+      statusWithFacts(db, env, now),
+      db
+        .select({
+          name: domains.name,
+          state: domains.state,
+          lastCheck: domains.lastCheck,
+        })
+        .from(domains)
+        .where(live)
+        .orderBy(sql`${domains.createdAt} desc`)
+        .limit(10),
+      readProfile(db),
+      // Each build's last check report from the day, for what a stopped one failed.
+      db.execute<{ assignment_id: string; gates: unknown }>(
+        sql`select distinct on (assignment_id) assignment_id, payload->'gates' as gates from events where type = 'assignment.validation_reported' and occurred_at > now() - interval '24 hours' order by assignment_id, event_id desc`
+      ),
+      db.execute<{ assignment_id: string; rounds: number }>(
+        sql`select assignment_id, count(*)::int as rounds from events where type = 'assignment.state_changed' and payload->>'to' = 'repairing' and occurred_at > now() - interval '24 hours' group by assignment_id`
+      ),
+      // Each open build's last logged work and last resume, for its pace.
+      db.execute<Life & { assignment_id: string }>(
+        sql`select e.assignment_id, (extract(epoch from max(e.occurred_at) filter (where e.type <> ${AGENT_NOTE})) * 1000)::float8 as work_ms, (extract(epoch from max(e.occurred_at) filter (where ${resumed})) * 1000)::float8 as resumed_ms, (array_agg(e.payload->>'cause' order by e.event_id desc) filter (where ${resumed}))[1] as cause from events e join assignments a on a.id = e.assignment_id where a.kind in ('site.build', 'site.revise') and a.state not in ${TERMINAL_STATES} group by e.assignment_id`
+      ),
+      readTipsGiven(db),
+      readProfile(db, STORES.notes),
+    ])
+  )
   const { status, facts, tasks, waiting } = read
   const zone = status.time_zone ?? "UTC"
   const roundsOf = (assignmentId: string) =>
@@ -507,7 +519,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       full: rangeOf(status.expected_seconds, "full"),
     },
   })
-  return { workspace, facts, profile }
+  return { workspace, facts, profile, notes }
 }
 
 /**

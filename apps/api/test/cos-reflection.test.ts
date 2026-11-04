@@ -551,6 +551,27 @@ describe.skipIf(!url)("a pass, on a live connection", () => {
     expect(prompts).toHaveLength(1)
   })
 
+  it("reads onboarding's answers on a session's first pass, as the owner's own words", async () => {
+    await start([])
+    const job = await closed(talk)
+    const said = Array.from(
+      { length: 5 },
+      (_, i) => `Onboarding answer ${i}: I only work weekday mornings.`
+    )
+    const { model, prompts } = fakeModel(
+      answer(add("Only works weekday mornings"))
+    )
+    // Six owner messages with onboarding's five, so the pass is due at once.
+    await reflectAfterTurn(kit, model, job, async () => said)
+    expect(prompts[0]).toContain("Onboarding answer 0")
+    expect((await profile()).lines.map((l) => l.text)).toEqual([
+      "Only works weekday mornings",
+    ])
+    // A later pass reads only the log again.
+    await reflectAfterTurn(kit, model, { ...job, idle: true }, async () => said)
+    expect(prompts).toHaveLength(1)
+  })
+
   it("keeps a review's 'prices are free' out of the profile", async () => {
     await start([])
     const job = await closed(
