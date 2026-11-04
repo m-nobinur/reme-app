@@ -194,6 +194,24 @@ test("a design read that fails says so and stops asking until Try again", async 
   }
 })
 
+test("layout tiles are their pictures alone, each still named for a screen reader", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  const tiles = state(page, "Arrangement, picked").getByRole("radio")
+  await expect(tiles).toHaveCount(4)
+  await expect(tiles.nth(1)).toHaveAccessibleName("Big photo, centred heading")
+  for (const tile of await tiles.all()) {
+    const label = tile.locator("xpath=ancestor::label")
+    const [box, picture] = await Promise.all([
+      label.boundingBox(),
+      label.locator("svg").boundingBox(),
+    ])
+    // Only the tile's padding and border around the picture, no line of text.
+    expect((box?.height ?? 0) - (picture?.height ?? 0)).toBeLessThan(20)
+  }
+})
+
 test("a focused tile takes the shared ring and a picked one keeps its one line", async ({
   page,
 }) => {

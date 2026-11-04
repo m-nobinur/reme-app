@@ -1730,13 +1730,13 @@ function QuestionTray({
                 "choice" in answer &&
                 answer.choice === option.id
             const look = layoutLook(option)
-            // A palette is its colours alone: the name is for screen readers.
+            // A palette, a lettering and a layout are their pictures alone: the name is for screen readers.
             const swatch = option.visual?.kind === "swatches"
             return (
               <label
                 className={cn(
                   TRAY_TILE,
-                  look && "p-2",
+                  look && "gap-0 p-2",
                   swatch && "gap-0 overflow-hidden p-0"
                 )}
                 key={option.id}
@@ -1752,16 +1752,13 @@ function QuestionTray({
                   value={option.id}
                 />
                 <Picture name={name} option={option} stops={stops} />
-                <span
-                  className={cn(
-                    "flex items-center gap-1.5 font-medium text-sm",
-                    look && "text-xs"
-                  )}
-                >
-                  {question.visual === "font_pair" || swatch ? (
-                    <span className="sr-only">{option.label}</span>
+                <span className="flex items-center gap-1.5 font-medium text-sm">
+                  {question.visual === "font_pair" || swatch || look ? (
+                    <span className="sr-only">
+                      {look?.hero ?? option.label}
+                    </span>
                   ) : (
-                    (look?.hero ?? option.label)
+                    option.label
                   )}
                   {/* A box, ticked or not, so a card of many reads apart from a card of one. */}
                   {multiple ? (
