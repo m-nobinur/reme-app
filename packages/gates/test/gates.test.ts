@@ -10,6 +10,7 @@ import {
   checkContent,
   checkLinks,
   checkPlannedPages,
+  checkPlannedPhotos,
   checkPlannedSections,
   checkStructuredData,
   checkTypes,
@@ -497,6 +498,78 @@ describe("the planned sections", () => {
     })
     expect(result?.message).toContain("site.photo1Src")
     expect(GateResult.parse(result)).toEqual(result)
+  })
+})
+
+describe("the planned photos", () => {
+  const upload = "0b0c5f4e-6a59-4f1e-9a43-1c1b3f0e7a11"
+  const plan = {
+    images: [
+      { id: "home_hero", page: "home", section: "hero", source: "generated" },
+      {
+        id: "service_1_hero",
+        page: "service",
+        section: "hero",
+        source: "generated",
+      },
+      {
+        id: "gallery_1",
+        page: "home",
+        section: "gallery",
+        source: "upload",
+        asset_id: upload,
+      },
+      { id: "odd", page: "home", section: "reviews", source: "generated" },
+    ],
+  } as never
+  const built = {
+    "index.html": "x",
+    "_astro/home_hero.Bx1_2a.webp": "x",
+    "_astro/service_1_hero.Q9z_k1.webp": "x",
+    [`_astro/${upload}.Zk2_9q.webp`]: "x",
+  }
+
+  it("passes when every photo the plan holds is in the build", () => {
+    expect(checkPlannedPhotos(plan, built)).toBeNull()
+  })
+
+  it("fails the build gate on a planned photo the build does not show", () => {
+    const { "_astro/home_hero.Bx1_2a.webp": _, ...rest } = built
+    const result = checkPlannedPhotos(plan, rest)
+    expect(result).toMatchObject({
+      gate: "build",
+      passed: false,
+      offending_node: "home_hero",
+    })
+    expect(result?.message).toContain("site.heroImage")
+    expect(GateResult.parse(result)).toEqual(result)
+  })
+
+  it("fails the build gate of a run whose photos were placed and none shown", async () => {
+    const body = new TextEncoder().encode("<html><main></main></html>")
+    const results = await runGates({
+      manifest: {
+        revision_id: ORG,
+        site_id: ORG,
+        org_id: ORG,
+        routes: [],
+        headers: {},
+        files: {
+          "index.html": createHash("sha256").update(body).digest("hex"),
+        },
+        built_at: AT,
+      },
+      read: async (file) => (file === "index.html" ? body : null),
+      report: { checks: [] },
+      facts: [],
+      budget: { limit: 102_400 },
+      plan: { ...(plan as object), pages: [] } as never,
+    })
+    expect(results[0]).toMatchObject({
+      gate: "build",
+      passed: false,
+      offending_node: "home_hero",
+    })
   })
 })
 

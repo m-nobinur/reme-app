@@ -15,6 +15,7 @@ import {
   withCustomSections,
 } from "./custom.ts"
 import { type Located, type Page, parsePage } from "./page.ts"
+import { checkPlannedPhotos } from "./photos.ts"
 import { limit } from "./pool.ts"
 import { resolveSitePath } from "./site-path.ts"
 import { checkSize, type SizeBudget } from "./size.ts"
@@ -69,6 +70,7 @@ export {
   parseInteraction,
 } from "./interaction.ts"
 export { type Page, parsePage } from "./page.ts"
+export { checkPlannedPhotos, slotFields } from "./photos.ts"
 export { limit } from "./pool.ts"
 export { resolveSitePath } from "./site-path.ts"
 export { checkSize, type SizeBudget } from "./size.ts"
@@ -626,7 +628,8 @@ export async function runGates(input: {
       checkPlannedSections(
         input.plan,
         built.map(({ page, html }) => ({ file: page.file, html }))
-      ))
+      ) ??
+      checkPlannedPhotos(input.plan, parsed.data.files))
     : null
   return [
     build.passed && gap ? gap : build,

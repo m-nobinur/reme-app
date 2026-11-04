@@ -50,6 +50,7 @@ import {
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import { z } from "zod"
 import { type Brief, changeBriefSignal, retryContextSignal } from "../brief.ts"
+import { ownerUploads } from "../developer-rules.ts"
 import {
   assemble,
   DOCUMENTS_DIR,
@@ -929,7 +930,14 @@ const writePagesTool = (current: Session) =>
       const photos = await following
       const reconciled = await current.mutations(CONFIG, async () => {
         const { content } = await stub.readFile(CONFIG)
-        const next = reconcilePhotos(content, slots, photos.files)
+        const next = reconcilePhotos(
+          content,
+          plan.images.filter(
+            (s) => s.source === "upload" || slots.includes(s.id)
+          ),
+          photos.files,
+          ownerUploads(brief.snapshot.facts)
+        )
         if (next !== content) await stub.writeFile(CONFIG, next)
         return next !== content
       })

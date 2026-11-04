@@ -1,7 +1,8 @@
-import { limit } from "@workspace/gates"
+import type { Asset, ImageSlot } from "@workspace/contracts"
+import { limit, slotFields } from "@workspace/gates"
 import { DOCUMENTS_DIR, type Words, type Written } from "./documents.ts"
 import { type WriterTask, writerLabel } from "./fanout.ts"
-import { GENERATED_DIR, generatedPath } from "./photo-files.ts"
+import { generatedPath, photoFile } from "./photo-files.ts"
 import type { PhotoFile } from "./photo-step.ts"
 import { SITE_ROOT } from "./revise.ts"
 
@@ -368,26 +369,37 @@ export async function followPhotos(input: {
 }
 
 /**
- * Each generated slot's path in the site config as it landed: the writers
- * wrote the planned `.jpg`, a draw may be another format, and a slot that
- * fell back or never came leaves its field empty, so its section takes the
- * no-image form.
+ * Every planned photo's site fields, its path and alt, written by code: no
+ * writer owns an image field, so in the run of 2026-11-04 eight photos were
+ * placed and none was shown. A generated slot that fell back or never came,
+ * and an upload the facts no longer hold, leave both fields empty, so the
+ * section takes its no-image form.
  */
 export function reconcilePhotos(
   source: string,
-  slots: readonly string[],
-  files: readonly PhotoFile[]
+  slots: readonly ImageSlot[],
+  files: readonly PhotoFile[],
+  uploads: readonly Asset[]
 ): string {
-  let next = source
+  const gallery = slots.filter((s) => s.section === "gallery")
+  const values: Record<string, string> = {}
   for (const slot of slots) {
-    const file = files.find((f) => f.slot_id === slot && f.key)
-    const to = file ? generatedPath(slot, file.content_type) : ""
-    next = next.replace(
-      new RegExp(`"${GENERATED_DIR}/${slot}\\.(?:jpe?g|png|webp)"`, "g"),
-      JSON.stringify(to)
-    )
+    const at = slotFields(slot, gallery.indexOf(slot) + 1)
+    if (!at) continue
+    const file = files.find((f) => f.slot_id === slot.id && f.key)
+    const upload =
+      slot.source === "upload"
+        ? uploads.find((a) => a.id === slot.asset_id)
+        : undefined
+    const path = upload
+      ? `/${photoFile(upload)}`
+      : file
+        ? generatedPath(slot.id, file.content_type)
+        : ""
+    values[at.src] = path
+    if (at.alt) values[at.alt] = path ? slot.alt : ""
   }
-  return next
+  return setValues(source, values)
 }
 
 /**
