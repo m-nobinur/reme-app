@@ -3,9 +3,16 @@ import type {
   JobKind,
   StaffCorrections,
 } from "@workspace/contracts"
+import { builds } from "./procedures/builds.ts"
+import { googleSearch } from "./procedures/google-search.ts"
 import { quoteReply } from "./procedures/quote-reply.ts"
+import { quotesAndPrices } from "./procedures/quotes-and-prices.ts"
+import { remindersAndTime } from "./procedures/reminders-and-time.ts"
 import { reviewReply } from "./procedures/review-reply.ts"
+import { reviews } from "./procedures/reviews.ts"
 import { siteChange } from "./procedures/site-change.ts"
+import { webAddress } from "./procedures/web-address.ts"
+import { websiteChanges } from "./procedures/website-changes.ts"
 import { weeklyReview } from "./procedures/weekly-review.ts"
 
 /** Whose prompt a skill is for: the CoS, or a staff role. */
@@ -17,7 +24,7 @@ export type Scope = "cos" | CorrectedStaff
  */
 export type Skill = {
   name: string
-  /** One line, at most 60 characters, which the index shows. */
+  /** One line, at most 90 characters, which the index shows: when to read it. */
   description: string
   scope: Scope
   kind: "procedure" | "correction"
@@ -29,10 +36,17 @@ export type Skill = {
 export type Procedure = Skill & { kind: "procedure" }
 
 export const PROCEDURES: readonly Procedure[] = [
-  weeklyReview,
-  reviewReply,
-  quoteReply,
+  webAddress,
+  googleSearch,
+  websiteChanges,
   siteChange,
+  builds,
+  reviews,
+  remindersAndTime,
+  quotesAndPrices,
+  quoteReply,
+  reviewReply,
+  weeklyReview,
 ]
 
 /**
