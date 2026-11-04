@@ -79,7 +79,9 @@ export {
 } from "./staff.ts"
 export { steerByKey, steerKeyHash } from "./steers.ts"
 export {
+  type AddressStage,
   addressPlan,
+  addressStage,
   CONNECT_DEADLINE_MS,
   type DomainFacts,
   type GoogleFacts,

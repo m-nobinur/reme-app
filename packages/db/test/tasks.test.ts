@@ -1,5 +1,11 @@
+import type { OwnerTask } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
-import { addressPlan, type DomainFacts, googlePlan } from "../src/tasks.ts"
+import {
+  addressPlan,
+  addressStage,
+  type DomainFacts,
+  googlePlan,
+} from "../src/tasks.ts"
 
 const AT = "2026-10-27T09:00:00.000Z"
 const row = (over: Partial<DomainFacts>): DomainFacts => ({
@@ -101,5 +107,80 @@ describe("googlePlan", () => {
     expect(googlePlan({ ...facts, data: true }).steps?.first_data).toEqual({
       state: "done",
     })
+  })
+})
+
+describe("addressStage", () => {
+  const task = (over: Record<string, unknown>) =>
+    ({
+      id: "00000000-0000-4000-8000-000000000001",
+      kind: "address",
+      state: "active",
+      later_until: null,
+      created_at: AT,
+      done_at: null,
+      detail: {},
+      steps: [],
+      ...over,
+    }) as OwnerTask
+  const step = (
+    name: string,
+    state: string,
+    blocked_on: string | null = null
+  ) => ({
+    step: name,
+    state,
+    note: null,
+    blocked_on,
+    deadline: null,
+    changed_at: null,
+  })
+
+  it("reads each stage the notes and the draft-ready line name", () => {
+    expect(addressStage([])).toEqual({ stage: "none" })
+    expect(addressStage([task({ state: "later", later_until: AT })])).toEqual({
+      stage: "put_off",
+      until: AT,
+    })
+    expect(
+      addressStage([task({ steps: [step("find_out", "pending")] })])
+    ).toEqual({
+      stage: "unknown",
+    })
+    expect(
+      addressStage([
+        task({ steps: [step("find_out", "done"), step("choose", "blocked")] }),
+      ])
+    ).toEqual({ stage: "choosing" })
+    expect(
+      addressStage([
+        task({
+          detail: { name: "x.co.uk", origin: "buying_elsewhere" },
+          steps: [step("purchase", "blocked", "owner_action")],
+        }),
+      ])
+    ).toEqual({ stage: "buying_elsewhere", name: "x.co.uk" })
+    expect(
+      addressStage([
+        task({
+          detail: { name: "x.co.uk", origin: "purchased" },
+          steps: [
+            step("find_out", "done"),
+            step("purchase", "blocked", "purchase"),
+          ],
+        }),
+      ])
+    ).toEqual({ stage: "paying", name: "x.co.uk" })
+    expect(
+      addressStage([
+        task({
+          detail: { name: "x.co.uk", origin: "owned" },
+          steps: [step("find_out", "done"), step("records", "blocked")],
+        }),
+      ])
+    ).toEqual({ stage: "connecting", name: "x.co.uk" })
+    expect(
+      addressStage([task({ state: "done", detail: { name: "x.co.uk" } })])
+    ).toEqual({ stage: "live", name: "x.co.uk" })
   })
 })

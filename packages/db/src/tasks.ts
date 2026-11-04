@@ -175,6 +175,53 @@ export async function readTasks(db: OrgScopedDb): Promise<OwnerTask[]> {
   )
 }
 
+/**
+ * Where the website's own address stands, from the newest address task:
+ * `unknown` until the owner says whether they have a domain, then
+ * `choosing` a name, `paying` here, `buying_elsewhere`, `connecting` one,
+ * `live`, or `put_off` and `declined` by the owner. One reading for the
+ * assistant's notes and the draft-ready line, so both say the same.
+ */
+export type AddressStage = {
+  stage:
+    | "none"
+    | "unknown"
+    | "put_off"
+    | "declined"
+    | "choosing"
+    | "paying"
+    | "buying_elsewhere"
+    | "connecting"
+    | "live"
+  name?: string
+  /** For `put_off`: when it may be offered again. */
+  until?: string
+}
+
+export function addressStage(tasks: readonly OwnerTask[]): AddressStage {
+  const task = tasks.find((t) => t.kind === "address")
+  if (task?.kind !== "address") return { stage: "none" }
+  const name = task.detail.name ? { name: task.detail.name } : {}
+  if (task.state === "later")
+    return {
+      stage: "put_off",
+      ...name,
+      ...(task.later_until && { until: task.later_until }),
+    }
+  if (task.state === "declined") return { stage: "declined", ...name }
+  if (task.state === "done") return { stage: "live", ...name }
+  const state = (step: string) => task.steps.find((s) => s.step === step)
+  const purchase = state("purchase")
+  if (purchase?.blocked_on === "purchase") return { stage: "paying", ...name }
+  if (task.detail.origin === "buying_elsewhere" && purchase?.state !== "done")
+    return { stage: "buying_elsewhere", ...name }
+  if (state("find_out")?.state !== "done") return { stage: "unknown", ...name }
+  if (state("choose")?.state === "blocked") return { stage: "choosing" }
+  return task.detail.name
+    ? { stage: "connecting", ...name }
+    : { stage: "choosing" }
+}
+
 // ---------------------------------------------------------------------------
 // The mapping from the rows that already record the work
 
