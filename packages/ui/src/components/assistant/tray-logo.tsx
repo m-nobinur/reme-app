@@ -294,6 +294,34 @@ function Dots({ colors }: { colors: readonly string[] }) {
   )
 }
 
+/** What went wrong, and a button to try again. */
+function Retry({
+  message,
+  busy = false,
+  onRetry,
+}: {
+  message: string
+  busy?: boolean
+  onRetry: () => void
+}) {
+  return (
+    <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-3">
+      <p className="text-sm" role="status">
+        {message}
+      </p>
+      <Button
+        disabled={busy}
+        onClick={onRetry}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Try again
+      </Button>
+    </div>
+  )
+}
+
 function TrayLogo({
   question,
   toolCallId,
@@ -361,13 +389,16 @@ function TrayLogo({
   // When each design was first shown, so its own ideas get a moment.
   const shownSince = useRef(new Map<string, number>())
 
+  // A read that failed: what the rounds hold is not known, so nothing of it
+  // is shown or polled until Try again.
+  const [unread, setUnread] = useState(false)
   const latest = rounds.at(-1)
-  const drawing = latest?.status === "drawing"
+  const drawing = !unread && latest?.status === "drawing"
 
   // The rounds drawn before a reload, and again every few seconds while one
   // draws, since a round draws after its request answers.
   useEffect(() => {
-    if (!services) return
+    if (!services || unread) return
     let live = true
     const read = () =>
       services
@@ -378,14 +409,14 @@ function TrayLogo({
           setNextAt(drawn.next_at ? Date.parse(drawn.next_at) : null)
           setLoaded(true)
         })
-        .catch(() => undefined)
+        .catch(() => live && setUnread(true))
     const timer = drawing ? setInterval(read, 2500) : undefined
     if (!drawing) void read()
     return () => {
       live = false
       clearInterval(timer)
     }
-  }, [drawing, services, toolCallId])
+  }, [drawing, services, toolCallId, unread])
 
   // The wait before the next round, counted down a second at a time.
   const left = nextAt === null ? 0 : Math.ceil((nextAt - Date.now()) / 1000)
@@ -418,7 +449,7 @@ function TrayLogo({
     )
     .at(0)
   const keptDrawn = picked !== undefined
-  const held = loaded ? (keptDrawn ? "create" : "upload") : null
+  const held = loaded && !unread ? (keptDrawn ? "create" : "upload") : null
   const shownPath = path ?? (answer ? held : null)
   const round = at === null ? latest : rounds[at]
   const shownAt = at ?? rounds.length - 1
@@ -671,6 +702,7 @@ function TrayLogo({
   const designFirst =
     create &&
     loaded &&
+    !unread &&
     rounds.length < LOGO_ROUNDS_MAX &&
     (!latest || changed || words !== "")
   const design = useRef(() => undefined as undefined)
@@ -712,7 +744,11 @@ function TrayLogo({
   )
   const landed = round?.variants.length === LOGO_VARIANTS
   const heading: LogoHeading | undefined =
-    step !== "designs" || !create || !round || round.status === "failed"
+    step !== "designs" ||
+    !create ||
+    unread ||
+    !round ||
+    round.status === "failed"
       ? undefined
       : round.status === "drawing" && !landed
         ? {
@@ -778,8 +814,17 @@ function TrayLogo({
   return (
     <div className="-my-1.5 flex shrink-0 flex-col" ref={page}>
       {/* The designs, once a round has started: first, so the pick needs no scroll. */}
-      <Fold open={create && round !== undefined}>
-        {round && services ? (
+      <Fold open={step === "designs" && unread}>
+        {unread ? (
+          <Retry
+            message="Your designs did not load."
+            onRetry={() => setUnread(false)}
+          />
+        ) : null}
+      </Fold>
+
+      <Fold open={create && !unread && round !== undefined}>
+        {round && services && !unread ? (
           <div className="flex flex-col gap-3">
             {rounds.length > 1 ? (
               <div className="flex items-center gap-1">
@@ -812,19 +857,11 @@ function TrayLogo({
             ) : null}
 
             {round.status === "failed" ? (
-              <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-3">
-                <p className="text-sm">These designs did not come through.</p>
-                <Button
-                  className={ACCENT_RING}
-                  disabled={busy === "draw"}
-                  onClick={() => void draw()}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  Try again
-                </Button>
-              </div>
+              <Retry
+                busy={busy === "draw"}
+                message="These designs did not come through."
+                onRetry={() => void draw()}
+              />
             ) : (
               <div
                 aria-busy={round.status === "drawing"}
@@ -914,7 +951,7 @@ function TrayLogo({
       </Fold>
 
       {/* Ideas for a redesign of the picked design, then the brief as one line. */}
-      <Fold open={create && redesigning && ideas !== null}>
+      <Fold open={create && !unread && redesigning && ideas !== null}>
         <ReplyPills label="Ideas for a redesign">
           {(ideas ?? []).map((idea) =>
             idea === "colours" ? (
@@ -933,7 +970,7 @@ function TrayLogo({
           )}
         </ReplyPills>
       </Fold>
-      <Fold open={create && briefReady && !editing}>
+      <Fold open={create && !unread && briefReady && !editing}>
         <p className="text-muted-foreground text-sm">
           Your brief:{" "}
           {brief.type
@@ -1044,7 +1081,7 @@ function TrayLogo({
       </Fold>
 
       {/* No: the brief to edit, the change first once there is a design to change. */}
-      <Fold open={create && (editing || !briefReady)}>
+      <Fold open={create && !unread && (editing || !briefReady)}>
         <div
           className="flex flex-col gap-4"
           data-part="brief"
@@ -1256,7 +1293,9 @@ function TrayLogo({
         <p className="pt-1 text-muted-foreground text-sm" role="status">
           I need your logo file to finish. Add it here and I'll do the rest.
         </p>
-      ) : picking && !answer && (latest?.status === "failed" || error) ? (
+      ) : picking &&
+        !answer &&
+        (latest?.status === "failed" || unread || error) ? (
         <p className="pt-1 text-muted-foreground text-sm" role="status">
           I need a logo to finish. Try the designs again, or upload yours.
         </p>
@@ -1265,7 +1304,6 @@ function TrayLogo({
   )
 }
 
-/** A logo type or style to pick: its pictures, cycling while hovered, and its name. */
 /** How long a section takes to fold, as `Fold` eases it. */
 const FOLD_MS = 220
 
@@ -1391,6 +1429,7 @@ function CustomColours({
   )
 }
 
+/** A logo type or style to pick: its pictures, cycling while hovered, and its name. */
 function PickTile({
   checked,
   className,

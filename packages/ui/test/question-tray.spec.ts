@@ -171,6 +171,29 @@ test("an idea for a redesign toggles from the keyboard, and Edit moves into What
   ).toBeFocused()
 })
 
+test("a design read that fails says so and stops asking until Try again", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  for (const title of [
+    "Logo, the designs could not be read",
+    "Logo, a read failed while drawing",
+  ]) {
+    const logo = state(page, title)
+    const failed = logo.getByText("Your designs did not load.")
+    const designs = logo.getByRole("radiogroup", { name: "Logo designs" })
+    await expect(failed).toBeVisible({ timeout: 8000 })
+    await expect(designs.getByRole("radio")).toHaveCount(0)
+    await expect(logo.getByRole("button", { name: /Redesign/ })).toHaveCount(0)
+    // Longer than the poll that would otherwise ask again and bring them back.
+    await page.waitForTimeout(3500)
+    await expect(failed).toBeVisible()
+    await logo.getByRole("button", { name: "Try again" }).click()
+    await expect(designs.getByRole("radio")).toHaveCount(3)
+    await expect(failed).toBeHidden()
+  }
+})
+
 test("lettering shows four styles and More styles shows them all", async ({
   page,
 }) => {
