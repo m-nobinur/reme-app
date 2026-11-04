@@ -1619,7 +1619,8 @@ const AssistantMessage: FC = () => {
           ) : reveal.phase === "writing" ? (
             <div aria-hidden>
               <TextMessagePartProvider isRunning text={reveal.text}>
-                <MarkdownText />
+                {/* The reveal paces the words itself; the reading pace would lag it. */}
+                <MarkdownText smooth />
               </TextMessagePartProvider>
             </div>
           ) : (

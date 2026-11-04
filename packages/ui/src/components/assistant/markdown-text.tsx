@@ -1,4 +1,4 @@
-import type { TextMessagePartProps } from "@assistant-ui/react"
+import type { SmoothOptions, TextMessagePartProps } from "@assistant-ui/react"
 import {
   type CodeHeaderProps,
   MarkdownTextPrimitive,
@@ -15,6 +15,18 @@ import remarkGfm from "remark-gfm"
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
   components?: Parameters<typeof memoizeMarkdownComponents>[0]
+  smooth?: boolean | SmoothOptions
+}
+
+/**
+ * Streamed words revealed at a steady reading pace, about 65 characters a
+ * second, and any backlog within 2.5 s: the library's default drains it in
+ * a quarter second, so a reply that arrives in one burst read as one block
+ * (2026-11-04). Reduced motion shows the words at once.
+ */
+export const READING_PACE: SmoothOptions = {
+  drainMs: 2_500,
+  maxCharIntervalMs: 15,
 }
 
 const useShallowStable = <T extends Record<string, unknown> | undefined>(
@@ -33,7 +45,10 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
   return ref.current
 }
 
-const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
+const MarkdownTextImpl: FC<MarkdownTextProps> = ({
+  components,
+  smooth = READING_PACE,
+}) => {
   const stableComponents = useShallowStable(components)
   const markdownComponents = useMemo(() => {
     if (!stableComponents) return defaultComponents
@@ -56,6 +71,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
       components={markdownComponents}
       disallowedElements={["img"]}
       preprocess={settled}
+      smooth={smooth}
       defer
     />
   )

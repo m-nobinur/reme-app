@@ -300,6 +300,64 @@ it("a reply streaming in never shows a raw asterisk, an empty bullet or a headin
   expect(md.querySelector("em")?.textContent).toBe("Not sure")
 })
 
+it("reveals a reply that arrived in one burst at a reading pace, and shows a settled one whole", async () => {
+  const motion = (reduce: boolean) =>
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: reduce && query.includes("reduce"),
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }))
+  const burst = "Weddings and proms, lovely. Who books you most? ".repeat(3)
+  const shown = async (isRunning: boolean) => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    unmount = async () => {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+    await act(async () =>
+      root.render(
+        createElement(
+          TextMessagePartProvider,
+          { text: burst, isRunning },
+          createElement(MarkdownText)
+        )
+      )
+    )
+    return container.querySelector(".aui-md") as HTMLElement
+  }
+  const length = (md: HTMLElement) => md.textContent?.trim().length ?? 0
+
+  motion(false)
+  const streaming = await shown(true)
+  expect(length(streaming)).toBeLessThan(10)
+  await act(() => new Promise((resolve) => setTimeout(resolve, 500)))
+  // About 65 characters a second: a third of it after half a second, where
+  // the library's default had drawn nearly all of it.
+  expect(length(streaming)).toBeGreaterThan(10)
+  expect(length(streaming)).toBeLessThan(burst.length / 2)
+  await vi.waitFor(() => expect(length(streaming)).toBe(burst.trim().length), {
+    timeout: 4_000,
+  })
+  await unmount?.()
+
+  // A settled reply, as history loads it, is drawn whole at once.
+  expect(length(await shown(false))).toBe(burst.trim().length)
+  await unmount?.()
+
+  // Less motion shows streaming words at once.
+  motion(true)
+  expect(length(await shown(true))).toBe(burst.trim().length)
+  await unmount?.()
+  unmount = undefined
+})
+
 it("leaves a finished reply's literal asterisks as they are", async () => {
   for (const text of ["Three * four is twelve.", "Note the asterisk*"]) {
     const md = (await renderText(text)).querySelector(".aui-md")

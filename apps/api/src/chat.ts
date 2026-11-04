@@ -2925,7 +2925,13 @@ async function plannedTurn(
     }
   )
   planning = false
-  if (textOpen) write({ type: "text-end", id: "text" })
+  // The words arrive in one burst once the facts commit; ended only after
+  // the turn's rows, the client first sees them still streaming and reveals
+  // them at its pace instead of drawing them whole (2026-11-04).
+  const endText = () => {
+    if (textOpen) write({ type: "text-end", id: "text" })
+    textOpen = false
+  }
   console.log(
     JSON.stringify({
       code: "onboarding.plan",
@@ -3000,6 +3006,7 @@ async function plannedTurn(
       return done
     })
     logged = true
+    endText()
     if (!(staged instanceof Response) || staged.ok) p.committed()
     if (staged instanceof Response) {
       if (!staged.ok) {
@@ -3026,6 +3033,7 @@ async function plannedTurn(
       : staged.step
     await finish(step, staged.lead)
   } catch (error) {
+    endText()
     await p.kit
       .withOrg(scope, (db) => close(db, "error"))
       .catch(() => undefined)
