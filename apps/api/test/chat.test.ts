@@ -168,6 +168,37 @@ describe("the script's next step", () => {
       { type: "text", text: expect.stringMatching(/\?/), state: "done" },
     ])
   })
+
+  it("greets by the time of day in the zone sign-up carried", () => {
+    vi.useFakeTimers({
+      toFake: ["Date"],
+      now: new Date("2026-11-05T14:00:00Z"),
+    })
+    try {
+      const greeting = (orgId: string, zone?: string | null) => {
+        const [, part] = firstMessage(
+          { orgId, orgName: "Brightclean (fixture)", ownerName: "Probe", zone },
+          [],
+          counter()
+        ).content.parts
+        return (part as { text: string }).text.split(".")[0]
+      }
+      const org = Array.from(
+        { length: 50 },
+        (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`
+      ).find((id) => greeting(id, "Europe/London")?.startsWith("Good"))
+      expect(org).toBeDefined()
+      expect(greeting(org as string, "Europe/London")).toBe(
+        "Good afternoon, Probe"
+      )
+      expect(greeting(org as string, "Pacific/Auckland")).toBe(
+        "Hi Probe, it's good to meet you"
+      )
+      expect(greeting(org as string)).toBe("Hi Probe, it's good to meet you")
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 const url = process.env.DATABASE_URL

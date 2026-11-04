@@ -3453,18 +3453,29 @@ async function commitPlan(
  * opener, then the script's first step for the facts the org holds.
  */
 export function firstMessage(
-  org: { orgId: string; orgName: string; ownerName: string },
+  {
+    zone = null,
+    ...org
+  }: {
+    orgId: string
+    orgName: string
+    ownerName: string
+    zone?: string | null
+  },
   current: FactRecord[],
   newId: () => string
 ) {
-  const step = openingParts({
-    ...org,
-    facts: current,
-    passed: [],
-    closed: [],
-    offered: false,
-    builder: null,
-  })
+  const step = openingParts(
+    {
+      ...org,
+      facts: current,
+      passed: [],
+      closed: [],
+      offered: false,
+      builder: null,
+    },
+    zone
+  )
   return {
     id: newId(),
     parentId: null,

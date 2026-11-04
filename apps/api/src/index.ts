@@ -156,6 +156,7 @@ async function signup(
       workosUserId: session.workosUserId,
       email: session.email,
       displayName: session.name,
+      timeZone: parsed.data.time_zone,
     })
     // The owner reads the opener next: the planner's prompt is cached by
     // the time they answer it.

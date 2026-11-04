@@ -34,6 +34,7 @@ import {
   SIGNUP_LEASE_S,
   SignupBusy,
 } from "../src/org.ts"
+import { offerZone } from "../src/time-zone.ts"
 
 /**
  * Two halves, the same split `health.test.ts` uses. The routing half needs no
@@ -747,6 +748,32 @@ describe.skipIf(!url)("one signup at a time, on a live connection", () => {
     // The running attempt's claim is left alone.
     expect(await claimOf(input.workosUserId)).not.toBeNull()
     expect(calls()).toBe(1)
+  }, 30_000)
+
+  it("keeps the browser's zone as the org's, so the sync after it changes nothing, and drops a zone Intl does not know", async () => {
+    const zoned = await createOrg(kit, workosFor("zone").directory, {
+      ...signup("zone"),
+      timeZone: "America/New_York",
+    })
+    const unknown = await createOrg(kit, workosFor("nozone").directory, {
+      ...signup("nozone"),
+      timeZone: "Mars/Olympus",
+    })
+    written.push(zoned.org_id, unknown.org_id)
+    const zoneOf = (orgId: string) =>
+      kit.withOrg({ orgId }, (db) =>
+        db
+          .select({ zone: orgs.timeZone, source: orgs.timeZoneSource })
+          .from(orgs)
+      )
+    expect(await zoneOf(zoned.org_id)).toEqual([
+      { zone: "America/New_York", source: "browser" },
+    ])
+    expect(await zoneOf(unknown.org_id)).toEqual([{ zone: null, source: null }])
+    const synced = await kit.withOrg({ orgId: zoned.org_id }, (db) =>
+      offerZone(db, zoned.org_id, "Europe/London", "browser")
+    )
+    expect(synced).toEqual({ zone: "America/New_York", next: null })
   }, 30_000)
 
   it("takes over a claim older than the lease", async () => {

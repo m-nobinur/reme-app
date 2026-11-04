@@ -1376,7 +1376,9 @@ export function onboardingStep(o: Onboarding, newId: () => string): Part[] {
  * what the business does in words. Its answer goes to the planner, or to the
  * script's `openCard`.
  */
-export const opening = (o: Onboarding): Part[] => [text(opener(voiceOf(o)))]
+export const opening = (o: Onboarding, zone: string | null = null): Part[] => [
+  text(opener(voiceOf(o), zone)),
+]
 
 /**
  * The card a typed message answers when none is waiting: the step the
