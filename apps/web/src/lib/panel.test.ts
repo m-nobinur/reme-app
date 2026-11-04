@@ -324,6 +324,23 @@ describe("the first run", () => {
     ])
   })
 
+  it("closes Look and feel once the build starts, before the answer is stored", () => {
+    const asking = onboarding(8, "waiting")
+    const waiting = firstRun([asking])
+    expect(waiting?.journey.map((each) => each.title)).toEqual([
+      "Website choices",
+    ])
+
+    const building = firstRun([
+      asking,
+      segment("website", "now", along(WEBSITE_STEPS, 0), BUSINESS),
+    ])
+    expect(building?.journey.map((each) => each.title)).not.toContain(
+      "Website choices"
+    )
+    expect(building?.journey.map((each) => each.kind)).toEqual(["website"])
+  })
+
   it("dates each finished part by when its last step settled", () => {
     const steps = onboarding(8).steps.map((each, i) =>
       each.state === "done"

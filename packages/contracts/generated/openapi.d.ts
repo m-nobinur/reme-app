@@ -2190,6 +2190,7 @@ export interface components {
               }
           )[]
           skip_all?: boolean
+          changed?: string[]
         }
       | {
           /** @constant */
@@ -5565,6 +5566,7 @@ export interface components {
                                 }
                             )[]
                             skip_all?: boolean
+                            changed?: string[]
                           }
                         | {
                             /** @constant */

@@ -71,6 +71,18 @@ describe("the logo round the panel shows", () => {
     expect(await read(round("failed"))).toBeUndefined()
     expect(await read(null)).toBeUndefined()
   })
+
+  it("follows the tray: drawing until all three show, even while the round reads its ideas", async () => {
+    expect(await read(round("drawing", ids.slice(0, 1)))).toEqual({
+      status: "drawing",
+      options: 3,
+    })
+    expect(await read(round("drawing", ids))).toEqual({
+      status: "ready",
+      options: 3,
+    })
+    expect(await read(round("drawing", ids), [kept])).toBeUndefined()
+  })
 })
 
 /** The onboarding segment's finish time, on a live connection. */

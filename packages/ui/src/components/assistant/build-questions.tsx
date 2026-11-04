@@ -1,8 +1,10 @@
 import { makeAssistantDataUI, useAui, useAuiState } from "@assistant-ui/react"
 import {
+  ADDRESS_ASK,
   addressReply,
   type BuildQuestion,
   type BuildQuestions,
+  DomainName,
   type QuestionAnswer,
   type QuestionReply,
   SKIP_REPLY,
@@ -50,6 +52,36 @@ export type AnswerBuildQuestion = (answer: {
   conversationId: string
   reply: QuestionReply
 }) => Promise<BuildQuestions | string | null>
+
+/** The address card's own field, in place of the generic "Your answer". */
+const ADDRESS_FIELD = {
+  label: "Web address",
+  placeholder: "yourbusiness.co.uk",
+}
+
+/** The domain in what the owner typed, with any https://, www. or path taken off; null when it is not one. */
+export function domainTyped(text: string) {
+  const host = text
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z]+:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/[/?#].*$/, "")
+  return DomainName.safeParse(host).success ? host : null
+}
+
+/** The address question's name page: the owner types the web address they have. */
+const isAddressName = (question: BuildQuestion) =>
+  question.text === ADDRESS_ASK.name
+
+/** The typed answer as the domain in it, or what is wrong with it. */
+const addressChecked = (typed: ReturnType<typeof answerValue>) => {
+  if ("error" in typed) return typed
+  const domain = domainTyped(String(typed.value))
+  return domain
+    ? { value: domain }
+    : { error: "Enter a web address like yourbusiness.co.uk." }
+}
 
 /** What the owner said to the address question, as their message; null when there is nothing to say. */
 export function addressSaid(
@@ -219,9 +251,10 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
       if (each.answer ?? now[each.id]) continue
       const form = document.getElementById(`${id}-${at}`)
       const fields = new FormData(form as HTMLFormElement)
-      const parsed = answerValue(each.input, (name) =>
+      const typed = answerValue(each.input, (name) =>
         String(fields.get(name) ?? "")
       )
+      const parsed = isAddressName(each) ? addressChecked(typed) : typed
       const saved =
         "error" in parsed
           ? parsed.error
@@ -343,6 +376,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
                     id={`${id}-${at}`}
                     invalid={at === index && error !== null}
                     spec={each.input}
+                    text={isAddressName(each) ? ADDRESS_FIELD : undefined}
                     title={each.text}
                   />
                   {at === index && error ? (

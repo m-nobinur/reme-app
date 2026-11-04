@@ -500,13 +500,16 @@ export const AskDetailsInput = z
  * `ask_details`'s output: the facts the owner stated, at least one. The api
  * refuses a key outside the call's step, a key stated twice, and a skip of a
  * card that is not skippable. `skip_all`, as on `AskDesignOutput`: the owner
- * pressed Pick for me, so the facts are the assistant's choice.
+ * pressed Pick for me, so the facts are the assistant's choice. `changed`
+ * names the keys whose value the owner typed or picked away from what the
+ * card offered; the rest were the card's own defaults.
  */
 export const AskDetailsOutput = z.discriminatedUnion("answer", [
   z.strictObject({
     answer: z.literal("stated"),
     facts: z.array(FactValue).min(1).max(4),
     skip_all: z.boolean().optional(),
+    changed: z.array(z.string()).max(4).optional(),
   }),
   z.strictObject({ answer: z.literal("skipped") }),
 ])

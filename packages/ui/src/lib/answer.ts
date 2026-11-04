@@ -75,8 +75,8 @@ export const FACT_INPUTS = {
         label: "Phone number",
         type: "tel",
         autoComplete: "tel",
-        placeholder: "07700 900123",
-        invalid: "Enter a valid number customers can ring.",
+        placeholder: "+44 7700 900123",
+        invalid: "Enter a valid phone number.",
         check: (value) => typeof value === "string" && dialable(value),
         // What cannot be read stays as typed, for the check to name.
         parse: (raw) => toE164(raw) ?? raw,

@@ -7568,6 +7568,13 @@
               },
               "skip_all": {
                 "type": "boolean"
+              },
+              "changed": {
+                "maxItems": 4,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
@@ -19364,6 +19371,13 @@
                                         },
                                         "skip_all": {
                                           "type": "boolean"
+                                        },
+                                        "changed": {
+                                          "maxItems": 4,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
                                         }
                                       },
                                       "required": [

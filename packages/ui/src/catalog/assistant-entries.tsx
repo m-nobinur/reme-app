@@ -1012,6 +1012,16 @@ const quoteField = (
   options: extra.options ?? null,
 })
 
+const PARKING = quoteField(
+  "parking",
+  "Is there parking outside the property for the driver to use",
+  "select",
+  {
+    hint: "Permits are not needed",
+    options: ["Off-street", "On-street", "None"],
+  }
+)
+
 const LIMOUSINE_QUESTIONS = [
   quoteField("pickup", "Pick-up address", "text", { hint: "Street and town" }),
   quoteField("dropoff", "Drop-off address", "text"),
@@ -1025,6 +1035,7 @@ const LIMOUSINE_QUESTIONS = [
     required: false,
     options: ["Wedding", "Airport transfer", "Night out", "Business"],
   }),
+  PARKING,
   quoteField(
     "notes",
     "Anything else we should know before we quote",
@@ -1046,8 +1057,9 @@ const EVERY_TYPE_QUESTIONS = [
   quoteField("journey_time", "Date and time of the journey", "datetime"),
   quoteField("occasion", "Occasion", "select", {
     required: false,
-    options: ["Wedding", "Airport transfer", "Night out"],
+    options: ["Wedding", "Airport transfer", "Night out", "Birthday"],
   }),
+  PARKING,
   quoteField("vehicle", "Vehicle", "radio", {
     hint: "The minibus seats up to 16",
     options: ["Saloon", "Stretch limousine", "Minibus"],
@@ -3121,6 +3133,11 @@ const assistantCatalog = [
           <SiteReady {...READY} preview="error" />
           <SiteReady {...READY} pictures={null} preview="loading" />
           <SiteReady {...READY} approved />
+          <SiteReady {...READY} connect={{ label: "Connect", onClick: noop }} />
+          <SiteReady
+            {...READY}
+            connect={{ label: "Connect Search Console", onClick: noop }}
+          />
         </div>
       </div>
     ),
