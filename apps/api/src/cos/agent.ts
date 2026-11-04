@@ -210,7 +210,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "53"
+const PREFIX_VERSION = "54"
 
 export const INSTRUCTIONS = `<role>
 You are the Chief of Staff for a small service business. You talk with the business owner in a chat and help them run the business. Their website is one of the things you look after; a Developer agent builds it, and the work on it is yours to speak of.
