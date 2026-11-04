@@ -106,6 +106,7 @@ export const signUp = createServerFn({ method: "POST" })
       // itself, so nothing a caller sends here selects a tenant. 120 is the
       // contract's bound.
       businessName: text(data.businessName, 120),
+      timeZone: text(data.timeZone, 64) || undefined,
     }
   })
   .handler(async ({ data }): Promise<AuthOutcome> => {
@@ -142,7 +143,11 @@ export const signUp = createServerFn({ method: "POST" })
           password: data.password,
           ...sessionOptions(),
         }),
-      { email: data.email, orgName: data.businessName }
+      {
+        email: data.email,
+        orgName: data.businessName,
+        timeZone: data.timeZone,
+      }
     )
   })
 
@@ -525,6 +530,7 @@ export const nameBusiness = createServerFn({ method: "POST" })
     // A display name, as on /sign-up: the api makes the organization itself.
     return {
       businessName: text(data.businessName, 120),
+      timeZone: text(data.timeZone, 64) || undefined,
       returnTo: data.returnTo,
     }
   })
@@ -557,6 +563,7 @@ export const nameBusiness = createServerFn({ method: "POST" })
           sealedSession,
           workosUserId: auth.user.id,
           name: data.businessName,
+          timeZone: data.timeZone,
         }).catch((error: unknown) => {
           // The message only, as at signup (R9).
           console.error(

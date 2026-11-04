@@ -54,8 +54,12 @@ export async function createOrgForSession(input: {
   sealedSession: string
   workosUserId: string
   name: string
+  timeZone?: string
 }): Promise<string> {
-  const body = CreateOrgRequest.parse({ name: input.name })
+  const body = CreateOrgRequest.parse({
+    name: input.name,
+    time_zone: input.timeZone,
+  })
   const response = await apiFetch(new URL("/org", apiUrl()), {
     method: "POST",
     headers: {
