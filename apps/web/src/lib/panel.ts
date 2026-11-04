@@ -400,8 +400,7 @@ function settledOnBuild(activity: Activity): Activity {
   ) {
     return activity
   }
-  const open = (state: ActivitySegment["state"]) =>
-    state === "waiting" || state === "now"
+  const open = (state: string) => state === "waiting" || state === "now"
   return {
     ...activity,
     journey: activity.journey.map((segment) =>
