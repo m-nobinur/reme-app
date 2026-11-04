@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright"
-import { expect, test } from "@playwright/test"
+import { expect, type Page, test } from "@playwright/test"
 import { open, WCAG } from "./helpers"
 
 /**
@@ -73,11 +73,12 @@ test("a segment marks the step at work, and ticks the ones done", async ({
   await open(page, "PanelSegment website photos", 400)
   const segment = page.locator('[data-slot="panel-segment"]')
   await expect(segment.locator('li[data-state="now"]')).toHaveCount(1)
-  await expect(segment.locator('li[data-state="now"]')).toContainText(
-    "Making 4 photos, 2 done"
-  )
+  // The step's name; counted words stay on the Website page.
+  await expect(segment.locator('li[data-state="now"]')).toContainText("Photos")
   await expect(segment.locator('li[data-state="done"]')).toHaveCount(1)
-  await expect(segment.getByText("4 minutes so far")).toBeVisible()
+  await expect(
+    segment.getByText("Step 2 of 6: making your photos")
+  ).toBeVisible()
 })
 
 test("the screenshots step through the deck, and the approve button shows a focus ring from the keyboard", async ({
@@ -308,10 +309,18 @@ test("an approval whose preview fails has no accessibility violations at any wid
   }
 })
 
+/** Coming up and Completed fold to their heading line; open both. */
+async function unfold(page: Page) {
+  for (const name of [/Coming up/, /Completed/]) {
+    await page.getByRole("button", { name }).click()
+  }
+}
+
 test("each timeline is a list per day, with the time of day and how far off it is", async ({
   page,
 }) => {
   await open(page, "ComingUp timeline", 390)
+  await unfold(page)
   const coming = page.getByRole("region", { name: /Coming up/ })
   await expect(coming.getByRole("heading", { level: 3 })).toHaveText([
     "Today",
@@ -342,9 +351,11 @@ test("each timeline is a list per day, with the time of day and how far off it i
     "Today",
     "Wed 28 Oct",
   ])
+  // Finished work keeps its clock time, with no "ago".
   await expect(done.getByRole("list", { name: "Today" })).toContainText(
-    "10:40 AMReminder: call Sam20 min ago"
+    "10:40 AMReminder: call Sam"
   )
+  await expect(done).not.toContainText("ago")
   await expect(done.locator("li[data-soon]")).toHaveCount(0)
   await expect(page.getByText("View all")).toHaveCount(1)
 })
@@ -354,6 +365,7 @@ test("a timeline's time column never wraps, at the panel's width or a phone's", 
 }) => {
   for (const width of [340, 390]) {
     await open(page, "ComingUp timeline", width)
+    await unfold(page)
     for (const time of await page
       .locator('[data-slot="timeline"] time')
       .all()) {

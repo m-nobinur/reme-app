@@ -17,15 +17,17 @@ async function openMenu(page: Page, name: RegExp | string) {
   await page.getByRole("button", { name }).click()
   await expect(menu(page)).toBeVisible()
   // A transition cut short rejects `finished`; that is settled too. Reme's
-  // float and blink never end, so they are not waited on.
+  // float and blink never end, nor does the panel's scroll-driven fade, so
+  // they are not waited on.
   await page.evaluate(() =>
     Promise.all(
       document
         .getAnimations()
         .filter(
           (animation) =>
+            animation.timeline instanceof DocumentTimeline &&
             animation.effect?.getTiming().iterations !==
-            Number.POSITIVE_INFINITY
+              Number.POSITIVE_INFINITY
         )
         .map((animation) => animation.finished.catch(() => undefined))
     )

@@ -30,10 +30,13 @@ export async function settled(page: Page) {
     Promise.all(
       document
         .getAnimations()
+        // A scroll-driven animation (the panel's scroll fade) follows the
+        // scroll position and never finishes on its own.
         .filter(
           (animation) =>
+            animation.timeline instanceof DocumentTimeline &&
             animation.effect?.getTiming().iterations !==
-            Number.POSITIVE_INFINITY
+              Number.POSITIVE_INFINITY
         )
         .map((animation) => animation.finished.catch(() => null))
     )
