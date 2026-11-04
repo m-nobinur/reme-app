@@ -222,6 +222,26 @@ function WorkspaceShell({
   placed.current = floating
   const hasPanel = panel !== null && panel !== undefined
   const docked = hasPanel && !floating
+  // On a phone the pill sits over the top of the page, which starts below it
+  // by the pill's own height, so a line that grows never covers the thread.
+  useEffect(() => {
+    const button = head.current
+    const card = aside.current
+    const column = card?.parentElement
+    if (!docked || !button || !card || !column) return
+    const measure = () =>
+      column.style.setProperty(
+        "--pill",
+        `${button.offsetHeight + card.offsetHeight - card.clientHeight}px`
+      )
+    measure()
+    const watch = new ResizeObserver(measure)
+    watch.observe(button)
+    return () => {
+      watch.disconnect()
+      column.style.removeProperty("--pill")
+    }
+  }, [docked])
   // Tailwind's `md`, the width the sheet hands the rail back to the layout.
   useCloseAt(
     "(min-width: 48rem)",
@@ -385,7 +405,7 @@ function WorkspaceShell({
           className={cn(
             "min-h-0 flex-1 overflow-y-auto",
             docked &&
-              "max-md:pt-14 lg:[--panel-inset:calc(22rem+var(--gap)+0.5rem)]",
+              "max-md:pt-[calc(var(--pill,2.625rem)+var(--gap)+0.5rem)] lg:[--panel-inset:calc(22rem+var(--gap)+0.5rem)]",
             floating && "pb-16"
           )}
           // The page scrolls here, not the window: the router resets and

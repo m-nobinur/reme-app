@@ -58,3 +58,28 @@ for (const width of [390, 1440]) {
     ).toBe(false)
   })
 }
+
+for (const width of [390, 500]) {
+  test(`at ${width} wide the folded pill ends above the thread, however tall its line grows`, async ({
+    page,
+  }) => {
+    await open(page, "Conversation", width)
+    const gap = () =>
+      page.evaluate(() => {
+        const pill = document.querySelector("#workspace-panel")
+        const thread = document.querySelector(
+          '[data-slot="aui_thread-viewport"]'
+        )
+        if (!pill || !thread) throw new Error("no panel or thread")
+        return (
+          thread.getBoundingClientRect().top -
+          pill.getBoundingClientRect().bottom
+        )
+      })
+    expect(await gap()).toBeGreaterThanOrEqual(0)
+    await page.addStyleTag({
+      content: "#workspace-panel > button { min-height: 5rem }",
+    })
+    await expect.poll(gap).toBeGreaterThanOrEqual(0)
+  })
+}

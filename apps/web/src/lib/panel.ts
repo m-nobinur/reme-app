@@ -387,6 +387,37 @@ export function setupParts(segment: ActivitySegment): Part[] {
   })
 }
 
+/**
+ * The answer to the design tray is stored when the turn that started the
+ * build ends, so for a while the panel still read the look as waiting on the
+ * owner. A build under way means setting up is over.
+ */
+function settledOnBuild(activity: Activity): Activity {
+  if (
+    !activity.journey.some(
+      (segment) => segment.kind === "website" && segment.state !== "upcoming"
+    )
+  ) {
+    return activity
+  }
+  const open = (state: ActivitySegment["state"]) =>
+    state === "waiting" || state === "now"
+  return {
+    ...activity,
+    journey: activity.journey.map((segment) =>
+      segment.kind === "onboarding" && open(segment.state)
+        ? {
+            ...segment,
+            state: "done",
+            steps: segment.steps.map((step) =>
+              open(step.state) ? { ...step, state: "done" } : step
+            ),
+          }
+        : segment
+    ),
+  }
+}
+
 const running = (segment: ActivitySegment | undefined) =>
   segment?.state === "now" ||
   segment?.state === "waiting" ||
@@ -395,7 +426,7 @@ const running = (segment: ActivitySegment | undefined) =>
 export function panelFor(input: PanelInput): Panel | null {
   const { workspace, business, now, zone } = input
   const { live, host, builds, attention } = workspace
-  const activity = workspace.activity ?? NO_ACTIVITY
+  const activity = settledOnBuild(workspace.activity ?? NO_ACTIVITY)
   const onboarding = business
     ? onboardingFor(workspace, input.conversations)
     : null
