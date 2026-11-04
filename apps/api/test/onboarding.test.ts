@@ -1665,11 +1665,77 @@ describe("the owner's first name", () => {
   })
 
   it("greets with no name when the account's name is only a title", () => {
-    expect(opener(voice({ owner: firstName("Sir") }))).toMatch(
+    const org = ORGS.find((o) =>
+      opener(voice({ org: o, owner: "" })).startsWith("Hi, good")
+    )
+    expect(opener(voice({ org, owner: firstName("Sir") }))).toMatch(
       /^Hi, good to meet you\./
     )
-    expect(opener(voice({ owner: firstName("Sir Don") }))).toMatch(
+    expect(opener(voice({ org, owner: firstName("Sir Don") }))).toMatch(
       /^Hi Don, good to meet you\./
+    )
+  })
+})
+
+describe("the opener", () => {
+  const MANY = Array.from({ length: 400 }, (_, i) => `org-${i}`)
+  /** The words a reader would notice said twice. */
+  const FUNCTION = new Set(
+    "a an and anything as do for i'll in is it it's me of on or that the there to what with you you'd your".split(
+      " "
+    )
+  )
+  const morning = new Date("2026-11-05T09:30:00Z")
+
+  it("renders all 27 combinations, named and unnamed, with no word said twice, no dash and short paragraphs", () => {
+    for (const owner of ["Sam", ""]) {
+      const seen = new Set(
+        MANY.map((org) =>
+          opener(voice({ org, owner }), "Europe/London", morning)
+        )
+      )
+      expect(seen.size, owner).toBe(27)
+      for (const text of seen) {
+        const [first, ask, ...rest] = text.split("\n\n")
+        expect(rest, text).toEqual([])
+        expect(ask, text).toContain(BUSINESS)
+        expect(text, text).not.toMatch(/[—–-]|website/i)
+        for (const paragraph of [first, ask])
+          expect(paragraph?.split(/\s+/).length, text).toBeLessThanOrEqual(52)
+        const words = text
+          .replace(BUSINESS, "")
+          .toLowerCase()
+          .match(/[a-z']+/g)
+          ?.filter((w) => !FUNCTION.has(w))
+        const twice = words?.filter((w, i) => words.indexOf(w) !== i)
+        expect(twice, text).toEqual([])
+      }
+    }
+  })
+
+  it("greets by the owner's time of day, and plainly with no zone or before 5 AM", () => {
+    const org = MANY.find((o) =>
+      opener(voice({ org: o }), "Europe/London", morning).startsWith("Good")
+    )
+    const at = (zone: string | null, iso: string) =>
+      opener(voice({ org }), zone, new Date(iso)).split(".")[0]
+    expect(at("Europe/London", "2026-11-05T09:30:00Z")).toBe(
+      "Good morning, Sam"
+    )
+    expect(at("Europe/London", "2026-11-05T14:00:00Z")).toBe(
+      "Good afternoon, Sam"
+    )
+    expect(at("America/New_York", "2026-11-06T01:00:00Z")).toBe(
+      "Good evening, Sam"
+    )
+    expect(at("Europe/London", "2026-11-05T03:00:00Z")).toBe(
+      "Hi Sam, it's good to meet you"
+    )
+    expect(at(null, "2026-11-05T09:30:00Z")).toBe(
+      "Hi Sam, it's good to meet you"
+    )
+    expect(opener(voice({ org, owner: "" }), "Europe/London", morning)).toMatch(
+      /^Good morning\. I'm/
     )
   })
 })
@@ -1711,8 +1777,11 @@ describe("the onboarding copy", () => {
       expect(text, name).not.toMatch(
         /\*\*[^*]*\?\s*\*\*|\*\*[^*\n]*\*\*[^.!?\n]*\?/
       )
+      // The opener is the owner's approved copy, held to its own cap below.
       for (const paragraph of text.split(/\n\s*\n/))
-        expect(paragraph.split(/\s+/).length, name).toBeLessThanOrEqual(50)
+        expect(paragraph.split(/\s+/).length, name).toBeLessThanOrEqual(
+          name === "opener" ? 52 : 50
+        )
       expect(voiceProblems(text, { assistantNamed: true }), name).toEqual({
         hard: [],
         soft: [],
@@ -1865,19 +1934,16 @@ describe("the onboarding copy", () => {
       expect(text).toContain("Probe")
       expect(text).not.toContain("Probe Owner")
       expect(text).toContain(BUSINESS)
-      // The owner's new assistant from now on: the website is one thing it offers.
-      expect(text).toMatch(/from now on/i)
-      expect(text).toMatch(/quote/)
-      expect(text).toMatch(/website/)
-      expect(text).toMatch(/if you need/)
-      // The first question asks for detail and says why.
-      expect(text).toContain(`What does ${BUSINESS} do?`)
-      expect(text).toMatch(/anything you don't take on/)
-      expect(text).toMatch(/the better I can answer/)
+      // Who the assistant is and what it takes on; no website offer yet.
+      expect(text).toMatch(/I'm your new business assistant/)
+      expect(text).toMatch(/quotes/)
+      expect(text).not.toMatch(/website/)
+      // The first question asks for the work and the exclusions.
+      expect(text).toMatch(/don't take on|rather not do|turn down/)
       expect(text).not.toMatch(/[—–]|\bReme\b/)
-      // Short paragraphs, one idea each, the question opening its own.
-      expect(text.split("\n\n").length).toBeLessThanOrEqual(3)
-      expect(text).toContain(`\n\nWhat does ${BUSINESS} do?`)
+      // Two paragraphs, the question its own.
+      expect(text.split("\n\n")).toHaveLength(2)
+      expect(text.split("\n\n")[1]).toContain(BUSINESS)
       expect(text).not.toContain("**")
       seen.add(text)
       // No name from the sign-in: no stray comma or space before it.
