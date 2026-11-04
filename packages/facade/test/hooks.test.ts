@@ -134,6 +134,10 @@ describe("the pre_tool_call policy", () => {
       `node -e 'require("fs").readFileSync("/./etc/passwd")'`,
       `node -e 'require("fs").readFileSync("/"+"etc/passwd")'`,
       `node -e 'require("fs").readFileSync("/e"+"tc/passwd")'`,
+      `node -e 'require("fs").readFileSync("/e\\x74c/passwd")'`,
+      `node -e 'require("fs").readFileSync("/\\u0065tc/passwd")'`,
+      `printf '/\\145tc/passwd' | xargs cat`,
+      `node -e 'require("fs").readFileSync(decodeURIComponent("/%65tc/passwd"))'`,
       // Unquoted, a lookalike is still a path: only quotes hold patterns.
       "cat /span",
     ]) {

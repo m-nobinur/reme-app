@@ -117,6 +117,8 @@ const QUOTED = /'[^']*'|"[^"]*"/g
  * or `split(/\s+/)`, is a pattern.
  */
 const namesDisk = (token: string) => {
+  // `\x74`, `\145`, `%65`: a character spelt by code can hide any name.
+  if (/\\[xuU0-7]|%[0-9a-f]{2}/i.test(token)) return true
   // `"/"+"etc"` joins in the script, so `+` is no part of a segment.
   const first = token
     .replace(/[\\+]/g, "")
