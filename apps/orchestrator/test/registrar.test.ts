@@ -316,8 +316,15 @@ describe("the name ranker", () => {
     })
     expect(ranked).toEqual([
       { stem: "sparkleclean", why: "matches your business name", score: 40 },
+      { stem: "sparklecleaners", why: "says what you do, cleaners", score: 19 },
       { stem: "sparklecleanbristol", why: "your name plus Bristol", score: 18 },
       { stem: "bristolcleaning", why: "Bristol plus what you do", score: 12 },
+      { stem: "bristolcleaners", why: "Bristol plus cleaners", score: 11 },
+      {
+        stem: "sparklecleanuk",
+        why: "your name with uk, for a UK business",
+        score: 10,
+      },
       {
         stem: "sparkleclean-bristol",
         why: "your name and Bristol, with a dash",
@@ -335,9 +342,12 @@ describe("the name ranker", () => {
     expect(ranked.map((r) => r.stem)).toEqual([
       "bright",
       "brightbath",
+      "brightcleaners",
       "brightcleaning",
       "bright-bath",
       "bathcleaning",
+      "bathcleaners",
+      "brightuk",
     ])
     expect(new Set(ranked.map((r) => r.why)).size).toBe(ranked.length)
     expect(ranked.find((r) => r.stem === "brightcleaning")?.why).toBe(
@@ -356,15 +366,50 @@ describe("the name ranker", () => {
       "northsidedoggrooming",
       "northsidegrooming",
       "northsideleeds",
+      "northsidedoggroomers",
+      "leedsgroomers",
       "leedsgrooming",
       "leedsdoggrooming",
     ])
     expect(ranked[1]?.why).toBe("shorter, northside grooming")
     expect(
       candidates({ name: "Leeds Cleaning", town: "Leeds" }).map((r) => r.stem)
-    ).toEqual(["leedscleaning"])
+    ).toEqual(["leedscleaning", "leedscleaninguk"])
     for (const r of candidates({ name: "Ab", town: "Leeds", trade: "x" }))
       expect(r.stem.length).toBeLessThanOrEqual(ADDED_MAX)
+  })
+
+  it("offers four to six names from the trade's noun, never the industry's other words (seen 2026-11-04)", () => {
+    const ranked = candidates({
+      name: "Sparkle Clean",
+      town: "Stockport",
+      trade: "Domestic and end of tenancy cleaning",
+    })
+    const stems = ranked.map((r) => r.stem)
+    expect(stems.length).toBeGreaterThanOrEqual(4)
+    expect(stems.join(" ")).not.toMatch(/domestic|tenancy|end/)
+    expect(stems).toEqual(
+      expect.arrayContaining([
+        "sparklecleaners",
+        "sparklecleanstockport",
+        "stockportcleaning",
+      ])
+    )
+    expect(
+      candidates({ name: "Bright", trade: "Cleaning company" }).map(
+        (r) => r.stem
+      )
+    ).toContain("brightcleaning")
+    // The registrar's names are read against the trade's noun alone.
+    expect(
+      suggestions(
+        {
+          name: "Sparkle Clean",
+          trade: "Domestic and end of tenancy cleaning",
+        },
+        ["sparklecleandomestic.com", "sparklecleaners.co.uk"]
+      ).map((r) => r.stem)
+    ).toEqual(["sparklecleaners"])
   })
 
   it("fills from the registrar's names made only of the owner's words, never repeated or long", () => {

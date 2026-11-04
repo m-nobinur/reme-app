@@ -15,7 +15,6 @@ import {
   RowEnding,
   sellableTld,
   townOf,
-  tradeWords,
   Uuid,
 } from "@workspace/contracts"
 import {
@@ -146,7 +145,7 @@ async function rankFacts(db: OrgScopedDb, query?: string) {
       text(value("service_area.radius")?.centre) ??
         text(value("service_area.text")?.text)
     ),
-    trade: tradeWords(text(value("business.industry")?.name)),
+    trade: text(value("business.industry")?.name),
     asked: Boolean(query),
   }
 }
@@ -166,6 +165,29 @@ const rowEndings = (env: Env): readonly RowEnding[] =>
       (offeredTlds(env) as readonly string[]).includes(e) ||
       (e === "co" && registrarLive(env))
   )
+
+/**
+ * The UK endings the sandbox cannot check, read from the registry instead
+ * (RDAP), so a UK business sees its .co.uk first wherever it is found: free
+ * with no price when the name is not registered, absent when RDAP fails.
+ */
+const UK_ENDINGS: readonly RowEnding[] = ["co.uk", "uk"]
+
+async function registryEndings(
+  env: Env,
+  names: string[]
+): Promise<Map<string, ReturnType<typeof endingOf>>> {
+  if (registrarLive(env)) return new Map()
+  const read = await Promise.all(
+    names.map(async (name) => {
+      const found = await rdapLookup(name).catch(() => null)
+      return found
+        ? ([name, { state: found.registered ? "taken" : "free" }] as const)
+        : null
+    })
+  )
+  return new Map(read.filter((r) => r !== null))
+}
 
 /** Names checked in calls of `CHECK_MAX`, all at once. */
 const checkAll = (env: Env, names: string[]) =>
@@ -254,10 +276,20 @@ export async function find(
     return registrarDown()
   }
   const answer = new Map(checked.map((c) => [c.name, c]))
+  const uk = UK_ENDINGS.filter((tld) => !endings.includes(tld))
+  const registry = await registryEndings(
+    env,
+    rows.flatMap((r) => uk.map((tld) => `${r.stem}.${tld}`))
+  )
   const out: DomainStemOffer[] = []
   for (const { stem, why } of rows) {
     const row: DomainStemOffer["endings"] = Object.fromEntries(
-      endings.map((tld) => [tld, endingOf(answer.get(`${stem}.${tld}`))])
+      RowEnding.options.flatMap((tld) => {
+        const name = `${stem}.${tld}`
+        if (endings.includes(tld)) return [[tld, endingOf(answer.get(name))]]
+        const read = registry.get(name)
+        return read ? [[tld, read]] : []
+      })
     )
     if (!Object.values(row).some((e) => e?.state === "free")) continue
     out.push({ stem, why, endings: row })
