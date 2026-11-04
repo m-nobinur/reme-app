@@ -412,10 +412,12 @@ describe("the onboarding steps", () => {
     expect((plain[0] as { text: string }).text).not.toContain("Customers")
     // A yes settles it; without a model a correction cannot be read.
     const asked = card as ToolPart
-    expect(typedAnswer(asked, RECAP_REPLY)).toEqual({
-      kind: "passed",
-      step: "recap",
-    })
+    for (const words of [RECAP_REPLY, "Yes, all correct"]) {
+      expect(typedAnswer(asked, words)).toEqual({
+        kind: "passed",
+        step: "recap",
+      })
+    }
     expect(typedAnswer(asked, "Yes, that's right")).toMatchObject({
       kind: "passed",
     })
