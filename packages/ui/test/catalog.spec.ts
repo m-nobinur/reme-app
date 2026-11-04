@@ -125,6 +125,12 @@ for (const theme of ["light", "dark"] as const) {
     await page.emulateMedia({ reducedMotion: "reduce" })
     await page.goto(`/?theme=${theme}`)
     await page.locator("[data-entry]").first().waitFor()
+    // Reduced motion stops entrances, not colour transitions: a button that
+    // settles from disabled to enabled as its entry loads reads grey mid-way.
+    await page.waitForFunction(
+      () =>
+        !document.getAnimations().some((each) => each instanceof CSSTransition)
+    )
 
     const { violations } = await new AxeBuilder({ page })
       .withTags(WCAG)
