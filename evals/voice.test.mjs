@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { check, verdict } from "./voice.mjs"
+import { check, readJudge, verdict } from "./voice.mjs"
 
 const sample = (text, named = true) => ({ id: "t", source: "cos", text, named })
 
@@ -35,4 +35,22 @@ test("the bar: a hard hit fails, three soft hits fail, two pass, a weak judge fa
   const clean = check([sample("Done.")])
   assert.equal(verdict(clean, [{ score: 5 }]).pass, true)
   assert.equal(verdict(clean, [{ score: 3 }]).pass, false)
+})
+
+test("a judge reply that does not parse is a failed case, and the run goes on", () => {
+  assert.deepEqual(readJudge('{"score": 4, "why": "Plain."}'), {
+    score: 4,
+    why: "Plain.",
+  })
+  for (const bad of [
+    '{"score": 4, "why": "Cut of',
+    '{"score": 9}',
+    undefined,
+  ]) {
+    const read = readJudge(bad)
+    assert.equal(read.score, 0)
+    assert.match(read.why, /^unjudged/)
+  }
+  const clean = check([sample("Done."), sample("Done.")])
+  assert.equal(verdict(clean, [{ score: 5 }, readJudge("{")]).pass, false)
 })
