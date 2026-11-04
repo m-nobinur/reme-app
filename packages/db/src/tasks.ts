@@ -178,7 +178,8 @@ export async function readTasks(db: OrgScopedDb): Promise<OwnerTask[]> {
 /**
  * Where the website's own address stands, from the newest address task:
  * `unknown` until the owner says whether they have a domain, then
- * `choosing` a name, `paying` here, `buying_elsewhere`, `connecting` one,
+ * `choosing` a name, `paying` here, `buying_elsewhere` and then `bought`
+ * once the registry shows it, `connecting` one,
  * `live`, or `put_off` and `declined` by the owner. One reading for the
  * assistant's notes and the draft-ready line, so both say the same.
  */
@@ -191,6 +192,7 @@ export type AddressStage = {
     | "choosing"
     | "paying"
     | "buying_elsewhere"
+    | "bought"
     | "connecting"
     | "live"
   name?: string
@@ -213,8 +215,11 @@ export function addressStage(tasks: readonly OwnerTask[]): AddressStage {
   const state = (step: string) => task.steps.find((s) => s.step === step)
   const purchase = state("purchase")
   if (purchase?.blocked_on === "purchase") return { stage: "paying", ...name }
-  if (task.detail.origin === "buying_elsewhere" && purchase?.state !== "done")
-    return { stage: "buying_elsewhere", ...name }
+  if (task.detail.origin === "buying_elsewhere")
+    return {
+      stage: purchase?.state === "done" ? "bought" : "buying_elsewhere",
+      ...name,
+    }
   if (state("find_out")?.state !== "done") return { stage: "unknown", ...name }
   if (state("choose")?.state === "blocked") return { stage: "choosing" }
   return task.detail.name

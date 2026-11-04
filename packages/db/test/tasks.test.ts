@@ -163,6 +163,14 @@ describe("addressStage", () => {
     expect(
       addressStage([
         task({
+          detail: { name: "x.co.uk", origin: "buying_elsewhere" },
+          steps: [step("purchase", "done")],
+        }),
+      ])
+    ).toEqual({ stage: "bought", name: "x.co.uk" })
+    expect(
+      addressStage([
+        task({
           detail: { name: "x.co.uk", origin: "purchased" },
           steps: [
             step("find_out", "done"),

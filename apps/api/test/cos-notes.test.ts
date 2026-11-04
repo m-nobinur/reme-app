@@ -118,6 +118,15 @@ describe("the open items note", () => {
     expect(text).toMatch(
       /buying sparkleclean\.co\.uk themselves\. When they say it's bought, call domain_bought/
     )
+    const shown = address({
+      detail: { name: "sparkleclean.co.uk", origin: "buying_elsewhere" },
+      steps: [step("purchase", "done")],
+    })
+    expect(
+      openItems({ ...EMPTY, tasks: [shown] }, null, NOW).join("\n")
+    ).toMatch(
+      /bought sparkleclean\.co\.uk themselves and the registry shows it/
+    )
   })
 
   it("tells a draft waiting from a published site, and Google's turn once a domain connects", () => {

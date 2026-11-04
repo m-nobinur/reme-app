@@ -69,6 +69,8 @@ function addressLine(
       return `Web address: ${name} is being bought here and waits for the owner's payment.`
     case "buying_elsewhere":
       return `Web address: the owner is buying ${name} themselves. When they say it's bought, call domain_bought with that name; until then, ask whether they have bought it, never assume.`
+    case "bought":
+      return `Web address: the owner bought ${name} themselves and the registry shows it; putting the website on it is next (connect_domain once they say yes).`
     case "choosing":
       return "Web address: the owner has no domain and wants one; picking a name is next (find_domain). If they say they bought one, ask which and connect it."
     case "declined":
@@ -222,6 +224,7 @@ const UNDER_WAY = new Set([
   "choosing",
   "paying",
   "buying_elsewhere",
+  "bought",
   "connecting",
 ])
 
