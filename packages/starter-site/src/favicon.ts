@@ -199,8 +199,8 @@ type MarkSite = {
   logo: string
 }
 
-const dataUri = (png: Buffer) =>
-  `data:image/png;base64,${png.toString("base64")}`
+const dataUri = (png: Uint8Array) =>
+  `data:image/png;base64,${Buffer.from(png).toString("base64")}`
 
 type Box = { l: number; t: number; r: number; b: number; ink: number }
 
@@ -219,7 +219,7 @@ type Box = { l: number; t: number; r: number; b: number; ink: number }
  * An opaque logo with nothing to cut apart (a frame, a fill, one piece) is
  * drawn whole, exactly as the mark drew every logo before.
  */
-export async function symbolOf(file: Buffer): Promise<string | undefined> {
+export async function symbolOf(file: Uint8Array): Promise<string | undefined> {
   const whole = async () =>
     dataUri(
       await sharp(file).resize(128, 128, { fit: "inside" }).png().toBuffer()
