@@ -1256,7 +1256,7 @@ function TrayFrame({
       aria-label={collapsed ? question : undefined}
       aria-labelledby={collapsed ? undefined : `${id}-question`}
       className={cn(
-        "@container flex max-h-[min(36rem,max(15rem,45dvh))] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground max-sm:max-h-[60svh]",
+        "@container flex max-h-[min(40rem,70dvh)] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground max-sm:max-h-[60svh]",
         className
       )}
       data-collapsed={collapsed || undefined}

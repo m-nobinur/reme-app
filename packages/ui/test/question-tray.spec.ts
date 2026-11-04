@@ -228,6 +228,39 @@ for (const [title, why] of [
   })
 }
 
+test("on an 807 px tall window the palette page is not cut off and ends with the picture upload", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  await page.setViewportSize({ width: 1024, height: 807 })
+  for (const title of [
+    "Palette, nothing picked",
+    "Palette, built from the logo",
+  ]) {
+    const palette = state(page, title)
+    const upload = palette.getByText("Use colours from a picture")
+    await expect(upload).toBeVisible()
+    await expect(
+      palette.getByRole("button", { name: "Surprise me" })
+    ).toBeVisible({ timeout: 4000 })
+    const body = palette.locator("div.overflow-y-auto").first()
+    const [room, frame] = await Promise.all([
+      body.evaluate((box) => box.scrollHeight - box.clientHeight),
+      palette.boundingBox(),
+    ])
+    expect(room).toBeLessThanOrEqual(1)
+    expect(frame?.height).toBeLessThanOrEqual(0.7 * 807)
+    // Palettes first, Surprise me under them, the picture last.
+    const [tiles, surprise, picture] = await Promise.all([
+      palette.getByRole("radio").last().boundingBox(),
+      palette.getByRole("button", { name: "Surprise me" }).boundingBox(),
+      upload.boundingBox(),
+    ])
+    expect(tiles?.y).toBeLessThan(surprise?.y ?? 0)
+    expect(surprise?.y).toBeLessThan(picture?.y ?? 0)
+  }
+})
+
 test("Surprise me moves on at once with reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" })
   await open(page, "QuestionTray")
