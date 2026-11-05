@@ -117,12 +117,9 @@ const rate = (key: string) => (r: Rates) => perMillion(r[key])
  * The cap is the factor times the list price, the day's hourly peak without
  * long-context tiers. OpenRouter compares a provider against it when a
  * request is made, so a provider under it at any hour can serve a call.
- * The entry's cost is the most such a call is billed (owner, 2026-11-06:
- * count as OpenRouter bills, never under it): for each rate, the dearest
- * any admitted provider charges at the hours the cap admits it, a
- * long-context tier from each provider's own tier. Terra's local turns
- * were billed 1.19 times the list price that day; its dearest provider is
- * 2 and the cap 2.1. A call is logged at what OpenRouter billed
+ * The entry's cost is OpenRouter's own listed price for the model (owner,
+ * 2026-11-06): its rates at the day's hourly peak, and its long-context
+ * tiers as listed. A call is logged at what OpenRouter billed
  * (`billed` in `transport.ts`); the cost prices only a call OpenRouter
  * reports no cost for, and the CoS's reservations. With no admitted
  * provider it is the list price. pi-ai takes written tokens out of the
@@ -149,28 +146,14 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
       !ignore.includes(e.tag?.split("/")[0] ?? "") &&
       hours(e.pricing).some(routable)
   )
-  /** The dearest rate for `key` any admitted provider bills in `blocksOf`; the list's with none. */
-  const dearest = (
-    key: string,
-    blocksOf: (e: Endpoint) => Rates[],
-    list: Rates[]
-  ) =>
-    rounded(
-      admitted.length > 0
-        ? Math.max(...admitted.map((e) => peak(key, blocksOf(e))))
-        : peak(key, list)
-    )
-  const costs = (blocksOf: (e: Endpoint) => Rates[], list: Rates[]) => ({
-    input: dearest("prompt", blocksOf, list),
-    output: dearest("completion", blocksOf, list),
-    cacheRead: dearest("input_cache_read", blocksOf, list),
-    cacheWrite: dearest("input_cache_write", blocksOf, list),
+  const costs = (from: Rates[]) => ({
+    input: rounded(peak("prompt", from)),
+    output: rounded(peak("completion", from)),
+    cacheRead: rounded(peak("input_cache_read", from)),
+    cacheWrite: rounded(peak("input_cache_write", from)),
   })
-  const open = (e: Endpoint) => hours(e.pricing).filter(routable)
   // pi-ai applies a tier above `inputTokensAbove`; an override applies from
   // `min_prompt_tokens`, so the threshold is one under it.
-  const tierAt = (pricing: Pricing | undefined, from: number) =>
-    (pricing?.overrides ?? []).filter((o) => o.min_prompt_tokens === from)
   const thresholds = [
     ...new Set(
       (model.pricing?.overrides ?? []).flatMap((o) =>
@@ -181,11 +164,9 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
   const tiers = thresholds.map((from) => ({
     inputTokensAbove: from - 1,
     ...costs(
-      (e) => {
-        const tier = tierAt(e.pricing, from)
-        return tier.length > 0 ? tier : open(e)
-      },
-      tierAt(model.pricing, from)
+      (model.pricing?.overrides ?? []).filter(
+        (o) => o.min_prompt_tokens === from
+      )
     ),
   }))
   const least = (values: (number | null | undefined)[]) => {
@@ -203,7 +184,7 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
       (mode) => mode === "text" || mode === "image"
     ),
     cost: {
-      ...costs(open, listed),
+      ...costs(listed),
       ...(tiers.length > 0 ? { tiers } : {}),
     },
     contextWindow:

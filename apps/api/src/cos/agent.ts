@@ -712,8 +712,7 @@ async function buildPrefix(): Promise<CosPrefix> {
 export type Price = { input: number; output: number; cacheRead: number }
 
 /**
- * The model's price at the dearest provider its routing admits, the most
- * OpenRouter bills, from the table the Developer's metering reads, or
+ * The model's own OpenRouter price, as OpenRouter lists it, from the table the Developer's metering reads, or
  * null for a model the table does not hold. Reservations are priced at it,
  * and a step OpenRouter reports no cost for.
  */
