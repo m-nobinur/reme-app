@@ -207,7 +207,7 @@ const FOLLOW_UP_AFTER: Partial<Record<TaskBlockedOn, number>> = {
 
 /** Each step in the owner's words, since the writer must never say a step name. */
 const STEP_WORDS: Record<TaskStepName, string> = {
-  find_out: "whether you already have a web address",
+  find_out: "whether you already have a domain",
   choose: "choosing a name",
   purchase: "buying the name",
   records: "your DNS change",

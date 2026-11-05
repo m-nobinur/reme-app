@@ -79,7 +79,7 @@ test("the web address question is quick replies, and Yes asks for the name", asy
 }) => {
   await open(page, "BuildQuestionsAddress")
   const have = pills(page).getByRole("group", {
-    name: "Do you already have a web address?",
+    name: "Do you already have a domain?",
   })
   await expect(have.getByRole("button")).toHaveText([
     "Yes, I have one",

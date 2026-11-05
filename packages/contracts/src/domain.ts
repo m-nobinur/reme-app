@@ -150,12 +150,12 @@ export function ownDomain(email: string): string | null {
 }
 
 /**
- * The tray question "Do you already have a web address?" (`kind: "address"`)
+ * The tray question "Do you already have a domain?" (`kind: "address"`)
  * and its answers: one place for the sender, the answer handler and the card.
  * A Yes is followed by a text page for the name, which No and Skip for now close.
  */
 export const ADDRESS_ASK = {
-  have: "Do you already have a web address?",
+  have: "Do you already have a domain?",
   name: "What is it?",
   yes: "Yes, I have one",
   no: "No, help me get one",

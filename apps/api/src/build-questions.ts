@@ -230,13 +230,13 @@ async function stateOffer(
 
 /** The one line Skip for now on the address card gets (owner, 2026-11-05). */
 export const ADDRESS_SKIPPED =
-  "No problem. Your site can go live on its free address, and you can add your own any time from the Connect button."
+  "No problem. Your site can go live on its free address, and you can add your own any time from the Connect now button."
 
 /** How long a Not now holds the address question back. */
 const ADDRESS_LATER_DAYS = 7
 
 /**
- * The owner's answer to "Do you already have a web address?" on the address
+ * The owner's answer to "Do you already have a domain?" on the address
  * task. A Yes changes nothing here: the card's reply carries the name into a
  * normal turn, which connects it. A No means finding out is over and a name
  * is next; Skip for now puts the task off. Both close the page that asks for the

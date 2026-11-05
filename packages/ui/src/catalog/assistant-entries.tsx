@@ -2697,7 +2697,7 @@ const KINDS: ThreadMessageLike[] = [
   posted(
     "29T13:04:02.000",
     "srv_reply",
-    "No problem. Your site can go live on its free address, and you can add your own any time from the Connect button.",
+    "No problem. Your site can go live on its free address, and you can add your own any time from the Connect now button.",
     "reply"
   ),
   posted(
