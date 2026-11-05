@@ -281,6 +281,12 @@ export type Step = {
 /** Why a pass may not make a batch, by code, as its refusal names it. */
 export type Guarded = { code: string; message: string }
 
+const PROTECTED: Guarded = {
+  code: "reflection.protected",
+  message:
+    "That line is the owner's: a pass never changes a line they said, and merges one they confirmed only with words the store already holds.",
+}
+
 /**
  * Whether a pass may make `ops` on `lines`: the owner's own lines are never
  * patched or removed, a line they confirmed is only merged with words the
@@ -319,14 +325,30 @@ export function guardOps(
             false
           )))
     ) {
-      return {
-        code: "reflection.protected",
-        message:
-          "That line is the owner's: a pass never changes a line they said, and merges one they confirmed only with words the store already holds.",
-      }
+      return PROTECTED
     }
   }
   return null
+}
+
+/**
+ * Whether `after` keeps every line the owner said as it was, and every line
+ * they confirmed, changed only into words the store already held. Checked
+ * on the result, since a batch resolves each op on the lines the ops before
+ * it left, not on the store as `guardOps` read it.
+ */
+const keepsTheirs = (
+  before: readonly ProfileLine[],
+  after: readonly ProfileLine[]
+) => {
+  const now = new Map(after.map((l) => [l.id, l.text]))
+  const words = before.map((l) => l.text)
+  return before.every((l) =>
+    l.source === "owner_said"
+      ? now.get(l.id) === l.text
+      : l.source !== "owner_confirmed" ||
+        (now.has(l.id) && inOwnersWords(now.get(l.id) ?? "", words, false))
+  )
 }
 
 /**
@@ -358,6 +380,9 @@ export function reviewBatch(
     elsewhere
   )
   if (!done.ok) return done
+  if (!keepsTheirs(lines, done.lines)) {
+    return { ok: false, refusal: PROTECTED }
+  }
   const was = new Map(lines.map((l) => [l.id, l.source]))
   return {
     ok: true,

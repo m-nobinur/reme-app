@@ -361,6 +361,18 @@ describe("the guards", () => {
         refusal: { code: "reflection.protected" },
       })
     }
+    // An earlier op narrows a shared piece onto the owner's line: refused on the result.
+    const shared = [mine, line("Quotes go out Fridays early")]
+    expect(
+      batch(
+        shared,
+        [
+          { action: "remove", old_text: "Fridays early" },
+          { action: "patch", old_text: "Fridays", content: "Mondays" },
+        ],
+        [...said, "Mondays"]
+      )
+    ).toMatchObject({ refusal: { code: "reflection.protected" } })
     const merged = batch(
       lines,
       [{ action: "patch", old_text: "Mondays", content: "Fridays" }],
