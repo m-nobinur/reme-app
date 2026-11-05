@@ -87,6 +87,12 @@ export const ViewedSkill = z.strictObject({
   parts: z.array(SkillName).max(10).optional(),
   /** The line the owner saw. */
   status: Text(SKILL_STATUS_MAX),
+  /**
+   * This business's notes for the skill, "Notes for this business:" then a
+   * line each, in the owner's words; absent when it has none. With the core
+   * only, so a part never repeats them.
+   */
+  notes: Text(1_000).optional(),
   /** Set when code loaded it on an explicit trigger, never the model. */
   by: z.literal("code").optional(),
 })

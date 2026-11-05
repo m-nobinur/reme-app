@@ -6117,7 +6117,8 @@ export interface components {
         | "connect_google"
         | "get_search_performance"
         | "get_indexing"
-        | "remember"
+        | "memory"
+        | "search_conversations"
         | "put_off"
         | "inspect_domain"
         | "domain_bought"
@@ -6130,6 +6131,7 @@ export interface components {
         | "read_site"
         | "get_preview"
         | "read_skill"
+        | "remember"
       )[]
       text: string
       reserved_usd: number
@@ -6611,7 +6613,8 @@ export interface components {
           | "connect_google"
           | "get_search_performance"
           | "get_indexing"
-          | "remember"
+          | "memory"
+          | "search_conversations"
           | "put_off"
           | "inspect_domain"
           | "domain_bought"
@@ -6624,6 +6627,7 @@ export interface components {
           | "read_site"
           | "get_preview"
           | "read_skill"
+          | "remember"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -9141,25 +9145,71 @@ export interface components {
           turn_id: string
           tool_call_id: string
           /** @constant */
-          tool: "remember"
+          tool: "memory"
           output:
             | {
                 /** @constant */
                 outcome: "saved"
+                /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+                target: string
                 note: string
                 fullness: string
               }
             | {
                 /** @constant */
                 outcome: "full"
+                /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+                target: string
                 note: string
                 fullness: string
-                lines: string[]
+                current_entries: string[]
               }
             | {
                 /** @constant */
                 outcome: "stopped"
                 note: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "search_conversations"
+          output:
+            | {
+                /** @constant */
+                outcome: "found"
+                results: {
+                  /** Format: uuid */
+                  conversation: string
+                  /** Format: date-time */
+                  at: string
+                  /** @enum {string} */
+                  by: "owner" | "assistant"
+                  snippet: string
+                }[]
+              }
+            | {
+                /** @constant */
+                outcome: "none"
               }
             | {
                 /** @constant */
@@ -9372,6 +9422,7 @@ export interface components {
                 body: string
                 parts?: string[]
                 status: string
+                notes?: string
                 /** @constant */
                 by?: "code"
                 /** @constant */
@@ -11678,6 +11729,49 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "remember"
+          output:
+            | {
+                /** @constant */
+                outcome: "saved"
+                note: string
+                fullness: string
+              }
+            | {
+                /** @constant */
+                outcome: "full"
+                note: string
+                fullness: string
+                lines: string[]
+              }
+            | {
+                /** @constant */
+                outcome: "stopped"
+                note: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosToolStarted: {
       tool_call_id: string
       approval_id: string
@@ -11721,7 +11815,8 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
@@ -11734,6 +11829,7 @@ export interface components {
             | "read_site"
             | "get_preview"
             | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11774,7 +11870,8 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
@@ -11787,6 +11884,7 @@ export interface components {
             | "read_site"
             | "get_preview"
             | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11825,7 +11923,8 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
@@ -11838,6 +11937,7 @@ export interface components {
             | "read_site"
             | "get_preview"
             | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11877,7 +11977,8 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
@@ -11890,6 +11991,7 @@ export interface components {
             | "read_site"
             | "get_preview"
             | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11928,7 +12030,8 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
@@ -11941,6 +12044,7 @@ export interface components {
             | "read_site"
             | "get_preview"
             | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11979,7 +12083,8 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
@@ -11992,6 +12097,7 @@ export interface components {
             | "read_site"
             | "get_preview"
             | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -12030,7 +12136,8 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
             | "inspect_domain"
             | "domain_bought"
@@ -12043,6 +12150,7 @@ export interface components {
             | "read_site"
             | "get_preview"
             | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -14258,11 +14366,74 @@ export interface components {
         source: "owner_said" | "owner_confirmed" | "reflection"
       }[]
     }
+    MemoryInput: {
+      /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+      target: string
+      /** @description Applied together against the final character budget; a single change is a one-item list. */
+      operations: {
+        /** @enum {string} */
+        action: "add" | "patch" | "remove"
+        /** @description Required for add and patch. For add, the new entry. For patch, the text that replaces old_text; the rest of the entry is kept. */
+        content?: string
+        /** @description Required for patch and remove: text from one entry. patch replaces exactly this span; remove deletes the whole entry. */
+        old_text?: string
+      }[]
+    }
+    MemoryLineEdit: {
+      /** @enum {string} */
+      store: "user" | "notes" | "skills"
+      /** Format: uuid */
+      id: string
+      text?: string & (unknown & unknown)
+    }
+    MemoryOutput:
+      | {
+          /** @constant */
+          outcome: "saved"
+          /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+          target: string
+          note: string
+          fullness: string
+        }
+      | {
+          /** @constant */
+          outcome: "full"
+          /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+          target: string
+          note: string
+          fullness: string
+          current_entries: string[]
+        }
+      | {
+          /** @constant */
+          outcome: "stopped"
+          note: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     MemoryProposal: {
       /** Format: uuid */
       id: string
       /** @enum {string} */
-      action: "add" | "replace" | "remove"
+      action: "add" | "replace" | "patch" | "remove"
+      /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+      target?: string
       text?: string
       was?: string
       /** Format: date-time */
@@ -14288,6 +14459,8 @@ export interface components {
         }
     MemoryUndo: {
       version: number
+      /** @enum {string} */
+      store?: "user" | "notes" | "skills"
     }
     MemoryView: {
       version: number
@@ -14313,12 +14486,71 @@ export interface components {
         }[]
         undoable: boolean
       }[]
+      notes: {
+        version: number
+        lines: {
+          /** Format: uuid */
+          id: string
+          text: string & (unknown & unknown)
+          /** @enum {string} */
+          source: "owner_said" | "owner_confirmed" | "reflection"
+          /** Format: date-time */
+          at: string
+        }[]
+        max: number
+        versions: {
+          version: number
+          /** Format: date-time */
+          at: string
+          changes: {
+            /** @enum {string} */
+            kind: "added" | "changed" | "removed"
+            text: string
+            /** @enum {string} */
+            source: "owner_said" | "owner_confirmed" | "reflection"
+          }[]
+          undoable: boolean
+        }[]
+      }
+      skills: {
+        version: number
+        notes: {
+          name: string
+          title: string
+          max: number
+          lines: {
+            /** Format: uuid */
+            id: string
+            text: string & (unknown & unknown)
+            /** @enum {string} */
+            source: "owner_said" | "owner_confirmed" | "reflection"
+            /** Format: date-time */
+            at: string
+            stale: boolean
+          }[]
+        }[]
+        versions: {
+          version: number
+          /** Format: date-time */
+          at: string
+          changes: {
+            /** @enum {string} */
+            kind: "added" | "changed" | "removed"
+            text: string
+            /** @enum {string} */
+            source: "owner_said" | "owner_confirmed" | "reflection"
+          }[]
+          undoable: boolean
+        }[]
+      }
       ask_first: boolean
       proposals: {
         /** Format: uuid */
         id: string
         /** @enum {string} */
-        action: "add" | "replace" | "remove"
+        action: "add" | "replace" | "patch" | "remove"
+        /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+        target?: string
         text?: string
         was?: string
         /** Format: date-time */
@@ -14576,7 +14808,9 @@ export interface components {
         /** Format: uuid */
         id: string
         /** @enum {string} */
-        action: "add" | "replace" | "remove"
+        action: "add" | "replace" | "patch" | "remove"
+        /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+        target?: string
         text?: string
         was?: string
         /** Format: date-time */
@@ -15964,6 +16198,46 @@ export interface components {
       google_email: string | null
       connected_at: string | null
     }
+    SearchConversationsInput: {
+      /** @description Words or a phrase they used, or that would be in the answer. */
+      query: string
+    }
+    SearchConversationsOutput:
+      | {
+          /** @constant */
+          outcome: "found"
+          results: {
+            /** Format: uuid */
+            conversation: string
+            /** Format: date-time */
+            at: string
+            /** @enum {string} */
+            by: "owner" | "assistant"
+            snippet: string
+          }[]
+        }
+      | {
+          /** @constant */
+          outcome: "none"
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     SearchProperty: {
       host: string
       site_url: string
@@ -16740,6 +17014,18 @@ export interface components {
       created_at: string
       /** Format: date-time */
       updated_at: string
+    }
+    SkillNotes: {
+      lines: {
+        /** Format: uuid */
+        id: string
+        text: string & (unknown & unknown)
+        /** @enum {string} */
+        source: "owner_said" | "owner_confirmed" | "reflection"
+        /** Format: date-time */
+        at: string
+        skill: string
+      }[]
     }
     StaffDirectory: {
       staff: {

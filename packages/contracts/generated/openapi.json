@@ -21643,7 +21643,8 @@
                 "connect_google",
                 "get_search_performance",
                 "get_indexing",
-                "remember",
+                "memory",
+                "search_conversations",
                 "put_off",
                 "inspect_domain",
                 "domain_bought",
@@ -21655,7 +21656,8 @@
                 "get_review",
                 "read_site",
                 "get_preview",
-                "read_skill"
+                "read_skill",
+                "remember"
               ]
             }
           },
@@ -23290,7 +23292,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember",
+                    "memory",
+                    "search_conversations",
                     "put_off",
                     "inspect_domain",
                     "domain_bought",
@@ -23302,7 +23305,8 @@
                     "get_review",
                     "read_site",
                     "get_preview",
-                    "read_skill"
+                    "read_skill",
+                    "remember"
                   ]
                 },
                 "description": {
@@ -32181,7 +32185,7 @@
               },
               "tool": {
                 "type": "string",
-                "const": "remember"
+                "const": "memory"
               },
               "output": {
                 "oneOf": [
@@ -32191,6 +32195,11 @@
                       "outcome": {
                         "type": "string",
                         "const": "saved"
+                      },
+                      "target": {
+                        "type": "string",
+                        "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
+                        "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
                       },
                       "note": {
                         "type": "string",
@@ -32207,6 +32216,7 @@
                     },
                     "required": [
                       "outcome",
+                      "target",
                       "note",
                       "fullness"
                     ],
@@ -32219,10 +32229,15 @@
                         "type": "string",
                         "const": "full"
                       },
+                      "target": {
+                        "type": "string",
+                        "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
+                        "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+                      },
                       "note": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 200,
+                        "maxLength": 400,
                         "pattern": "\\S"
                       },
                       "fullness": {
@@ -32231,7 +32246,7 @@
                         "maxLength": 60,
                         "pattern": "\\S"
                       },
-                      "lines": {
+                      "current_entries": {
                         "maxItems": 40,
                         "type": "array",
                         "items": {
@@ -32244,9 +32259,10 @@
                     },
                     "required": [
                       "outcome",
+                      "target",
                       "note",
                       "fullness",
-                      "lines"
+                      "current_entries"
                     ],
                     "additionalProperties": false
                   },
@@ -32267,6 +32283,148 @@
                     "required": [
                       "outcome",
                       "note"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "search_conversations"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "found"
+                      },
+                      "results": {
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "conversation": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                            },
+                            "by": {
+                              "type": "string",
+                              "enum": [
+                                "owner",
+                                "assistant"
+                              ]
+                            },
+                            "snippet": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 400,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "conversation",
+                            "at",
+                            "by",
+                            "snippet"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "results"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "none"
+                      }
+                    },
+                    "required": [
+                      "outcome"
                     ],
                     "additionalProperties": false
                   },
@@ -32992,6 +33150,12 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 50,
+                        "pattern": "\\S"
+                      },
+                      "notes": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000,
                         "pattern": "\\S"
                       },
                       "by": {
@@ -42672,6 +42836,166 @@
               "output"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "remember"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "saved"
+                      },
+                      "note": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
+                      },
+                      "fullness": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 60,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "note",
+                      "fullness"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "full"
+                      },
+                      "note": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
+                      },
+                      "fullness": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 60,
+                        "pattern": "\\S"
+                      },
+                      "lines": {
+                        "maxItems": 40,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "note",
+                      "fullness",
+                      "lines"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "stopped"
+                      },
+                      "note": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "note"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -42802,7 +43126,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember",
+                    "memory",
+                    "search_conversations",
                     "put_off",
                     "inspect_domain",
                     "domain_bought",
@@ -42814,14 +43139,15 @@
                     "get_review",
                     "read_site",
                     "get_preview",
-                    "read_skill"
+                    "read_skill",
+                    "remember"
                   ]
                 }
               },
               "steps": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 6
+                "maximum": 16
               },
               "first_chunk_ms": {
                 "anyOf": [
@@ -42942,7 +43268,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember",
+                    "memory",
+                    "search_conversations",
                     "put_off",
                     "inspect_domain",
                     "domain_bought",
@@ -42954,14 +43281,15 @@
                     "get_review",
                     "read_site",
                     "get_preview",
-                    "read_skill"
+                    "read_skill",
+                    "remember"
                   ]
                 }
               },
               "steps": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 6
+                "maximum": 16
               },
               "first_chunk_ms": {
                 "anyOf": [
@@ -43075,7 +43403,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember",
+                    "memory",
+                    "search_conversations",
                     "put_off",
                     "inspect_domain",
                     "domain_bought",
@@ -43087,14 +43416,15 @@
                     "get_review",
                     "read_site",
                     "get_preview",
-                    "read_skill"
+                    "read_skill",
+                    "remember"
                   ]
                 }
               },
               "steps": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 6
+                "maximum": 16
               },
               "first_chunk_ms": {
                 "anyOf": [
@@ -43215,7 +43545,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember",
+                    "memory",
+                    "search_conversations",
                     "put_off",
                     "inspect_domain",
                     "domain_bought",
@@ -43227,14 +43558,15 @@
                     "get_review",
                     "read_site",
                     "get_preview",
-                    "read_skill"
+                    "read_skill",
+                    "remember"
                   ]
                 }
               },
               "steps": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 6
+                "maximum": 16
               },
               "first_chunk_ms": {
                 "anyOf": [
@@ -43348,7 +43680,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember",
+                    "memory",
+                    "search_conversations",
                     "put_off",
                     "inspect_domain",
                     "domain_bought",
@@ -43360,14 +43693,15 @@
                     "get_review",
                     "read_site",
                     "get_preview",
-                    "read_skill"
+                    "read_skill",
+                    "remember"
                   ]
                 }
               },
               "steps": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 6
+                "maximum": 16
               },
               "first_chunk_ms": {
                 "anyOf": [
@@ -43480,7 +43814,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember",
+                    "memory",
+                    "search_conversations",
                     "put_off",
                     "inspect_domain",
                     "domain_bought",
@@ -43492,14 +43827,15 @@
                     "get_review",
                     "read_site",
                     "get_preview",
-                    "read_skill"
+                    "read_skill",
+                    "remember"
                   ]
                 }
               },
               "steps": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 6
+                "maximum": 16
               },
               "first_chunk_ms": {
                 "anyOf": [
@@ -43612,7 +43948,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember",
+                    "memory",
+                    "search_conversations",
                     "put_off",
                     "inspect_domain",
                     "domain_bought",
@@ -43624,14 +43961,15 @@
                     "get_review",
                     "read_site",
                     "get_preview",
-                    "read_skill"
+                    "read_skill",
+                    "remember"
                   ]
                 }
               },
               "steps": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 6
+                "maximum": 16
               },
               "first_chunk_ms": {
                 "anyOf": [
@@ -51767,6 +52105,245 @@
         ],
         "additionalProperties": false
       },
+      "MemoryInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
+            "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+          },
+          "operations": {
+            "minItems": 1,
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "add",
+                    "patch",
+                    "remove"
+                  ]
+                },
+                "content": {
+                  "description": "Required for add and patch. For add, the new entry. For patch, the text that replaces old_text; the rest of the entry is kept.",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "pattern": "\\S"
+                },
+                "old_text": {
+                  "description": "Required for patch and remove: text from one entry. patch replaces exactly this span; remove deletes the whole entry.",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "action"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Applied together against the final character budget; a single change is a one-item list."
+          }
+        },
+        "required": [
+          "target",
+          "operations"
+        ],
+        "additionalProperties": false
+      },
+      "MemoryLineEdit": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "store": {
+            "type": "string",
+            "enum": [
+              "user",
+              "notes",
+              "skills"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "allOf": [
+              {
+                "pattern": "\\S"
+              },
+              {
+                "pattern": "^[^\\r\\n]+$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "store",
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "MemoryOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "saved"
+              },
+              "target": {
+                "type": "string",
+                "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
+                "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "fullness": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "outcome",
+              "target",
+              "note",
+              "fullness"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "full"
+              },
+              "target": {
+                "type": "string",
+                "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
+                "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 400,
+                "pattern": "\\S"
+              },
+              "fullness": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "\\S"
+              },
+              "current_entries": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "pattern": "\\S"
+                }
+              }
+            },
+            "required": [
+              "outcome",
+              "target",
+              "note",
+              "fullness",
+              "current_entries"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "stopped"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "outcome",
+              "note"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
       "MemoryProposal": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -51781,8 +52358,14 @@
             "enum": [
               "add",
               "replace",
+              "patch",
               "remove"
             ]
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
+            "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
           },
           "text": {
             "type": "string",
@@ -51877,6 +52460,14 @@
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
+          },
+          "store": {
+            "type": "string",
+            "enum": [
+              "user",
+              "notes",
+              "skills"
+            ]
           }
         },
         "required": [
@@ -52005,6 +52596,305 @@
               "additionalProperties": false
             }
           },
+          "notes": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "allOf": [
+                        {
+                          "pattern": "\\S"
+                        },
+                        {
+                          "pattern": "^[^\\r\\n]+$"
+                        }
+                      ]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "owner_said",
+                        "owner_confirmed",
+                        "reflection"
+                      ]
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "text",
+                    "source",
+                    "at"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "max": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "versions": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "changes": {
+                      "maxItems": 40,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "added",
+                              "changed",
+                              "removed"
+                            ]
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "pattern": "\\S"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "owner_said",
+                              "owner_confirmed",
+                              "reflection"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "text",
+                          "source"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "undoable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "at",
+                    "changes",
+                    "undoable"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "version",
+              "lines",
+              "max",
+              "versions"
+            ],
+            "additionalProperties": false
+          },
+          "skills": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "notes": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "maxLength": 64,
+                      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "pattern": "\\S"
+                    },
+                    "max": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "lines": {
+                      "maxItems": 40,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "allOf": [
+                              {
+                                "pattern": "\\S"
+                              },
+                              {
+                                "pattern": "^[^\\r\\n]+$"
+                              }
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "owner_said",
+                              "owner_confirmed",
+                              "reflection"
+                            ]
+                          },
+                          "at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                          },
+                          "stale": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "source",
+                          "at",
+                          "stale"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "title",
+                    "max",
+                    "lines"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "versions": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "changes": {
+                      "maxItems": 40,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "added",
+                              "changed",
+                              "removed"
+                            ]
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "pattern": "\\S"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "owner_said",
+                              "owner_confirmed",
+                              "reflection"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "text",
+                          "source"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "undoable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "at",
+                    "changes",
+                    "undoable"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "version",
+              "notes",
+              "versions"
+            ],
+            "additionalProperties": false
+          },
           "ask_first": {
             "type": "boolean"
           },
@@ -52024,8 +52914,14 @@
                   "enum": [
                     "add",
                     "replace",
+                    "patch",
                     "remove"
                   ]
+                },
+                "target": {
+                  "type": "string",
+                  "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
+                  "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
                 },
                 "text": {
                   "type": "string",
@@ -52103,6 +52999,8 @@
           "version",
           "lines",
           "versions",
+          "notes",
+          "skills",
           "ask_first",
           "proposals",
           "corrections"
@@ -52705,8 +53603,14 @@
                   "enum": [
                     "add",
                     "replace",
+                    "patch",
                     "remove"
                   ]
+                },
+                "target": {
+                  "type": "string",
+                  "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
+                  "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
                 },
                 "text": {
                   "type": "string",
@@ -57735,6 +58639,142 @@
         ],
         "additionalProperties": false
       },
+      "SearchConversationsInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S",
+            "description": "Words or a phrase they used, or that would be in the answer."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "SearchConversationsOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "found"
+              },
+              "results": {
+                "minItems": 1,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "conversation": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "by": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "assistant"
+                      ]
+                    },
+                    "snippet": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 400,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "conversation",
+                    "at",
+                    "by",
+                    "snippet"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "outcome",
+              "results"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "none"
+              }
+            },
+            "required": [
+              "outcome"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
       "SearchProperty": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -60579,6 +61619,69 @@
           "retire_after",
           "created_at",
           "updated_at"
+        ],
+        "additionalProperties": false
+      },
+      "SkillNotes": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "lines": {
+            "maxItems": 120,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "allOf": [
+                    {
+                      "pattern": "\\S"
+                    },
+                    {
+                      "pattern": "^[^\\r\\n]+$"
+                    }
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "owner_said",
+                    "owner_confirmed",
+                    "reflection"
+                  ]
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "skill": {
+                  "type": "string",
+                  "maxLength": 64,
+                  "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+                }
+              },
+              "required": [
+                "id",
+                "text",
+                "source",
+                "at",
+                "skill"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "lines"
         ],
         "additionalProperties": false
       },

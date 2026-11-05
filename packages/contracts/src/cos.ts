@@ -24,7 +24,7 @@ import {
   NotRegisteredYet,
 } from "./domain.ts"
 import { ToolCallId } from "./ids.ts"
-import { RememberInput, RememberOutput } from "./memory.ts"
+import { MemoryInput, MemoryOutput, RememberOutput } from "./memory.ts"
 import {
   BUILD_ACTIVITY_MAX,
   BuildStopCause,
@@ -806,6 +806,38 @@ export const PutOffInput = z.strictObject({
   never: z.boolean().optional(),
 })
 
+/** `search_conversations`'s input, after Hermes's session search: words to find in earlier conversations. */
+export const SearchConversationsInput = z.strictObject({
+  query: Text(200).describe(
+    "Words or a phrase they used, or that would be in the answer."
+  ),
+})
+
+/**
+ * `search_conversations`'s output: the best matches from this business's
+ * earlier conversations, newest and best first, each a short snippet of
+ * what the owner or the assistant wrote, with when and in which
+ * conversation. Tool results and emails are never searched.
+ */
+export const SearchConversationsOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("found"),
+    results: z
+      .array(
+        z.strictObject({
+          conversation: Uuid,
+          at: Timestamp,
+          by: z.enum(["owner", "assistant"]),
+          snippet: Text(400),
+        })
+      )
+      .min(1)
+      .max(8),
+  }),
+  z.strictObject({ outcome: z.literal("none") }),
+  Refused,
+])
+
 /** `put_off`'s output: when the offer may come back. */
 export const PutOffOutput = z.discriminatedUnion("outcome", [
   z.strictObject({ outcome: z.literal("put_off"), until: Timestamp }),
@@ -876,7 +908,11 @@ export const COS_TOOLS = {
     output: GetSearchPerformanceOutput,
   },
   get_indexing: { input: GetIndexingInput, output: GetIndexingOutput },
-  remember: { input: RememberInput, output: RememberOutput },
+  memory: { input: MemoryInput, output: MemoryOutput },
+  search_conversations: {
+    input: SearchConversationsInput,
+    output: SearchConversationsOutput,
+  },
   put_off: { input: PutOffInput, output: PutOffOutput },
   inspect_domain: { input: InspectDomainInput, output: InspectDomainOutput },
   domain_bought: { input: DomainBoughtInput, output: BoughtElsewhereOutput },
@@ -899,6 +935,7 @@ const LoggedToolName = z.enum([
   ...CosToolName.options,
   "get_preview",
   "read_skill",
+  "remember",
 ])
 
 const Usage = z.strictObject({
@@ -922,7 +959,8 @@ const Ran = {
   usage: Usage,
   cost_usd: Usd,
   tools: z.array(LoggedToolName),
-  steps: z.int().min(0).max(6),
+  /** At most the run's step limit (`LIMITS.steps`), 6 on rows before it was 16. */
+  steps: z.int().min(0).max(16),
   /** Null when no model call was made. */
   first_chunk_ms: z.int().nonnegative().nullable(),
 }
@@ -1107,8 +1145,13 @@ export const CosToolResult = z.discriminatedUnion("tool", [
   }),
   z.strictObject({
     ...Called,
-    tool: z.literal("remember"),
-    output: COS_TOOLS.remember.output,
+    tool: z.literal("memory"),
+    output: COS_TOOLS.memory.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("search_conversations"),
+    output: COS_TOOLS.search_conversations.output,
   }),
   z.strictObject({
     ...Called,
@@ -1169,6 +1212,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     ...Called,
     tool: z.literal("read_skill"),
     output: ReadSkillOutput,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("remember"),
+    output: RememberOutput,
   }),
 ])
 
@@ -1328,6 +1376,10 @@ export type DomainBoughtInput = z.infer<typeof DomainBoughtInput>
 export type InspectDomainInput = z.infer<typeof InspectDomainInput>
 export type InspectDomainOutput = z.infer<typeof InspectDomainOutput>
 export type PutOffInput = z.infer<typeof PutOffInput>
+export type SearchConversationsInput = z.infer<typeof SearchConversationsInput>
+export type SearchConversationsOutput = z.infer<
+  typeof SearchConversationsOutput
+>
 export type PutOffOutput = z.infer<typeof PutOffOutput>
 export type GrantKind = z.infer<typeof GrantKind>
 export type OfferGrantInput = z.infer<typeof OfferGrantInput>

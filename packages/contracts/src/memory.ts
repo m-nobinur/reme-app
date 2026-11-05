@@ -2,7 +2,7 @@ import { z } from "zod"
 import { Timestamp, Uuid } from "./common.ts"
 import { BUSINESS_ADDRESS_KEY } from "./domain.ts"
 import { Refused } from "./refused.ts"
-import { STAFF_CORRECTIONS_KEY, StaffCorrections } from "./skills.ts"
+import { SkillName, STAFF_CORRECTIONS_KEY, StaffCorrections } from "./skills.ts"
 import { TIPS_KEY } from "./task.ts"
 import { Text } from "./text.ts"
 
@@ -19,6 +19,14 @@ export const OWNER_PROFILE_KEY = "owner.profile"
  */
 export const WORKING_NOTES_KEY = "assistant.working_notes"
 
+/**
+ * The notes each business keeps for one skill (after Hermes routing a task's
+ * preferences to its skill): how this owner wants that kind of work done.
+ * The skills are shared by every business, so the notes live here, per org,
+ * and load only with their skill.
+ */
+export const SKILL_NOTES_KEY = "assistant.skill_notes"
+
 /** The owner's "Ask me before saving" choice, the changes reflection proposed, and how far the chat has shown the profile's changes. */
 export const OWNER_MEMORY_REVIEW_KEY = "owner.memory_review"
 
@@ -33,6 +41,7 @@ export const PRIVATE_FACT_KEYS: readonly string[] = [
   OWNER_PROFILE_KEY,
   WORKING_NOTES_KEY,
   OWNER_MEMORY_REVIEW_KEY,
+  SKILL_NOTES_KEY,
   BUSINESS_ADDRESS_KEY,
   STAFF_CORRECTIONS_KEY,
   TIPS_KEY,
@@ -43,6 +52,8 @@ export const PROFILE_MAX_CHARS = 1_500
 export const PROFILE_LINE_MAX = 300
 /** The most the working notes may hold, counted the same way. */
 export const NOTES_MAX_CHARS = 2_200
+/** The most one skill's notes may hold for one business, counted the same way. */
+export const SKILL_NOTES_MAX_CHARS = 600
 
 /** How a line came to be there. Only `owner_said` is protected from reflection. */
 export const ProfileSource = z.enum([
@@ -76,14 +87,49 @@ export const WorkingNotes = z
     message: `The working notes hold at most ${NOTES_MAX_CHARS} characters.`,
   })
 
+/** One line of a skill's notes for this business. */
+export const SkillNoteLine = ProfileLine.extend({ skill: SkillName })
+
+/** `assistant.skill_notes`'s value: every skill's notes, each within its own budget. */
+export const SkillNotes = z
+  .strictObject({ lines: z.array(SkillNoteLine).max(120) })
+  .refine(
+    (p) =>
+      [...new Set(p.lines.map((l) => l.skill))].every(
+        (skill) =>
+          profileText(p.lines.filter((l) => l.skill === skill)).length <=
+          SKILL_NOTES_MAX_CHARS
+      ),
+    {
+      message: `Each skill's notes hold at most ${SKILL_NOTES_MAX_CHARS} characters.`,
+    }
+  )
+
+/**
+ * Where a `memory` write goes: `user`, the owner profile; `notes`, the
+ * working notes; `skill:<name>`, that skill's notes for this business.
+ */
+export const MemoryTarget = z
+  .string()
+  .regex(/^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$/)
+  .describe(
+    "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+  )
+
+/** The stores the owner's page edits and undoes: every skill's notes are one store. */
+export const MemoryStoreName = z.enum(["user", "notes", "skills"])
+
 /**
  * A change reflection wants to make while "Ask me before saving" is on. It
  * waits on the owner's page: accepting it saves it as `owner_confirmed`.
- * `was` is the whole line a replace or remove would touch.
+ * `was` is the whole line a replace, patch or remove would touch.
  */
 export const MemoryProposal = z.strictObject({
   id: Uuid,
-  action: z.enum(["add", "replace", "remove"]),
+  /** `patch` is the `memory` tool's; `replace` stays for proposals stored before it. */
+  action: z.enum(["add", "replace", "patch", "remove"]),
+  /** The store it changes; absent on proposals stored before notes and skill notes, which were the profile's. */
+  target: MemoryTarget.optional(),
   text: Text(PROFILE_LINE_MAX).optional(),
   was: Text(PROFILE_LINE_MAX).optional(),
   at: Timestamp,
@@ -120,7 +166,7 @@ export const RememberOperation = z.strictObject({
     ),
 })
 
-/** `remember`'s input: every change in one call, applied together or not at all. */
+/** `remember`'s input, which `memory` replaced. Kept so a session logged before the rename still parses. */
 export const RememberInput = z.strictObject({
   operations: z.array(RememberOperation).min(1).max(8),
   store: z
@@ -131,11 +177,7 @@ export const RememberInput = z.strictObject({
     ),
 })
 
-/**
- * `remember`'s output. `saved` says the write is complete. `full` carries
- * the current lines so the next call can merge or remove first; `stopped`
- * ends the retries for the turn. Anything else is a `Refused`.
- */
+/** `remember`'s output, kept with its input for sessions logged before `memory`. */
 export const RememberOutput = z.discriminatedUnion("outcome", [
   z.strictObject({
     outcome: z.literal("saved"),
@@ -147,6 +189,62 @@ export const RememberOutput = z.discriminatedUnion("outcome", [
     note: Text(200),
     fullness: Text(60),
     lines: z.array(Text(PROFILE_LINE_MAX)).max(40),
+  }),
+  z.strictObject({ outcome: z.literal("stopped"), note: Text(200) }),
+  Refused,
+])
+
+/**
+ * One change in a `memory` batch, after Hermes's memory tool: `add` a new
+ * entry; `patch` the span `old_text` of the one entry holding it into
+ * `content`, the rest of the entry kept; `remove` the one entry holding
+ * `old_text`. Which fields each action needs is checked where the batch is
+ * applied, as with `RememberOperation`.
+ */
+export const MemoryOperation = z.strictObject({
+  action: z.enum(["add", "patch", "remove"]),
+  content: Text(PROFILE_LINE_MAX)
+    .optional()
+    .describe(
+      "Required for add and patch. For add, the new entry. For patch, the text that replaces old_text; the rest of the entry is kept."
+    ),
+  old_text: Text(PROFILE_LINE_MAX)
+    .optional()
+    .describe(
+      "Required for patch and remove: text from one entry. patch replaces exactly this span; remove deletes the whole entry."
+    ),
+})
+
+/** `memory`'s input: one target, every change to it in one batch, applied together or not at all. */
+export const MemoryInput = z.strictObject({
+  target: MemoryTarget,
+  operations: z
+    .array(MemoryOperation)
+    .min(1)
+    .max(8)
+    .describe(
+      "Applied together against the final character budget; a single change is a one-item list."
+    ),
+})
+
+/**
+ * `memory`'s output. `saved` says the write is complete. `full` carries the
+ * store's current entries so one batch can consolidate and add together;
+ * `stopped` ends the retries for the turn. Anything else is a `Refused`.
+ */
+export const MemoryOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("saved"),
+    target: MemoryTarget,
+    note: Text(200),
+    fullness: Text(60),
+  }),
+  z.strictObject({
+    outcome: z.literal("full"),
+    target: MemoryTarget,
+    note: Text(400),
+    fullness: Text(60),
+    current_entries: z.array(Text(PROFILE_LINE_MAX)).max(40),
   }),
   z.strictObject({ outcome: z.literal("stopped"), note: Text(200) }),
   Refused,
@@ -170,15 +268,42 @@ export const ProfileVersion = z.strictObject({
   undoable: z.boolean(),
 })
 
+/** One store as the owner's page shows it: its lines, its budget and the versions behind them. */
+export const MemoryLayer = z.strictObject({
+  version: z.int().nonnegative(),
+  lines: z.array(ProfileLine),
+  max: z.int().positive(),
+  versions: z.array(ProfileVersion).max(50),
+})
+
 /**
- * `GET /memory`: the current lines and the versions behind them, newest
- * first, and the owner's corrections for staff, each of which the owner may
- * remove with `DELETE /memory/corrections/{id}` (answered with this view).
+ * One skill's notes for this business, under the skill's plain name. A
+ * line is `stale` once its skill has not loaded for 60 days (after Hermes's
+ * curator): shown to the owner, never removed for it.
+ */
+export const SkillNotesView = z.strictObject({
+  name: SkillName,
+  title: Text(80),
+  max: z.int().positive(),
+  lines: z.array(ProfileLine.extend({ stale: z.boolean() })).max(40),
+})
+
+/**
+ * `GET /memory`: the profile's lines and the versions behind them, newest
+ * first; the working notes and every skill's notes the same way; and the
+ * owner's corrections for staff, each of which the owner may remove with
+ * `DELETE /memory/corrections/{id}` (answered with this view).
  */
 export const MemoryView = z.strictObject({
   version: z.int().nonnegative(),
   lines: z.array(ProfileLine),
   versions: z.array(ProfileVersion).max(50),
+  notes: MemoryLayer,
+  skills: z.strictObject({
+    version: z.int().nonnegative(),
+    notes: z.array(SkillNotesView).max(40),
+    versions: z.array(ProfileVersion).max(50),
+  }),
   ask_first: z.boolean(),
   proposals: z.array(MemoryProposal).max(10),
   corrections: StaffCorrections.shape.lines,
@@ -191,8 +316,20 @@ export const MemoryReviewAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("dismiss"), id: Uuid }),
 ])
 
-/** `POST /memory/undo`: undoes the newest version, named so a stale page undoes nothing. */
-export const MemoryUndo = z.strictObject({ version: z.int().positive() })
+/** `POST /memory/undo`: undoes one version of a store, named so a stale page undoes nothing; no store is the profile. */
+export const MemoryUndo = z.strictObject({
+  version: z.int().positive(),
+  store: MemoryStoreName.optional(),
+})
+
+/** `POST /memory/lines`: the owner rewrites one line in their own words, or removes it when `text` is absent. */
+export const MemoryLineEdit = z.strictObject({
+  store: MemoryStoreName,
+  id: Uuid,
+  text: Text(PROFILE_LINE_MAX)
+    .regex(/^[^\r\n]+$/)
+    .optional(),
+})
 
 /** The `data-memory` part: "Saved to memory", shown once on the turn after a write. */
 export const MemoryChip = z.strictObject({
@@ -212,3 +349,13 @@ export type MemoryProposal = z.infer<typeof MemoryProposal>
 export type MemoryReviewAction = z.infer<typeof MemoryReviewAction>
 export type MemoryUndo = z.infer<typeof MemoryUndo>
 export type MemoryChip = z.infer<typeof MemoryChip>
+export type MemoryOperation = z.infer<typeof MemoryOperation>
+export type MemoryInput = z.infer<typeof MemoryInput>
+export type MemoryOutput = z.infer<typeof MemoryOutput>
+export type MemoryTarget = z.infer<typeof MemoryTarget>
+export type MemoryStoreName = z.infer<typeof MemoryStoreName>
+export type MemoryLayer = z.infer<typeof MemoryLayer>
+export type MemoryLineEdit = z.infer<typeof MemoryLineEdit>
+export type SkillNoteLine = z.infer<typeof SkillNoteLine>
+export type SkillNotes = z.infer<typeof SkillNotes>
+export type SkillNotesView = z.infer<typeof SkillNotesView>
