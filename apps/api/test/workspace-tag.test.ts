@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import type { Owner as Caller } from "../src/changes.ts"
 import type { Held } from "../src/onboarding.ts"
 import {
+  designCallId,
   finishedAt,
   logoRound,
   readTaggedWorkspace,
@@ -146,6 +147,27 @@ describe.skipIf(!url)("when onboarding finished, on a live connection", () => {
     kit.withOrg({ orgId: who.orgId }, (db) =>
       finishedAt(db, { id, updated_at: at(59) })
     )
+
+  it("finds the newest design tray's id, answered or not, and none without one", async () => {
+    const design = (toolCallId: string, state: string): Part => ({
+      ...card("tool-ask_design", state),
+      toolCallId,
+    })
+    const called = (id: string) =>
+      kit.withOrg({ orgId: who.orgId }, (db) => designCallId(db, id))
+    const without = await onboarding([
+      ["assistant", 0, [card("tool-ask_choice", "output-available")]],
+    ])
+    expect(await called(without)).toBeNull()
+    const asked = await onboarding([
+      ["assistant", 0, [design("call_old", "output-available")]],
+      ["user", 1, [say]],
+      ["assistant", 2, [say, design("call_new", "output-available")]],
+      ["user", 3, [say]],
+      ["assistant", 4, [say]],
+    ])
+    expect(await called(asked)).toBe("call_new")
+  })
 
   it("is the row after the newest settled card, not the conversation's last message", async () => {
     const id = await onboarding([

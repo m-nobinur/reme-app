@@ -737,17 +737,19 @@ export function panelFor(input: PanelInput): Panel | null {
     return { ...each, quiet: needed && each.state === "now" }
   }
   const parts = current?.kind === "onboarding" ? setupViews(current) : []
-  // The design tray's logo round, as its own row under setting up.
-  const logo: SegmentView[] = current?.logo
+  // The design tray's logo round, as its own row under setting up, and under
+  // the build when that began before a logo was picked.
+  const round = journey.find((segment) => segment.kind === "onboarding")?.logo
+  const logo: SegmentView[] = round
     ? [
         {
           id: "logo",
           kind: "onboarding",
-          state: current.logo.status === "drawing" ? "now" : "waiting",
-          icon: current.logo.status === "drawing" ? "polishing" : "waiting",
+          state: round.status === "drawing" ? "now" : "waiting",
+          icon: round.status === "drawing" ? "polishing" : "waiting",
           title: "Your logo",
           working: "Your logo",
-          line: logoLine(current.logo),
+          line: logoLine(round),
           status: null,
           quiet: true,
           steps: [],
@@ -759,11 +761,14 @@ export function panelFor(input: PanelInput): Panel | null {
   return {
     line,
     badge,
-    journey: current
-      ? current.kind === "onboarding"
-        ? [...parts.filter((part) => part.state !== "done"), ...logo]
-        : [shownView(current)]
-      : [],
+    journey: [
+      ...(current
+        ? current.kind === "onboarding"
+          ? parts.filter((part) => part.state !== "done")
+          : [shownView(current)]
+        : []),
+      ...logo,
+    ],
     finished: [
       ...parts.filter((part) => part.state === "done"),
       ...before.flatMap((segment) =>

@@ -745,6 +745,11 @@ async function domainElsewhere(
   return await outcome(await post(path, undefined, key), path)
 }
 
+async function domainNotYet(name: string, key: string): Promise<WriteOutcome> {
+  const path = `/domains/${DomainName.parse(name)}/not-yet`
+  return await outcome(await post(path, undefined, key), path)
+}
+
 async function completeReminder(id: string): Promise<WriteOutcome> {
   const path = `/reminders/${segment(id)}`
   // Done is done: a second press is the same request.
@@ -1034,6 +1039,7 @@ export const apiSource: OwnerDataSource = {
   domainStatus,
   domainRegistrant,
   domainElsewhere,
+  domainNotYet,
   googleConnect,
   googleResult,
   conversations,

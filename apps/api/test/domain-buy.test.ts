@@ -5,12 +5,15 @@ import {
   ErrorEnvelope,
 } from "@workspace/contracts"
 import {
+  addressStage,
   currentFacts,
   domains,
   eq,
   factVersions,
   memberships,
+  openTask,
   orgs,
+  readTasks,
   sql,
   supersedeFact,
   supersedePrivateFact,
@@ -525,6 +528,34 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
         .where(sql`${memberships.orgId} = ${member.orgId}`)
     )
     expect((await post(member, "bought")).status).toBe(403)
+  })
+
+  it("puts the address off when the owner has not bought the name yet, for the owner only", async () => {
+    const name = `notyet-${crypto.randomUUID().slice(0, 8)}.com`
+    const stage = async (who: Owner) =>
+      addressStage(await kit.withOrg({ orgId: who.orgId }, readTasks))
+    await kit.withOrg({ orgId: me.orgId }, (db) =>
+      openTask(db, me.orgId, "address", { name, origin: "buying_elsewhere" })
+    )
+    const stub = stubOrchestrator(() => new Response(null, { status: 204 }))
+    const post = (who: Owner, n = name) =>
+      who.call(stub, `/domains/${n}/not-yet`, {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+      })
+    expect((await stage(me)).stage).toBe("buying_elsewhere")
+    expect((await post(me, "other.com")).status).toBe(204)
+    expect((await stage(me)).stage).toBe("buying_elsewhere")
+    expect((await post(me)).status).toBe(204)
+    expect(await stage(me)).toMatchObject({ stage: "put_off", name })
+    const member = await owner(kit, url as string, "notyet-member")
+    await kit.withOrg({ orgId: member.orgId }, (db) =>
+      db
+        .update(memberships)
+        .set({ role: "member" })
+        .where(sql`${memberships.orgId} = ${member.orgId}`)
+    )
+    expect((await post(member)).status).toBe(403)
   })
 
   it("bridges the check the owner's tab asks for back from Domain Connect", async () => {

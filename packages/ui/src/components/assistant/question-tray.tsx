@@ -1196,22 +1196,51 @@ function TrayFrame({
     if (body)
       setMore(body.scrollHeight - body.scrollTop - body.clientHeight > 4)
   }
-  // The body is held at its content's height, so a new page eases to its own
-  // height instead of snapping; the frame's cap still shrinks it to scroll.
-  // The write waits a frame: the body is observed too, and resizing it in
-  // the observer's own callback would loop.
+  // The body takes its content's height at once, so a part of a page that
+  // opens or folds (its own ease) never leaves the tray at a stale height.
+  // Only a new page is eased: from the last page's height to its own, then
+  // let go. The observer reads the height and writes nothing, so it cannot loop.
+  const height = useRef(0)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only a new page eases
+  useLayoutEffect(() => {
+    const body = bodyRef.current
+    const from = height.current
+    if (
+      !body ||
+      !from ||
+      matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      return
+    const to = body.offsetHeight
+    if (from === to) return
+    const release = () => {
+      body.style.height = ""
+    }
+    const done = (event: TransitionEvent) => {
+      if (event.target === body && event.propertyName === "height") release()
+    }
+    body.style.height = `${from}px`
+    body.getBoundingClientRect()
+    body.style.height = `${to}px`
+    body.addEventListener("transitionend", done)
+    const fallback = setTimeout(release, 500)
+    return () => {
+      clearTimeout(fallback)
+      body.removeEventListener("transitionend", done)
+      release()
+    }
+  }, [page?.index])
+  // Whether the body hides content below its fold, and how tall it stands.
   // biome-ignore lint/correctness/useExhaustiveDependencies: measure again when the page or its state changes
   useEffect(() => {
     const body = bodyRef.current
     const content = contentRef.current
     if (!body || !content) return
     measure()
-    const watch = new ResizeObserver(() =>
-      requestAnimationFrame(() => {
-        body.style.height = `${content.offsetHeight}px`
-        measure()
-      })
-    )
+    const watch = new ResizeObserver(() => {
+      height.current = body.offsetHeight
+      measure()
+    })
     watch.observe(body)
     watch.observe(content)
     return () => watch.disconnect()

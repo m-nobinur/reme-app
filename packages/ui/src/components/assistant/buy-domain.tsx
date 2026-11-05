@@ -1146,11 +1146,7 @@ export function BuyTray({
     )
   }
   if (later || skipped) {
-    const offered = rows.flatMap((r) =>
-      offersOf(r)
-        .slice(0, 1)
-        .map((o) => o.name)
-    )
+    const offered = shortlist(rows).map((o) => o.name)
     return offered.length ? (
       <Line text={`Names I offered: ${offered.join(", ")}.`} />
     ) : null

@@ -783,6 +783,9 @@ export const DerivedReminder = z.discriminatedUnion("rule", [
   }),
 ])
 
+/** A sitting ends after this long with no owner message, or with a new conversation. */
+export const SITTING_GAP_MS = 30 * 60_000
+
 /** The most open reminders `/workspace` lists. */
 export const REMINDER_NOTES_MAX = 20
 

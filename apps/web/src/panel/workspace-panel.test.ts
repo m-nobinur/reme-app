@@ -61,6 +61,7 @@ const router = vi.hoisted(() => ({
 const server = vi.hoisted(() => ({
   completeReminder: vi.fn(),
   askForChanges: vi.fn(),
+  putOffDomain: vi.fn(),
 }))
 
 const ONBOARDING = "00000000-0000-4000-8000-00000000000a"
@@ -91,6 +92,7 @@ beforeEach(() => {
   }
   server.completeReminder.mockReset()
   server.askForChanges.mockReset()
+  server.putOffDomain.mockReset()
   route.id = "/app/_conversation/"
   router.state.matches = []
   router.navigate.mockReset()
@@ -381,10 +383,21 @@ it("asks whether a name bought elsewhere is bought, each answer said in the chat
   expect(router.navigate.mock.lastCall?.[0]).toEqual(
     said(`I've bought ${name}`)
   )
+  server.putOffDomain.mockResolvedValue({ done: false, reason: "no" })
   await act(async () => buttonNamed("Not yet")?.click())
   expect(router.navigate.mock.lastCall?.[0]).toEqual(
     said(`I haven't bought ${name} yet`)
   )
+  expect(server.putOffDomain).toHaveBeenCalledWith({
+    data: { name, key: expect.any(String) },
+  })
+  // A refused write brings the row back.
+  expect(buttonNamed("Not yet")?.closest("[inert]")).toBeNull()
+
+  server.putOffDomain.mockResolvedValue({ done: true })
+  await act(async () => buttonNamed("Not yet")?.click())
+  expect(buttonNamed("Not yet")?.closest("[inert]")).not.toBeNull()
+  expect(live.refresh).toHaveBeenCalledTimes(1)
 })
 
 it("draws no tab bar for one tab", async () => {

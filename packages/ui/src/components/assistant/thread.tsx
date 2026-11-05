@@ -803,10 +803,16 @@ const ThreadRoot: FC<{
               <HistoryLoading stored={stored} />
 
               {/* The space assistant-ui holds below a pinned reply goes last,
-                after the slot. An empty slot's margin takes back its gap. */}
+                after the slot. An empty slot's margin takes back its gap. A
+                conversation keeps room under its last row for the Scroll to
+                bottom button, which floats over the thread above the
+                composer. */}
               <div
                 data-slot="aui_message-group"
-                className="flex flex-col gap-y-6 has-[>:not(:empty)]:mb-14 [&>[data-aui-top-anchor-reserve]]:order-last"
+                className={cn(
+                  "flex flex-col gap-y-6 has-[>:not(:empty)]:mb-14 [&>[data-aui-top-anchor-reserve]]:order-last",
+                  !isEmpty && "mb-14"
+                )}
               >
                 <ThreadMessages />
                 {/* Always in the page, so a card that appears in it is read out. */}

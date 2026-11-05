@@ -14,6 +14,7 @@ import type { AttentionItem, Workspace } from "@/lib/api/types"
 import { anchorOf } from "@/lib/reminders"
 import { awaitsReadyLine, draftReview } from "@/lib/site-ready"
 import { type JourneyItem, journeyItem, stackOrder } from "@/lib/update-stack"
+import { useBack } from "@/lib/use-back"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { useAskInChat } from "@/panel/workspace-panel"
 import { SiteReadyCard } from "./site-ready"
@@ -73,9 +74,10 @@ function JourneyRow({ item }: { item: JourneyItem }) {
 
 const journeyUpdate = (
   workspace: Workspace | null,
-  site: boolean
+  site: boolean,
+  back = true
 ): { lead: boolean; value: Update } | null => {
-  const item = journeyItem(workspace?.journey, site)
+  const item = journeyItem(workspace?.journey, site, back)
   return (
     item && {
       lead: item.lead,
@@ -162,8 +164,23 @@ export function ConversationUpdates() {
     review ? (seen.get(review.revisionId) ?? now) : now,
     now
   )
+  const buyingLatest = useAuiState((s) => {
+    const last = s.thread.messages.at(-1)
+    return (
+      last?.role === "assistant" &&
+      last.content.some(
+        (part) =>
+          part.type === "tool-call" &&
+          (part.toolName === "find_domain" || part.toolName === "buy_domain")
+      )
+    )
+  })
+  const back = useBack(
+    workspace?.journey?.address.stage === "buying_elsewhere",
+    sentAt
+  )
   if (empty) return null
-  const item = journeyUpdate(workspace, !!review)
+  const item = journeyUpdate(workspace, !!review, back && !buyingLatest)
   return (
     <SiteReadyCard
       className="mx-2 -mt-2"

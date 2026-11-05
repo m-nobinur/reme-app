@@ -96,6 +96,16 @@ describe("the journey's item in the stack", () => {
     )
   })
 
+  it("asks about a name being bought only once the owner is back", () => {
+    expect(journeyItem(journey("buying_elsewhere"), true, false)).toBeNull()
+    expect(journeyItem(journey("buying_elsewhere"), true, true)?.title).toBe(
+      "Finished buying sparkleclean.co.uk?"
+    )
+    expect(journeyItem(journey("put_off"), true, false)?.title).toBe(
+      "Add your domain"
+    )
+  })
+
   it("says nothing before the api sends the journey", () => {
     expect(journeyItem(undefined, true)).toBeNull()
   })

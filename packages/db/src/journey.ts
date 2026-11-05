@@ -1,4 +1,8 @@
-import type { Journey, OwnerTask } from "@workspace/contracts"
+import {
+  type Journey,
+  type OwnerTask,
+  SITTING_GAP_MS,
+} from "@workspace/contracts"
 import { addressStage } from "./tasks.ts"
 
 // The website journey: one reading of the records for the update stack, the
@@ -6,8 +10,7 @@ import { addressStage } from "./tasks.ts"
 // same. Pure: the callers read the rows, this decides. The model never sees
 // this state, only the lines `notes.ts` renders from it.
 
-/** A sitting ends after this long with no owner message, or with a new conversation. */
-export const SITTING_GAP_MS = 30 * 60_000
+export { SITTING_GAP_MS }
 
 /** Bring-backs of an open question a sitting: once, as Hermes reports a thing once and then stays silent. */
 export const BRING_BACKS = 1
