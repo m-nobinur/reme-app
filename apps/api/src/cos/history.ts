@@ -100,10 +100,11 @@ export type ContextPolicy = {
  * reads a `cos.skill` code loaded as a procedure in the history.
  * Version 21 reads a `cos.skill` as a `skill_view` call and its result after
  * the turn's messages, keeps skill views in older turns, reads `read_skill`
- * as `skill_view`, and names the skills a summary replaced.
+ * as `skill_view`, and names the skills a summary replaced. Version 23 may
+ * add a line naming what the newest draft left out, once per draft.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "22",
+  version: "23",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,

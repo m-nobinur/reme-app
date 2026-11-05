@@ -13,6 +13,7 @@ import {
   ASIDE_LINE,
   cardState,
   handoverNote,
+  leftOutLine,
   openItems,
   RETURN_LINE,
   sessionNote,
@@ -522,5 +523,30 @@ describe("the journey's lines", () => {
         { ...DRAFT, tasks: bought }
       ).lines.join("\n")
     ).not.toMatch(/last here/)
+  })
+
+  it("says what the newest draft left out in its own line, once", () => {
+    const website = {
+      live: false,
+      building: false,
+      drafts: [
+        {
+          id: "r1",
+          at: ago(20),
+          left_out: ["Are you insured?", "Do you offer a guarantee?"],
+        },
+      ],
+    }
+    const first = turn({ website, visit: sitting })
+    expect(first.lines.at(-1)).toBe(
+      "The draft left out: Are you insured? Do you offer a guarantee? Mention it once, in one line, the next time the owner talks about the website, and offer to add them."
+    )
+    expect(first.lines).toContain(leftOutLine(first.journey.left_out))
+    const latches = first.journey.record
+      .filter((k) => k.startsWith("told:left_out:"))
+      .map((key) => ({ key, at: ago(1) }))
+    expect(
+      turn({ website, visit: sitting, latches }).lines.join("\n")
+    ).not.toContain("The draft left out")
   })
 })

@@ -41,8 +41,11 @@ export type JourneyInput = {
   website?: {
     live: boolean
     building: boolean
-    /** Drafts waiting on the owner: their review's id and when it opened. */
-    drafts: readonly { id: string; at: string }[]
+    /**
+     * Drafts waiting on the owner: their review's id, when it opened and,
+     * for the newest, what its build left out for want of a fact.
+     */
+    drafts: readonly { id: string; at: string; left_out?: readonly string[] }[]
   }
   card?: JourneyCard | null
   /** Set only for a turn the owner typed. */
@@ -74,6 +77,8 @@ export type JourneyState = Journey & {
   changes: JourneyChange[]
   /** Bring the open address back this turn: after an aside while its card waits, or on a return. */
   bring_back: "aside" | "return" | null
+  /** What the newest draft left out, while the owner has not been told; on a turn they typed only. */
+  left_out: string[]
   /** Ledger keys to record when this turn's note says them. */
   record: string[]
 }
@@ -238,6 +243,16 @@ export function journeyOf(input: JourneyInput): JourneyState {
     offer !== null &&
     (card !== null || website !== "none") &&
     brought < limit
+  const newest = site.drafts.reduce<(typeof site.drafts)[number] | undefined>(
+    (a, d) => (!a || d.at > a.at ? d : a),
+    undefined
+  )
+  const left_out =
+    sitting &&
+    newest?.left_out?.length &&
+    !told.has(`told:left_out:${newest.id}`)
+      ? [...newest.left_out]
+      : []
   const bring_back = !due
     ? null
     : waiting
@@ -257,9 +272,11 @@ export function journeyOf(input: JourneyInput): JourneyState {
     sitting,
     changes,
     bring_back,
+    left_out,
     record: [
       ...(bring_back ? [`bring_back:${now.toISOString()}`] : []),
       ...changes.map((c) => `told:${c.key}`),
+      ...(left_out.length > 0 ? [`told:left_out:${newest?.id}`] : []),
     ],
   }
 }

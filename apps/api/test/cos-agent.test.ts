@@ -37,6 +37,7 @@ import {
   reminders,
   serverMessageId,
   sql,
+  supersedeFact,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
@@ -110,7 +111,7 @@ import {
   toolErrorText,
 } from "../src/cos/agent.ts"
 import { sha256 } from "../src/cos/history.ts"
-import { RETURN_LINE } from "../src/cos/notes.ts"
+import { leftOutLine, RETURN_LINE } from "../src/cos/notes.ts"
 import { retrying } from "../src/cos/retry.ts"
 import { knownZone, wallToUtc } from "../src/cos/time.ts"
 import { ToolFailed } from "../src/cos/tools.ts"
@@ -3934,6 +3935,54 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "bring_back",
     ])
     await seed(kit, who).state(building, "cancelled")
+  })
+
+  it("says what the newest draft left out once, without facts now known or ones asked later", async () => {
+    const who = await owner(kit, url as string, "cos-left-out")
+    const s = seed(kit, who)
+    const draft = await s.assignment("awaiting_review")
+    const approval = await s.approval(draft, await s.revision(draft, 1), 24)
+    const ask = (field: string, text: string) => ({
+      field,
+      question: text,
+      answer_schema: { type: "string" },
+      options: null,
+    })
+    await s.event(draft, "assignment.completion_reported", {
+      left_out: [
+        ask("business.insurance", "Are you insured?"),
+        ask("business.insurance", "What insurance do you hold?"),
+        ask("business.name", "What is the business called?"),
+        ask("hours.weekday", "When are you open?"),
+      ],
+    })
+    await kit.withOrg({ orgId: who.orgId }, (db) =>
+      supersedeFact(db, {
+        orgId: who.orgId,
+        key: "business.name",
+        factType: "business",
+        value: { name: "Left Out Cleaning (fixture)" },
+        provenance: { source: "owner_stated", confidence: 1 },
+      })
+    )
+    const room = await conversation(who)
+    for (const text of ["Morning.", "And another thing."])
+      await turn(who, typed(room, text), {
+        model: scripted(said("Here you go.")).model,
+      })
+    const texts = (await logOf(room))
+      .filter((e) => e.type === "cos.context")
+      .map((e) => String(e.payload.text))
+    const line = leftOutLine(["Are you insured?"])
+    expect(texts.map((t) => t.includes(line))).toEqual([true, false])
+    const latches = await kit.withOrg({ orgId: who.orgId }, (db) =>
+      db
+        .select({ key: deliveries.key })
+        .from(deliveries)
+        .where(sql`${deliveries.key} like '%:told:left_out:%'`)
+    )
+    expect(latches.map((l) => l.key.split(":").at(-1))).toEqual([approval])
+    await s.state(draft, "cancelled")
   })
 
   it("counts a turn's spend on the day the database recorded it, not the day the Worker says", async () => {

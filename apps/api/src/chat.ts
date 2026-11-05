@@ -1975,7 +1975,8 @@ const latchKey = (key: string) =>
 /**
  * What `journeyOf` reads beyond the workspace for a turn the owner typed:
  * the drafts waiting with when each opened, the owner's earlier messages for
- * the sitting, and the journey's latches from the ledger.
+ * the sitting, the journey's latches from the ledger and what the newest
+ * draft left out.
  */
 async function journeyRows(db: OrgScopedDb, id: string, byOwner: boolean) {
   const [drafts, recent, latches] = await Promise.all([
@@ -1996,10 +1997,29 @@ async function journeyRows(db: OrgScopedDb, id: string, byOwner: boolean) {
       : [],
   ])
   const iso = (at: string) => new Date(at).toISOString()
+  const newest = drafts.reduce<(typeof drafts)[number]["row"] | undefined>(
+    (a, { row }) => (!a || row.requestedAt > a.requestedAt ? row : a),
+    undefined
+  )
+  // What the newest draft's build left out, once per fact and only while the
+  // fact is missing; hours, prices, enquiries and priorities the assistant
+  // asks for once its own work needs them, never beside a draft.
+  const leftOut =
+    byOwner && newest
+      ? await db.execute<{ question: string }>(sql`
+          select distinct on (q->>'field') q->>'question' as question
+          from ${events} e, jsonb_array_elements(e.payload->'left_out') with ordinality as l(q, n)
+          where e.event_id = (select max(x.event_id) from ${events} x
+              where x.assignment_id = ${newest.assignmentId} and x.type = 'assignment.completion_reported')
+            and q->>'field' !~ '^(hours\\.|business\\.(prices|enquiries)$|owner\\.priorities$)'
+            and not exists (select 1 from facts f where f.key = q->>'field' and f.valid_to is null)
+          order by q->>'field', n`)
+      : []
   return {
     drafts: drafts.map(({ row }) => ({
       id: row.id,
       at: row.requestedAt.toISOString(),
+      ...(row === newest && { left_out: [...leftOut].map((q) => q.question) }),
     })),
     visit: byOwner
       ? {

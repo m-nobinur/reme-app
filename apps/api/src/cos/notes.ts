@@ -177,6 +177,10 @@ export const ASIDE_LINE =
 export const RETURN_LINE =
   "The web address is still open and the owner is back after a break: answer their message first, then bring it up in one line."
 
+/** Said once per draft while what it left out is untold. */
+export const leftOutLine = (items: readonly string[]) =>
+  `The draft left out: ${items.join(" ")} Mention it once, in one line, the next time the owner talks about the website, and offer to add them.`
+
 /** "3 hours", "40 minutes", "2 days". */
 function awayWords(ms: number): string {
   const minutes = Math.max(1, Math.round(ms / 60_000))
@@ -346,6 +350,7 @@ export function openItems(
     ...(journey.bring_back === "aside" ? [ASIDE_LINE] : []),
     ...(journey.bring_back === "return" ? [RETURN_LINE] : []),
     ...(gap ? [gap] : []),
+    ...(journey.left_out.length > 0 ? [leftOutLine(journey.left_out)] : []),
   ]
 }
 
