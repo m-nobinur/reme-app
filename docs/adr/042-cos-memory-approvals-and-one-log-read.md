@@ -247,8 +247,9 @@ prefills the whole history.
 
 **Cost.** OpenRouter bills Terra $1 a million uncached, $0.05 cached and $5 out (models API,
 2026-11-06), so a step carrying 128,000 history tokens costs about $0.006 cached and $0.13 cold.
-The facade's price table still holds $2.10 and $0.20, so reservations and the cap count about
-twice the real cost until it is refreshed. A warm cache is about twenty times cheaper than a cold
+The facade's price table holds Terra at its routing cap, 2.1 times the list price
+(`ROUTING_CAP_FACTOR`, 2026-09-27), the most a routed call can bill: reservations count that, and
+each call is then logged at what OpenRouter billed. A warm cache is about twenty times cheaper than a cold
 one, which is why the summary runs while it is warm and why clearing waits to save 4,096 tokens
 before it rewrites a cached prefix.
 
