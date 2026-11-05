@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer"
 import type { RemeSandbox } from "./container.ts"
 import { restore, SITE_ROOT } from "./revise.ts"
 import {
@@ -154,7 +155,7 @@ export const tailSandbox = (sandbox: ReturnType<typeof sandboxFor>) => ({
   readFile: (path: string) => sandbox.readFile(path),
   readFileBuffer: async (path: string) => {
     const file = await sandbox.readFile(path, { encoding: "base64" })
-    return Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
+    return Buffer.from(file.content, "base64")
   },
   writeFile: (path: string, content: string) =>
     sandbox.writeFile(path, content),
@@ -568,9 +569,7 @@ export async function takeScreenshots(
       const file = await sandbox
         .readFile(path, { encoding: "base64" })
         .catch(() => null)
-      return file
-        ? Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
-        : null
+      return file ? Buffer.from(file.content, "base64") : null
     }
     for (const w of VIEWPORTS) {
       const full = await bytes(`/tmp/home-${w}.png`)

@@ -81,7 +81,7 @@ import {
   refuseQuestion,
 } from "../question.ts"
 import { logTurn } from "../quick.ts"
-import { placePhotos, SITE_ROOT } from "../revise.ts"
+import { placePhotos, restore, SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover, sandboxFor } from "../sandbox.ts"
 import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
 import { eventSink } from "../sink.ts"
@@ -594,21 +594,14 @@ function render({ id }: AgentProps) {
       const prepared =
         brief.map !== null &&
         (await sandbox.exec(`test -d ${SITE_ROOT}/.git`)).exitCode === 0
-      if (!prepared) {
-        const object = await env.SITES.get(brief.restore_key)
-        if (!object) {
-          throw new Error(`no source snapshot at ${brief.restore_key}`)
-        }
-        await sandbox.writeFile(
-          "/tmp/source.tar.zst",
-          new Uint8Array(await object.arrayBuffer())
+      // Straight to the stub, which streams the tar from R2: the harness's
+      // writeFile would carry it through this isolate as base64 (#612).
+      if (!prepared)
+        await restore(
+          sandboxFor(env, runtime.spec.org_id),
+          env.SITES,
+          brief.restore_key
         )
-        const restore = await sandbox.exec(
-          `tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`
-        )
-        if (restore.exitCode !== 0)
-          throw new Error(`restore failed: ${restore.stderr}`)
-      }
       // The owner's quote questions as the facts hold them now: a newer
       // `quote.form` replaces the restored file, the same one keeps it.
       await sandbox.writeFile(

@@ -134,12 +134,16 @@ const SHA256 = /^([0-9a-f]{64}) [ *](.+)$/
  * Upload `dist/` to `prefix`: a file whose hash matches the previous
  * manifest's is copied inside R2 from the earlier revision, and only the
  * rest is read out of the sandbox. Eight at a time. The hashes come from
- * `sha256sum` in the sandbox, so an unchanged file is never read out, and a
- * file `sha256sum` did not report is hashed here from its bytes. Returns the
+ * `sha256sum` in the sandbox, so an unchanged file is never read out and a
+ * changed one streams to R2 without entering this isolate; a file
+ * `sha256sum` did not report is read and hashed here from its bytes. Returns the
  * manifest's `files` and `routes` and what moved.
  */
 export async function uploadDist(input: {
-  sandbox: DistSandbox
+  sandbox: DistSandbox & {
+    /** Streams a file into the site bucket under `key`, outside this isolate, and returns its size. */
+    saveFile: (path: string, key: string) => Promise<number>
+  }
   sites: DistBucket
   prefix: string
   previous: Previous | null
@@ -178,11 +182,18 @@ export async function uploadDist(input: {
             return
           }
         }
-        const body = await sandbox.readFileBuffer(`${SITE_ROOT}/${line}`)
-        await sites.put(`${prefix}dist/${file}`, body)
-        files[file] = known ?? (await sha256(body))
-        bytes += body.byteLength
+        const path = `${SITE_ROOT}/${line}`
+        const key = `${prefix}dist/${file}`
         sent++
+        if (known) {
+          bytes += await sandbox.saveFile(path, key)
+          files[file] = known
+          return
+        }
+        const body = await sandbox.readFileBuffer(path)
+        await sites.put(key, body)
+        files[file] = await sha256(body)
+        bytes += body.byteLength
       })
     )
   )
@@ -493,6 +504,7 @@ export async function finishRevision(input: {
       sandbox: {
         exec: run,
         readFileBuffer: (p) => sandbox.readFileBuffer(p),
+        saveFile: input.saveFile,
       },
       sites,
       prefix,
