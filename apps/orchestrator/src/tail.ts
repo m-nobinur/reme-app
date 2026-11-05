@@ -20,7 +20,9 @@ import {
   redirectsFor,
   routeOf,
 } from "./change.ts"
+import { ownerLogo } from "./developer-rules.ts"
 import { DOCUMENTS_DIR } from "./documents.ts"
+import { MARK_FILE, markKey } from "./photo-files.ts"
 import { SITE_ROOT } from "./revise.ts"
 import { QUOTE_FORM_FILE, quoteFormFile } from "./seed.ts"
 import { changeBase, recordTextChanges } from "./text-changes.ts"
@@ -383,6 +385,35 @@ type Run = { exit_code: number; key: string | null; ms: number }
 export type Axe = Run
 
 /**
+ * The kept logo's mark (`apps/api` logo.ts) at `MARK_FILE`, where the
+ * favicon set draws it, or no file while the logo has none, so the set
+ * keeps the logo's symbol or the initial. Placed by every build, so the
+ * first build after the mark lands picks it up. The tail's sandbox writes
+ * text, so the bytes cross as base64.
+ */
+async function placeMark(
+  sandbox: TailSandbox,
+  sites: R2Bucket,
+  orgId: string,
+  facts: readonly FactRecord[]
+) {
+  const logo = ownerLogo(facts)
+  const object = logo
+    ? await sites.get(markKey(orgId, logo.id)).catch(() => null)
+    : null
+  const file = `${SITE_ROOT}/${MARK_FILE}`
+  await sandbox.exec(`rm -f ${file}`)
+  if (!object) return
+  await sandbox.writeFile(
+    `${file}.b64`,
+    Buffer.from(await object.arrayBuffer()).toString("base64")
+  )
+  await sandbox.exec(
+    `base64 -d ${file}.b64 > ${file}.tmp && mv ${file}.tmp ${file}; rm -f ${file}.b64 ${file}.tmp`
+  )
+}
+
+/**
  * The end of every build, both lanes (§8.2 "Verify before claiming done"):
  * one `astro check` and one `astro build`, the revision row, the changed
  * files uploaded and the source snapshot. Throws when the build fails, with
@@ -420,6 +451,7 @@ export async function finishRevision(input: {
     `${SITE_ROOT}/${QUOTE_FORM_FILE}`,
     quoteFormFile(input.facts)
   )
+  await placeMark(sandbox, sites, orgId, input.facts)
   const documents = await steps.do("documents", () =>
     recordDocuments({ run, sandbox, kit, sites, orgId, assignmentId })
   )

@@ -27,6 +27,13 @@ const contentTypeOf = (ext: string) =>
 export const photoKey = (orgId: string, assetId: string) =>
   `uploads/${orgId}/${assetId}`
 
+/** Where `apps/api` stores a kept logo's mark (its `markKey`). */
+export const markKey = (orgId: string, logoId: string) =>
+  `marks/${orgId}/${logoId}.png`
+
+/** Where the favicon set reads the mark in a site: the starter's `MARK_FILE` (src/favicon.ts). */
+export const MARK_FILE = "src/assets/mark.png"
+
 /** The path the site config names an owner photo by; the file sits under `src/assets/`. */
 export const photoFile = (asset: Asset) =>
   `uploads/${asset.id}.${extension(asset.content_type)}`
