@@ -172,8 +172,14 @@ describe("skills", () => {
     expect(part("bought-elsewhere")).toMatch(
       /registry doesn't show it yet, your reply says so/
     )
+    expect(part("bought-elsewhere")).toContain(
+      "do NOT call inspect_domain, check_domain or domain_bought again in this reply"
+    )
     expect(part("bought-elsewhere")).toMatch(
-      /"I haven't bought <name> yet"\), reply in two sentences at most/
+      /"I haven't bought <name> yet"\), reply in two or three short sentences/
+    )
+    expect(part("bought-elsewhere")).toContain(
+      "see the names again, carry on with the free Reme address for now, or tell you here once it's bought"
     )
     expect(part("bought-elsewhere")).toContain(
       "Do not infer that silence means it's bought."
