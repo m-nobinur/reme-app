@@ -29,10 +29,6 @@ import { announce, searchInstanceId } from "../src/search.ts"
 import { freshOrg, kit as pool } from "./fixture.ts"
 import { stubNet } from "./fixtures/domains.ts"
 
-vi.mock("@cloudflare/sandbox", () => ({
-  Sandbox: class {},
-  ContainerProxy: class {},
-}))
 vi.mock("../src/sandbox.ts", () => ({}))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 

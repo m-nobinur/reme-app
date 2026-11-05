@@ -34,7 +34,6 @@ RUN apt-get update \
 
 # The helper `Files` in @cloudflare/sandbox runs for each file call. Its tag
 # must equal the @cloudflare/sandbox version in apps/orchestrator/package.json.
-COPY --from=docker.io/cloudflare/sandbox:1.0.1@sha256:e796e813de8213fb062bba279ddeddbf61277389a2cc7b3e4620075a9188843b /usr/local/bin/sandbox-shim /usr/local/bin/sandbox-shim
 
 # The Astro toolchain, installed once here so a site build never reaches the
 # registry. A site links /opt/astro/node_modules; astro/README.md says how,

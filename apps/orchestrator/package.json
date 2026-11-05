@@ -13,7 +13,6 @@
     "test:probe": "node ../../scripts/floor.mjs orchestrator-probe -- vitest run --dir probe"
   },
   "dependencies": {
-    "@cloudflare/sandbox": "1.0.1",
     "@openrouter/ai-sdk-provider": "3.1.0",
     "@pushforge/builder": "2.0.5",
     "@workspace/contracts": "workspace:*",
