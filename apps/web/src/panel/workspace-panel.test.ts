@@ -311,7 +311,9 @@ it("offers to connect a web address, as a message into the open or latest chat",
   await act(async () => buttonNamed("Connect")?.click())
   expect(sent()).toEqual({
     to: ".",
-    state: { send: { text: ask, key: expect.any(String) } },
+    state: {
+      send: { text: ask, key: expect.any(String), intent: "connect_address" },
+    },
   })
   // From any other page, into the most recent one.
   router.state.matches = []
@@ -319,7 +321,9 @@ it("offers to connect a web address, as a message into the open or latest chat",
   expect(sent()).toEqual({
     to: "/app/c/$id",
     params: { id: RECENT },
-    state: { send: { text: ask, key: expect.any(String) } },
+    state: {
+      send: { text: ask, key: expect.any(String), intent: "connect_address" },
+    },
   })
   // With none, a new chat opens with it.
   loader.conversations = []
@@ -327,7 +331,7 @@ it("offers to connect a web address, as a message into the open or latest chat",
   await act(async () => buttonNamed("Connect")?.click())
   expect(sent()).toEqual({
     to: "/app",
-    state: { chat: expect.any(String), ask },
+    state: { chat: expect.any(String), ask, intent: "connect_address" },
   })
   // The Website tab offers it too.
   const tab = [...container.querySelectorAll('[role="tab"]')].find(

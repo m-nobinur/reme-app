@@ -99,11 +99,14 @@ describe("a slow read's step in the chat", () => {
     )
   })
 
-  it("covers the tools whose input takes a step, and request_change's panel step is not one", () => {
+  // skill_view's step goes to the waiting line, and the thread draws no row for it.
+  it("covers the tools whose input takes a step, and neither request_change's panel step nor skill_view's is one", () => {
     const takes = Object.entries(COS_TOOLS)
       .filter(
         ([name, tool]) =>
-          "step" in tool.input.shape && name !== "request_change"
+          "step" in tool.input.shape &&
+          name !== "request_change" &&
+          name !== "skill_view"
       )
       .map(([name]) => name)
     expect([...STEPPED].sort()).toEqual(takes.sort())

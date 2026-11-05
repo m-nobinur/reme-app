@@ -5,6 +5,7 @@ import {
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
 import { AVATARS, PRONOUNS, TONES } from "@workspace/contracts"
+import { READING_PACE } from "@workspace/ui/components/assistant/markdown-text"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
 import { Thread } from "@workspace/ui/components/assistant/thread"
@@ -748,8 +749,9 @@ it("the persona card waits for the words above it to finish typing in", async ()
     chat.querySelector('[data-slot="persona-card"]')?.parentElement?.className
   ).toContain("[&>.aui-md[data-status=running]~*]:invisible")
   expect(waiting()).not.toBeNull()
-  // About 5 ms a character, so 40 frames are plenty.
-  for (let i = 0; i < 40 && waiting(); i++) await frame()
+  // The reading pace drains any backlog within drainMs, at 16 ms a frame.
+  const budget = Math.ceil((READING_PACE.drainMs ?? 0) / 16) + 2
+  for (let i = 0; i < budget && waiting(); i++) await frame()
   expect(waiting()).toBeNull()
   expect(
     chat.querySelector('[data-slot="persona-card"]')?.previousElementSibling
