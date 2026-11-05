@@ -38,6 +38,7 @@ import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
 import {
   useFocusWhenIdle,
   useRevealWaiting,
+  useWordsRevealing,
 } from "@workspace/ui/hooks/use-reveal-waiting"
 import { trayItem, trayOthers } from "@workspace/ui/lib/activity-copy"
 import { OPTION, OPTION_TILE, PICKED_LINE } from "@workspace/ui/lib/card"
@@ -276,14 +277,14 @@ function Docked({
   children: ReactNode
 }) {
   const slot = useContext(SlotContext)
-  const running = useRevealWaiting(!settled)
+  const mark = useRef<HTMLSpanElement>(null)
+  const running = useRevealWaiting(!settled, useWordsRevealing(mark))
   const away = running && !settled
   // One that was there when the page loaded appears still; only one a turn
   // brought glides in.
   const brought = useRef<boolean>(false)
   if (running) brought.current = true
   const ref = useRef<HTMLDivElement>(null)
-  const mark = useRef<HTMLSpanElement>(null)
   const key = useId()
   const steps = useStacked(slot, key)
   useLayoutEffect(() => {

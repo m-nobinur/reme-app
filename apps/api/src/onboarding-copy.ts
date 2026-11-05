@@ -239,6 +239,7 @@ export function recap(
     excluded: string | null
     area: string | null
     customers: string | null
+    proof: string | null
     questions: number | null
     phone: string | null
     email: string | null
@@ -249,6 +250,7 @@ export function recap(
     ["Not taken on", held.excluded && notTakenOn(held.excluded)],
     ["Area", held.area && yours(bare(held.area))],
     ["Customers", held.customers && lower(bare(held.customers))],
+    ["What sets you apart", held.proof && lower(yours(bare(held.proof)))],
     ["Quote form", held.questions ? `${held.questions} questions` : null],
     ["Contact", [held.phone, held.email].filter(Boolean).join(", ")],
   ].flatMap(([label, value]) => (value ? [`- **${label}:** ${md(value)}`] : []))
@@ -259,9 +261,6 @@ export function recap(
 }
 
 type Asked = Exclude<StepId, "upload" | "build" | "manual_builder" | "recap">
-
-/** "your services", or the phrase written for this business. */
-const services = (v: Voice) => v.services ?? "your services"
 
 const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   "business.name": () => [
@@ -460,22 +459,10 @@ export function quoteUnchanged(v: Voice): string {
 }
 
 /** After the design: the build runs in the background and the chat stays open. */
-export function started(v: Voice, uploaded: boolean): string {
+export function started(v: Voice): string {
   return say(
     v,
-    pick(v, "started", [
-      `${v.picked ? "" : `That's everything I need: ${services(v)}, your style${uploaded ? " and your photos" : ""}.\n\n`}I've started building the website for ${v.business} in the background.
-
-You'll see progress in the activity panel, and there's no need to wait: keep chatting or ask me anything while it runs. I'll let you know as soon as the first draft is ready.`,
-      `${v.picked ? "" : `That's everything, thank you${comma(v.owner)}. `}I'm starting on the website for ${v.business} now.
-
-It builds in the background, and you can follow along in the activity panel.
-
-There's no need to sit and watch. Ask me anything in the meantime, and I'll tell you the moment the first draft is ready.`,
-      `All set. The build for ${v.business} is under way.
-
-It takes a little while, so keep chatting with me if you like. Progress shows in the activity panel, and I'll let you know here as soon as there's a draft to look at.`,
-    ])
+    `All set. The build for ${v.business} is under way. Progress shows in the activity panel, and I'll let you know here as soon as there's a draft to look at.`
   )
 }
 

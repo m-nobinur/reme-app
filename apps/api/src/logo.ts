@@ -31,10 +31,10 @@ import { failure, invalid, keyMissing, readBody, sha256Hex } from "./http.ts"
 import { readChanges, readChips } from "./logo-chips.ts"
 import { logoReference } from "./logo-references.ts"
 import {
-  changesPrompt,
   DIRECTOR_GUIDE,
   type LogoSubject,
   logoPrompt,
+  redesignPrompt,
   variantStyles,
 } from "./logo-style.ts"
 import { factValue } from "./onboarding.ts"
@@ -581,7 +581,9 @@ export type Director = (
   subject: Manifest["subject"],
   brief: LogoBrief,
   /** Each variant's type, in order. */
-  types: readonly LogoType[]
+  types: readonly LogoType[],
+  /** The change the owner asked of a picked logo, for a redesign. */
+  changes?: string
 ) => Promise<{ ideas: string[]; support?: string } | null>
 
 function openrouterDirector(
@@ -594,10 +596,11 @@ function openrouterDirector(
   const model = plannerModel(apiKey, modelId, { session: orgId })
   const price = priceOf(modelId)
   if (!model || !price) return null
-  return async (subject, brief, types) => {
+  return async (subject, brief, types, changes) => {
     const data = JSON.stringify({
       ...subject,
       types,
+      ...(changes ? { changes } : {}),
       direction: brief.description,
       style: brief.style,
       colors: brief.colors,
@@ -822,14 +825,14 @@ export async function drawRound(
           kit,
           job.orgId
         )
-  const directed =
-    base || !director
-      ? null
-      : await director(
-          manifest.subject,
-          manifest.brief,
-          manifest.planned.map((_, i) => typeAt(i))
-        ).catch(() => null)
+  const directed = !director
+    ? null
+    : await director(
+        manifest.subject,
+        manifest.brief,
+        manifest.planned.map((_, i) => typeAt(i)),
+        manifest.changes
+      ).catch(() => null)
   const symbols = directed?.ideas ?? []
   // A second colour only for an owner who gave one.
   const support =
@@ -843,26 +846,32 @@ export async function drawRound(
       }
       const style = manifest.styles[i] as LogoStyle
       const brief = { ...manifest.brief, type: typeAt(i) }
-      const asked = manifest.changes && base
-      const reference = base ?? exampleFor(brief.type, style)
-      for (const model of LOGO_MODELS) {
-        const prompt = asked
-          ? changesPrompt({
+      const redesign =
+        manifest.changes && base
+          ? redesignPrompt({
               subject: manifest.subject,
               brief,
               style,
-              changes: manifest.changes as string,
+              changes: manifest.changes,
               take: i,
-            })
-          : logoPrompt({
-              subject: manifest.subject,
-              brief,
-              style,
               symbol: symbols[i] ?? null,
               support,
-              reference: !base,
-              changes: manifest.changes,
             })
+          : null
+      const reference =
+        redesign && !redesign.fresh ? base : exampleFor(brief.type, style)
+      for (const model of LOGO_MODELS) {
+        const prompt =
+          redesign?.prompt ??
+          logoPrompt({
+            subject: manifest.subject,
+            brief,
+            style,
+            symbol: symbols[i] ?? null,
+            support,
+            reference: true,
+            changes: manifest.changes,
+          })
         const reservation = await kit.withOrg({ orgId: job.orgId }, (db) =>
           reserveSpend(db, job.orgId, "logo", DRAW_RESERVE_USD)
         )

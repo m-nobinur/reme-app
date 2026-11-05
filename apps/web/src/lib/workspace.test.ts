@@ -129,6 +129,20 @@ it("polls every 3 s while a build waits in the queue", async () => {
   expect(tags).toEqual(['"queued"'])
 })
 
+it("polls every 3 s while the design tray's logo round draws", async () => {
+  start({
+    ...EMPTY_WORKSPACE,
+    activity: {
+      journey: [
+        { id: "onboarding", kind: "onboarding", logo: { status: "drawing" } },
+      ],
+    } as unknown as Workspace["activity"],
+    etag: '"logo"',
+  })
+  await wait(INTERVAL.building)
+  expect(tags).toEqual(['"logo"'])
+})
+
 it("keeps what it has on a 304", async () => {
   start(building)
   answers = ["unchanged", "unchanged"]

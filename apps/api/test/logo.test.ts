@@ -50,9 +50,11 @@ import {
 import { logoReference } from "../src/logo-references.ts"
 import {
   changesPrompt,
+  DIRECTOR_GUIDE,
   initialsOf,
   LOGO_STYLE_WORDS,
   logoPrompt,
+  redesignPrompt,
   variantStyles,
 } from "../src/logo-style.ts"
 import { owner, stubOrchestrator } from "./owner-fixture.ts"
@@ -217,6 +219,41 @@ describe("the logo prompt", () => {
         take: 0,
       })
     ).toContain("no lettering")
+  })
+
+  it("keeps a redesign's first take an edit and draws the others from the director's ideas", () => {
+    const ideas = ["a mop", "a red roof line", "a bucket and a roof"]
+    const takes = [0, 1, 2].map((take) =>
+      redesignPrompt({
+        subject,
+        brief,
+        style: "minimal",
+        changes: "Make the roof red",
+        take,
+        symbol: ideas[take] ?? null,
+      })
+    )
+    expect(takes.map((t) => t.fresh)).toEqual([false, true, true])
+    for (const { prompt } of takes)
+      expect(prompt).toContain("Make the roof red")
+    expect(takes[0]?.prompt).toContain("Change only that.")
+    expect(takes[1]?.prompt).toContain("Idea: a red roof line")
+    expect(takes[2]?.prompt).toContain("Idea: a bucket and a roof")
+    expect(new Set(takes.map((t) => t.prompt)).size).toBe(3)
+    // No idea, no fresh drawing: every take stays an edit of the picture.
+    const none = redesignPrompt({
+      subject,
+      brief,
+      style: "minimal",
+      changes: "Make the roof red",
+      take: 1,
+      symbol: null,
+    })
+    expect(none.fresh).toBe(false)
+    expect(none.prompt).toContain("bolder version")
+    expect(none.prompt).not.toContain("Idea:")
+    expect(DIRECTOR_GUIDE).toContain("data.changes")
+    expect(DIRECTOR_GUIDE).toContain("never one symbol in three versions")
   })
 
   it("takes the director's ideas that are words, at most one per variant", () => {
@@ -491,14 +528,39 @@ describe("drawing a round in the queue", () => {
     expect(none).toHaveLength(0)
   })
 
-  it("hands the picked variant to every call of a round of changes", async () => {
+  it("hands the picked variant to the first call of a round of changes, and a director's idea to the others", async () => {
     const base = "aaaaaaaa-0000-4000-8000-000000000000"
     const { sites, env } = await setup({ base, changes: "Make the roof red" })
     await sites.put(`generated/${ORG}/${base}.png`, PNG)
     const asked = images()
+    const seen: (string | undefined)[] = []
     await drawRound(env, ledger().kit, job, {
-      director: async () => ({ ideas: ["unused"] }),
+      director: async (_subject, _brief, _types, changes) => {
+        seen.push(changes)
+        return { ideas: ["a mop", "a red roof line", "a bucket and a roof"] }
+      },
     })
+    expect(seen).toEqual(["Make the roof red"])
+    expect(asked.every((a) => a.prompt.includes("Make the roof red"))).toBe(
+      true
+    )
+    const edit = asked.filter((a) => a.prompt.includes("Change only that."))
+    expect(edit).toHaveLength(1)
+    expect(edit[0]?.url).toBe(
+      `data:image/png;base64,${Buffer.from(PNG).toString("base64")}`
+    )
+    const fresh = asked.filter((a) => a.prompt.includes("Idea:"))
+    expect(fresh).toHaveLength(LOGO_VARIANTS - 1)
+    expect(new Set(fresh.map((a) => a.prompt)).size).toBe(fresh.length)
+    expect(fresh.every((a) => a.url !== edit[0]?.url)).toBe(true)
+  })
+
+  it("edits the picked variant in every take when the director gives nothing", async () => {
+    const base = "aaaaaaaa-0000-4000-8000-000000000000"
+    const { sites, env } = await setup({ base, changes: "Make the roof red" })
+    await sites.put(`generated/${ORG}/${base}.png`, PNG)
+    const asked = images()
+    await drawRound(env, ledger().kit, job, { director: null })
     expect(
       asked.every((a) => a.reference && a.prompt.includes("Make the roof red"))
     ).toBe(true)

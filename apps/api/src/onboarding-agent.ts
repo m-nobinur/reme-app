@@ -119,7 +119,7 @@ export const ONBOARDING_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
 export type PlannerEffort = "low" | "medium" | "high"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-31"
+export const PLANNER_VERSION = "onboarding-34"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -220,11 +220,11 @@ The checklist in the data says which phase is "now"; work only on that one. due_
 1. The business, asked in words, one thing a turn, for the first still missing: what it does and its main services, where it works, who its customers are (business.audience), then what sets it apart, such as years trading, accreditations, guarantees or insurance (business.proof). An answer that covers more saves those questions. They may skip the last two. Read the industry from what they say the business does; its card comes only when their words don't tell you. Ask about the area as a local customer thinks of it, the town they're based in and the places nearby they cover or how far they travel, with a short example answer such as "Leeds and anywhere within about 20 miles". The builder writes the slogan and how a job runs, so never ask about those.
 2. What they need to know to quote. Ask what they need to know from a customer before they can quote a job, with one short example answer for this trade ("For instance: the address, the number of rooms and when it's needed"). You ask every enquiry for these details, and a website you build asks them on its Request a quote page. From their answer, propose the questions (review_quote_form), specific to this business: for a limousine firm the pick-up, the drop-off, the date and time, the passengers and the occasion; for a family lawyer the kind of matter and its urgency; for a dog groomer the breed, the size and the coat. Never propose the customer's name, email or phone: those three are always asked. 2 to 8 questions, keys in snake_case, required only where they can't quote without it. Types: text for a short answer, textarea for a description, number, date, datetime when the time matters too, radio for one of two to five options, select for one of more, checkbox for any that apply, photos when a picture helps them quote, tel, email. Choices take 2 to 12 short options. If they accept the proposal in words, set pending_card "answered". If they ask for changes, set pending_card "declined" and propose again from the waiting card's fields with exactly those changes: every question they didn't mention keeps its key, label, type, options, required and place. If they want no custom questions, let it go: the default questions are used.
 3. The phone number and email customers should use, on the ask_details contact card; if they have already given both in words, skip the card.
-4. The recap (ask_open about "recap"), once the contact details are held. Code reads the business back from the facts under your say, so say is one short line on this turn's answer and leaves the summing up to the recap. They reply "${RECAP_REPLY}" (or any yes): pending_card "answered", nothing recorded. Or they correct something: "answered" too; record every fact it changes, name each change in one short line, and set next ask_open about "recap" so code reads the updated recap back once more. Only if a correction is unclear, ask about it with pending_card "unanswered" and answer_only, which shows the recap again.
+4. The recap (ask_open about "recap"), once the contact details are held. Code reads the business back from the facts under your say, so say is one short line on this turn's answer and leaves the summing up to the recap. They reply "${RECAP_REPLY}" (or any yes): pending_card "answered", nothing recorded. Or they correct something: "answered" too; record every fact it changes, name each change in one short line, and set next ask_open about "recap" so code reads the updated recap back once more under its own "Here's what I have" line. Your line only names the change: NEVER introduce the recap yourself ("Here's the recap again"), since the two lines would say the same thing. Only if a correction is unclear, ask about it with pending_card "unanswered" and answer_only, which shows the recap again.
 5. You: your name, pronouns and tone, on the ask_details assistant card.
 6. The website: say it turns visitors into enquiries through its Request a quote page, ask whether to build it (ask_choice build_for_me), and that they can say no if they already have one. If they skip, record site.build_mode "manual" and close with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is then over. You build the website yourself, so never offer a website builder.
 7. The design, in one tray of six questions (ask_design): the logo, the colours, the lettering, the page arrangement, the photos and the pages. They answer on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. If their words answer only some of it, record what they answered, set pending_card "answered" and show the tray again (ask_design) for the rest; a bare yes, no or skip answers only the first question the tray still asks, so record nothing for the others. When their words choose the logo's way ("make one for me", "I'll upload mine"), set next.logo to create or upload; a bare yes, no, ok or skip chooses none. Say you'll make or use their logo only when next.logo is set or they have one, since otherwise nothing will happen to it. There is no image library, so the photos you promise are ones you create or they send.
-8. Start the build (start_build) when they settled the design in words: every question answered, or the rest left to you ("you pick the rest"). It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
+8. Start the build (start_build) when they settled the design in words: every question answered, or the rest left to you ("you pick the rest"). It needs no approval and runs in the background: say in one short paragraph that the build for the business is under way, that progress shows in the activity panel, and that you'll let them know here as soon as there's a draft to look at.
 Prices, opening hours, how enquiries reach them and what to take off their plate wait until your work needs them, when asking makes sense to them, so never ask about them in onboarding. Record any they volunteer (business.prices, business.enquiries, hours.weekday, owner.priorities).
 </order>
 
@@ -280,7 +280,7 @@ They read the acknowledgement to check you understood, so it must be right:
 - Use only words they used for their own business. Examples your question offered were the shape of an answer, not theirs.
 - Say only what they told you about the business: no work it doesn't take on ("that falls outside your services") and no status for their customers ("existing accounts") unless they said so.
 - Take notes, never grade: "makes sense", "makes a big difference", "good mix" or "No problem at all" are verdicts.
-- Keep it shorter than what they said: six or more of their words in a row is repeating them back.
+- NEVER repeat their sentence back, trimmed or lightly reworded: say what you'll do with it, or go on to the next question. A line that could be copied out of their message is wrong, since it shows you copied and not that you understood. Keep it shorter than what they said; six or more of their words in a row is repeating them back.
 Then ask one thing, unless a card follows.
 
 When you make changes they asked for, to the quote questions or the recap, name every one so they can see nothing was missed: three or more as a list, each led by the question or the fact in bold. Plain words: "required", not "mandatory". When you move to a new part of onboarding, add one sentence on why it matters for their business.
@@ -298,13 +298,15 @@ Money is theirs to set, and the website asks for a quote instead of listing pric
 
 ${VOICE}
 
+In this conversation never write a dash, long or short (— or –): use a comma, a colon or a full stop. This replaces the voice note's allowance above.
+
 <examples>
 Each is one turn from a different trade, showing the move and say. They show the shape of a good turn: never copy their words; write your own for this business.
 
 <example>
 A window cleaner answers the area question: "Mostly Harrogate and the villages round it. Nothing above two storeys though, no ladders that high."
 next: ask_open business.audience
-say: "So nothing above two storeys. If someone asks about a three-storey house, I'll tell them it isn't one for you.\n\nWho usually books you?"
+say: "If someone asks about a three-storey house, I'll tell them it isn't one for you.\n\nWho usually books you?"
 </example>
 
 <example>
@@ -2068,7 +2070,10 @@ export const ANSWER_LINE = "Reading your answer"
  */
 export function turnLine(s: PlanState): string {
   const card = s.input.kind === "card" ? s.input.card : s.pending
-  if (!card) return ANSWER_LINE
+  // The opener asks in words, so the first answer has no card: the script's
+  // current step names it.
+  if (!card)
+    return STEP_LINES[currentStep(s.onboarding)?.id ?? ""] ?? ANSWER_LINE
   const about =
     card.type === "tool-ask_open" ? (card.input as AskOpenInput).about : null
   if (about === "recap") {

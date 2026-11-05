@@ -1295,6 +1295,7 @@ export function recapOf(o: Onboarding): string {
     excluded: factValue(o.facts, "business.disclaimer")?.text ?? null,
     area: factValue(o.facts, "service_area.text")?.text ?? null,
     customers: factValue(o.facts, "business.audience")?.text ?? null,
+    proof: factValue(o.facts, "business.proof")?.text ?? null,
     questions: factValue(o.facts, "quote.form")?.fields.length ?? null,
     phone: phone ? phoneText(phone) : null,
     email: factValue(o.facts, "business.email")?.address ?? null,
@@ -1451,15 +1452,7 @@ export function built(
   return [
     { ...pending, state: "output-available", output },
     { type: "step-start" },
-    text(
-      begun
-        ? (said ??
-            started(
-              v,
-              uploadsOf(o.facts).some((a) => a.use !== "logo")
-            ))
-        : notStarted(v)
-    ),
+    text(begun ? (said ?? started(v)) : notStarted(v)),
     ...(begun && offer ? offerParts(offer) : []),
   ]
 }

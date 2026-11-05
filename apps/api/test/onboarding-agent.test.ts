@@ -2354,7 +2354,7 @@ describe("the recap", () => {
       "tool-ask_open",
     ])
     expect((parts[1] as { text: string }).text).toBe(
-      `Here's what I have for Regal Rides:\n\n- **Services:** wedding cars\n- **Area:** Greater Manchester\n- **Customers:** couples getting married\n- **Quote form:** ${FIELDS.length} questions\n- **Contact:** 07700 900412, bookings@regal.invalid\n\nHave I got that right?`
+      `Here's what I have for Regal Rides:\n\n- **Services:** wedding cars\n- **Area:** Greater Manchester\n- **Customers:** couples getting married\n- **What sets you apart:** twelve years trading, every chauffeur DBS checked\n- **Quote form:** ${FIELDS.length} questions\n- **Contact:** 07700 900412, bookings@regal.invalid\n\nHave I got that right?`
     )
   })
 
@@ -2611,6 +2611,19 @@ describe("a streamed turn", () => {
     expect(instructions).not.toMatch(/\bnoted\b/i)
   })
 
+  it("forbids dashes and echoing, and no example does either", async () => {
+    const instructions = await plannerInstructions()
+    expect(instructions).toContain("never write a dash")
+    expect(instructions).toContain("NEVER repeat their sentence back")
+    expect(instructions).toContain("NEVER introduce the recap yourself")
+    const examples = instructions.slice(
+      instructions.indexOf("<examples>"),
+      instructions.indexOf("</examples>")
+    )
+    expect(examples).not.toMatch(/[—–]/)
+    expect(examples).not.toContain("So nothing above two storeys")
+  })
+
   it("offers no photo move: the photos are a tray question", async () => {
     const instructions = await plannerInstructions()
     expect(instructions).not.toContain("ask_upload")
@@ -2765,8 +2778,13 @@ describe("the turn's first line", () => {
     )
   })
 
+  it("names the opener's step when no card waits", () => {
+    expect(turnLine(typed("We clean offices and homes"))).toBe(
+      "Noting your services"
+    )
+  })
+
   it("falls back to a plain line when nothing names the step", () => {
-    expect(turnLine(typed("hello"))).toBe(ANSWER_LINE)
     expect(
       turnLine(
         typed(

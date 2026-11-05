@@ -1,5 +1,34 @@
 import { useAuiState, useThreadViewportStore } from "@assistant-ui/react"
-import { type RefObject, useEffect, useRef } from "react"
+import { type RefObject, useEffect, useRef, useState } from "react"
+
+const REVEALING = '.aui-md[data-status="running"]'
+const MESSAGE = '[data-slot="aui_assistant-message-content"]'
+
+/**
+ * Whether the words beside `mark` are still being revealed. The stream ends
+ * before the reading pace has shown them all, so a card that waits only on
+ * the stream would open under a sentence still being written.
+ */
+export function useWordsRevealing(
+  mark: RefObject<HTMLElement | null>
+): boolean {
+  const [revealing, setRevealing] = useState(false)
+  useEffect(() => {
+    const content = mark.current?.closest(MESSAGE)
+    if (!content) return
+    const read = () => setRevealing(content.querySelector(REVEALING) !== null)
+    read()
+    const observer = new MutationObserver(read)
+    observer.observe(content, {
+      attributes: true,
+      attributeFilter: ["data-status"],
+      childList: true,
+      subtree: true,
+    })
+    return () => observer.disconnect()
+  }, [mark])
+  return revealing
+}
 
 /**
  * Brings a card that waits on the owner into view once no turn is running.
@@ -8,10 +37,10 @@ import { type RefObject, useEffect, useRef } from "react"
  * a turn brought stays where the turn left the view: a reply's first line
  * at the top, or wherever the owner scrolled to read. Only a turn no longer
  * anchored (something landed after it) glides to it. Returns whether a turn
- * is running.
+ * is running, or `hold` says the words above it are still showing.
  */
-export function useRevealWaiting(waiting: boolean): boolean {
-  const running = useAuiState((s) => s.thread.isRunning)
+export function useRevealWaiting(waiting: boolean, hold = false): boolean {
+  const running = useAuiState((s) => s.thread.isRunning) || hold
   const viewport = useThreadViewportStore({ optional: true })
   const ran = useRef(running)
   useEffect(() => {

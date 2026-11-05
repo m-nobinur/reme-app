@@ -70,7 +70,10 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       ref={root}
-      style={{ paddingBottom: `${(count - 1) * EDGE}rem` }}
+      style={{
+        paddingBottom: `${(count - 1) * EDGE}rem`,
+        ...(count > 1 && { paddingTop: "1.25rem" }),
+      }}
     >
       {LAYERS.slice(3 - count).map((place, depth) => (
         <div
@@ -83,9 +86,34 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
           style={{ bottom: `${depth * EDGE}rem` }}
         />
       ))}
-      <div className="relative flex items-start gap-1 overflow-hidden rounded-2xl border border-border bg-card pe-2">
+      {count > 1 ? (
+        // On the card's top edge at its right, mostly above it, so a row's own button keeps
+        // the whole width of the row.
+        <div className="absolute end-3 top-0 z-10 flex items-center rounded-full border border-border bg-card px-0.5 text-muted-foreground shadow-xs">
+          <Button
+            aria-label="Previous update"
+            onClick={() => step(-1)}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <CaretLeftIcon aria-hidden />
+          </Button>
+          <span className={cn(META, "tabular-nums")}>
+            {front + 1}/{count}
+          </span>
+          <Button
+            aria-label="Next update"
+            onClick={() => step(1)}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <CaretRightIcon aria-hidden />
+          </Button>
+        </div>
+      ) : null}
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
         {/* One cell for every update, so the stack is as tall as the tallest. */}
-        <div className="grid min-w-0 flex-1 *:[grid-area:1/1]">
+        <div className="grid min-w-0 *:[grid-area:1/1]">
           {deck.map((update, index) => (
             <div
               aria-hidden={index !== front}
@@ -103,30 +131,6 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
             </div>
           ))}
         </div>
-        {count > 1 ? (
-          // A row's height, so the arrows stay level with it when a card opens.
-          <div className="flex h-15 shrink-0 items-center">
-            <Button
-              aria-label="Previous update"
-              onClick={() => step(-1)}
-              size="icon-xs"
-              variant="ghost"
-            >
-              <CaretLeftIcon aria-hidden />
-            </Button>
-            <span className={cn(META, "tabular-nums")}>
-              {front + 1}/{count}
-            </span>
-            <Button
-              aria-label="Next update"
-              onClick={() => step(1)}
-              size="icon-xs"
-              variant="ghost"
-            >
-              <CaretRightIcon aria-hidden />
-            </Button>
-          </div>
-        ) : null}
       </div>
     </section>
   )
