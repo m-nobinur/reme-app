@@ -74,12 +74,14 @@ export async function withinCap(
  * concurrent call sums after it. The id it returns is settled by the one
  * `settleSpend` row that names it; null means no room. A call never settled
  * (its Worker died) stays counted at `amount`, since it may still bill.
+ * `about` names what the call is for, such as the conversation it serves.
  */
 export async function reserveSpend(
   db: OrgScopedDb,
   orgId: string,
   job: string,
-  amount: number
+  amount: number,
+  about: Record<string, string> = {}
 ): Promise<string | null> {
   if (!(await withinCap(db, orgId, amount))) return null
   const id = newUlid()
@@ -91,7 +93,7 @@ export async function reserveSpend(
     type: "cos.background_reserve",
     occurredAt: new Date(),
     idempotencyKey: newUlid(),
-    payload: { job, reserved_usd: amount },
+    payload: { ...about, job, reserved_usd: amount },
   })
   return id
 }
