@@ -178,12 +178,24 @@ for (const theme of ["light", "dark"] as const) {
         seed = (seed * 16_807) % 2_147_483_647
         return (seed - 1) / 2_147_483_646
       }
+      // A line that turns to "Still ..." after 12 s of real time would turn
+      // in a slow run and not a fast one, so long timers never fire here.
+      const later = window.setTimeout
+      window.setTimeout = ((
+        handler: TimerHandler,
+        ms = 0,
+        ...rest: unknown[]
+      ) =>
+        ms >= 10_000 ? 0 : later(handler, ms, ...rest)) as typeof setTimeout
     })
     await page.emulateMedia({ reducedMotion: "reduce" })
     await page.goto(`/?theme=${theme}`)
     // The variable font loads from node_modules through Vite; without this the
     // first snapshot of a run is taken mid-swap and every later one is not.
     await page.evaluate(() => document.fonts.ready)
+    // Fixture services answer after 1.2 s (the tray's logo palettes among
+    // them); the first entries are otherwise shot before or after by chance.
+    await page.waitForTimeout(3000)
 
     // A fixture thread is meant to be taller than its conversation, so the
     // viewport sits at the bottom and this button stays hidden. A thread that

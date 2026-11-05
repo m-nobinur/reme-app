@@ -212,7 +212,7 @@ test("the ready card sits at the end of the thread and never claims an approval 
 }) => {
   await open(page, "SiteReady")
   const cards = page.locator('[data-slot="site-ready"]')
-  await expect(cards).toHaveCount(8)
+  await expect(cards).toHaveCount(9)
   const ready = cards.nth(0)
   await expect(
     ready.getByRole("heading", { name: "Brightclean website" })
@@ -232,14 +232,17 @@ test("the ready card sits at the end of the thread and never claims an approval 
   await expect(
     cards.nth(1).getByRole("button", { name: "Publishing" })
   ).toBeDisabled()
-  await expect(cards.nth(2).getByRole("alert")).toContainText("newer version")
-  await expect(cards.nth(3).getByRole("link")).toHaveCount(0)
+  await expect(cards.nth(2)).toContainText(
+    "Publishing waits until your update is ready."
+  )
+  await expect(cards.nth(3).getByRole("alert")).toContainText("newer version")
   await expect(cards.nth(4).getByRole("link")).toHaveCount(0)
-  await expect(cards.nth(5)).toHaveText("Approved, publishing your website")
+  await expect(cards.nth(5).getByRole("link")).toHaveCount(0)
+  await expect(cards.nth(6)).toHaveText("Approved, publishing your website")
   // A step beside Publish, on the same row, for the web address and then Search Console.
   for (const [at, label] of [
-    [6, "Connect"],
-    [7, "Connect Search Console"],
+    [7, "Connect"],
+    [8, "Connect Search Console"],
   ] as const) {
     const publish = await cards
       .nth(at)
@@ -267,7 +270,7 @@ test("the ready cards with a step beside Publish fit a phone and pass axe", asyn
       () => document.documentElement.scrollWidth > window.innerWidth
     )
   ).toBe(false)
-  const card = page.locator('[data-slot="site-ready"]').nth(7)
+  const card = page.locator('[data-slot="site-ready"]').nth(8)
   const box = await card.boundingBox()
   const connect = await card
     .getByRole("button", { name: "Connect Search Console" })
@@ -539,6 +542,7 @@ test("the quote form preview keeps focus inside, rises from the bottom on a phon
   await open(page, "QuoteFormPreview", 1024, "dark")
   await page.getByRole("button", { name: "Preview form" }).click()
   await expect(page.getByRole("dialog", { name: "Form preview" })).toBeVisible()
+  await settled(page)
   await axe(page, "QuoteFormPreview dark")
 })
 

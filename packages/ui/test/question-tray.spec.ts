@@ -330,11 +330,11 @@ test("on an 807 px tall window the palette page is not cut off and ends with the
       palette.getByRole("button", { name: "Surprise me" })
     ).toBeVisible({ timeout: 4000 })
     const body = palette.locator("div.overflow-y-auto").first()
-    const [room, frame] = await Promise.all([
-      body.evaluate((box) => box.scrollHeight - box.clientHeight),
-      palette.boundingBox(),
-    ])
-    expect(room).toBeLessThanOrEqual(1)
+    // The logo's palettes land after the fixture's 1.2 s and reflow the page.
+    await expect
+      .poll(() => body.evaluate((box) => box.scrollHeight - box.clientHeight))
+      .toBeLessThanOrEqual(1)
+    const frame = await palette.boundingBox()
     expect(frame?.height).toBeLessThanOrEqual(0.7 * 807)
     // Palettes first, Surprise me under them, the picture last.
     const [tiles, surprise, picture] = await Promise.all([
