@@ -3,34 +3,48 @@ import {
   conversations,
   eq,
   events,
+  scheduledJobs,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
 import { MockLanguageModelV4 } from "ai/test"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
+import type { AfterTurn } from "../src/after-turn.ts"
 import {
+  boundInput,
   COMPACTION,
   compactAfterTurn,
+  type Later,
   type Plan,
+  pillLine,
   planCompaction,
   promptOf,
+  scheduleCompaction,
   summarise,
+  THRESHOLDS,
+  type Thresholds,
   targetTokens,
+  thresholdsFor,
+  thresholdTokens,
+  transcript,
   worstCall,
 } from "../src/cos/compaction.ts"
 import {
   CONTEXT_POLICY,
+  clearedOutputs,
   deriveCosMessages,
   historyTokens,
   loggedMessages,
+  PRUNED_TOOL_PLACEHOLDER,
   type SessionEvent,
   SUMMARY_HEADER,
   sha256,
+  skillMarker,
+  viewedLine,
 } from "../src/cos/history.ts"
 import {
   DAILY_CAP_USD as CAP,
   reserveSpend,
-  SessionBusy,
   settleSpend,
   withinCap,
   writeCompaction,
@@ -39,27 +53,34 @@ import recorded from "./cos-compaction-session.json" with { type: "json" }
 import { type Owner, owner } from "./owner-fixture.ts"
 
 /**
- * Compaction (ADR-042) without a database: the plan, the cut rules, the
- * fold and the summary call, over the scripted 60-turn session and small
- * logs built for one rule each. The model is a stand-in that records what
- * it was sent.
+ * Compaction (ADR-042, amended 2026-11-06): Hermes's algorithm, run as
+ * OpenMausBot's warm summary. Without a database: the thresholds, the
+ * clearing, the plan, the fold and the summary call, over the scripted
+ * 60-turn session and small logs built for one rule each, with thresholds
+ * scaled to them. On a live connection: the warm job's scheduling, holds,
+ * retries and claim. The model is a stand-in that records what it was sent.
  */
 
 type Row = { type: string; payload: unknown }
 // Fake, and short of the repo's own secret scan, but secret-shaped to scrub.
 const FAKE_KEY = "sk-fake12345678"
 
-/** A stand-in model: answers `text` (or a function of the prompt) and keeps every prompt. */
+/** Thresholds scaled to the fixtures: the scripted session is about 25,000 history tokens. */
+const AT: Thresholds = { warm: 6_000, hard: 12_000 }
+
+/** A stand-in model: answers `text` (or a function of the prompt) and keeps every prompt and call. */
 function fakeModel(
   text: string | ((prompt: string) => string),
   finish: "stop" | "length" = "stop",
   billed?: number
 ) {
   const prompts: string[] = []
+  const calls: Record<string, unknown>[] = []
   const model = new MockLanguageModelV4({
     doGenerate: async (options) => {
       const prompt = JSON.stringify(options.prompt)
       prompts.push(prompt)
+      calls.push(options as unknown as Record<string, unknown>)
       return {
         content: [
           {
@@ -84,7 +105,7 @@ function fakeModel(
       }
     },
   })
-  return { model, prompts }
+  return { model, prompts, calls }
 }
 
 /**
@@ -94,14 +115,15 @@ function fakeModel(
  */
 async function replay(
   turns: Row[][],
-  summary: (plan: Plan) => Promise<string | null>
+  summary: (plan: Plan) => Promise<string | null>,
+  at: Thresholds = AT
 ): Promise<{ log: SessionEvent[]; plans: Plan[] }> {
   const log: SessionEvent[] = []
   const plans: Plan[] = []
   const add = (row: Row) => log.push({ seq: log.length, ...row })
   for (const rows of turns) {
     for (const row of rows) add(row)
-    const plan = planCompaction(log)
+    const plan = planCompaction(log, at)
     if (!plan) continue
     const text = await summary(plan)
     if (text === null) continue
@@ -146,79 +168,237 @@ const nextTurnSees = (log: SessionEvent[]) =>
 const TURN = (n: number) =>
   `01K6C0000000000000000000${String(n).padStart(2, "0")}`
 
-/** A turn: the owner's message, its context, the reply and the close. */
+const context = (n: number, text = "Mode: ask.") => ({
+  type: "cos.context",
+  payload: {
+    turn_id: TURN(n),
+    prefix_sha256: "a".repeat(64),
+    context_policy_version: CONTEXT_POLICY.version,
+    mode: "act",
+    active_tools: [],
+    text,
+    reserved_usd: 0.05,
+  },
+})
+
+const said = (n: number, id: string, role: string, parts: unknown[]): Row => ({
+  type: "cos.message",
+  payload: { turn_id: TURN(n), message: { id, role, parts } },
+})
+
+/** A turn: the owner's message, its context, the reply and its calls. */
 function turn(
   n: number,
-  said: string,
+  ownerText: string,
   answered: string,
-  context = "Mode: ask."
+  text = "Mode: ask.",
+  calls: unknown[] = []
 ): Row[] {
   return [
-    {
-      type: "cos.message",
-      payload: {
-        turn_id: TURN(n),
-        message: {
-          id: `u${n}`,
-          role: "user",
-          parts: [{ type: "text", text: said }],
-        },
-      },
-    },
-    {
-      type: "cos.context",
-      payload: {
-        turn_id: TURN(n),
-        prefix_sha256: "a".repeat(64),
-        context_policy_version: CONTEXT_POLICY.version,
-        mode: "act",
-        active_tools: [],
-        text: context,
-        reserved_usd: 0.05,
-      },
-    },
-    {
-      type: "cos.message",
-      payload: {
-        turn_id: TURN(n),
-        message: {
-          id: `a${n}`,
-          role: "assistant",
-          parts: [{ type: "step-start" }, { type: "text", text: answered }],
-        },
-      },
-    },
+    said(n, `u${n}`, "user", [{ type: "text", text: ownerText }]),
+    context(n, text),
+    said(n, `a${n}`, "assistant", [
+      { type: "step-start" },
+      ...calls,
+      { type: "text", text: answered },
+    ]),
   ]
 }
+
+/** A finished call with `output`. */
+const call = (n: number, tool: string, input: unknown, output: unknown) => ({
+  type: `tool-${tool}`,
+  toolCallId: `call_${n}_${tool}`,
+  state: "output-available",
+  input,
+  output,
+})
 
 /** Owner and reply text of about `tokens` tokens between them. */
 const words = (n: number, tokens: number) =>
   `${n}: ${"word ".repeat(Math.round((tokens * 4) / 5))}`.trim()
 
+/** Turns of about 1,000 tokens each. */
+const long = (from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_, i) =>
+    turn(from + i, words(from + i, 500), words(from + i, 500))
+  ).flat()
+
+/** A part's output. */
+const outputOf = (part: unknown) =>
+  (part as { output?: unknown } | undefined)?.output
+
+const ids = (plan: Plan | null) => plan?.span.map((m) => m.message.id)
+
+describe("the threshold, from the model's window", () => {
+  it("is Hermes's: half the input window, 75% under 512K, floored at 64K, 85% when the floor fills it", () => {
+    expect(thresholdTokens(1_050_000, Infinity)).toBe(525_000)
+    expect(thresholdTokens(1_050_000, Infinity, 3_100)).toBe(523_450)
+    expect(thresholdTokens(200_000, Infinity)).toBe(150_000)
+    expect(thresholdTokens(80_000, Infinity)).toBe(64_000)
+    expect(thresholdTokens(64_000, Infinity)).toBe(54_400)
+  })
+
+  it("is held to the owner's 128K, and the warm summary to 64K under it", () => {
+    expect(thresholdTokens(1_050_000, 128_000)).toBe(128_000)
+    expect(THRESHOLDS).toEqual({ warm: 64_000, hard: 128_000 })
+    expect(COMPACTION.hardTokens).toBe(CONTEXT_POLICY.historyTokens)
+    expect(thresholdsFor(2_000)).toEqual({ warm: 2_000, hard: 128_000 })
+  })
+
+  it("keeps a small-window model compacting in time", () => {
+    const small = thresholdTokens(64_000, 128_000)
+    expect(small).toBe(54_400)
+    expect(Math.min(COMPACTION.warmTokens, small)).toBe(54_400)
+  })
+})
+
+describe("clearing old tool output", () => {
+  const big = (n: number) => ({ rows: "x".repeat(n) })
+
+  /** `n` messages, the first holding a call whose output is `size` characters. */
+  const messages = (count: number, size: number, tool = "get_facts") =>
+    nextTurnSees(
+      seqd([
+        ...turn(1, "Hi", "Here.", "Mode: ask.", [
+          call(1, tool, { name: "pricing" }, big(size)),
+        ]),
+        ...long(2, Math.ceil(count / 2)),
+      ])
+    )
+
+  it("clears an output over 8,000 characters outside the newest 20 messages, as Hermes's one line", () => {
+    const all = messages(30, 20_000)
+    const out = clearedOutputs(all, 20)
+    const part = { output: outputOf(out[1]?.parts[1]) }
+    const chars = JSON.stringify(big(20_000)).length.toLocaleString("en-GB")
+    expect(part.output).toBe(`[get_facts] name=pricing (${chars} chars result)`)
+    expect(out.slice(-20)).toEqual(all.slice(-20))
+  })
+
+  it("leaves the newest 20 messages, and a clearing that saves under 4,096 tokens, alone", () => {
+    expect(clearedOutputs(messages(12, 20_000), 20)).toEqual(
+      messages(12, 20_000)
+    )
+    const small = messages(30, 9_000)
+    expect(clearedOutputs(small, 20)).toBe(small)
+  })
+
+  it("marks a long skill cut with Hermes's reload marker, and spares one viewed in the tail", () => {
+    const all = messages(30, 20_000, "skill_view")
+    const part = { output: outputOf(clearedOutputs(all, 20)[1]?.parts[1]) }
+    expect(String(part.output)).toContain(skillMarker("pricing"))
+    const named = [
+      ...all,
+      {
+        id: "u99",
+        role: "user" as const,
+        parts: [{ type: "text", text: "Use the pricing skill." }],
+      },
+    ]
+    expect(clearedOutputs(named, 20)[1]).toEqual(named[1])
+  })
+
+  it("turns an older copy of an output into a back-reference", () => {
+    const same = big(20_000)
+    const all = nextTurnSees(
+      seqd([
+        ...turn(1, "Hi", "Here.", "Mode: ask.", [
+          call(1, "get_facts", {}, same),
+        ]),
+        ...turn(2, "Again", "Here.", "Mode: ask.", [
+          call(2, "get_facts", {}, same),
+        ]),
+        ...long(3, 11),
+      ])
+    )
+    const out = clearedOutputs(all, 20)
+    expect(outputOf(out[1]?.parts[1])).toBe(
+      "[Duplicate tool output: same content as a more recent call]"
+    )
+    expect(outputOf(out[3]?.parts[1])).toEqual(same)
+  })
+
+  it("replaces toolTurns: a call three turns old keeps its input and output", () => {
+    const rows = [
+      ...turn(1, "Hi", "Set.", "Mode: ask.", [
+        call(1, "create_reminder", { title: "Call Sam" }, { id: "r1" }),
+      ]),
+      ...turn(2, "a", "b"),
+      ...turn(3, "c", "d"),
+      ...turn(4, "e", "f"),
+    ]
+    const { messages: out } = deriveCosMessages(seqd(rows), CONTEXT_POLICY)
+    expect(JSON.stringify(out)).toContain("Call Sam")
+  })
+})
+
+describe("the history cap, while compaction lags or fails", () => {
+  /** What the next turn's call carries as history, without its context, at four characters a token. */
+  const carried = (log: SessionEvent[], policy = CONTEXT_POLICY) => {
+    const { messages } = deriveCosMessages(log, policy)
+    return Math.ceil(
+      JSON.stringify(messages.filter((m) => !m.id.startsWith("context-")))
+        .length / 4
+    )
+  }
+
+  it("clears old output with Hermes's placeholder first, sparing the newest two", () => {
+    const rows = Array.from({ length: 6 }, (_, i) =>
+      turn(i + 1, "Look it up", "Here.", "Mode: ask.", [
+        call(i + 1, "get_facts", { n: i }, { rows: `${i}`.repeat(2_000) }),
+      ])
+    ).flat()
+    const policy = { ...CONTEXT_POLICY, historyTokens: 2_000 }
+    const { messages } = deriveCosMessages(seqd(rows), policy)
+    const outputs = messages.flatMap((m) =>
+      m.parts.flatMap((p) => ("output" in p ? [p.output] : []))
+    )
+    expect(outputs.slice(0, 4)).toEqual(Array(4).fill(PRUNED_TOOL_PLACEHOLDER))
+    expect(outputs.slice(-2)).not.toContain(PRUNED_TOOL_PLACEHOLDER)
+    expect(messages.some((m) => m.id === "u1")).toBe(true)
+  })
+
+  it("then drops the oldest turns after the summary, never the summary or the newest turn", () => {
+    const rows: Row[] = [
+      ...turn(1, "Our van is blue.", "Noted."),
+      {
+        type: "cos.compaction",
+        payload: {
+          summary: "The owner's van is blue.",
+          replaced_range: { from_seq: 0, to_seq: 2 },
+          dropped_refs: [],
+        },
+      },
+      ...long(2, 30),
+    ]
+    const policy = { ...CONTEXT_POLICY, historyTokens: 16_000 }
+    const log = seqd(rows)
+    const { messages } = deriveCosMessages(log, policy)
+    expect(messages[0]?.id).toBe("compaction:3")
+    expect(messages.some((m) => m.id === "u2")).toBe(false)
+    expect(messages.at(-1)?.id).toBe("a30")
+    expect(carried(log, policy)).toBeLessThanOrEqual(16_000)
+  })
+})
+
 describe("the scripted 60-turn session", () => {
-  it("compacts, cuts only before an owner message, and keeps both open approvals", async () => {
+  it("compacts and keeps both open approvals on their cards", async () => {
     const { log, plans } = await replay(SESSION, keepsOwnerLines)
     expect(plans.length).toBeGreaterThanOrEqual(1)
-    for (const plan of plans) {
-      const next = log[plan.replaced_range.to_seq + 1]
-      expect(next?.type).toBe("cos.message")
-      expect(next?.payload).toMatchObject({ message: { role: "user" } })
-      expect(plan.replaced_range.from_seq).toBe(0)
-    }
     const seen = nextTurnSees(log)
-    expect(seen[0]?.parts[0]?.text).toContain(SUMMARY_HEADER)
+    expect(JSON.stringify(seen)).toContain(SUMMARY_HEADER)
     const cards = seen
       .flatMap((m) => m.parts)
       .filter((p) => p.state === "approval-requested")
       .map((p) => (p.approval as { id: string }).id)
     expect(cards).toEqual(recorded.open_approvals)
-    expect(historyTokens(seen)).toBeLessThanOrEqual(COMPACTION.threshold)
   })
 
   it("keeps every seeded fact in what the next turn reads when the model keeps the owner's words", async () => {
     const { log } = await replay(SESSION, keepsOwnerLines)
     const summary = JSON.stringify(nextTurnSees(log))
-    for (const said of [
+    for (const fact of [
       "Priya Nair",
       "after 4pm",
       "never work Sundays",
@@ -230,11 +410,11 @@ describe("the scripted 60-turn session", () => {
       "cheap",
       "Martin Hale",
     ]) {
-      expect(summary).toContain(said)
+      expect(summary).toContain(fact)
     }
   })
 
-  it("derives the same messages twice, and a turn after it opens with the summary", async () => {
+  it("derives the same messages twice, and a turn after it reads the summary", async () => {
     const { log } = await replay(SESSION, keepsOwnerLines)
     const next = [
       ...log,
@@ -244,7 +424,9 @@ describe("the scripted 60-turn session", () => {
     expect(await sha256(first)).toBe(
       await sha256(deriveCosMessages(next, CONTEXT_POLICY))
     )
-    expect(first.messages[0]?.id).toMatch(/^compaction:/)
+    expect(first.messages.some((m) => m.id.startsWith("compaction:"))).toBe(
+      true
+    )
     expect(first.messages.map((m) => m.id)).toContain("u60")
   })
 })
@@ -256,12 +438,13 @@ describe("the fold", () => {
   ]
   const compaction = (
     to_seq: number,
-    summary = "The owner said hello."
+    summary = "The owner said hello.",
+    from_seq = 0
   ): Row => ({
     type: "cos.compaction",
     payload: {
       summary,
-      replaced_range: { from_seq: 0, to_seq },
+      replaced_range: { from_seq, to_seq },
       dropped_refs: [],
     },
   })
@@ -285,6 +468,32 @@ describe("the fold", () => {
     expect(text.startsWith(SUMMARY_HEADER)).toBe(true)
     expect(text).toContain(
       `<data source="summary" taint="inferred untrusted_input">`
+    )
+  })
+
+  it("keeps a first summary's head before it, its old tool output cleared", () => {
+    const log = seqd([
+      ...turn(1, "Hi", "Here.", "Mode: ask.", [
+        call(1, "get_facts", { name: "x" }, { rows: "y".repeat(500) }),
+      ]),
+      ...turn(2, "Our van is blue.", "Noted."),
+      compaction(5, "Summary.", 3),
+      ...turn(3, "Thanks", "Any time."),
+    ])
+    const { messages } = deriveCosMessages(log, CONTEXT_POLICY)
+    expect(messages.map((m) => m.id).slice(0, 3)).toEqual([
+      "u1",
+      "a1",
+      "compaction:6",
+    ])
+    expect(outputOf(messages[1]?.parts[1])).toBe(
+      "[get_facts] name=x (511 chars result)"
+    )
+  })
+
+  it("names the skills it replaced with Hermes's reload notice", () => {
+    expect(viewedLine(["pricing", "weekly-review"])).toContain(
+      "reload them first: skill_view(name='pricing'); skill_view(name='weekly-review')."
     )
   })
 
@@ -332,184 +541,213 @@ describe("the fold", () => {
 })
 
 describe("the cut", () => {
-  /** Turns of about 1,000 tokens each, enough to pass the threshold. */
-  const long = (from: number, to: number) =>
-    Array.from({ length: to - from + 1 }, (_, i) =>
-      turn(from + i, words(from + i, 500), words(from + i, 500))
-    ).flat()
+  it("does nothing at or under the warm threshold", () => {
+    expect(planCompaction(seqd(long(1, 5)), AT)).toBeNull()
+  })
 
-  it("keeps about 6,000 tokens and cuts just before an owner message", () => {
+  it("protects the first three messages before a first summary, and none after", () => {
     const log = seqd(long(1, 16))
-    const plan = planCompaction(log) as Plan
-    expect(plan).not.toBeNull()
+    const first = planCompaction(log, AT) as Plan
+    expect(ids(first)?.[0]).toBe("a2")
+    expect(first.replaced_range.from_seq).toBe(log[5]?.seq)
+    const after = seqd([
+      ...long(1, 16),
+      {
+        type: "cos.compaction",
+        payload: {
+          summary: "A summary.",
+          replaced_range: first.replaced_range,
+          dropped_refs: [],
+        },
+      },
+      ...long(17, 30),
+    ])
+    const second = planCompaction(after, AT) as Plan
+    expect(second.replaced_range.from_seq).toBe(0)
+    expect(ids(second)?.[0]).toBe("u1")
+    expect(second.previous).toBe("A summary.")
+  })
+
+  it("keeps a tail of a fifth of the trigger, at most half again, and the owner's last two messages", () => {
+    const at = { warm: 6_000, hard: 40_000 }
+    const log = seqd(long(1, 30))
+    const plan = planCompaction(log, at) as Plan
     const kept = loggedMessages(log, log.length).filter(
       (m) => m.first > plan.replaced_range.to_seq
     )
-    expect(kept[0]?.message.role).toBe("user")
     const tokens = historyTokens(kept.map((m) => m.message))
-    expect(tokens).toBeLessThanOrEqual(COMPACTION.keep)
-    expect(tokens).toBeGreaterThan(COMPACTION.keep - 1_200)
+    expect(tokens).toBeLessThanOrEqual(at.hard * 0.2 * 1.5)
+    expect(tokens).toBeGreaterThan(at.hard * 0.2)
+    expect(kept.length).toBeGreaterThanOrEqual(COMPACTION.tailFloor)
+    const owners = kept.filter((m) => m.message.role === "user")
+    expect(owners.length).toBeGreaterThanOrEqual(2)
   })
 
-  it("never compacts the turn of an open approval, or anything after it", () => {
+  it("keeps the owner's last two messages word for word even past the tail's budget", () => {
+    const rows = [
+      ...long(1, 10),
+      ...turn(11, words(11, 4_000), "Ok."),
+      ...turn(12, "Thanks", "Ok."),
+    ]
+    const plan = planCompaction(seqd(rows), AT) as Plan
+    expect(ids(plan)).not.toContain("u11")
+    expect(ids(plan)).not.toContain("a10")
+  })
+
+  it("never compacts a message with an open approval, or anything after it", () => {
     const rows = long(1, 16)
-    // Turn 4's reply holds a card still waiting.
     const at = rows.findIndex(
-      (r) => (r.payload as { message?: { id: string } }).message?.id === "a4"
+      (r) => (r.payload as { message?: { id: string } }).message?.id === "a6"
     )
-    rows[at] = {
-      type: "cos.message",
-      payload: {
-        turn_id: TURN(4),
-        message: {
-          id: "a4",
-          role: "assistant",
-          parts: [
-            { type: "step-start" },
-            {
-              type: "tool-create_reminder",
-              toolCallId: "call_4",
-              state: "approval-requested",
-              input: { title: "Call Sam", due_at: null },
-              approval: { id: "appr_4" },
-            },
-          ],
-        },
+    rows[at] = said(6, "a6", "assistant", [
+      { type: "step-start" },
+      {
+        type: "tool-create_reminder",
+        toolCallId: "call_6",
+        state: "approval-requested",
+        input: { title: "Call Sam", due_at: null },
+        approval: { id: "appr_6" },
       },
-    }
-    const plan = planCompaction(seqd(rows)) as Plan
-    expect(plan.span.map((m) => m.message.id)).toEqual([
-      "u1",
-      "a1",
-      "u2",
+    ])
+    expect(ids(planCompaction(seqd(rows), AT))).toEqual([
       "a2",
       "u3",
       "a3",
+      "u4",
+      "a4",
+      "u5",
+      "a5",
+      "u6",
     ])
   })
 
   it("never parts a message from a later version of it", () => {
     const rows = long(1, 16)
-    // Turn 3's reply is logged again as turn 14 opens, as a cancelled card is.
-    rows.splice(13 * 3, 0, {
-      type: "cos.message",
-      payload: {
-        turn_id: TURN(14),
-        message: {
-          id: "a3",
-          role: "assistant",
-          parts: [{ type: "text", text: "again" }],
-        },
-      },
-    })
-    const plan = planCompaction(seqd(rows)) as Plan
-    expect(plan.span.map((m) => m.message.id)).toEqual(["u1", "a1", "u2", "a2"])
-  })
-
-  it("does nothing under the threshold", () => {
-    expect(planCompaction(seqd(long(1, 5)))).toBeNull()
-  })
-})
-
-describe("the trigger", () => {
-  it("compacts at most once in 10 turns over a 12,000-token fixed floor", async () => {
-    // The context is the fixed part a step carries; history grows 600 tokens a turn from 9,000.
-    const floor = `Mode: act.\n${"x".repeat(48_000)}`
-    const turns = [
-      turn(1, words(1, 4500), words(1, 4500), floor),
-      ...Array.from({ length: 9 }, (_, i) =>
-        turn(i + 2, words(i + 2, 300), words(i + 2, 300), floor)
-      ),
-    ]
-    const { plans } = await replay(turns, async () => "A summary.")
-    expect(plans.length).toBe(1)
-  })
-
-  it("waits for 4,000 more tokens when what it had to keep stays large", () => {
-    const each = (k: number, size = 500) =>
-      turn(k, words(k, size), words(k, size))
-    // A long paste in turn 4 is the newest turn, so it is kept whole.
-    const rows = [...each(1), ...each(2), ...each(3), ...each(4, 5_000)]
-    const first = planCompaction(seqd(rows)) as Plan
-    expect(first.span.map((m) => m.message.id)).toEqual([
-      "u1",
-      "a1",
-      "u2",
+    rows.splice(
+      13 * 3,
+      0,
+      said(14, "a5", "assistant", [{ type: "text", text: "again" }])
+    )
+    expect(ids(planCompaction(seqd(rows), AT))).toEqual([
       "a2",
       "u3",
       "a3",
+      "u4",
+      "a4",
+      "u5",
     ])
-    rows.push({
-      type: "cos.compaction",
-      payload: {
-        summary: "A summary.",
-        replaced_range: first.replaced_range,
-        dropped_refs: [],
-      },
-    })
-    const after = historyTokens(nextTurnSees(seqd(rows)))
-    expect(after).toBeGreaterThan(COMPACTION.threshold - COMPACTION.strike)
-    let n = 5
-    for (; ; n++) {
-      rows.push(...each(n))
-      const log = seqd(rows)
-      const tokens = historyTokens(nextTurnSees(log))
-      if (tokens < after + COMPACTION.strike) {
-        expect(planCompaction(log)).toBeNull()
-      } else {
-        expect(planCompaction(log)).not.toBeNull()
-        break
-      }
-    }
-    // Past the threshold for at least one turn before the strike let it go.
-    expect(n).toBeGreaterThan(6)
+  })
+
+  it("clears the span's tool output before summarising, as Hermes's first pass does", () => {
+    const rows = [
+      ...turn(1, "Hi", "Hi"),
+      ...turn(2, "Hi", "Hi"),
+      ...turn(3, "Prices?", "Here.", "Mode: ask.", [
+        call(3, "get_facts", { name: "pricing" }, { rows: "z".repeat(600) }),
+      ]),
+      ...long(4, 16),
+    ]
+    const plan = planCompaction(seqd(rows), AT) as Plan
+    const text = transcript(plan.span)
+    expect(text).toContain("output [get_facts] name=pricing (611 chars result)")
+    expect(text).not.toContain("zzzz")
   })
 })
 
-describe("the history cap", () => {
-  /** What the next turn's call carries as history, without its context, at four characters a token. */
-  const carried = (log: SessionEvent[]) => {
-    const { messages } = deriveCosMessages(log, CONTEXT_POLICY)
-    return Math.ceil(
-      JSON.stringify(messages.filter((m) => !m.id.startsWith("context-")))
-        .length / 4
-    )
-  }
+describe("ignored quick replies", () => {
+  const pills = call(
+    3,
+    "offer_choices",
+    {
+      choices: [
+        { label: "Go ahead", send: "Go ahead with the new About page" },
+        { label: "Not now", send: "Not now" },
+      ],
+    },
+    { outcome: "offered" }
+  )
+  const withReply = (reply: string) =>
+    planCompaction(
+      seqd([
+        ...turn(1, "Hi", "Hi"),
+        ...turn(2, "Hi", "Hi"),
+        ...turn(3, "New About page?", "Shall I start it?", "Mode: ask.", [
+          pills,
+        ]),
+        ...turn(4, reply, "Ok."),
+        ...long(5, 16),
+      ]),
+      AT
+    ) as Plan
 
-  it("never lets history pass its cap while every compaction fails", () => {
-    const turns = Array.from({ length: 40 }, (_, i) =>
-      turn(i + 1, words(i + 1, 500), words(i + 1, 500))
+  it("are no answer when the owner wrote something else", () => {
+    const text = transcript(withReply("What are our hours?").span)
+    expect(text).toContain(
+      "[offer_choices] offered quick replies; the owner did not tap one, so this is no answer"
     )
-    const log: SessionEvent[] = []
-    for (const rows of turns) {
-      for (const row of rows) log.push({ seq: log.length, ...row })
-      expect(carried(log)).toBeLessThanOrEqual(CONTEXT_POLICY.historyTokens)
-    }
-    const { messages } = deriveCosMessages(log, CONTEXT_POLICY)
-    expect(messages.at(-1)?.id).toBe("a40")
-    expect(messages.some((m) => m.id === "u1")).toBe(false)
+    expect(text).not.toContain("Go ahead with the new About page")
   })
 
-  it("drops the oldest turns after the summary, never the summary", () => {
-    const rows: Row[] = [
-      ...turn(1, "Our van is blue.", "Noted."),
-      {
-        type: "cos.compaction",
-        payload: {
-          summary: "The owner's van is blue.",
-          replaced_range: { from_seq: 0, to_seq: 2 },
-          dropped_refs: [],
-        },
+  it("are the owner's answer only when their next message is one of them", () => {
+    expect(
+      transcript(withReply("Go ahead with the new About page").span)
+    ).toContain(
+      '[offer_choices] owner responded: "Go ahead with the new About page"'
+    )
+    expect(pillLine(pills, null)).toContain("did not tap")
+  })
+})
+
+describe("anti-thrash", () => {
+  const short = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) =>
+      turn(from + i, "Hi", "Hi")
+    ).flat()
+  /** Two turns of about 4,000 tokens each: the owner's last two, which a summary keeps word for word. */
+  const big = (n: number) => [
+    ...turn(n, words(n, 2_000), words(n, 2_000)),
+    ...turn(n + 1, words(n + 1, 2_000), words(n + 1, 2_000)),
+  ]
+  /** A log whose kept tail alone stays over the warm threshold. */
+  const stuck = () => [...short(1, 5), ...big(6)]
+  const compacted = (rows: Row[], plan: Plan): Row[] => [
+    ...rows,
+    {
+      type: "cos.compaction",
+      payload: {
+        summary: "A summary.",
+        replaced_range: plan.replaced_range,
+        dropped_refs: [],
       },
-      ...Array.from({ length: 30 }, (_, i) =>
-        turn(i + 2, words(i + 2, 500), words(i + 2, 500))
-      ).flat(),
-    ]
-    const log = seqd(rows)
-    const { messages } = deriveCosMessages(log, CONTEXT_POLICY)
-    expect(messages[0]?.id).toBe("compaction:3")
-    expect(messages.some((m) => m.id === "u2")).toBe(false)
-    expect(carried(log)).toBeLessThanOrEqual(CONTEXT_POLICY.historyTokens)
+    },
+  ]
+
+  it("skips a summary of a small middle after a compaction that did not get under the threshold", () => {
+    const rows = stuck()
+    const first = planCompaction(seqd(rows), AT) as Plan
+    expect(first).not.toBeNull()
+    const after = [...compacted(rows, first), ...turn(8, "Ok", "Ok")]
+    // One strike: the middle (short turns only) is under a tenth of the trigger.
+    expect(historyTokens(nextTurnSees(seqd(after)))).toBeGreaterThan(AT.warm)
+    expect(planCompaction(seqd(after), AT)).toBeNull()
+  })
+
+  it("stops after two ineffective compactions until the hard trigger", () => {
+    // A higher trigger, so the newest eight messages Hermes keeps can hold 16,000 tokens under it.
+    const at = { warm: 6_000, hard: 30_000 }
+    let rows = stuck()
+    const first = planCompaction(seqd(rows), at) as Plan
+    rows = [...compacted(rows, first), ...big(8), ...big(10)]
+    const second = planCompaction(seqd(rows), at) as Plan
+    expect(second).not.toBeNull()
+    rows = [...compacted(rows, second), ...turn(12, "Ok", "Ok")]
+    const tokens = historyTokens(nextTurnSees(seqd(rows)))
+    expect(tokens).toBeGreaterThan(at.warm)
+    expect(tokens).toBeLessThan(at.hard)
+    expect(planCompaction(seqd(rows), at)).toBeNull()
+    expect(
+      planCompaction(seqd(rows), { ...at, hard: at.warm + 1 })
+    ).not.toBeNull()
   })
 })
 
@@ -529,7 +767,10 @@ describe("the summary call", () => {
         at: "2026-10-01T09:15 (Europe/London)",
       },
     ],
-    historyTokens: 13_000,
+    historyTokens: 70_000,
+    spanTokens: 40_000,
+    hard: false,
+    now: "2026-11-06T10:00 (Europe/London)",
   })
 
   it("sends no secret in the span", async () => {
@@ -552,7 +793,13 @@ describe("the summary call", () => {
     expect(made.summary).toContain("[redacted]")
   })
 
-  it("has no fallback summary: a failed or cut-off call gives none, so nothing can carry a secret", async () => {
+  it("puts no cap on the output, Hermes's rule", async () => {
+    const { model, calls } = fakeModel("A summary.")
+    await summarise(model, plan("Hello."))
+    expect(calls[0]?.maxOutputTokens).toBeUndefined()
+  })
+
+  it("rejects a failed, empty or cut-off call, so nothing can carry a secret", async () => {
     const failing = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error(`upstream echoed ${FAKE_KEY}`)
@@ -564,29 +811,53 @@ describe("the summary call", () => {
     expect(failed.cost).toBeGreaterThan(0)
 
     const { model } = fakeModel(`Half a summary with ${FAKE_KEY}`, "length")
-    const cut = await summarise(model, plan("Hello."))
-    expect(cut).toMatchObject({ summary: null, problem: "length" })
+    expect(await summarise(model, plan("Hello."))).toMatchObject({
+      summary: null,
+      problem: "length",
+    })
+    const empty = fakeModel("   ")
+    expect(await summarise(empty.model, plan("Hello."))).toMatchObject({
+      summary: null,
+      problem: "shape",
+    })
   })
 
-  it("dates the owner's lines, says it is data, and asks for an update in place", () => {
-    const prompt = promptOf(plan("Hello.", "The owner likes blue."))
-    expect(prompt).toContain("Owner (2026-10-01T09:15 (Europe/London)):")
-    expect(prompt).toContain(`<data source="conversation">`)
-    expect(prompt).toContain(
-      "Keep everything still relevant; remove only what is clearly obsolete."
+  it("follows Hermes's template, first and as an update of the previous summary", () => {
+    const first = promptOf(plan("Hello."))
+    expect(first).toContain("TURNS TO SUMMARISE:")
+    expect(first).toContain("## Historical Task Snapshot")
+    expect(first).toContain("Owner (2026-10-01T09:15 (Europe/London)):")
+    expect(first).toContain("The current date is 2026-11-06T10:00")
+    expect(first).toContain(`<data source="conversation">`)
+    expect(first).toContain("Target ~8000 tokens.")
+    const update = promptOf(plan("Hello.", "The owner likes blue."))
+    expect(update).toContain("PREVIOUS SUMMARY:")
+    expect(update).toContain("NEW TURNS TO INCORPORATE:")
+    expect(update).toContain(
+      "PRESERVE all existing information that is still relevant."
     )
   })
 
-  it("aims at a fifth of the span, from 500 to 1,500 tokens", () => {
-    expect(targetTokens(4_000)).toBe(500)
-    expect(targetTokens(40_000)).toBe(1_500)
-    expect(targetTokens(16_000)).toBe(800)
+  it("aims at a fifth of the span, from 2,000 to 10,000 tokens", () => {
+    expect(targetTokens(4_000)).toBe(2_000)
+    expect(targetTokens(30_000)).toBe(6_000)
+    expect(targetTokens(200_000)).toBe(10_000)
+  })
+
+  it("bounds its input to 160,000 characters, head and tail, the middle marked", () => {
+    const text = `${"a".repeat(100_000)}${"m".repeat(100_000)}${"z".repeat(100_000)}`
+    const bounded = boundInput(text)
+    expect(bounded.length).toBeLessThanOrEqual(COMPACTION.inputMaxChars)
+    expect(bounded.startsWith("aaa")).toBe(true)
+    expect(bounded.endsWith("zzz")).toBe(true)
+    expect(bounded).toContain("[summary input truncated: omitted")
+    expect(boundInput("short")).toBe("short")
   })
 })
 
 const url = process.env.DATABASE_URL
 
-describe.skipIf(!url)("the after-turn job, on a live connection", () => {
+describe.skipIf(!url)("the warm summary job, on a live connection", () => {
   const kit: Tenancy = tenancy(url as string, { max: 3 })
   let me: Owner
 
@@ -621,6 +892,18 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
       return sessionId
     })
 
+  const append = (sessionId: string, row: Row, who: Owner = me) =>
+    kit.withOrg({ orgId: who.orgId }, (db) =>
+      appendSessionEvent(db, {
+        orgId: who.orgId,
+        staffId: who.chiefId,
+        assignmentId: null,
+        sessionId,
+        type: row.type,
+        payload: row.payload as Record<string, unknown>,
+      })
+    )
+
   const rowsOf = (sessionId: string, who: Owner = me) =>
     kit.withOrg({ orgId: who.orgId }, (db) =>
       db
@@ -636,6 +919,9 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
         .orderBy(events.seq)
     )
 
+  const written = async (sessionId: string, who: Owner = me) =>
+    (await rowsOf(sessionId, who)).filter((r) => r.type === "cos.compaction")
+
   const background = (sessionId: string) =>
     kit.withOrg({ orgId: me.orgId }, async (db) =>
       (
@@ -648,21 +934,55 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
       )
     )
 
-  const job = (sessionId: string, turnId = TURN(60), who: Owner = me) => ({
+  const job = (
+    sessionId: string,
+    turnId = TURN(60),
+    who: Owner = me
+  ): AfterTurn => ({
     orgId: who.orgId,
     staffId: who.chiefId,
     sessionId,
     turnId,
+    compact: Date.now(),
   })
 
-  it("leaves a turn that has not closed alone", async () => {
+  /** A queue stand-in: what was sent back, and when. */
+  const queue = () => {
+    const sent: { job: AfterTurn; delaySeconds: number }[] = []
+    const later: Later = async (sentJob, delaySeconds) => {
+      sent.push({ job: sentJob, delaySeconds })
+    }
+    return { sent, later }
+  }
+
+  it("arms one summary three minutes after a turn over the warm threshold, ten seconds at the hard trigger", async () => {
+    const sessionId = await seeded()
+    const { compact: _, ...closed } = job(sessionId)
+    const warm = queue()
+    await scheduleCompaction(kit, closed, warm.later, {
+      warm: 6_000,
+      hard: 1_000_000,
+    })
+    expect(warm.sent).toHaveLength(1)
+    expect(warm.sent[0]?.delaySeconds).toBe(180)
+    expect(warm.sent[0]?.job.compact).toEqual(expect.any(Number))
+    const hard = queue()
+    await scheduleCompaction(kit, closed, hard.later, AT)
+    expect(hard.sent.map((s) => s.delaySeconds)).toEqual([10])
+    const none = queue()
+    await scheduleCompaction(kit, closed, none.later)
+    expect(none.sent).toEqual([])
+  }, 60_000)
+
+  it("leaves a turn that has not closed, or that a newer turn superseded, alone", async () => {
     const sessionId = await seeded()
     const { model, prompts } = fakeModel("A summary.")
-    await compactAfterTurn(kit, model, job(sessionId, TURN(61)))
+    const { sent, later } = queue()
+    await compactAfterTurn(kit, model, job(sessionId, TURN(61)), later, AT)
+    await compactAfterTurn(kit, model, job(sessionId, TURN(59)), later, AT)
     expect(prompts).toEqual([])
-    expect(
-      (await rowsOf(sessionId)).some((r) => r.type === "cos.compaction")
-    ).toBe(false)
+    expect(sent).toEqual([])
+    expect(await written(sessionId)).toEqual([])
   }, 60_000)
 
   it("appends the summary under the CoS, logs its cost for the cap, and does not run twice", async () => {
@@ -675,19 +995,17 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
     const room = () =>
       kit.withOrg({ orgId: me.orgId }, (db) => withinCap(db, me.orgId, 9))
     expect(await room()).toBe(true)
-    await compactAfterTurn(kit, model, job(sessionId))
-    await compactAfterTurn(kit, model, job(sessionId))
-    expect(prompts).toHaveLength(1)
-
-    const rows = await rowsOf(sessionId)
-    const written = rows.filter((r) => r.type === "cos.compaction")
-    expect(written).toHaveLength(1)
+    const { later } = queue()
     const plan = planCompaction(
-      rows
-        .filter((r) => r.type !== "cos.compaction")
-        .map((r) => ({ ...r, seq: Number(r.seq) }))
+      (await rowsOf(sessionId)).map((r) => ({ ...r, seq: Number(r.seq) })),
+      AT
     ) as Plan
-    expect(written[0]).toMatchObject({
+    await compactAfterTurn(kit, model, job(sessionId), later, AT)
+    await compactAfterTurn(kit, model, job(sessionId), later, AT)
+    expect(prompts).toHaveLength(1)
+    const rows = await written(sessionId)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
       staffId: me.chiefId,
       taint: ["inferred", "untrusted_input"],
       payload: {
@@ -706,53 +1024,95 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
     expect(await room()).toBe(false)
   }, 60_000)
 
-  it("writes no event for a summary cut off at the output cap", async () => {
+  it("waits while work is due, and tries again every two minutes for fifty", async () => {
+    const who = await owner(kit, url as string, "cos-compaction-due")
+    const sessionId = await seeded(who)
+    await kit.withOrg({ orgId: who.orgId }, (db) =>
+      db.insert(scheduledJobs).values({
+        orgId: who.orgId,
+        kind: "cos_wake",
+        nextRunAt: new Date(),
+      })
+    )
+    const { model, prompts } = fakeModel("A summary.")
+    const { sent, later } = queue()
+    await compactAfterTurn(kit, model, job(sessionId, TURN(60), who), later, AT)
+    expect(prompts).toEqual([])
+    expect(sent.map((s) => s.delaySeconds)).toEqual([120])
+    const old = {
+      ...job(sessionId, TURN(60), who),
+      compact: Date.now() - 49 * 60_000,
+    }
+    await compactAfterTurn(kit, model, old, later, AT)
+    expect(sent).toHaveLength(1)
+  }, 60_000)
+
+  it("writes no event for a cut-off summary and tries again in two minutes", async () => {
     const sessionId = await seeded()
     const { model } = fakeModel("Half a", "length", 0.001)
-    await compactAfterTurn(kit, model, job(sessionId))
-    expect(
-      (await rowsOf(sessionId)).some((r) => r.type === "cos.compaction")
-    ).toBe(false)
+    const { sent, later } = queue()
+    await compactAfterTurn(kit, model, job(sessionId), later, AT)
+    expect(await written(sessionId)).toEqual([])
+    expect(sent.map((s) => s.delaySeconds)).toEqual([120])
     const [step] = await background(sessionId)
     expect(step?.payload).toMatchObject({ outcome: "length", cost_usd: 0.001 })
   }, 60_000)
 
-  it("writes nothing while a newer turn is open, and leaves the queue to try again", async () => {
+  it("runs one summary at a time per conversation", async () => {
     const sessionId = await seeded()
-    await kit.withOrg({ orgId: me.orgId }, (db) =>
-      appendSessionEvent(db, {
-        orgId: me.orgId,
-        staffId: me.chiefId,
-        assignmentId: null,
+    const { model, prompts } = fakeModel("A summary.", "stop", 0.001)
+    const answer = model.doGenerate
+    model.doGenerate = async (options) => {
+      await new Promise((r) => setTimeout(r, 500))
+      return answer(options)
+    }
+    const log = vi.spyOn(console, "log")
+    const { later } = queue()
+    await Promise.all([
+      compactAfterTurn(kit, model, job(sessionId), later, AT),
+      compactAfterTurn(kit, model, job(sessionId), later, AT),
+    ])
+    expect(prompts).toHaveLength(1)
+    expect(log.mock.calls.flat().join("\n")).toContain('"outcome":"running"')
+    log.mockRestore()
+    expect(await written(sessionId)).toHaveLength(1)
+  }, 60_000)
+
+  it("never makes a turn that starts mid-summary wait: it runs on its own history and the next reads the summary", async () => {
+    const sessionId = await seeded()
+    const opened = context(61)
+    const { model } = fakeModel("A summary.")
+    const answer = model.doGenerate
+    model.doGenerate = async (options) => {
+      // The owner's next turn opens while the summary is being written.
+      await append(
         sessionId,
-        ...(turn(61, "Hi", "Hi")[1] as Row),
-        payload: (turn(61, "Hi", "Hi")[1] as Row).payload as Record<
-          string,
-          unknown
-        >,
-      })
-    )
-    const { model, prompts } = fakeModel("A summary.")
-    await expect(
-      compactAfterTurn(kit, model, job(sessionId))
-    ).rejects.toBeInstanceOf(SessionBusy)
-    expect(prompts).toEqual([])
-    await expect(
-      kit.withOrg({ orgId: me.orgId }, (db) =>
-        writeCompaction(
-          db,
-          { orgId: me.orgId, staffId: me.chiefId, sessionId },
-          {
-            summary: "A summary.",
-            replaced_range: { from_seq: 0, to_seq: 10 },
-            dropped_refs: [],
-          }
-        )
+        said(61, "u61", "user", [{ type: "text", text: "Hi" }])
       )
-    ).rejects.toBeInstanceOf(SessionBusy)
+      await append(sessionId, opened)
+      return answer(options)
+    }
+    const { later } = queue()
+    await compactAfterTurn(kit, model, job(sessionId), later, AT)
+    const rows = (await rowsOf(sessionId)).map((r) => ({
+      ...r,
+      seq: Number(r.seq),
+    }))
+    expect(rows.filter((r) => r.type === "cos.compaction")).toHaveLength(1)
+    const open = deriveCosMessages(rows, CONTEXT_POLICY).messages
+    expect(open.some((m) => m.id.startsWith("compaction:"))).toBe(false)
+    const next = [
+      ...rows,
+      ...turn(62, "Bye", "Bye").map((r, i) => ({
+        ...r,
+        seq: rows.length + 100 + i,
+      })),
+    ]
     expect(
-      (await rowsOf(sessionId)).some((r) => r.type === "cos.compaction")
-    ).toBe(false)
+      deriveCosMessages(next, CONTEXT_POLICY).messages.some((m) =>
+        m.id.startsWith("compaction:")
+      )
+    ).toBe(true)
   }, 60_000)
 
   it("refuses a backwards range and drops one a logged compaction already covers", async () => {
@@ -802,12 +1162,13 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
           (await rowsOf(sessionId, who)).map((r) => ({
             ...r,
             seq: Number(r.seq),
-          }))
+          })),
+          AT
         ) as Plan
       )
     )
 
-  it("lets one of two calls at once through when the day has room for one", async () => {
+  it("lets one of two calls at once through when the day has room for one, and holds the other for the cap", async () => {
     const who = await owner(kit, url as string, "cos-compaction-race")
     const [a, b] = [await seeded(who), await seeded(who)]
     const worst = await worstOf(a, who)
@@ -818,11 +1179,13 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
       await new Promise((r) => setTimeout(r, 500))
       return answer(options)
     }
+    const { sent, later } = queue()
     await Promise.all([
-      compactAfterTurn(kit, model, job(a, TURN(60), who)),
-      compactAfterTurn(kit, model, job(b, TURN(60), who)),
+      compactAfterTurn(kit, model, job(a, TURN(60), who), later, AT),
+      compactAfterTurn(kit, model, job(b, TURN(60), who), later, AT),
     ])
     expect(prompts).toHaveLength(1)
+    expect(sent.map((s) => s.delaySeconds)).toEqual([120])
   }, 60_000)
 
   it("counts a failed call once, at its worst, not its reservation as well", async () => {
@@ -835,7 +1198,8 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
         throw new Error("provider down")
       },
     })
-    await compactAfterTurn(kit, model, job(sessionId, TURN(60), who))
+    const { later } = queue()
+    await compactAfterTurn(kit, model, job(sessionId, TURN(60), who), later, AT)
     expect(await room(1.5 * worst)).toBe(true)
     expect(await room(2.5 * worst)).toBe(false)
   }, 60_000)

@@ -60,13 +60,15 @@ export async function readSessionSince(
  */
 export type ContextPolicy = {
   version: string
-  /** The newest turns kept. */
-  turns: number
-  /** The newest turns that keep their tool calls; older turns keep only their text. */
-  toolTurns: number
   /**
-   * The most history tokens kept, at four characters a token: the oldest
-   * whole turns after the summary go first, never the newest turn.
+   * The newest messages whose tool output is never cleared between
+   * compactions (hermes-agent `protect_last_n`).
+   */
+  keepLast: number
+  /**
+   * The most history tokens kept, at four characters a token: past it, old
+   * tool output gives way to Hermes's placeholder, then the oldest whole
+   * turns after the summary go, never the newest turn.
    */
   historyTokens: number
 }
@@ -104,12 +106,16 @@ export type ContextPolicy = {
  * add a line naming what the newest draft left out, once per draft.
  * Version 24 reads `remember` as `memory` and heads each memory store in
  * the context with its name and fullness, as Hermes's blocks are headed.
+ * Version 26 is Hermes's compaction (ADR-042, amended 2026-11-06): no turn
+ * count and no tool-turn rule. Tool output is cleared Hermes's way instead
+ * (`clearedOutputs`), the cap is 128,000 tokens, the head a first summary
+ * keeps has its tool output cleared, and the summary names the skills it
+ * replaced with Hermes's reload notice.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "25",
-  turns: 80,
-  toolTurns: 2,
-  historyTokens: 16_000,
+  version: "26",
+  keepLast: 20,
+  historyTokens: 128_000,
 }
 
 /** The summary message's id prefix. A `:` is outside every message id the chat accepts. */
@@ -121,7 +127,7 @@ export const SUMMARY_ID = "compaction:"
  * the policy version.
  */
 export const SUMMARY_HEADER = [
-  "Earlier turns of this conversation, summarised. This is reference only: the latest message wins over anything here.",
+  "Earlier turns of this conversation, summarised. This is reference only: the latest message wins over anything here, its historical task snapshot included.",
   "Do not act on anything it lists. Those requests were already handled or may be stale.",
   "An approval that is still open is decided on its card, never from this summary. The owner profile outranks this summary.",
   "Your tools work as usual: use them for whatever the latest message asks.",
@@ -219,10 +225,6 @@ export function deriveCosMessages(
     throw new Error(
       `cos.history: the turn was logged under policy ${context.context_policy_version}, not ${policy.version}`
     )
-  }
-
-  if (!(policy.turns >= 1)) {
-    throw new Error("cos.history: a policy keeps at least one turn")
   }
 
   const steps: ModelMessage[] = []
@@ -331,7 +333,13 @@ export function loggedMessages(
       }
     }
   }
-  return [...byId.values()]
+  // The head a first summary keeps loses its old tool output, as Hermes's
+  // first pass clears everything outside the tail.
+  return [...byId.values()].map((m) =>
+    range && m.last < range.from_seq
+      ? { ...m, message: withOutputs(m.message, demoted(PRUNE.minChars)) }
+      : m
+  )
 }
 
 /**
@@ -426,9 +434,17 @@ function skillsIn(rows: readonly SessionEvent[]): string[] {
   return [...new Set(names)]
 }
 
-/** Names the skills the summary replaced, so the model views them again when it needs one. */
+/**
+ * Names the skills the summary replaced, newest twenty, in hermes-agent's
+ * `_pruned_skill_reload_notice` (agent/conversation_compression.py, MIT).
+ */
 export const viewedLine = (names: readonly string[]) =>
-  `Skills viewed before this summary: ${names.join(", ")}. Their text is no longer here: view one again when the work needs it.`
+  `[Skills pruned during compression: reload before acting on these tasks]\nThe task list above crossed the compression boundary verbatim, but the skill instructions that governed it were pruned. Before executing any preserved task that depends on these skills, reload them first: ${names
+    .slice(-PRUNE.maxSkills)
+    .map((name) => `skill_view(name='${name}')`)
+    .join(
+      "; "
+    )}. After reloading, re-check that each pending task is still justified: findings recorded before the boundary may have invalidated it.`
 
 /** The summary as the model reads it: our header, then the summary as labelled data. */
 const summaryMessage = (
@@ -453,52 +469,247 @@ const summaryMessage = (
   ],
 })
 
+/** After hermes-agent agent/context_compressor.py (MIT): how old tool output is cleared. */
+export const PRUNE = {
+  /** `_PRUNE_MIN_CHARS`: output this long or shorter is never cleared. */
+  minChars: 200,
+  /** `proactive_prune_min_result_chars`: between summaries, only output longer than this. */
+  proactiveMinChars: 8_000,
+  /** `proactive_prune_min_reclaim_tokens`: a clearing that saves less leaves the history, and its cache, alone. */
+  minReclaimTokens: 4_096,
+  /** `_SKILL_VIEW_PRUNE_MIN_CHARS`: a cleared skill longer than this leaves a reload marker. */
+  skillMinChars: 5_000,
+  /** `_MAX_PRUNED_SKILL_MARKERS`. */
+  maxSkills: 20,
+  /** `_SALVAGE_KEEP_RECENT_TOOLS`: the outputs the cap's placeholder spares. */
+  salvageKeepTools: 2,
+  /** `_truncate_tool_call_args_json`: an input longer than this has its long strings cut to `inputHeadChars`. */
+  inputMaxChars: 500,
+  inputHeadChars: 200,
+} as const
+
+/** Hermes's `_PRUNED_TOOL_PLACEHOLDER`. */
+export const PRUNED_TOOL_PLACEHOLDER =
+  "[Old tool output cleared to save context space]"
+
+const DUPLICATE_OUTPUT =
+  "[Duplicate tool output: same content as a more recent call]"
+
+/** Hermes's `_skill_pruned_marker`. */
+export const skillMarker = (name: string) =>
+  `[SKILL_PRUNED: content lost in compression; reload with skill_view(name='${name}')]`
+
+type ToolPart = Part & { input?: unknown; output?: unknown; toolName?: unknown }
+
+export const toolNameOf = (part: Part) =>
+  part.type === "dynamic-tool"
+    ? String((part as ToolPart).toolName)
+    : part.type.replace(/^tool-/, "")
+
+const outputChars = (part: Part) =>
+  JSON.stringify((part as ToolPart).output ?? null).length
+
+const argsOf = (part: Part) => {
+  const input = (part as ToolPart).input
+  return (input && typeof input === "object" ? input : {}) as Record<
+    string,
+    unknown
+  >
+}
+
+/** A finished call whose output the model reads. */
+const hasOutput = (part: Part) =>
+  isTool(part) && part.state === "output-available"
+
+/**
+ * A cleared output's one line, after hermes-agent `_summarize_tool_result`
+ * (MIT): the tool, its first two arguments and the size it had. A skill past
+ * `skillMinChars` adds the reload marker.
+ */
+export function toolLine(part: Part): string {
+  const name = toolNameOf(part)
+  const args = argsOf(part)
+  const chars = outputChars(part).toLocaleString("en-GB")
+  if (name === "skill_view") {
+    const skill = String(args.name ?? "?")
+    return `[skill_view] name=${skill} (${chars} chars)${
+      outputChars(part) > PRUNE.skillMinChars ? ` ${skillMarker(skill)}` : ""
+    }`
+  }
+  const first = Object.entries(args)
+    .slice(0, 2)
+    .map(
+      ([key, value]) =>
+        ` ${key}=${(typeof value === "string" ? value : JSON.stringify(value)).slice(0, 40)}`
+    )
+    .join("")
+  return `[${name}]${first} (${chars} chars result)`
+}
+
+/** `message` with each finished call's part passed through `change`. */
+const withOutputs = (
+  message: Message,
+  change: (part: Part, at: number) => Part
+): Message => ({
+  ...message,
+  parts: message.parts.map((part, at) =>
+    hasOutput(part) ? change(part, at) : part
+  ),
+})
+
+/** A part whose output is longer than `min` characters, as its one line. */
+const demoted =
+  (min: number) =>
+  (part: Part): Part =>
+    outputChars(part) > min ? { ...part, output: toolLine(part) } : part
+
+/** Long strings in a call's input cut short, after Hermes's `_truncate_tool_call_args_json`. */
+function shrunkInput(part: Part): Part {
+  const input = (part as ToolPart).input
+  if (JSON.stringify(input ?? null).length <= PRUNE.inputMaxChars) return part
+  const shrink = (value: unknown): unknown =>
+    typeof value === "string"
+      ? value.length > PRUNE.inputHeadChars
+        ? `${value.slice(0, PRUNE.inputHeadChars)}...[truncated]`
+        : value
+      : Array.isArray(value)
+        ? value.map(shrink)
+        : value && typeof value === "object"
+          ? Object.fromEntries(
+              Object.entries(value).map(([k, v]) => [k, shrink(v)])
+            )
+          : value
+  return { ...part, input: shrink(input) } as Part
+}
+
+/**
+ * Skills whose text stays through the clearing, after Hermes's
+ * `_collect_protected_skill_names`: viewed in the newest messages, or named
+ * by the owner there.
+ */
+function protectedSkills(messages: Message[], boundary: number): Set<string> {
+  const tail = messages.slice(Math.max(0, boundary))
+  const said = tail
+    .filter(byOwner)
+    .flatMap((m) =>
+      m.parts.map((p) =>
+        String((p as { text?: unknown }).text ?? "").toLowerCase()
+      )
+    )
+  return new Set(
+    messages.flatMap((m, i) =>
+      m.parts.flatMap((p) => {
+        const name = argsOf(p).name
+        if (toolNameOf(p) !== "skill_view" || typeof name !== "string") {
+          return []
+        }
+        const key = name.toLowerCase()
+        return i >= boundary || said.some((text) => text.includes(key))
+          ? [key]
+          : []
+      })
+    )
+  )
+}
+
+/**
+ * Old tool output cleared between summaries, after hermes-agent
+ * `prune_tool_results_only` and `_prune_old_tool_results` (MIT): an output
+ * repeated later becomes a back-reference; outside the newest `keepLast`
+ * messages, an output over `proactiveMinChars` becomes its one line (a
+ * protected skill excepted) and a long input is cut short. The clearing
+ * applies only when it saves `minReclaimTokens`, since each one costs the
+ * prompt cache from the first message it changes. Compaction's first pass
+ * calls it with `PRUNE.minChars` and no gate, as Hermes's `compress` does.
+ * shortcut: Hermes also waits for the history to regrow before clearing
+ * again, which needs state the log does not hold; the saving gate stands in.
+ */
+export function clearedOutputs(
+  messages: Message[],
+  keepLast: number,
+  minChars: number = PRUNE.proactiveMinChars,
+  minReclaimTokens: number = PRUNE.minReclaimTokens
+): Message[] {
+  const boundary = messages.length - keepLast
+  if (boundary <= 0) return messages
+  const spared = protectedSkills(messages, boundary)
+  const seen = new Set<string>()
+  let saved = 0
+  const out = messages.map((_, back) => {
+    const i = messages.length - 1 - back
+    const message = messages[i] as Message
+    return withOutputs(message, (part) => {
+      const output = JSON.stringify((part as ToolPart).output ?? null)
+      let next = part
+      if (output.length >= PRUNE.minChars && seen.has(output)) {
+        next = { ...part, output: DUPLICATE_OUTPUT }
+      } else if (output.length >= PRUNE.minChars) {
+        seen.add(output)
+        const skill = String(argsOf(part).name ?? "").toLowerCase()
+        if (
+          i < boundary &&
+          !(toolNameOf(part) === "skill_view" && spared.has(skill))
+        ) {
+          next = demoted(minChars)(part)
+        }
+      }
+      if (i < boundary) next = shrunkInput(next)
+      saved += JSON.stringify(part).length - JSON.stringify(next).length
+      return next
+    })
+  })
+  return saved > 0 && saved / 4 >= minReclaimTokens ? out.reverse() : messages
+}
+
 /**
  * Tokens the model reads of `messages` as history, at four characters a
- * token over their JSON, older turns without their tool calls.
+ * token over their JSON, old tool output cleared as `clearedOutputs` clears
+ * it, before the cap.
  * shortcut: chars/4 undercounts non-Latin scripts (Bengali by about half);
  * switch to the last step's `inputTokens` when the first such owner arrives.
  */
 export const historyTokens = (messages: Message[]) =>
-  Math.ceil(JSON.stringify(pruned(messages, CONTEXT_POLICY)).length / 4)
+  Math.ceil(
+    JSON.stringify(clearedOutputs(messages, CONTEXT_POLICY.keepLast)).length / 4
+  )
 
 /**
- * The newest `policy.turns` turns, with tool calls kept only in the newest
- * `policy.toolTurns`, within `policy.historyTokens`. A message left with
- * nothing but step boundaries is dropped. Messages before the first owner
+ * The history within `policy.historyTokens`, for when compaction lags or
+ * fails. Past the cap, every tool output over `PRUNE.minChars` but the
+ * newest two gives way to the placeholder (hermes-agent
+ * `salvage_grown_transcript`, MIT); then the oldest whole turns go, never the
+ * summary and never the newest turn. Messages before the first owner
  * message count as a turn.
  */
 function pruned(messages: Message[], policy: ContextPolicy): Message[] {
+  const cleared = clearedOutputs(messages, policy.keepLast)
+  const size = (m: Message[]) => JSON.stringify(m).length / 4
+  if (size(cleared) <= policy.historyTokens) return cleared
+  const outputs = cleared.flatMap((m, i) =>
+    m.parts.flatMap((p, at) => (hasOutput(p) ? [`${i}:${at}`] : []))
+  )
+  const spared = new Set(outputs.slice(-PRUNE.salvageKeepTools))
+  const salvaged = cleared.map((message, i) =>
+    withOutputs(message, (part, at) =>
+      spared.has(`${i}:${at}`) || outputChars(part) <= PRUNE.minChars
+        ? part
+        : { ...part, output: PRUNED_TOOL_PLACEHOLDER }
+    )
+  )
   const turns: Message[][] = []
-  for (const message of messages) {
+  for (const message of salvaged) {
     const open = turns[turns.length - 1]
     if (byOwner(message) || !open) turns.push([message])
     else open.push(message)
   }
-  const kept = turns.slice(-policy.turns)
-  const full = kept.length - policy.toolTurns
-  // A skill stays until compaction or the budget drops its turn, as Hermes keeps one.
-  const shaped = kept.map((turn, i) =>
-    i >= full
-      ? turn
-      : turn.flatMap((message) => {
-          const parts = message.parts.filter(
-            (p) => !isTool(p) || p.type === "tool-skill_view"
-          )
-          return parts.some((p) => p.type !== "step-start")
-            ? [{ ...message, parts }]
-            : []
-        })
-  )
-  const sizes = shaped.map((turn) => JSON.stringify(turn).length / 4)
-  let total = sizes.reduce((sum, size) => sum + size, 0)
-  let from = shaped[0]?.[0]?.id.startsWith(SUMMARY_ID) ? 1 : 0
-  while (total > policy.historyTokens && from < shaped.length - 1) {
-    total -= sizes[from] ?? 0
-    shaped[from] = []
-    from += 1
+  const sizes = turns.map(size)
+  let total = sizes.reduce((sum, s) => sum + s, 0)
+  for (let i = 0; total > policy.historyTokens && i < turns.length - 1; i++) {
+    if (turns[i]?.[0]?.id.startsWith(SUMMARY_ID)) continue
+    total -= sizes[i] ?? 0
+    turns[i] = []
   }
-  return shaped.flat()
+  return turns.flat()
 }
 
 /**

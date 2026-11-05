@@ -9,7 +9,14 @@ import {
 import { cosModel } from "./chat.ts"
 import { type ContinueJob, continueTurn, isContinueJob } from "./continue.ts"
 import { LIMITS, openrouterModel } from "./cos/agent.ts"
-import { COMPACTION, compactAfterTurn } from "./cos/compaction.ts"
+import {
+  COMPACTION,
+  compactAfterTurn,
+  type Later,
+  scheduleCompaction,
+  THRESHOLDS,
+  thresholdsFor,
+} from "./cos/compaction.ts"
 import { REFLECTION, reflectAfterTurn } from "./cos/reflection.ts"
 import { GRACE_MS, SessionBusy } from "./cos/turns.ts"
 import { drawLogoMessage, isLogoJob, type LogoJob } from "./logo.ts"
@@ -24,6 +31,8 @@ export type AfterTurn = {
   turnId: string
   /** The copy sent to arrive after the conversation has been quiet, for reflection only. */
   idle?: boolean
+  /** The warm summary's copy (`scheduleCompaction`), for compaction only: when it was armed, in epoch ms. */
+  compact?: number
 }
 
 /**
@@ -84,7 +93,8 @@ export async function onboardingWords(
 }
 
 /**
- * The work after each closed turn: compaction, then reflection; and a
+ * The work after each closed turn: arming the warm summary, then
+ * reflection; the warm summary when its copy comes back; and a
  * continuation or a proactive turn the orchestrator handed over
  * (`continue.ts`, `wake.ts`). A message whose job threw is retried, after a
  * newer turn's longest life when it is open, then goes to the dead-letter
@@ -109,6 +119,13 @@ export async function afterTurnBatch(
     cos.model && cos.price
       ? { model: cos.model, modelId: cos.modelId, price: cos.price }
       : null
+  // The warm summary's delays ride this queue, the platform's own delay.
+  const later: Later = async (job, delaySeconds) => {
+    await env.AFTER_TURN.send(job, { delaySeconds })
+  }
+  const thresholds = env.COMPACTION_WARM_TOKENS
+    ? thresholdsFor(Number(env.COMPACTION_WARM_TOKENS))
+    : THRESHOLDS
   try {
     for (const message of batch.messages) {
       const { body } = message
@@ -128,8 +145,12 @@ export async function afterTurnBatch(
           console.log(
             JSON.stringify({ type: "cos.woke", job_id: body.jobId, woke })
           )
+        } else if (body.compact !== undefined) {
+          await compactAfterTurn(kit, model, body, later, thresholds)
         } else {
-          if (!body.idle) await compactAfterTurn(kit, model, body)
+          if (!body.idle) {
+            await scheduleCompaction(kit, body, later, thresholds)
+          }
           await reflectAfterTurn(kit, reviewer, body, onboardingWords)
         }
         message.ack()

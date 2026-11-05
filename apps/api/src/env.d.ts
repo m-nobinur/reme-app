@@ -33,6 +33,11 @@ interface Env {
   VAPID_PUBLIC_KEY?: string
   /** The Chief of Staff's key (ADR-034). Unset, every CoS turn takes the fallback. */
   OPENROUTER_API_KEY?: string
+  /**
+   * The warm summary's threshold in history tokens, when not Hermes's 64,000:
+   * a local test hook (`.dev.vars`) to watch a summary happen on a short chat.
+   */
+  COMPACTION_WARM_TOKENS?: string
   /** The CoS's model id, when not `DEFAULT_MODEL`. It must be in the facade's price table. */
   COS_MODEL?: string
   /**

@@ -22,6 +22,7 @@ import {
   events,
   handoffEvent,
   type OrgScopedDb,
+  reserveSpend,
   sql,
   unloggedResults,
 } from "@workspace/db"
@@ -335,10 +336,43 @@ export async function writeAsTurn(
 }
 
 /**
+ * One summary per conversation at a time (after OpenMausBot
+ * server/warm-summary.ts, Apache-2.0): under the org's budget lock, a
+ * compaction reservation for this conversation, unsettled and younger than
+ * `holdMs`, means one is being written, and this one says `running`.
+ * Otherwise the call's reservation, named for the conversation, or null when
+ * the day has no room.
+ */
+export async function claimCompaction(
+  db: OrgScopedDb,
+  session: { orgId: string; sessionId: string },
+  amount: number,
+  holdMs: number
+): Promise<string | "running" | null> {
+  await db.execute(
+    sql`select pg_advisory_xact_lock(3, hashtext(${session.orgId}::text))`
+  )
+  const [running] = await db.execute(sql`
+    select 1 from ${events} v
+    where v.org_id = ${session.orgId} and v.type = 'cos.background_reserve'
+      and v.payload->>'job' = 'compaction'
+      and v.payload->>'session_id' = ${session.sessionId}
+      and v.recorded_at > now() - make_interval(secs => ${holdMs / 1000})
+      and not exists (select 1 from ${events} s
+        where s.org_id = v.org_id and s.type = 'cos.background_step'
+          and s.payload->>'reservation_id' = v.event_id)
+    limit 1`)
+  if (running) return "running"
+  return reserveSpend(db, session.orgId, "compaction", amount, {
+    session_id: session.sessionId,
+  })
+}
+
+/**
  * Appends a `cos.compaction` as the session's CoS staff row, under the
- * conversation's lock, between turns: a closed turn holds no token, so the
- * write checks instead that no turn is open, and throws `SessionBusy`,
- * writing nothing, when one is. Returns its seq, or null, writing nothing,
+ * conversation's lock. A turn may be open: it read its history before this
+ * existed, and only the next turn folds it in (`loggedMessages`), so the
+ * owner never waits on a summary. Returns its seq, or null, writing nothing,
  * when a compaction already logged reaches as far.
  */
 export async function writeCompaction(
@@ -352,9 +386,6 @@ export async function writeCompaction(
     throw new Error(`cos.turns: a compaction from ${from_seq} to ${to_seq}`)
   }
   await lock(db, session.sessionId)
-  if (await openTurn(db, session.sessionId, 0)) {
-    throw new SessionBusy(session.sessionId)
-  }
   const [covered] = await db.execute(sql`
     select 1 from ${events}
     where session_id = ${session.sessionId} and type = 'cos.compaction'

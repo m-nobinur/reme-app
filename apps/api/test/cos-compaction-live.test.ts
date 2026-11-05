@@ -48,7 +48,8 @@ describe.skipIf(!LIVE)("compaction with the real models", () => {
     }[] = []
     for (const [i, rows] of (recorded.turns as Row[][]).entries()) {
       for (const row of rows) add(row)
-      const plan = planCompaction(log)
+      // The scripted session is about 25,000 tokens: thresholds scaled to it.
+      const plan = planCompaction(log, { warm: 6_000, hard: 12_000 })
       if (!plan) continue
       const summary = await summarise(summaryModel, plan)
       made.push({ turn: i + 1, summary })
