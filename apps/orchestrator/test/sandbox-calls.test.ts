@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   bounded,
@@ -5,6 +6,7 @@ import {
   EXEC_GRACE_MS,
   FILE_CALL_MS,
   SandboxCallTimeout,
+  tailSandbox,
 } from "../src/sandbox.ts"
 
 /** A stand-in stub whose calls hang the first `hangs` times, then answer. */
@@ -98,5 +100,17 @@ describe("a sandbox call that never answers", () => {
     })
     expect(await sandbox.exec("true")).toEqual({ exitCode: 0, stdout: "ok" })
     expect(await sandbox.readFile("/x")).toEqual({ content: "page" })
+  })
+})
+
+describe("a file read as bytes for the tail", () => {
+  it("decodes every byte value the container sends as base64", async () => {
+    const bytes = Uint8Array.from({ length: 256 }, (_, i) => i)
+    const sandbox = tailSandbox({
+      readFile: async () => ({
+        content: Buffer.from(bytes).toString("base64"),
+      }),
+    } as never)
+    expect(new Uint8Array(await sandbox.readFileBuffer("/x"))).toEqual(bytes)
   })
 })

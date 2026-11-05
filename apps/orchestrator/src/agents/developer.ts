@@ -47,7 +47,10 @@ import {
   useTool,
   withOutputCap,
 } from "@workspace/facade"
-import { cloudflareSandbox } from "@workspace/facade/cloudflare"
+import {
+  cloudflareSandbox,
+  createCloudflareTracing,
+} from "@workspace/facade/cloudflare"
 import { z } from "zod"
 import { type Brief, changeBriefSignal, retryContextSignal } from "../brief.ts"
 import { ownerUploads } from "../developer-rules.ts"
@@ -81,7 +84,7 @@ import {
   refuseQuestion,
 } from "../question.ts"
 import { logTurn } from "../quick.ts"
-import { placePhotos, SITE_ROOT } from "../revise.ts"
+import { placePhotos, restore, SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover, sandboxFor } from "../sandbox.ts"
 import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
 import { eventSink } from "../sink.ts"
@@ -142,27 +145,48 @@ const held = globalThis as { [OBSERVER]?: () => void }
 held[OBSERVER]?.()
 held[OBSERVER] = observe(observed)
 
+// Ahead of the generated entry's default, which puts the conversation in
+// every span: the events table already holds it, so traces keep timing and
+// shape (#613). A second evaluation replaces it in dev, as the observer does.
+instrument(createCloudflareTracing({ content: false }))
+
 export function observed(...[observation, ctx]: Parameters<Observer>) {
   // A submission that throws outside any turn (its container not running
-  // yet, measured locally 2026-10-25) settles with no operation event, so
-  // nothing else would wake the Workflow before its 45 minute watchdog.
+  // yet, measured locally 2026-10-25), or whose every attempt was cut short
+  // (the #593 staging build, #610), settles with no operation event, so nothing
+  // else would wake the Workflow before its stall watchdog. Neither needs the
+  // session: after an isolate restart it is gone.
   const o = observation as {
     type?: string
     operation?: string
     submissionId?: string
+    error?: { type?: string }
   }
   if (o.type === "submission_recovery" && o.operation === "process_submission")
     return unstarted.has(ctx.id)
       ? undefined
       : tell(ctx.id, "interrupted", SANDBOX_UPDATING, o.submissionId)
   const found = sessions.get(ctx.id)
-  if (!found) return
-  found.tee.subscriber(observation)
-  // Typed void | Promise<void>, but the budget guard's observer is synchronous.
-  void found.budget.instrumentation.observe(observation, ctx)
-  interrupted(found, observation)
+  if (found) {
+    found.tee.subscriber(observation)
+    // Typed void | Promise<void>, but the budget guard's observer is synchronous.
+    void found.budget.instrumentation.observe(observation, ctx)
+    interrupted(found, observation)
+  }
+  if (
+    o.type === "submission_settled" &&
+    EXHAUSTED.has(o.error?.type ?? "") &&
+    !unstarted.has(ctx.id)
+  )
+    tell(ctx.id, "interrupted", SANDBOX_UPDATING, o.submissionId)
 }
 type Observer = Parameters<typeof observe>[0]
+
+/** Flue's settlement errors for a submission that ran out of attempts, before or after its input. */
+const EXHAUSTED = new Set([
+  "submission_retry_exhausted",
+  "submission_interrupted",
+])
 
 /**
  * A run that ends in an error (a provider stream that breaks, measured on
@@ -570,7 +594,9 @@ function render({ id }: AgentProps) {
         })
       }
     }
-    await sandbox.exec(`mkdir -p ${SITE_ROOT}`)
+    // Root's workspace takes the site's directory; nothing the model runs can.
+    const stub = sandboxFor(env, runtime.spec.org_id)
+    await stub.exec(`mkdir -p ${SITE_ROOT}`, { privileged: true })
     if (brief.restore_key) {
       // QE2, one restore and not two: `brief.map` is set only when the
       // Workflow restored this revision or found it warm before admitting
@@ -578,21 +604,9 @@ function render({ id }: AgentProps) {
       const prepared =
         brief.map !== null &&
         (await sandbox.exec(`test -d ${SITE_ROOT}/.git`)).exitCode === 0
-      if (!prepared) {
-        const object = await env.SITES.get(brief.restore_key)
-        if (!object) {
-          throw new Error(`no source snapshot at ${brief.restore_key}`)
-        }
-        await sandbox.writeFile(
-          "/tmp/source.tar.zst",
-          new Uint8Array(await object.arrayBuffer())
-        )
-        const restore = await sandbox.exec(
-          `tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`
-        )
-        if (restore.exitCode !== 0)
-          throw new Error(`restore failed: ${restore.stderr}`)
-      }
+      // Straight to the stub, which streams the tar from R2: the harness's
+      // writeFile would carry it through this isolate as base64 (#612).
+      if (!prepared) await restore(stub, env.SITES, brief.restore_key)
       // The owner's quote questions as the facts hold them now: a newer
       // `quote.form` replaces the restored file, the same one keeps it.
       await sandbox.writeFile(
@@ -1083,6 +1097,7 @@ export const reportComplete = (current: Session) =>
           assignmentId,
           facts: current.brief.snapshot.facts,
           saveFile: sandboxFor(env, orgId).saveFile,
+          stopStrays: () => sandboxFor(env, orgId).stopStrays(),
           holdPhotos: true,
         })
 

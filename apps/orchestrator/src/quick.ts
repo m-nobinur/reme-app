@@ -281,6 +281,7 @@ export async function quickEdit(input: {
     /** A picture's bytes, for the photo kind. */
     writeBytes: (path: string, content: Uint8Array) => Promise<unknown>
     saveFile: (path: string, key: string) => Promise<number>
+    stopStrays: () => Promise<unknown>
   }
   brief: Brief
   /** `photo` draws one picture instead of calling the edit model (IG4). */
@@ -415,6 +416,7 @@ export async function quickEdit(input: {
       assignmentId: ids.assignmentId,
       facts: snapshot.facts,
       saveFile: sandbox.saveFile,
+      stopStrays: sandbox.stopStrays,
     })
     const report = CompletionReport.parse({
       report_id: crypto.randomUUID(),

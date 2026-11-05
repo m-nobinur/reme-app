@@ -33,7 +33,7 @@ import {
 import { HIDDEN_FACTS_KEY } from "@workspace/gates"
 import type { z } from "zod"
 import type { PhotoFile } from "./photo-step.ts"
-import { NPM_REGISTRY_HOST } from "./sandbox.ts"
+import { NPM_REGISTRY_HOST, SANDBOX_CLASS } from "./sandbox.ts"
 import { type Ids, repairsSoFar } from "./state.ts"
 
 /** The owner's decision: model spend is capped at $20 per assignment. */
@@ -464,7 +464,7 @@ export async function issueSpec(
         tool_usd_spent: 0,
         period_ends_at: new Date(now + SPEC_TTL_MS).toISOString(),
       },
-      sandbox_class: "standard-2",
+      sandbox_class: SANDBOX_CLASS,
       egress_allowlist: [NPM_REGISTRY_HOST],
       supervisor_ref: null,
       issued_at: new Date(now).toISOString(),

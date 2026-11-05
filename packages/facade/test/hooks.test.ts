@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { FacadeError } from "../src/errors.ts"
 import {
@@ -840,5 +841,43 @@ describe("the turn cap", () => {
     const open = createTurnGate()
     await turns(open, 50)
     await expect(open.interceptor(op("bash"), lead, ran)).resolves.toBe("ran")
+  })
+})
+
+// The guard's list of the image's top-level directories, held to the image:
+// a new base or a new top-level path in the Dockerfile fails here until the
+// list in hooks.ts says it too.
+describe("the guard's directories, against the sandbox image", () => {
+  const dockerfile = readFileSync(
+    new URL("../../../infra/sandbox/Dockerfile", import.meta.url),
+    "utf8"
+  )
+  /** node:22-trixie-slim at this digest: Debian's merged /usr layout. */
+  const BASE =
+    "docker.io/library/node:22-trixie-slim@sha256:154ba2f4d6fec323d28e4f4bb86bba4677f1223391a1979cf521304e03a98dfa"
+  const BASE_DIRS =
+    "bin boot dev etc home lib lib64 media mnt opt proc root run sbin srv sys usr var".split(
+      " "
+    )
+  const quotedIsDisk = (dir: string) =>
+    bashRefusal(`grep -r x "/${dir}/y"`, policy) !== null
+
+  it("is checked against the base image it was written for", () => {
+    expect(dockerfile).toContain(`FROM ${BASE}\n`)
+  })
+
+  it("names every top-level directory of the base and of the Dockerfile", () => {
+    const made = [
+      ...dockerfile
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("#"))
+        .join("\n")
+        .matchAll(/(?<![\w.:/@-])\/([a-z][\w.-]*)/g),
+    ].map((m) => m[1] as string)
+    const dirs = [...new Set([...BASE_DIRS, ...made])].filter(
+      (dir) => dir !== "tmp"
+    )
+    expect(made).toContain("workspace")
+    expect(dirs.filter((dir) => !quotedIsDisk(dir))).toEqual([])
   })
 })

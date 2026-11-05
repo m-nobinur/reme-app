@@ -15941,7 +15941,11 @@ export interface components {
         period_ends_at: string
       }
       /** @enum {string} */
-      sandbox_class: "virtual" | "standard-2" | "standard-3"
+      sandbox_class:
+        | "virtual"
+        | "standard-2"
+        | "standard-3"
+        | "custom-1vcpu-3gib"
       egress_allowlist: string[]
       supervisor_ref: string | null
       /** Format: date-time */

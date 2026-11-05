@@ -632,7 +632,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           : await restoreAndMap(sandbox, this.env.SITES, brief.restore_key)
       } else {
         // A first build seeds an empty site; a warm disk's site would linger.
-        await sandbox.exec(`rm -rf ${SITE_ROOT}`)
+        await sandbox.exec(`rm -rf ${SITE_ROOT}`, { privileged: true })
       }
       if (change) {
         const listed = await sandbox.exec(

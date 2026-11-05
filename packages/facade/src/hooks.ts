@@ -98,8 +98,8 @@ const touchesAgents = (path: string) =>
 
 /**
  * The sandbox image's top-level directories (node:22-trixie-slim, and
- * /workspace from infra/sandbox/Dockerfile).
- * shortcut: a fixed list; add to it when the image gains a top-level directory.
+ * /workspace from infra/sandbox/Dockerfile). The hooks test holds it to the
+ * Dockerfile and to the base image's digest.
  */
 const ROOT_DIRS: ReadonlySet<string> = new Set(
   "bin boot dev etc home lib lib32 lib64 libx32 media mnt opt proc root run sbin srv sys tmp usr var workspace".split(
@@ -142,9 +142,10 @@ export function bashRefusal(
   if (touchesAgents(command)) return "the command names .agents/"
   if (hasParentSegment(command)) return "the command contains a .. segment"
   const roots = [policy.siteRoot, ...(policy.readOnlyRoots ?? [])]
-  // shortcut: a string check, not a shell parser, so a path spelled without
-  // a slash (printf escapes) still passes; the org's own container is the
-  // tenant boundary. Parse the command if this ever guards more than that.
+  // A string check, not a shell parser, so a path spelled at run time still
+  // passes. It is a convenience that turns a stray path into a quick refusal,
+  // not the control: the org's own container is the tenant boundary, and
+  // RemeSandbox runs every command as `reme` with no capability (#697).
   const joined = command.replace(/\\\n/g, "")
   const split = (text: string) =>
     text.replace(/['"]/g, "").split(/[\s;&|<>()`=]+/)

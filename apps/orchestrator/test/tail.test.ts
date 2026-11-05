@@ -35,6 +35,7 @@ async function rig(
   options: { sumsFail?: boolean; hide?: string[]; swept?: boolean } = {}
 ) {
   const read: string[] = []
+  const saved: string[] = []
   const copied: string[] = []
   const stored = new Map<string, string>()
   const bucket = new Map(
@@ -72,6 +73,15 @@ async function rig(
       read.push(file)
       return enc(now[file] ?? "")
     },
+    saveFile: async (path: string, key: string) => {
+      peak = Math.max(peak, ++inFlight)
+      await new Promise((r) => setTimeout(r, 1))
+      inFlight--
+      const file = path.replace("/workspace/site/dist/", "")
+      saved.push(file)
+      stored.set(key, now[file] ?? "")
+      return enc(now[file] ?? "").byteLength
+    },
   }
   const sites = {
     get: async (key: string) => {
@@ -93,7 +103,7 @@ async function rig(
     ),
   }
   const run = () => uploadDist({ sandbox, sites, prefix: "new/", previous })
-  return { run, read, copied, stored, peak: () => peak }
+  return { run, read, saved, copied, stored, peak: () => peak }
 }
 
 describe("the dist upload", () => {
@@ -103,14 +113,15 @@ describe("the dist upload", () => {
       { "index.html": "old home", "a.css": "same", "b.js": "same too" }
     )
     const out = await r.run()
-    expect(r.read).toEqual(["index.html"])
+    expect(r.saved).toEqual(["index.html"])
+    expect(r.read).toEqual([])
     expect([...r.copied].sort()).toEqual(["a.css", "b.js"])
     expect(Object.fromEntries(r.stored)).toEqual({
       "new/dist/index.html": "new home",
       "new/dist/a.css": "same",
       "new/dist/b.js": "same too",
     })
-    expect(out).toMatchObject({ sent: 1, reused: 2 })
+    expect(out).toMatchObject({ sent: 1, reused: 2, bytes: 8 })
     expect(out.files).toEqual({
       "a.css": await sha("same"),
       "b.js": await sha("same too"),
@@ -127,7 +138,7 @@ describe("the dist upload", () => {
       { swept: true }
     )
     const out = await r.run()
-    expect(r.read).toEqual(["index.html"])
+    expect(r.saved).toEqual(["index.html"])
     expect(out).toMatchObject({ sent: 1, reused: 0 })
   })
 
@@ -138,6 +149,8 @@ describe("the dist upload", () => {
       { hide: ["odd name.css"] }
     )
     expect((await missing.run()).files["odd name.css"]).toBe(await sha("x"))
+    expect(missing.read).toEqual(["odd name.css"])
+    expect(missing.saved).toEqual(["index.html"])
     const failed = await rig(
       { "index.html": "home" },
       { "index.html": "home" },
@@ -346,6 +359,7 @@ describe("the build at the end of a report", () => {
       assignmentId: "a",
       facts: [],
       holdPhotos,
+      stopStrays: async () => undefined,
     } as unknown as Parameters<typeof finishRevision>[0])
     return { outcome, ran }
   }
@@ -485,6 +499,7 @@ describe("the source snapshot at the end of a report", () => {
   it("goes from the sandbox to R2 without being read back through the caller", async () => {
     const reads: string[] = []
     const saved: [string, string][] = []
+    const order: string[] = []
     const done: Record<string, unknown> = {
       documents: { json: null },
       "astro check": { exit_code: 0, output: "", ms: 0 },
@@ -501,7 +516,10 @@ describe("the source snapshot at the end of a report", () => {
           name in done ? (done[name] as T) : fn(),
       },
       sandbox: {
-        exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+        exec: async () => {
+          order.push("exec")
+          return { exitCode: 0, stdout: "", stderr: "" }
+        },
         readFileBuffer: async (path: string) => {
           reads.push(path)
           return new Uint8Array()
@@ -512,6 +530,7 @@ describe("the source snapshot at the end of a report", () => {
         saved.push([path, key])
         return 1
       },
+      stopStrays: async () => void order.push("stop strays"),
       kit: {},
       sites: {},
       hostSuffix: "-stg.remeai.co.uk",
@@ -524,5 +543,8 @@ describe("the source snapshot at the end of a report", () => {
     ])
     expect(reads).toEqual([])
     expect(out.source.key).toBe("sites/o/rev-1/source.tar.zst")
+    // #697: nothing the Developer left running sees the tail's files.
+    expect(order[0]).toBe("stop strays")
+    expect(order.filter((o) => o === "stop strays")).toHaveLength(3)
   })
 })
