@@ -146,7 +146,32 @@ describe("refreshRate", () => {
     expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toEqual({
       rate: "usd_gbp",
       code: "ecb.503",
+      message: "ecb.503",
     })
+  })
+
+  it("logs a failed fetch's message, which workerd's bare Error name does not say", async () => {
+    const log = logged()
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("internal error; reference = mtkuq31v608jtgeepgjk116g")
+      })
+    )
+    await refreshRate(store().env, new Date("2026-11-04T17:00:00Z"))
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toEqual({
+      rate: "usd_gbp",
+      code: "Error",
+      message: "internal error; reference = mtkuq31v608jtgeepgjk116g",
+    })
+  })
+
+  it("fetches before 16:00 UTC when the stored rate is too old to show", async () => {
+    const fetched = serve(new Response(SAMPLE))
+    const { env, map } = store(held("2026-10-28", "2026-10-28"))
+    await refreshRate(env, new Date("2026-11-04T09:00:00Z"))
+    expect(fetched).toHaveBeenCalledOnce()
+    expect(JSON.parse(map.get(RATE_KEY) ?? "null")?.date).toBe("2026-11-03")
   })
 
   it("stores nothing from a file it cannot read, and does not throw when the fetch fails", async () => {
@@ -180,6 +205,15 @@ describe("rateNow", () => {
     const fetched = vi.fn(async () => new Response(SAMPLE))
     vi.stubGlobal("fetch", fetched)
     expect(await rateNow(store().env, now)).toBe(POUNDS_PER_DOLLAR)
+    expect(fetched).toHaveBeenCalledOnce()
+  })
+
+  it("fetches when a server restarts on a rate stored days ago, before 16:00 UTC", async () => {
+    const fetched = vi.fn(async () => new Response(SAMPLE))
+    vi.stubGlobal("fetch", fetched)
+    expect(
+      await rateNow(store(held("2026-10-28", "2026-10-28")).env, now)
+    ).toBe(POUNDS_PER_DOLLAR)
     expect(fetched).toHaveBeenCalledOnce()
   })
 

@@ -1,4 +1,4 @@
-import { logFailure } from "@workspace/db"
+import { failureCode } from "@workspace/db"
 
 /**
  * The USD to GBP rate behind the pound estimate on a Cloudflare price, which
@@ -65,14 +65,17 @@ export async function freshRate(
   now: Date
 ): Promise<number | undefined> {
   const rate = await stored(kv)
-  if (!rate) return undefined
-  const days = (Date.parse(day(now)) - Date.parse(rate.date)) / 86_400_000
-  return days <= RATE_MAX_DAYS ? rate.usd_gbp : undefined
+  return rate && isFresh(rate, now) ? rate.usd_gbp : undefined
 }
 
+const isFresh = (rate: Stored, now: Date) =>
+  (Date.parse(day(now)) - Date.parse(rate.date)) / 86_400_000 <= RATE_MAX_DAYS
+
 /**
- * Fetches the day's file when nothing is stored, or once a day after
+ * Fetches the day's file when nothing fresh is stored, or once a day after
  * `RATE_HOUR_UTC`; a failure is logged and retried by the next hour's firing.
+ * The log keeps the error's message as well as its code: workerd names every
+ * failed fetch `Error`, and this one carries no credential.
  */
 export async function refreshRate(
   env: Pick<Env, "SCHEDULE">,
@@ -82,7 +85,8 @@ export async function refreshRate(
     const held = await stored(env.SCHEDULE)
     if (
       held &&
-      (held.fetched_on === day(now) || now.getUTCHours() < RATE_HOUR_UTC)
+      (held.fetched_on === day(now) ||
+        (now.getUTCHours() < RATE_HOUR_UTC && isFresh(held, now)))
     )
       return
     const response = await fetch(ECB_DAILY, {
@@ -96,7 +100,13 @@ export async function refreshRate(
       JSON.stringify({ ...parsed, fetched_on: day(now) } satisfies Stored)
     )
   } catch (error) {
-    logFailure({ rate: "usd_gbp" }, error)
+    console.error(
+      JSON.stringify({
+        rate: "usd_gbp",
+        code: failureCode(error),
+        message: error instanceof Error ? error.message : String(error),
+      })
+    )
   }
 }
 
