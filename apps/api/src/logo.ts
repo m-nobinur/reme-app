@@ -34,6 +34,7 @@ import {
   DIRECTOR_GUIDE,
   type LogoSubject,
   logoPrompt,
+  markPrompt,
   redesignPrompt,
   variantStyles,
 } from "./logo-style.ts"
@@ -124,12 +125,17 @@ export const LOGO_ROUNDS_PER_DAY = 20
 export const DRAW_RESERVE_USD = 0.05
 
 /** What the queue carries: names only, the manifest holds the rest. */
-export type LogoJob = {
+type RoundJob = {
   kind: "logo"
   orgId: string
   toolCallId: string
   round: number
 }
+
+/** A kept logo's mark to draw, once, for the site's favicon set. */
+type MarkJob = { kind: "logo_mark"; orgId: string; logoId: string }
+
+export type LogoJob = RoundJob | MarkJob
 
 type Manifest = {
   round: number
@@ -169,6 +175,9 @@ const manifestKey = (orgId: string, toolCallId: string, round: number) =>
   `${manifestPrefix(orgId, toolCallId)}${round}.json`
 const variantKey = (orgId: string, id: string, ext: string) =>
   `generated/${orgId}/${id}.${ext}`
+/** Where a kept logo's mark is stored; the orchestrator's build tail reads it (`markKey` in photo-files.ts). */
+export const markKey = (orgId: string, logoId: string) =>
+  `marks/${orgId}/${logoId}.png`
 
 const EXTENSION: Record<string, string> = {
   "image/png": "png",
@@ -474,7 +483,7 @@ export async function drawLogos(
       detail: {},
     })
   }
-  const job: LogoJob = { kind: "logo", orgId, toolCallId, round }
+  const job: RoundJob = { kind: "logo", orgId, toolCallId, round }
   try {
     await env.AFTER_TURN.send(job)
   } catch {
@@ -567,6 +576,11 @@ export async function keepLogo(
       "That's as many pictures as a business can keep. Remove a photo first."
     )
   }
+  // The mark is extra: without it the favicon keeps the initial.
+  const job: MarkJob = { kind: "logo_mark", orgId, logoId: id }
+  await env.AFTER_TURN.send(job).catch(() =>
+    console.error(JSON.stringify({ code: "logos.mark_not_queued" }))
+  )
   const body: KeptLogo = { asset }
   return Response.json(body)
 }
@@ -760,6 +774,93 @@ async function forJev(env: Env, bytes: Uint8Array): Promise<string> {
 }
 
 /**
+ * One picture, from each model in turn until one draws it, every call's
+ * spend reserved against the org's daily cap first. Null when none drew or
+ * the cap is reached.
+ */
+async function drawPaid(
+  kit: Tenancy,
+  orgId: string,
+  apiKey: string,
+  prompt: string,
+  reference: string | null
+): Promise<(Drawn & { model: string }) | null> {
+  for (const model of LOGO_MODELS) {
+    const reservation = await kit.withOrg({ orgId }, (db) =>
+      reserveSpend(db, orgId, "logo", DRAW_RESERVE_USD)
+    )
+    if (!reservation) {
+      console.log(JSON.stringify({ code: "logos.budgetary", model: model.id }))
+      return null
+    }
+    const drawn = await drawOne(apiKey, model, prompt, reference).catch(
+      (error: unknown) => {
+        console.error(
+          JSON.stringify({
+            code: "logos.draw_failed",
+            model: model.id,
+            error: error instanceof Error ? error.message : "unknown",
+          })
+        )
+        return null
+      }
+    )
+    // A call that fails may still bill, so it stays counted at its worst.
+    await settleSpend(kit, { orgId }, reservation, {
+      job: "logo",
+      model: model.id,
+      cost_usd: drawn?.cost ?? DRAW_RESERVE_USD,
+    })
+    if (drawn) return { ...drawn, model: model.id }
+  }
+  return null
+}
+
+/**
+ * Draws a kept logo's mark for the queue: the logo's picture handed to the
+ * image model with `markPrompt`, checked like a variant and stored at
+ * `markKey`, which the next build places for the favicon set. Skipped when
+ * the mark is already there or the owner has kept another logo since. A
+ * mark that fails to draw is logged; the favicon keeps the initial.
+ */
+export async function drawMark(
+  env: Env,
+  kit: Tenancy,
+  job: MarkJob
+): Promise<void> {
+  const apiKey = env.OPENROUTER_API_KEY
+  const at = markKey(job.orgId, job.logoId)
+  if (!apiKey || (await env.SITES.head(at))) return
+  const facts = await kit.withOrg({ orgId: job.orgId }, readFacts)
+  const kept = factValue(facts, "media.uploads")?.items.find(
+    (a) => a.use === "logo"
+  )
+  if (kept?.id !== job.logoId) return
+  const logo = await env.SITES.get(uploadKey(job.orgId, job.logoId))
+  if (!logo) return
+  const bytes = new Uint8Array(await logo.arrayBuffer())
+  const drawn = await drawPaid(
+    kit,
+    job.orgId,
+    apiKey,
+    markPrompt(factValue(facts, "business.name")?.name ?? ""),
+    dataUrl(bytes, sniff(bytes) ?? "image/png")
+  )
+  if (drawn) {
+    await env.SITES.put(at, drawn.bytes, {
+      httpMetadata: { contentType: drawn.type },
+    })
+  }
+  console.log(
+    JSON.stringify({
+      code: drawn ? "logos.mark" : "logos.mark_failed",
+      model: drawn?.model ?? null,
+      cost_usd: drawn?.cost ?? 0,
+    })
+  )
+}
+
+/**
  * Draws one round for the queue. A variant already in R2 is skipped, so a
  * retried message finishes the round rather than paying for it twice. A
  * round no longer drawing, past its deadline, or replaced by a new try is
@@ -768,7 +869,7 @@ async function forJev(env: Env, bytes: Uint8Array): Promise<string> {
 export async function drawRound(
   env: Env,
   kit: Tenancy,
-  job: LogoJob,
+  job: RoundJob,
   deps: { director?: Director | null } = {}
 ): Promise<void> {
   const began = Date.now()
@@ -860,70 +961,41 @@ export async function drawRound(
           : null
       const reference =
         redesign && !redesign.fresh ? base : exampleFor(brief.type, style)
-      for (const model of LOGO_MODELS) {
-        const prompt =
-          redesign?.prompt ??
-          logoPrompt({
-            subject: manifest.subject,
-            brief,
-            style,
-            symbol: symbols[i] ?? null,
-            support,
-            reference: true,
-            changes: manifest.changes,
-          })
-        const reservation = await kit.withOrg({ orgId: job.orgId }, (db) =>
-          reserveSpend(db, job.orgId, "logo", DRAW_RESERVE_USD)
-        )
-        if (!reservation) {
-          console.log(
-            JSON.stringify({ code: "logos.budgetary", model: model.id })
-          )
-          break
-        }
-        const drawn = await drawOne(apiKey, model, prompt, reference).catch(
-          (error: unknown) => {
-            console.error(
-              JSON.stringify({
-                code: "logos.draw_failed",
-                model: model.id,
-                error: error instanceof Error ? error.message : "unknown",
-              })
-            )
-            return null
-          }
-        )
-        // A call that fails may still bill, so it stays counted at its worst.
-        await settleSpend(kit, { orgId: job.orgId }, reservation, {
-          job: "logo",
-          model: model.id,
-          cost_usd: drawn?.cost ?? DRAW_RESERVE_USD,
+      const prompt =
+        redesign?.prompt ??
+        logoPrompt({
+          subject: manifest.subject,
+          brief,
+          style,
+          symbol: symbols[i] ?? null,
+          support,
+          reference: true,
+          changes: manifest.changes,
         })
-        if (!drawn) continue
-        await env.SITES.put(
-          variantKey(job.orgId, id, EXTENSION[drawn.type] as string),
-          drawn.bytes,
-          {
-            httpMetadata: { contentType: drawn.type },
-            customMetadata: LOGO_VARIANT,
-          }
-        )
-        await add(id)
-        // Its chips, while the other variants still draw; none leaves the tray's own.
-        const chips = await readChips(
-          apiKey,
-          manifest.subject.name,
-          await forJev(env, drawn.bytes),
-          { type: brief.type, style },
-          manifest.brief,
-          manifest.suggested ?? []
-        ).catch(() => null)
-        if (chips) {
-          await record((m) => ({ ...m, chips: { ...m.chips, [id]: chips } }))
+      const drawn = await drawPaid(kit, job.orgId, apiKey, prompt, reference)
+      if (!drawn) return { model: null, cost: 0 }
+      await env.SITES.put(
+        variantKey(job.orgId, id, EXTENSION[drawn.type] as string),
+        drawn.bytes,
+        {
+          httpMetadata: { contentType: drawn.type },
+          customMetadata: LOGO_VARIANT,
         }
-        return { model: model.id, cost: drawn.cost }
+      )
+      await add(id)
+      // Its chips, while the other variants still draw; none leaves the tray's own.
+      const chips = await readChips(
+        apiKey,
+        manifest.subject.name,
+        await forJev(env, drawn.bytes),
+        { type: brief.type, style },
+        manifest.brief,
+        manifest.suggested ?? []
+      ).catch(() => null)
+      if (chips) {
+        await record((m) => ({ ...m, chips: { ...m.chips, [id]: chips } }))
       }
-      return { model: null, cost: 0 }
+      return { model: drawn.model, cost: drawn.cost }
     })
   )
   const drawn = outcomes.filter((o) => o.model !== null).length
@@ -946,11 +1018,11 @@ export async function drawRound(
   )
 }
 
-/** A queue message that is a logo round rather than a closed turn. */
+/** A queue message that is a logo round or mark rather than a closed turn. */
 export const isLogoJob = (body: unknown): body is LogoJob =>
   typeof body === "object" &&
   body !== null &&
-  (body as { kind?: unknown }).kind === "logo"
+  ["logo", "logo_mark"].includes(String((body as { kind?: unknown }).kind))
 
 /** One logo message: acked when drawn, retried on a storage failure, then the dead-letter queue. */
 export async function drawLogoMessage(
@@ -958,8 +1030,11 @@ export async function drawLogoMessage(
   kit: Tenancy,
   message: Message<LogoJob>
 ): Promise<void> {
+  const { body } = message
   try {
-    await drawRound(env, kit, message.body)
+    await (body.kind === "logo_mark"
+      ? drawMark(env, kit, body)
+      : drawRound(env, kit, body))
     message.ack()
   } catch (error) {
     console.error(

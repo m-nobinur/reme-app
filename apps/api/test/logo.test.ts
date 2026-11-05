@@ -36,9 +36,11 @@ import {
   DRAW_DEADLINE_MS,
   DRAW_RESERVE_USD,
   drawLogos,
+  drawMark,
   drawRound,
   hasAlpha,
   LOGO_MODELS,
+  markKey,
   nextRoundAt,
   readLogos,
   roundView,
@@ -54,6 +56,7 @@ import {
   initialsOf,
   LOGO_STYLE_WORDS,
   logoPrompt,
+  markPrompt,
   redesignPrompt,
   variantStyles,
 } from "../src/logo-style.ts"
@@ -72,6 +75,14 @@ const brief = {
 const subject = { name: "Bright Homes", trade: "domestic cleaning" }
 
 describe("the logo prompt", () => {
+  it("asks a mark for the logo's symbol alone, on a transparent background", () => {
+    const prompt = markPrompt('The "Bright" Homes')
+    expect(prompt).toContain(
+      `Redraw the attached logo for "The 'Bright' Homes" as its app icon: the same symbol in the same colours and style, with the name and every other word left out.`
+    )
+    expect(prompt).toContain("fully transparent background")
+  })
+
   it("quotes the name, and binds each colour by name to a part", () => {
     const prompt = logoPrompt({
       subject,
@@ -980,12 +991,73 @@ describe.skipIf(!url)("POST /logos/:id/keep, on a live connection", () => {
   })
 
   type Who = Awaited<ReturnType<typeof owner>>
+  const queued: unknown[] = []
   const keep = (who: Who, sites: ReturnType<typeof bucket>, id: string) =>
     who.call(stubOrchestrator(), `/logos/${id}/keep`, {
       method: "POST",
       headers: { "idempotency-key": crypto.randomUUID() },
-      bindings: { SITES: sites },
+      bindings: {
+        SITES: sites,
+        AFTER_TURN: { send: async (sent: unknown) => void queued.push(sent) },
+      },
     })
+  const keptDrawn = async (who: Who, sites: ReturnType<typeof bucket>) => {
+    const id = crypto.randomUUID()
+    await sites.put(`generated/${who.orgId}/${id}.png`, PNG, {
+      httpMetadata: { contentType: "image/png" },
+      customMetadata: { use: "logo" },
+    })
+    expect((await keep(who, sites, id)).status).toBe(200)
+    return id
+  }
+  const drawEnv = (sites: ReturnType<typeof bucket>) =>
+    ({ SITES: sites, OPENROUTER_API_KEY: "test" }) as unknown as Env
+
+  it("queues a kept logo's mark, drawn once from the logo's picture and stored for the build", async () => {
+    const who = await owner(kit, url as string, "logo-mark")
+    const sites = bucket()
+    const id = await keptDrawn(who, sites)
+    const mark = { kind: "logo_mark" as const, orgId: who.orgId, logoId: id }
+    expect(queued).toContainEqual(mark)
+
+    const asked = images()
+    await drawMark(drawEnv(sites), kit, mark)
+    await drawMark(drawEnv(sites), kit, mark)
+    expect(asked).toHaveLength(1)
+    expect(asked[0]?.model).toBe(LOGO_MODELS[0].id)
+    expect(asked[0]?.prompt).toContain("as its app icon")
+    expect(asked[0]?.url).toBe(
+      `data:image/png;base64,${btoa(String.fromCharCode(...PNG))}`
+    )
+    expect(sites.objects.get(markKey(who.orgId, id))?.type).toBe("image/png")
+  })
+
+  it("stores no mark when every model fails, or for a logo the owner has replaced", async () => {
+    const who = await owner(kit, url as string, "logo-mark-none")
+    const sites = bucket()
+    const first = await keptDrawn(who, sites)
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    const asked = images(() => true)
+    await drawMark(drawEnv(sites), kit, {
+      kind: "logo_mark",
+      orgId: who.orgId,
+      logoId: first,
+    })
+    expect(asked).toHaveLength(LOGO_MODELS.length)
+    expect(sites.objects.has(markKey(who.orgId, first))).toBe(false)
+    quiet.mockRestore()
+
+    vi.unstubAllGlobals()
+    await keptDrawn(who, sites)
+    const later = images()
+    await drawMark(drawEnv(sites), kit, {
+      kind: "logo_mark",
+      orgId: who.orgId,
+      logoId: first,
+    })
+    expect(later).toHaveLength(0)
+    expect(sites.objects.has(markKey(who.orgId, first))).toBe(false)
+  })
   const uploads = async (who: Who) => {
     const facts = FactList.parse(
       await (await who.call(stubOrchestrator(), "/facts")).json()

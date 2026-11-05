@@ -282,6 +282,19 @@ export function redesignPrompt(input: {
 }
 
 /**
+ * The prompt for a kept logo's mark: its symbol alone, drawn from the logo's
+ * own picture, for the site's favicon and home-screen icons. A logo that is
+ * lettering only keeps its first letter, so the icon still looks like it.
+ */
+export function markPrompt(name: string): string {
+  return [
+    `Redraw the attached logo for "${quoted(name)}" as its app icon: the same symbol in the same colours and style, with the name and every other word left out. If the logo is lettering only, draw just its first letter in the same lettering.`,
+    "Keep the same logo identity and add nothing new. Make it bold and simple enough to read at 16 pixels, filling a square.",
+    FORMAT_LINE,
+  ].join("\n")
+}
+
+/**
  * The director's guideline: one quick text call turns the brief into three
  * ideas for the logo type, specific to the trade, so the three variants are
  * not the same generic house or sparkle.
