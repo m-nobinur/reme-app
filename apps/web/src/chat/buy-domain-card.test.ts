@@ -747,7 +747,7 @@ it("says Skip for now in the chat, folds once it is sent, and gives way to a fre
   ]
   const skipped = await found()
   expect(skipped.chat.textContent).toBe(
-    "Found 3 namesNames I offered: sparkleclean.co.uk, sparklecleanbristol.com."
+    "Found 3 namesNames I offered: sparkleclean.co.uk, sparkleclean.uk, sparklecleanbristol.com."
   )
 
   store.after.push({
