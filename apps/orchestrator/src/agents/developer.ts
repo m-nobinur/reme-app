@@ -112,7 +112,7 @@ import {
  * budget guard sits in front of every model call.
  */
 
-const POLICY = { siteRoot: SITE_ROOT, readOnlyRoots: ["/opt/astro"] }
+const POLICY = { siteRoot: SITE_ROOT }
 
 // The transport, once per isolate; a missing key fails here, before a model.
 const { providers } = registerProviders(env)

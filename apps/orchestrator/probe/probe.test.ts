@@ -85,11 +85,10 @@ live("the sandbox", { timeout: 300_000 }, () => {
     ).toEqual([])
   })
 
-  it("runs every command with no capability, writing only where reme may", async () => {
-    const confined = await check("confined")
-    expect(confined.exit_code).toBe(0)
-    expect(confined.output).toMatch(/CapEff:\s*0+\n/)
-    expect(confined.output).toContain("confined")
+  it("runs every command as root, writing anywhere", async () => {
+    const root = await check("root")
+    expect(root.exit_code).toBe(0)
+    expect(root.output).toMatch(/^0\nroot/)
   })
 
   it("builds the Astro toolchain check", async () => {

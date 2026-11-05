@@ -33,7 +33,6 @@ const SYSTEM = "/etc/ssl/certs/ca-certificates.system.crt"
  * from the Worker's env goes in.
  */
 const EXEC_ENV = {
-  // Under /tmp: a confined command writes nowhere else outside the site.
   HOME: "/tmp/home",
   PLAYWRIGHT_BROWSERS_PATH: "/opt/pw-browsers",
   NODE_EXTRA_CA_CERTS: CA,
@@ -49,44 +48,29 @@ const EXEC_ENV = {
 /**
  * Trust the intercept's CA, as the 0.12 control server did at start: wait
  * for it, then write the bundle from the image's copy and the current CA.
- * Then give root the workspace, the home directory and the warm-revision
- * marker's directory, which the image gave `reme`: a confined command is
- * `reme` with no capabilities, so it writes the site and /tmp and no more.
- * Run again for the same container, it does the same.
+ * Then make the warm-revision marker's directory. Run again for the same
+ * container, it does the same.
  */
 const TRUST = [
   "sh",
   "-c",
   `[ -e ${SYSTEM} ] || { cp ${BUNDLE} ${SYSTEM}.tmp && mv ${SYSTEM}.tmp ${SYSTEM}; }
 timeout 10 sh -c 'until [ -s ${CA} ]; do sleep 0.1; done' && cat ${SYSTEM} ${CA} >${BUNDLE}.tmp && mv ${BUNDLE}.tmp ${BUNDLE} &&
-mkdir -p ${WORKSPACE}/.reme && chown -R 0:0 ${WORKSPACE}/.reme && chown 0:0 ${WORKSPACE} /home/reme && chmod 755 ${WORKSPACE} ${WORKSPACE}/.reme /home/reme`,
+mkdir -p ${WORKSPACE}/.reme`,
 ]
 
 /**
- * What every command runs under unless the code marks it privileged (#697):
- * `reme` with every capability dropped for good. The platform gives each
- * process root's capabilities whatever its user (ADR-031), so without this
- * the Developer's shell, and the site code a build runs, could write the
- * toolchain the gates run, read any process's memory and follow a planted
- * symlink anywhere. Within the org's own container; the tenant boundary is
- * the container.
+ * Set on every command the code does not mark privileged, so the stray sweep
+ * can tell the Developer's processes and the site's build code from the
+ * code's own steps: every command runs as root with every capability, since
+ * the org's own container is the boundary (as Hermes skips its command
+ * guards in a container).
  */
-export const CONFINED = [
-  "setpriv",
-  "--reuid=1000",
-  "--regid=1000",
-  "--clear-groups",
-  "--inh-caps=-all",
-  "--ambient-caps=-all",
-  "--bounding-set=-all",
-  "--no-new-privs",
-  "--",
-]
+const STRAY = "REME_STRAY=1"
 
 /**
- * The file calls, as commands run confined, so a symlink in the site never
- * takes a write past what `reme` may write. The path comes in `REME_PATH`;
- * a write's bytes come on stdin. A write makes its directory, as 0.12 did.
+ * The file calls, as commands. The path comes in `REME_PATH`; a write's
+ * bytes come on stdin. A write makes its directory, as 0.12 did.
  */
 export const FILE_SCRIPTS = {
   read: 'cat -- "$REME_PATH"',
@@ -98,13 +82,13 @@ export const FILE_SCRIPTS = {
 }
 
 /**
- * Kills every process with no capabilities: what the Developer's commands
- * or the site's own build code left running (a `setsid` escapes the
+ * Kills every process carrying the `STRAY` marker: what the Developer's
+ * commands or the site's own build code left running (a `setsid` escapes the
  * timeout), so none of it touches the tail's files. Each pass stops what it
  * finds before killing it, so nothing forks past it, and passes repeat until
  * one finds nothing. Never the container's own process or this shell.
  */
-export const STOP_STRAYS = `for _ in $(seq 20); do found=; for s in /proc/[0-9]*/status; do p=\${s#/proc/}; p=\${p%/status}; { [ "$p" = 1 ] || [ "$p" = $$ ]; } && continue; grep -qE '^CapEff:[[:space:]]*0+$' "$s" 2>/dev/null && kill -STOP "$p" 2>/dev/null && found="$found $p"; done; [ -z "$found" ] && break; kill -KILL $found 2>/dev/null; done; true`
+export const STOP_STRAYS = `for _ in $(seq 20); do found=; for s in /proc/[0-9]*/status; do p=\${s#/proc/}; p=\${p%/status}; { [ "$p" = 1 ] || [ "$p" = $$ ]; } && continue; tr '\\0' '\\n' 2>/dev/null <"/proc/$p/environ" | grep -qx '${STRAY}' && kill -STOP "$p" 2>/dev/null && found="$found $p"; done; [ -z "$found" ] && break; kill -KILL $found 2>/dev/null; done; true`
 
 /**
  * What bash runs for every `exec`: the cwd and the command come in its env.
@@ -139,8 +123,8 @@ type ExecOptions = {
   env?: Record<string, string>
   timeout?: number
   /**
-   * Keep root's capabilities, for the code's own steps outside the site.
-   * flue's adapter never passes it, so no model command can.
+   * The code's own step, outside the site: the stray sweep never stops it.
+   * flue's adapter never passes it, so every model command is swept.
    */
   privileged?: boolean
 }
@@ -311,18 +295,16 @@ export class RemeSandbox extends DurableObject<Env> {
     // changes directory itself: on Containers a spawn into a missing
     // directory throws "Command `bash` was not found", which ended the
     // Developer's `mkdir -p /workspace/site` on staging.
-    const shell = [
-      ...(options.privileged ? [] : CONFINED),
-      "bash",
-      "-c",
-      EXEC_SCRIPT,
-    ]
+    const shell = ["bash", "-c", EXEC_SCRIPT]
     return this.container.exec(
       seconds ? ["timeout", "--kill-after=5", `${seconds}`, ...shell] : shell,
       {
         cwd: WORKSPACE,
+        // Root: the image's own user, reme, has no capabilities locally.
+        user: "0:0",
         env: {
           ...EXEC_ENV,
+          ...(options.privileged ? {} : { REME_STRAY: "1" }),
           ...options.env,
           REME_COMMAND: command,
           REME_CWD: options.cwd ?? WORKSPACE,
@@ -332,7 +314,7 @@ export class RemeSandbox extends DurableObject<Env> {
     )
   }
 
-  /** One file call, confined; a failure throws with what the command said. */
+  /** One file call; a failure throws with what the command said. */
   private async file(
     script: keyof typeof FILE_SCRIPTS,
     path: string,
@@ -363,9 +345,8 @@ export class RemeSandbox extends DurableObject<Env> {
   /**
    * Stream a file from the container into the sites bucket under `key` and
    * return its size. A site's tar is tens of MB: as a base64 string decoded
-   * in the caller it ran the Developer's isolate out of memory (#593). Read
-   * confined, as every file call is, so a planted link yields only what
-   * `reme` could read; a file that changes length on the way fails the put.
+   * in the caller it ran the Developer's isolate out of memory (#593). A file
+   * that changes length on the way fails the put.
    */
   async saveFile(path: string, key: string): Promise<number> {
     return this.use(async () => {

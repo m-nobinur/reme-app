@@ -170,9 +170,7 @@ type Sites = {
  * Restore a snapshot into the container. The tarball carries `.git` and no
  * `node_modules`; the toolchain is linked in, as the seed does for a fresh
  * site. Whatever the disk held goes first: a warm sandbox's other revision
- * would otherwise leave its files behind. Only the site's own directory,
- * in root's workspace, takes a privileged command; the snapshot unpacks
- * confined, so a link it carries reaches nothing `reme` cannot.
+ * would otherwise leave its files behind.
  */
 export async function restore(
   sandbox: Restorable,

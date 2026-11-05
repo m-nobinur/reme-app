@@ -1,23 +1,16 @@
-import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { FacadeError } from "../src/errors.ts"
 import {
-  bashRefusal,
   boundResult,
   createMutationQueue,
   createTurnGate,
   guard,
   guardedTools,
   observer,
-  pathRefusal,
   TOOL_RESULT_MAX_CHARS,
   TURN_CAPPED,
 } from "../src/hooks.ts"
 
-const policy = {
-  siteRoot: "/workspace/site",
-  readOnlyRoots: ["/opt/astro"],
-}
+const policy = { siteRoot: "/workspace/site" }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -48,134 +41,6 @@ describe("hook timeouts", () => {
     ).resolves.toBeUndefined()
     await expect(observer("post_tool_call", async () => "seen")).resolves.toBe(
       "seen"
-    )
-  })
-})
-
-describe("the pre_tool_call policy", () => {
-  it("refuses bash that leaves the site or touches .agents", () => {
-    expect(bashRefusal("cat /etc/passwd", policy)).toMatch(/outside the site/)
-    expect(bashRefusal("cd .. && ls", policy)).toMatch(/\.\. segment/)
-    expect(bashRefusal("cat ../../secret", policy)).toMatch(/\.\. segment/)
-    expect(bashRefusal("echo x > .agents/skills/a/SKILL.md", policy)).toMatch(
-      /\.agents/
-    )
-    expect(bashRefusal("cd /workspace/other; ls", policy)).toMatch(
-      /outside the site/
-    )
-    expect(bashRefusal("cd src; cd /workspace/other", policy)).toMatch(
-      /outside the site/
-    )
-    for (const command of [
-      "cat</etc/passwd",
-      "echo x>/etc/hosts",
-      "true;cat /etc/passwd",
-      "npm pack --pack-destination=/workspace/other",
-      'cp a "$(echo /etc/passwd)"',
-    ]) {
-      expect(bashRefusal(command, policy)).toMatch(/outside the site/)
-    }
-    for (const command of [
-      "cat $HOME/.ssh/id_rsa",
-      "cat ~/.npmrc",
-      "cat \\/etc/passwd",
-      "cat {/etc/passwd,}",
-    ]) {
-      expect(bashRefusal(command, policy)).toMatch(/builds a path/)
-    }
-    for (const command of [
-      "cd ~ && cat .npmrc",
-      "cd $HOME; ls",
-      "cd && ls",
-      "cd - && ls",
-      "pushd /etc",
-      "ls && cd /workspace/other",
-    ]) {
-      expect(bashRefusal(command, policy)).toMatch(
-        /leaves the site|outside the site/
-      )
-    }
-    expect(bashRefusal("cd src && cd components && ls", policy)).toBeNull()
-  })
-
-  it("passes patterns that only look like paths, as issue 611 and round 2 of 2026-11-04 ran", () => {
-    for (const command of [
-      `grep -c "home_hero\\|/_astro/home" dist/index.html`,
-      `grep -o '.\\{40\\}<span>Regular cleans</span>' dist/index.html`,
-      `grep -o "<title>[^<]*</title>" dist/index.html`,
-      `awk '/about-audience/,/about-practice/' src/content/pages/about.json`,
-      `node -e 'console.log(t.split(/\\s+/).length)'`,
-      `node -e 'console.log(t.replace(/#+ /g,"").length)'`,
-      `node -e 'console.log(t.replace(/###|#/g,"").length)'`,
-      "cd /workspace/site && node /opt/astro/axe.mjs dist /tmp/axe.json",
-    ]) {
-      expect(bashRefusal(command, policy)).toBeNull()
-    }
-  })
-
-  it("still refuses a real path however it is spelt", () => {
-    for (const command of [
-      'cat "/etc/passwd"',
-      `cat '/etc/passwd'`,
-      'cat /e"t"c/passwd',
-      "cat /e\\tc/passwd",
-      "cat //etc/passwd",
-      'bash -c "cat</etc/passwd"',
-      `node -e 'require("fs").readFileSync("/etc/passwd")'`,
-      "find / -name passwd",
-      "ls /",
-      "cat /proc/self/environ",
-      "ls /workspace",
-      "cat /./etc/passwd",
-      'cat "/./etc/passwd"',
-      'cat "/.//etc/passwd"',
-      "cat /e\\\ntc/passwd",
-      'cat "/e"tc/passwd',
-      `cat "$(cat /e't'c/passwd)"`,
-      `node -e 'require("fs").readFileSync("/./etc/passwd")'`,
-      `node -e 'require("fs").readFileSync("/"+"etc/passwd")'`,
-      `node -e 'require("fs").readFileSync("/e"+"tc/passwd")'`,
-      `node -e 'require("fs").readFileSync("/e\\x74c/passwd")'`,
-      `node -e 'require("fs").readFileSync("/\\u0065tc/passwd")'`,
-      `printf '/\\145tc/passwd' | xargs cat`,
-      `node -e 'require("fs").readFileSync(decodeURIComponent("/%65tc/passwd"))'`,
-      // Unquoted, a lookalike is still a path: only quotes hold patterns.
-      "cat /span",
-    ]) {
-      expect(bashRefusal(command, policy)).toMatch(/outside the site/)
-    }
-    for (const command of [
-      "cat /$(echo etc)/passwd",
-      "cat /*/passwd",
-      "cat /e?c/passwd",
-      `cat /\${D}/passwd`,
-    ]) {
-      expect(bashRefusal(command, policy)).toMatch(
-        /builds a path|outside the site/
-      )
-    }
-  })
-
-  it("allows bash inside the site, the toolchain and the scratch dir", () => {
-    expect(bashRefusal("pnpm astro build", policy)).toBeNull()
-    expect(
-      bashRefusal("ln -s /opt/astro/node_modules node_modules", policy)
-    ).toBeNull()
-    expect(bashRefusal("ls /workspace/site/src > /tmp/out", policy)).toBeNull()
-    expect(
-      bashRefusal("git -c user.name=reme commit -m 'x'", policy)
-    ).toBeNull()
-  })
-
-  it("refuses write and edit paths outside the site", () => {
-    const resolve = (p: string) =>
-      p.startsWith("/") ? p : `/workspace/site/${p}`
-    expect(pathRefusal("src/pages/index.astro", policy, resolve)).toBeNull()
-    expect(pathRefusal("/workspace/site/x.ts", policy, resolve)).toBeNull()
-    expect(pathRefusal("/workspace/x.ts", policy, resolve)).toMatch(/outside/)
-    expect(pathRefusal("../x.ts", policy, resolve)).toMatch(/\.\. segment/)
-    expect(pathRefusal(".agents/skills/x/SKILL.md", policy, resolve)).toMatch(
-      /\.agents/
     )
   })
 })
@@ -236,11 +101,9 @@ describe("the guarded tool set", () => {
     }
   })
 
-  it("refuses a bash call that leaves the site before it runs", async () => {
-    await expect(
-      tool("bash").execute("call-1", { command: "cat /etc/passwd" })
-    ).rejects.toBeInstanceOf(FacadeError)
-    expect(calls).not.toContain("cat /etc/passwd")
+  it("runs a bash call wherever it reaches: the container is the boundary", async () => {
+    await tool("bash").execute("call-1", { command: "cat /etc/passwd" })
+    expect(calls).toContain("cat /etc/passwd")
   })
 
   it("runs a bash call inside the site", async () => {
@@ -248,21 +111,13 @@ describe("the guarded tool set", () => {
     expect(calls).toContain("pnpm astro check")
   })
 
-  it("refuses a write or an edit outside the site before it touches a file", async () => {
-    await expect(
-      tool("write").execute("call-3", {
-        path: "/workspace/.agents/skills/x/SKILL.md",
-        content: "x",
-      })
-    ).rejects.toMatchObject({ code: "tool.refused" })
-    await expect(
-      tool("edit").execute("call-4", {
-        path: "/workspace/other.ts",
-        edits: [{ oldText: "a", newText: "b" }],
-      })
-    ).rejects.toMatchObject({ code: "tool.refused" })
+  it("writes outside the site too", async () => {
+    await tool("write").execute("call-3", {
+      path: "/workspace/.agents/skills/x/SKILL.md",
+      content: "x",
+    })
     expect(calls.some((c) => c.startsWith("write /workspace/.agents"))).toBe(
-      false
+      true
     )
   })
 
@@ -841,43 +696,5 @@ describe("the turn cap", () => {
     const open = createTurnGate()
     await turns(open, 50)
     await expect(open.interceptor(op("bash"), lead, ran)).resolves.toBe("ran")
-  })
-})
-
-// The guard's list of the image's top-level directories, held to the image:
-// a new base or a new top-level path in the Dockerfile fails here until the
-// list in hooks.ts says it too.
-describe("the guard's directories, against the sandbox image", () => {
-  const dockerfile = readFileSync(
-    new URL("../../../infra/sandbox/Dockerfile", import.meta.url),
-    "utf8"
-  )
-  /** node:22-trixie-slim at this digest: Debian's merged /usr layout. */
-  const BASE =
-    "docker.io/library/node:22-trixie-slim@sha256:154ba2f4d6fec323d28e4f4bb86bba4677f1223391a1979cf521304e03a98dfa"
-  const BASE_DIRS =
-    "bin boot dev etc home lib lib64 media mnt opt proc root run sbin srv sys usr var".split(
-      " "
-    )
-  const quotedIsDisk = (dir: string) =>
-    bashRefusal(`grep -r x "/${dir}/y"`, policy) !== null
-
-  it("is checked against the base image it was written for", () => {
-    expect(dockerfile).toContain(`FROM ${BASE}\n`)
-  })
-
-  it("names every top-level directory of the base and of the Dockerfile", () => {
-    const made = [
-      ...dockerfile
-        .split("\n")
-        .filter((line) => !line.trimStart().startsWith("#"))
-        .join("\n")
-        .matchAll(/(?<![\w.:/@-])\/([a-z][\w.-]*)/g),
-    ].map((m) => m[1] as string)
-    const dirs = [...new Set([...BASE_DIRS, ...made])].filter(
-      (dir) => dir !== "tmp"
-    )
-    expect(made).toContain("workspace")
-    expect(dirs.filter((dir) => !quotedIsDisk(dir))).toEqual([])
   })
 })

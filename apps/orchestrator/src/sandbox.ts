@@ -501,12 +501,10 @@ const PROBE_COMMANDS = [
     command: `curl -fsS -m 20 -o /dev/null -w '%{http_code}' https://${NPM_REGISTRY_HOST}/astro/latest`,
   },
   { name: "credentials", command: "env" },
-  // #697: a command holds no capability, and so cannot write the toolchain
-  // or the workspace; /tmp it can.
+  // Every command runs as root with every capability: the container is the boundary.
   {
-    name: "confined",
-    command:
-      "grep '^CapEff' /proc/self/status && ! touch /opt/astro/.probe 2>/dev/null && ! touch /workspace/.probe 2>/dev/null && touch /tmp/.probe && echo confined",
+    name: "root",
+    command: "id -u && touch /workspace/.probe /opt/astro/.probe && echo root",
   },
   {
     name: "astro.build",

@@ -28,7 +28,6 @@ vi.mock("cloudflare:workers", () => ({
 }))
 
 const {
-  CONFINED,
   EXEC_SCRIPT,
   FILE_SCRIPTS,
   LEASE_MS,
@@ -40,8 +39,8 @@ const {
 const encode = (s: string) => new TextEncoder().encode(s).buffer
 type Ran = { argv: string[]; options: Record<string, unknown> | undefined }
 type Answer = { exitCode: number; stdout: string | Uint8Array; stderr: string }
-/** How a confined command's argv reads: no capability, then bash. */
-const shell = [...CONFINED, "bash", "-c", EXEC_SCRIPT]
+/** How a command's argv reads: bash, as root with every capability. */
+const shell = ["bash", "-c", EXEC_SCRIPT]
 
 /** A container as `ctx.container` presents one, scripted per command. */
 const fakeContainer = () => {
@@ -170,14 +169,13 @@ describe("a sandbox's first command", () => {
     expect(container.ran[0]?.argv[0]).toBe("sh")
     expect(container.ran[0]?.options).toEqual({ user: "0:0" })
     expect(container.timeouts).toEqual([30 * 60 * 1000])
-    // Root then gives root the workspace, in the same setup command.
-    expect(container.ran[0]?.argv[2]).toContain(
-      "chown 0:0 /workspace /home/reme"
-    )
+    // The warm-revision marker's directory, in the same setup command.
+    expect(container.ran[0]?.argv[2]).toContain("mkdir -p /workspace/.reme")
     expect(container.ran[1]).toEqual({
       argv: shell,
       options: {
         cwd: "/workspace",
+        user: "0:0",
         env: {
           HOME: "/tmp/home",
           PLAYWRIGHT_BROWSERS_PATH: "/opt/pw-browsers",
@@ -188,6 +186,7 @@ describe("a sandbox's first command", () => {
           GIT_AUTHOR_EMAIL: "developer@reme.invalid",
           GIT_COMMITTER_NAME: "reme",
           GIT_COMMITTER_EMAIL: "developer@reme.invalid",
+          REME_STRAY: "1",
           REME_COMMAND: "echo hi",
           REME_CWD: "/workspace",
         },
@@ -326,12 +325,10 @@ describe("the shell an exec runs", () => {
   })
 })
 
-// #697: a file call runs as a confined command, so a symlink the Developer
-// planted in the site takes a write no further than `reme` may go.
 describe("a file call", () => {
   const last = (c: ReturnType<typeof fakeContainer>) => c.ran.at(-1)
 
-  it("writes its bytes on stdin, its path in a variable, confined", async () => {
+  it("writes its bytes on stdin, its path in a variable", async () => {
     const { sandbox, container } = newSandbox()
     await sandbox.writeFile("/workspace/site/src/a.ts", "export {}")
     expect(last(container)?.argv).toEqual(shell)
@@ -376,22 +373,23 @@ describe("a file call", () => {
     expect(await sandbox.exists("/tmp/")).toEqual({ exists: true })
   })
 
-  it("keeps root's capabilities only where the code asks", async () => {
+  it("marks every command but the code's own steps for the stray sweep", async () => {
     const { sandbox, container } = newSandbox()
     await sandbox.exec("rm -rf /workspace/site", { privileged: true })
-    expect(last(container)?.argv).toEqual(["bash", "-c", EXEC_SCRIPT])
+    expect(last(container)?.argv).toEqual(shell)
+    expect(last(container)?.options?.env).not.toHaveProperty("REME_STRAY")
     await sandbox.stopStrays()
-    expect(last(container)?.argv).toEqual(["bash", "-c", EXEC_SCRIPT])
+    expect(last(container)?.options?.env).not.toHaveProperty("REME_STRAY")
     expect(last(container)?.options?.env).toMatchObject({
-      REME_COMMAND: expect.stringContaining("CapEff"),
+      REME_COMMAND: expect.stringContaining("REME_STRAY=1"),
     })
     await sandbox.exec("rm -rf /workspace/site")
-    expect(last(container)?.argv).toEqual(shell)
+    expect(last(container)?.options?.env).toMatchObject({ REME_STRAY: "1" })
   })
 
   // #593: R2 takes a stream only when its length is known, and the bytes never
   // become a string in any isolate on the way.
-  it("streams a file into the bucket at its known length, read confined", async () => {
+  it("streams a file into the bucket at its known length", async () => {
     const lengths: number[] = []
     vi.stubGlobal(
       "FixedLengthStream",
@@ -412,7 +410,6 @@ describe("a file call", () => {
     ).toBe(3)
     expect([...(bucket.get("sites/o/r/source") ?? [])]).toEqual([0, 1, 255])
     expect(lengths).toEqual([3])
-    // #697: a planted link reaches only what reme may read.
     expect(container.ran.slice(-2).map((r) => r.argv)).toEqual([shell, shell])
     expect(container.ran.at(-1)?.options?.env).toMatchObject({
       REME_COMMAND: FILE_SCRIPTS.read,
