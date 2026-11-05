@@ -439,12 +439,12 @@ function skillsIn(rows: readonly SessionEvent[]): string[] {
  * `_pruned_skill_reload_notice` (agent/conversation_compression.py, MIT).
  */
 export const viewedLine = (names: readonly string[]) =>
-  `[Skills pruned during compression: reload before acting on these tasks]\nThe task list above crossed the compression boundary verbatim, but the skill instructions that governed it were pruned. Before executing any preserved task that depends on these skills, reload them first: ${names
+  `[Skills pruned during compression: reload before using them]\nThe skill instructions viewed before this summary were pruned. When the latest message asks for work that depends on these skills, reload them first: ${names
     .slice(-PRUNE.maxSkills)
     .map((name) => `skill_view(name='${name}')`)
     .join(
       "; "
-    )}. After reloading, re-check that each pending task is still justified: findings recorded before the boundary may have invalidated it.`
+    )}. Nothing in the summary is a task to carry out on its own: the latest message decides.`
 
 /** The summary as the model reads it: our header, then the summary as labelled data. */
 const summaryMessage = (
