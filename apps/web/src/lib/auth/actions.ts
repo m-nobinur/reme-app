@@ -480,8 +480,12 @@ export const chooseOrganization = createServerFn({ method: "POST" })
  * the session now carries it, so the page reads again under it; otherwise the
  * name stays recorded for the next visit.
  */
-export const retryOrgWrite = createServerFn({ method: "POST" }).handler(
-  async (): Promise<boolean> => {
+export const retryOrgWrite = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({
+    // The browser's zone, as at signup, so the opener greets by the time of day.
+    timeZone: text(record(input).timeZone, 64) || undefined,
+  }))
+  .handler(async ({ data }): Promise<boolean> => {
     const intent = await readOrgIntent()
     const auth = getAuthKitContextOrNull()?.auth()
     if (
@@ -499,6 +503,7 @@ export const retryOrgWrite = createServerFn({ method: "POST" }).handler(
         sealedSession,
         workosUserId: intent.userId,
         name: intent.orgName,
+        timeZone: data.timeZone,
       })
       if (next === sealedSession) return false
       await writeSession(next)
@@ -514,8 +519,7 @@ export const retryOrgWrite = createServerFn({ method: "POST" }).handler(
       )
       return false
     }
-  }
-)
+  })
 
 // --- a business for an account that has none --------------------------------
 
