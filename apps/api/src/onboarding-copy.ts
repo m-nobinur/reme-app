@@ -239,6 +239,7 @@ export function recap(
     excluded: string | null
     area: string | null
     customers: string | null
+    proof: string | null
     questions: number | null
     phone: string | null
     email: string | null
@@ -249,6 +250,7 @@ export function recap(
     ["Not taken on", held.excluded && notTakenOn(held.excluded)],
     ["Area", held.area && yours(bare(held.area))],
     ["Customers", held.customers && lower(bare(held.customers))],
+    ["What sets you apart", held.proof && lower(yours(bare(held.proof)))],
     ["Quote form", held.questions ? `${held.questions} questions` : null],
     ["Contact", [held.phone, held.email].filter(Boolean).join(", ")],
   ].flatMap(([label, value]) => (value ? [`- **${label}:** ${md(value)}`] : []))

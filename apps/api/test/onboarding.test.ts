@@ -395,7 +395,7 @@ describe("the onboarding steps", () => {
     expect(rest).toEqual([])
     const questions = factValue(facts, "quote.form")?.fields.length
     expect((said as { text: string }).text).toBe(
-      `Here's what I have for ${BUSINESS}:\n\n- **Services:** end of tenancy cleans, oven cleaning and MOT tests\n- **Not taken on:** offices or commercial sites\n- **Area:** Bristol and Bath, and you'll go to Wells for your regulars\n- **Customers:** mostly families\n- **Quote form:** ${questions} questions\n- **Contact:** 01632 960001, hello@brightclean.invalid\n\nHave I got that right?`
+      `Here's what I have for ${BUSINESS}:\n\n- **Services:** end of tenancy cleans, oven cleaning and MOT tests\n- **Not taken on:** offices or commercial sites\n- **Area:** Bristol and Bath, and you'll go to Wells for your regulars\n- **Customers:** mostly families\n- **What sets you apart:** ten years trading, fully insured\n- **Quote form:** ${questions} questions\n- **Contact:** 01632 960001, hello@brightclean.invalid\n\nHave I got that right?`
     )
     expect(card).toMatchObject({
       type: "tool-ask_open",
@@ -1670,6 +1670,7 @@ const lines = (v: Voice): [string, string][] => [
       excluded: "We don't take on commercial work.",
       area: "Bristol and about 15 miles out.",
       customers: "Mostly families, plus two letting agents",
+      proof: "We're fully insured.",
       questions: 6,
       phone: "0117 496 0321",
       email: "hello@freshstart.invalid",
@@ -1831,7 +1832,7 @@ describe("the onboarding copy", () => {
       // The opener is the owner's approved copy, held to its own cap below.
       for (const paragraph of text.split(/\n\s*\n/))
         expect(paragraph.split(/\s+/).length, name).toBeLessThanOrEqual(
-          name === "opener" ? 52 : 50
+          ({ opener: 52, recap: 60 } as Record<string, number>)[name] ?? 50
         )
       expect(voiceProblems(text, { assistantNamed: true }), name).toEqual({
         hard: [],
@@ -1867,6 +1868,7 @@ describe("the onboarding copy", () => {
         excluded: null,
         area: null,
         customers: "Mostly families — and two letting agents",
+        proof: null,
         questions: null,
         phone: null,
         email: "first_last@sparkle.invalid",

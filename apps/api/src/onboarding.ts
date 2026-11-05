@@ -1295,6 +1295,7 @@ export function recapOf(o: Onboarding): string {
     excluded: factValue(o.facts, "business.disclaimer")?.text ?? null,
     area: factValue(o.facts, "service_area.text")?.text ?? null,
     customers: factValue(o.facts, "business.audience")?.text ?? null,
+    proof: factValue(o.facts, "business.proof")?.text ?? null,
     questions: factValue(o.facts, "quote.form")?.fields.length ?? null,
     phone: phone ? phoneText(phone) : null,
     email: factValue(o.facts, "business.email")?.address ?? null,
