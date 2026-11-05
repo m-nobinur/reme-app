@@ -181,6 +181,14 @@ test("each turn keeps its role and its model apart, a Developer turn too", () =>
     [
       rows({ role: "page", model: "haiku", response: { usage: {} } }),
       rows({
+        role: "developer",
+        model: "haiku",
+        agentName: "developer",
+        request: { requestedModel: "haiku" },
+        response: { usage: {} },
+      }),
+      // A Developer row from before the tee named its role and model.
+      rows({
         agentName: "developer",
         request: { requestedModel: "sonnet" },
         response: { usage: {} },
@@ -191,6 +199,7 @@ test("each turn keeps its role and its model apart, a Developer turn too", () =>
     turns.map((t) => [t.role, t.model]),
     [
       ["page", "haiku"],
+      ["developer", "haiku"],
       ["developer", "sonnet"],
     ]
   )

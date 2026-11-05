@@ -41,8 +41,9 @@ export const timingsOf = (text) =>
 /**
  * `runtime.turn` rows, from the event log or the billed-cost tap's export,
  * as `{assignment, role, model, input, cacheRead, cacheWrite, output, cost}`.
- * A writer's own row names its role and model (page, plan, copy, critic,
- * photos); a Developer turn names its agent and the model it asked for.
+ * Every row names its role and model at the top (page, plan, copy, critic,
+ * photos, and the Developer's from the tee); a Developer row from before the
+ * tee did names only its agent and the model it asked for.
  */
 export function turnsOf(text) {
   return objects(text)

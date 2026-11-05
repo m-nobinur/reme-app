@@ -125,6 +125,27 @@ describe("the observe tee", () => {
     })
   })
 
+  it("names a turn's role and model at the top, as every other writer's row does", async () => {
+    const { sink, rows } = memorySink()
+    const waited: Promise<unknown>[] = []
+    const tee = createTee({ sink, ids, waitUntil: (p) => waited.push(p) })
+    tee.subscriber(
+      observation("turn", {
+        agentName: "developer",
+        turnId: "t1",
+        request: { requestedModel: "anthropic/claude-haiku-5.5" },
+        response: { usage: {} },
+      })
+    )
+    await Promise.all(waited)
+    expect(rows[0]?.payload).toMatchObject({
+      role: "developer",
+      model: "anthropic/claude-haiku-5.5",
+      agentName: "developer",
+      request: { requestedModel: "anthropic/claude-haiku-5.5" },
+    })
+  })
+
   it("re-seeds after a failed flush instead of numbering past the gap", async () => {
     let fail = true
     const { sink, rows } = memorySink(0)
