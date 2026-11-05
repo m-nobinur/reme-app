@@ -579,9 +579,9 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
   },
   offer_choices: {
     kind: "thinking",
-    working: ["Putting your options together"],
-    done: ["Put your options together"],
-    fail: ["put your options together"],
+    working: ["Lining up your options"],
+    done: ["Lined up your options"],
+    fail: ["line up your options"],
   },
   offer_grant: {
     kind: "thinking",
