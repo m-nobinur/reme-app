@@ -106,7 +106,7 @@ export type ContextPolicy = {
  * the context with its name and fullness, as Hermes's blocks are headed.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "24",
+  version: "25",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,
