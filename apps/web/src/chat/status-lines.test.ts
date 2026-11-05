@@ -377,7 +377,7 @@ describe("what waits on the owner", () => {
         { id: "records", state: "next" },
       ],
     }
-    expect(segmentTitle(choosing, ctx)).toBe("Your web address")
+    expect(segmentTitle(choosing, ctx)).toBe("Your domain")
   })
 
   it("says what else waits in the tray", () => {
