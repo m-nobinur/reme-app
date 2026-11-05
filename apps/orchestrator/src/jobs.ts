@@ -402,7 +402,7 @@ async function failed(
   const posted = await postAssistantMessage(kit, {
     orgId,
     key: `job-paused:${jobId}:${now.toISOString()}`,
-    message: { text: [PAUSED_TEXT] },
+    message: { text: [PAUSED_TEXT], kind: "note" },
   }).catch((e: unknown) => failureCode(e))
   if (posted !== "posted" && posted !== "exists")
     console.error(

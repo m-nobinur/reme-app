@@ -779,6 +779,7 @@ export async function offerAddress(
     key: `address.offer:${orgId}`,
     message: {
       text: [text],
+      kind: "reply",
       ...(own
         ? { button: connectOwn(own.name) }
         : { questions: addressQuestions() }),
@@ -917,6 +918,7 @@ export async function sayLive(
     key: `site.live:${siteId}`,
     message: {
       text: [text],
+      kind: "done",
       ...(button && { button }),
       ...(questions && { questions }),
     },

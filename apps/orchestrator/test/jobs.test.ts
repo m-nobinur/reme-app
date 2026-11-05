@@ -375,7 +375,7 @@ describe.skipIf(!url)("running a claimed job", () => {
       {
         orgId,
         key: `job-paused:${message.jobId}:${job?.pausedAt?.toISOString()}`,
-        message: { text: [PAUSED_TEXT] },
+        message: { text: [PAUSED_TEXT], kind: "note" },
       },
     ])
     // Paused: a stray message for it runs nothing.

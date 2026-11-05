@@ -193,6 +193,7 @@ live("the relay", () => {
             ],
           },
         },
+        { type: "data-kind", data: "note" },
       ],
     })
   })

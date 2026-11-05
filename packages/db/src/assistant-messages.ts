@@ -70,7 +70,7 @@ export async function postAssistantMessage(
     conversationId?: string
   }
 ): Promise<Posted> {
-  const { id, text, button, questions, enquiry } = ServerMessage.parse({
+  const { id, text, button, questions, enquiry, kind } = ServerMessage.parse({
     ...message,
     id: serverMessageId(key),
   })
@@ -100,6 +100,7 @@ export async function postAssistantMessage(
       ...(button ? [{ type: "data-button", data: button }] : []),
       ...(questions ? [{ type: "data-build_questions", data: questions }] : []),
       ...(enquiry ? [{ type: "data-enquiry", data: enquiry }] : []),
+      ...(kind ? [{ type: "data-kind", data: kind }] : []),
     ],
     // The visitor's words go in as data of their own, never inside the
     // notice, which the model reads back as its own message.
