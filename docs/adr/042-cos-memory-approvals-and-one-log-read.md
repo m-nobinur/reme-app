@@ -226,3 +226,78 @@ Compaction and reflection must call it too when they send a transcript.
 The incremental read ever disagrees with a full read in the integrity check (go back to full
 reads and find the second writer); a compaction drops an open approval or a seeded fact in the
 60-turn eval; or the owner wants approvals by email.
+
+## Amendment, 2026-11-06: Hermes's compaction, run as a warm summary
+
+**Decision (owner).** Keep far more context, compact exactly as Hermes does, and never make the
+owner wait on a summary. Quality over cost, with the best optimisations: a cache-friendly order,
+summaries written while the prompt cache is warm, tool output cleared before summarising. This
+replaces the numbers and the trigger in **Compaction** above; the fold, the header, the data tag,
+the scrubbing and the cost accounting stay.
+
+**Numbers.** The trigger is computed Hermes's way from the CoS model's window
+(`thresholdTokens`): half the input window, three quarters under 512,000, floored at Hermes's
+`MINIMUM_CONTEXT_LENGTH` of 64,000, 85% of the window when the floor would fill it, then held to
+the owner's 128,000. For `openai/gpt-6.1-terra` (1,050,000-token window) that is 128,000; a later
+switch to a 64,000-token model would trigger at 54,400. A warm summary runs once history is over
+64,000 tokens (Hermes's floor); 128,000 is the hard trigger and also the history's cap
+(`CONTEXT_POLICY.historyTokens`, policy 26). `LIMITS.inputTokens` rises from 30,000 to 150,000
+(the layer caps sum to about 141,300) and `firstChunkMs` from 8 s to 20 s, since a cold cache
+prefills the whole history.
+
+**Cost.** On the facade's price table Terra bills $2.10 a million uncached and $0.20 cached, so a
+step carrying 128,000 history tokens costs about $0.026 cached and $0.27 cold; the turn
+reservation is about $5.56 while a turn is open. The brief's figures ($1 and $0.05 a million,
+about $0.13 cold and $0.006 cached a step) do not match the table; whichever is current, a warm
+cache is about ten to twenty times cheaper than a cold one, which is why the summary runs while it
+is warm and why clearing waits to save 4,096 tokens before it rewrites a cached prefix. The
+summary call itself is Haiku 5.5, uncapped, its input bounded to 160,000 characters.
+
+**Ported from hermes-agent (MIT, agent/context_compressor.py and agent/conversation_compression.py).**
+- Tool output clearing, before any summary: `_prune_old_tool_results` as the summary's first pass
+  (outputs over `_PRUNE_MIN_CHARS` 200 outside the tail become Hermes's one-line
+  `_summarize_tool_result`, repeats become a back-reference, long inputs are cut), and
+  `prune_tool_results_only` between summaries (outputs over 8,000 characters outside the newest
+  `protect_last_n` 20 messages, committed only when it saves 4,096 tokens). This replaces the
+  `toolTurns` rule and the turn count. Past the cap, outputs give way to
+  `_PRUNED_TOOL_PLACEHOLDER` as `salvage_grown_transcript` does, the newest two spared, then the
+  oldest turns go. A skill over 5,000 characters leaves `[SKILL_PRUNED: ...]`, a skill viewed in
+  the tail or named there by the owner is spared, and the summary names the skills it replaced
+  with `_pruned_skill_reload_notice`'s wording (newest twenty).
+- Head and tail: `protect_first_n` 3 before a session's first summary only (Hermes's decay), the
+  tail at a fifth of the trigger, half again at most, at least `_MAX_TAIL_MESSAGE_FLOOR` 8
+  messages, never parting a call from its result or an open approval from its card.
+- The summary: Hermes's preamble and template (Historical Task Snapshot, Goal, Constraints &
+  Preferences quoted verbatim, Completed Actions, Active State, Blocked, Key Decisions, Errors &
+  Fixes, Resolved Questions, Critical Context, Pruned Skills, temporal anchoring from the newest
+  Now line), worded for a business owner, and its iterative update of the previous summary.
+  `_SUMMARY_RATIO` 0.20 within `_MIN_SUMMARY_TOKENS` 2,000 and `_SUMMARY_TOKENS_CEILING` 10,000,
+  `_SUMMARY_INPUT_MAX_CHARS` 160,000 with Hermes's per-message limits, and no output cap on the
+  call. The event's summary now holds up to 48,000 characters.
+- Anti-thrash, read from the log: a compaction that left history over the warm threshold is a
+  strike; after one, a middle under `_FEASIBILITY_SKIP_MIDDLE_FRACTION` (a tenth) of the trigger
+  gets no summary; after two in a row only the hard trigger tries again (Hermes's recovery probe).
+- Clarify non-responses (`_CLARIFY_NON_RESPONSE_PREFIXES`): quick replies the owner did not tap
+  reach the summariser as "no answer", never with their text; a tapped one as the owner's reply.
+
+**Ported from OpenMausBot (Apache-2.0, server/warm-summary.ts, server/host/warm-summary-host.ts,
+server/compaction-summary.ts).** The after-turn queue job that used to compact at once now arms
+one warm summary: it sends the job back with Queues' own `delaySeconds` (0 to 86,400), 180 s over
+the warm threshold, 10 s at the hard trigger. When it comes back, a newer turn supersedes it (that
+turn's close arms its own); work about to wake the conversation (a continuation of it, or the
+org's proactive turn, heartbeat or weekly report, claimed or due within two minutes) or the day's
+spend cap holds it, and it comes back every two minutes for up to fifty minutes after the turn, as
+a failed or cut-off summary does. One summary runs per conversation at a time: the reservation now
+names the conversation, and an unsettled one younger than the call's timeout plus two minutes
+makes a second job stand down. The owner's last two messages and everything after them stay word
+for word. A turn that opens while a summary is being written runs on its own history:
+`writeCompaction` no longer refuses an open turn, and the summary applies from the next turn, as
+the fold already leaves a compaction logged during a turn for the next one.
+
+**Not ported, and why.** Hermes's deterministic fallback summary on a failed call (our history cap
+is the deterministic drop, and a retry follows); its in-memory cooldown ladder and the proactive
+prune's regrowth re-arm (the log holds no such state; the two-minute retry and the 4,096-token
+saving gate stand in); clearing tool output in the protected tail at summary time (it would need
+the cleared calls recorded; the 20-message proactive rule covers the large ones); OpenMausBot's
+abandon-on-turn-start and turn-waits-for-summary paths (our turns never wait, and the summary is
+kept for the next turn).
