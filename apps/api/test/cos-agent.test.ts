@@ -806,8 +806,8 @@ describe("the CoS's model and price", () => {
         1_000_000,
       12
     )
-    // On 2026-11-05's table and limits (Terra, 16 steps): about $1.53 a turn.
-    expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(1.53, 2)
+    // On 2026-11-06's table and limits (Terra, 16 steps, 150,000 input): about $5.56 a turn.
+    expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(5.56, 2)
   })
 
   it("prices cached input at the cache rate, as pi-ai does", () => {
@@ -4333,7 +4333,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       {
         type: "finish",
         finishReason: { unified: "tool-calls", raw: "tool_calls" },
-        usage: usage(100_000, 50),
+        usage: usage(200_000, 50),
       },
     ]
     const { model, sent } = scripted(
@@ -4341,12 +4341,12 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
     const done = await turn(me, typed(id, "Read everything.", "ask"), { model })
     expect(done.response.status, done.text).toBe(200)
-    // As many 100k-input steps as fit the reservation at the table's price
-    // (seven on 2026-11-05's table); the next could pass it, so the sixteen
+    // As many 200k-input steps as fit the reservation at the table's price
+    // (thirteen on 2026-11-06's limits); the next could pass it, so the sixteen
     // the model would take never all run, and the last that fits only writes.
     const price = PRICE as NonNullable<typeof PRICE>
     const reserved = reservation(price)
-    const step = (100_000 * price.input + 50 * price.output) / 1_000_000
+    const step = (200_000 * price.input + 50 * price.output) / 1_000_000
     const fits = Math.floor(reserved / step)
     expect(fits).toBeLessThan(LIMITS.steps)
     expect(sent).toHaveLength(fits)

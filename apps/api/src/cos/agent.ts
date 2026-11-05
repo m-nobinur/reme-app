@@ -207,11 +207,14 @@ export const LIMITS = {
    */
   maxOutputTokens: 3_100,
   /**
-   * The input a step is reserved for. Not lowered to the measured p99 of
-   * 2,681 tokens: those conversations were short, and a 12-turn history of
-   * long owner messages reaches 45k to 65k tokens a step.
+   * The input a step is reserved for: `LAYER_CAPS`, about 141,300 tokens
+   * with the history's 128,000-token cap (compaction's hard trigger, ADR-042
+   * amended 2026-11-06) and a fixed part of about 10,000, plus room for the
+   * turn's own steps. At the price table's $2.10 a million uncached on
+   * gpt-6.1-terra that reserves about $5.56 a turn while it is open; closed
+   * turns count what they billed.
    */
-  inputTokens: 30_000,
+  inputTokens: 150_000,
   /**
    * `COS_TURN_MS`: 16 steps at the 10 s a step the old limit allowed (60 s
    * for 6), so 160 s. A step's first chunk measured p95 1.3 s and its
@@ -221,12 +224,14 @@ export const LIMITS = {
    */
   totalMs: COS_TURN_MS,
   /**
-   * max(3 × the first-chunk p95, 8 s). The p95 was 1,305 ms (p50 517, max
-   * 1,799), but the SDK restarts this every step and the provider's prefill
-   * grows with the prompt, and those turns were short. It goes lower only
-   * after at least 5 measured turns at 20k+ input tokens.
+   * The first-chunk p95 was 1,305 ms (p50 517, max 1,799), on turns of a
+   * few thousand input tokens. History now runs to 128,000 tokens before a
+   * summary, and a cold cache prefills all of it (after a deploy, past the
+   * cache's life, or on the first step after a summary), so 8 s would end
+   * such a step before it starts. 20 s until at least 5 turns at 100k+
+   * input tokens are measured; it goes lower only then.
    */
-  firstChunkMs: 8_000,
+  firstChunkMs: 20_000,
 } as const
 
 /** After hermes-agent agent/turn_iteration_prep.py's opt-in ratio (MIT): the share of steps used before the one warning. */
