@@ -523,6 +523,7 @@ describe("the owner's onboarding choices in the rules", () => {
       '"your home or let" is not English',
       "A stage no fact states",
       "Reach the range with those facts and nothing else",
+      "Every sentence carries a fact from the brief: one that only restates the service",
       "it adds the main town, or stays empty",
     ])
       expect(rules, rule).toContain(rule)
