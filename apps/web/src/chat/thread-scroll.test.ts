@@ -104,7 +104,9 @@ const heightOf = (el: Element): number => {
   if (isTrayBody(el)) {
     const each = trayBody.get(el) ?? { shown: layout.content, step: 0 }
     trayBody.set(el, each)
-    return each.shown
+    return Number.isNaN(Number.parseFloat((el as HTMLElement).style.height))
+      ? layout.content
+      : each.shown
   }
   if (el.parentElement && isTrayBody(el.parentElement)) return layout.content
   if (isViewport(el)) return layout.clientHeight
@@ -879,4 +881,19 @@ it("logs no resize loop as the tray eases to the next page", async () => {
   await showTray(2, 120)
   await frames(TRAY_EASE_FRAMES + 4)
   expect(loops).toBe(0)
+})
+
+it("eases a new page to its height, then lets the body follow its content", async () => {
+  await sendAndReply("u1")
+  const height = () =>
+    document.querySelector<HTMLElement>(
+      '[data-slot="question-tray"] [id$="-body"]'
+    )?.style.height
+  await showTray(0, 187)
+  await frames(GLIDE_FRAMES * 2)
+  expect(height()).toBe("")
+  await showTray(1, 249)
+  expect(height()).toBe("249px")
+  await new Promise((done) => setTimeout(done, 600))
+  expect(height()).toBe("")
 })
