@@ -301,7 +301,8 @@ describe("the build at the end of a report", () => {
   const finish = async (
     build: string,
     edit?: (site: string) => void,
-    holdPhotos = false
+    holdPhotos = false,
+    more: { facts?: unknown[]; sites?: unknown } = {}
   ) => {
     const site = mkdtempSync(join(tmpdir(), "reme-tail-"))
     mkdirSync(join(site, "node_modules/.bin"), { recursive: true })
@@ -373,9 +374,67 @@ describe("the build at the end of a report", () => {
       facts: [],
       holdPhotos,
       stopStrays: async () => undefined,
+      ...more,
     } as unknown as Parameters<typeof finishRevision>[0])
     return { outcome, ran }
   }
+
+  it("places the kept logo's mark for the favicon set, and removes one the logo no longer has", async () => {
+    const LOGO = "11111111-0000-4000-8000-000000000000"
+    const facts = [
+      {
+        key: "media.uploads",
+        value: {
+          items: [
+            {
+              id: LOGO,
+              name: "Logo.png",
+              content_type: "image/png",
+              bytes: 7,
+              use: "logo",
+            },
+          ],
+        },
+      },
+    ]
+    const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0, 255, 10])
+    const asked: string[] = []
+    const sites = (held: boolean) => ({
+      get: async (key: string) => {
+        asked.push(key)
+        return held ? { arrayBuffer: async () => bytes.slice().buffer } : null
+      },
+    })
+    const built = "mkdir -p dist && echo '<html></html>' > dist/index.html"
+    let site = ""
+    const placed = await finish(
+      built,
+      (s) => {
+        site = s
+      },
+      false,
+      { facts, sites: sites(true) }
+    )
+    await expect(placed.outcome).rejects.toThrow("reached the revision")
+    expect(asked).toEqual([`marks/o/${LOGO}.png`])
+    expect(
+      new Uint8Array(readFileSync(join(site, "src/assets/mark.png")))
+    ).toEqual(bytes)
+    expect(() => readFileSync(join(site, "src/assets/mark.png.b64"))).toThrow()
+
+    const gone = await finish(
+      built,
+      (s) => {
+        site = s
+        mkdirSync(join(s, "src/assets"), { recursive: true })
+        writeFileSync(join(s, "src/assets/mark.png"), "an old logo's mark")
+      },
+      false,
+      { facts, sites: sites(false) }
+    )
+    await expect(gone.outcome).rejects.toThrow("reached the revision")
+    expect(() => readFileSync(join(site, "src/assets/mark.png"))).toThrow()
+  })
 
   it("fails the report when astro build fails, whatever its output's tail says", async () => {
     const { outcome, ran } = await finish('echo "ENOENT: font cache"; exit 1')
