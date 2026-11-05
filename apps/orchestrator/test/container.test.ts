@@ -1,5 +1,11 @@
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdtempSync,
+  realpathSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -21,7 +27,10 @@ vi.mock("cloudflare:workers", () => ({
   WorkerEntrypoint: class {},
 }))
 
-const { disk } = vi.hoisted(() => ({ disk: new Map<string, Uint8Array>() }))
+const { disk, links } = vi.hoisted(() => ({
+  disk: new Map<string, Uint8Array>(),
+  links: new Set<string>(),
+}))
 vi.mock("@cloudflare/sandbox", () => {
   const fail = (code: string) => Object.assign(new Error(code), { code })
   const parent = (path: string) => path.slice(0, path.lastIndexOf("/")) || "/"
@@ -48,10 +57,13 @@ vi.mock("@cloudflare/sandbox", () => {
       async mkdir(path: string) {
         disk.set(`${path}/`, new Uint8Array())
       }
-      async stat(path: string) {
+      async lstat(path: string) {
         const found = disk.get(path)
         if (!found) throw fail("ENOENT")
-        return { size: BigInt(found.length) }
+        return {
+          type: links.has(path) ? "symlink" : "file",
+          size: BigInt(found.length),
+        }
       }
       async remove(path: string) {
         disk.delete(path)
@@ -60,11 +72,21 @@ vi.mock("@cloudflare/sandbox", () => {
   }
 })
 
-const { EXEC_SCRIPT, LEASE_MS, RemeSandbox, SandboxEgress, SandboxPool } =
-  await import("../src/container.ts")
+const {
+  CONFINED,
+  EXEC_SCRIPT,
+  FILE_SCRIPTS,
+  LEASE_MS,
+  RemeSandbox,
+  SandboxEgress,
+  SandboxPool,
+} = await import("../src/container.ts")
 
 const encode = (s: string) => new TextEncoder().encode(s).buffer
 type Ran = { argv: string[]; options: Record<string, unknown> | undefined }
+type Answer = { exitCode: number; stdout: string | Uint8Array; stderr: string }
+/** How a confined command's argv reads: no capability, then bash. */
+const shell = [...CONFINED, "bash", "-c", EXEC_SCRIPT]
 
 /** A container as `ctx.container` presents one, scripted per command. */
 const fakeContainer = () => {
@@ -76,20 +98,35 @@ const fakeContainer = () => {
     intercepts: [] as string[],
     timeouts: [] as number[],
     destroyed: 0,
-    answer: (_argv: string[]) => ({ exitCode: 0, stdout: "", stderr: "" }),
+    answer: (_argv: string[]): Answer => ({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+    }),
+    stdin: [] as Uint8Array[],
     start(options: unknown) {
       if (c.running) throw new Error("already running")
       c.running = true
       c.started.push(options)
     },
     async exec(argv: string[], options?: Record<string, unknown>) {
-      c.ran.push({ argv, options })
+      const { stdin, ...rest } = options ?? {}
+      c.ran.push({ argv, options: options && rest })
+      if (stdin)
+        c.stdin.push(
+          new Uint8Array(
+            await new Response(stdin as ReadableStream).arrayBuffer()
+          )
+        )
       const out = c.answer(argv)
       return {
         exitCode: Promise.resolve(out.exitCode),
         output: async () => ({
           exitCode: out.exitCode,
-          stdout: encode(out.stdout),
+          stdout:
+            typeof out.stdout === "string"
+              ? encode(out.stdout)
+              : out.stdout.slice().buffer,
           stderr: encode(out.stderr),
         }),
       }
@@ -158,7 +195,7 @@ describe("a sandbox's first command", () => {
   it("starts one container with no Internet and sets it up before running", async () => {
     const { sandbox, container } = newSandbox()
     container.answer = (argv) =>
-      argv[0] === "bash"
+      argv.includes("bash")
         ? { exitCode: 0, stdout: "hi\n", stderr: "" }
         : { exitCode: 0, stdout: "", stderr: "" }
     const result = await sandbox.exec("echo hi")
@@ -174,12 +211,16 @@ describe("a sandbox's first command", () => {
     expect(container.ran[0]?.argv[0]).toBe("sh")
     expect(container.ran[0]?.options).toEqual({ user: "0:0" })
     expect(container.timeouts).toEqual([30 * 60 * 1000])
+    // Root then gives root the workspace, in the same setup command.
+    expect(container.ran[0]?.argv[2]).toContain(
+      "chown 0:0 /workspace /home/reme"
+    )
     expect(container.ran[1]).toEqual({
-      argv: ["bash", "-c", EXEC_SCRIPT],
+      argv: shell,
       options: {
         cwd: "/workspace",
         env: {
-          HOME: "/home/reme",
+          HOME: "/tmp/home",
           PLAYWRIGHT_BROWSERS_PATH: "/opt/pw-browsers",
           NODE_EXTRA_CA_CERTS:
             "/etc/cloudflare/certs/cloudflare-containers-ca.crt",
@@ -245,9 +286,7 @@ describe("a command", () => {
       "timeout",
       "--kill-after=5",
       "120",
-      "bash",
-      "-c",
-      EXEC_SCRIPT,
+      ...shell,
     ])
   })
 
@@ -265,7 +304,7 @@ describe("a command", () => {
   it("returns a failure as a result, not a throw", async () => {
     const { sandbox, container } = newSandbox()
     container.answer = (argv) =>
-      argv[0] === "bash"
+      argv.includes("bash")
         ? { exitCode: 1, stdout: "", stderr: "nope" }
         : { exitCode: 0, stdout: "", stderr: "" }
     expect(await sandbox.exec("test -d /x", { cwd: "/tmp" })).toEqual({
@@ -328,30 +367,72 @@ describe("the shell an exec runs", () => {
   })
 })
 
+// #697: a file call runs as a confined command, so a symlink the Developer
+// planted in the site takes a write no further than `reme` may go.
 describe("a file call", () => {
-  it("writes into a directory that does not exist yet, as 0.12 did", async () => {
-    const { sandbox } = newSandbox()
+  const last = (c: ReturnType<typeof fakeContainer>) => c.ran.at(-1)
+
+  it("writes its bytes on stdin, its path in a variable, confined", async () => {
+    const { sandbox, container } = newSandbox()
     await sandbox.writeFile("/workspace/site/src/a.ts", "export {}")
-    expect(new TextDecoder().decode(disk.get("/workspace/site/src/a.ts"))).toBe(
-      "export {}"
-    )
+    expect(last(container)?.argv).toEqual(shell)
+    expect(last(container)?.options?.env).toMatchObject({
+      REME_COMMAND: FILE_SCRIPTS.write,
+      REME_PATH: "/workspace/site/src/a.ts",
+    })
+    expect(new TextDecoder().decode(container.stdin.at(-1))).toBe("export {}")
   })
 
   it("decodes base64 on the way in and encodes it on the way out", async () => {
-    const { sandbox } = newSandbox()
-    disk.set("/tmp/", new Uint8Array())
+    const { sandbox, container } = newSandbox()
     await sandbox.writeFile("/tmp/b.bin", btoa("\u0000ÿ"), {
       encoding: "base64",
     })
-    expect([...(disk.get("/tmp/b.bin") ?? [])]).toEqual([0, 255])
+    expect([...(container.stdin.at(-1) ?? [])]).toEqual([0, 255])
+    container.answer = () => ({
+      exitCode: 0,
+      stdout: new Uint8Array([0, 255]),
+      stderr: "",
+    })
     expect(
       await sandbox.readFile("/tmp/b.bin", { encoding: "base64" })
     ).toEqual({ content: btoa("\u0000ÿ") })
+    expect(last(container)?.options?.env).toMatchObject({
+      REME_COMMAND: FILE_SCRIPTS.read,
+    })
+  })
+
+  it("throws what the command said when it fails, and answers exists by exit code", async () => {
+    const { sandbox, container } = newSandbox()
+    container.answer = (argv) => ({
+      exitCode: argv.includes("bash") ? 1 : 0,
+      stdout: "",
+      stderr: "cat: /opt/x: Permission denied\n",
+    })
+    await expect(sandbox.readFile("/opt/x")).rejects.toThrow(
+      "cat: /opt/x: Permission denied"
+    )
+    expect(await sandbox.exists("/tmp/none")).toEqual({ exists: false })
+    container.answer = () => ({ exitCode: 0, stdout: "", stderr: "" })
+    expect(await sandbox.exists("/tmp/")).toEqual({ exists: true })
+  })
+
+  it("keeps root's capabilities only where the code asks", async () => {
+    const { sandbox, container } = newSandbox()
+    await sandbox.exec("rm -rf /workspace/site", { privileged: true })
+    expect(last(container)?.argv).toEqual(["bash", "-c", EXEC_SCRIPT])
+    await sandbox.stopStrays()
+    expect(last(container)?.argv).toEqual(["bash", "-c", EXEC_SCRIPT])
+    expect(last(container)?.options?.env).toMatchObject({
+      REME_COMMAND: expect.stringContaining("CapEff"),
+    })
+    await sandbox.exec("rm -rf /workspace/site")
+    expect(last(container)?.argv).toEqual(shell)
   })
 
   // #593: R2 takes a stream only when its length is known, and the bytes never
   // become a string in any isolate on the way.
-  it("streams a file into the bucket at its known length", async () => {
+  it("streams a file into the bucket at its known length, never through a link", async () => {
     const lengths: number[] = []
     vi.stubGlobal(
       "FixedLengthStream",
@@ -369,14 +450,56 @@ describe("a file call", () => {
     ).toBe(3)
     expect([...(bucket.get("sites/o/r/source") ?? [])]).toEqual([0, 1, 255])
     expect(lengths).toEqual([3])
+    links.add("/tmp/source.tar.zst")
+    await expect(
+      sandbox.saveFile("/tmp/source.tar.zst", "sites/o/r/other")
+    ).rejects.toThrow("not a plain file")
+    expect(bucket.has("sites/o/r/other")).toBe(false)
+    links.clear()
     vi.unstubAllGlobals()
   })
+})
 
-  it("answers exists from the disk", async () => {
-    const { sandbox } = newSandbox()
-    disk.set("/tmp/", new Uint8Array())
-    expect(await sandbox.exists("/tmp/")).toEqual({ exists: true })
-    expect(await sandbox.exists("/tmp/none")).toEqual({ exists: false })
+describe("the file scripts, in a real bash", () => {
+  const run = (script: string, path: string, input?: string) =>
+    spawnSync("bash", ["-c", script], {
+      env: {
+        PATH: process.env.PATH ?? "",
+        REME_PATH: path,
+      } as unknown as NodeJS.ProcessEnv,
+      input,
+      encoding: "utf8",
+    })
+
+  it("writes stdin to a file in a directory it makes, and reads it back", () => {
+    const at = join(mkdtempSync(join(tmpdir(), "reme-file-")), "src", "a.ts")
+    expect(run(FILE_SCRIPTS.write, at, "export {}").status).toBe(0)
+    expect(run(FILE_SCRIPTS.read, at).stdout).toBe("export {}")
+  })
+
+  it("knows a file, a dangling link and nothing apart", () => {
+    const dir = mkdtempSync(join(tmpdir(), "reme-file-"))
+    writeFileSync(join(dir, "f"), "")
+    symlinkSync(join(dir, "gone"), join(dir, "link"))
+    expect(run(FILE_SCRIPTS.exists, join(dir, "f")).status).toBe(0)
+    expect(run(FILE_SCRIPTS.exists, join(dir, "link")).status).toBe(0)
+    expect(run(FILE_SCRIPTS.exists, join(dir, "none")).status).not.toBe(0)
+  })
+
+  it("makes a directory, a tree, and removes a file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "reme-file-"))
+    expect(run(FILE_SCRIPTS.mkdir, join(dir, "a", "b")).status).not.toBe(0)
+    expect(run(FILE_SCRIPTS.mkdirAll, join(dir, "a", "b")).status).toBe(0)
+    writeFileSync(join(dir, "f"), "")
+    expect(run(FILE_SCRIPTS.remove, join(dir, "f")).status).toBe(0)
+    expect(existsSync(join(dir, "f"))).toBe(false)
+  })
+
+  it("takes the path as data, never as code", () => {
+    const dir = mkdtempSync(join(tmpdir(), "reme-file-"))
+    const marker = join(dir, "ran")
+    run(FILE_SCRIPTS.read, `$(touch ${marker})`)
+    expect(existsSync(marker)).toBe(false)
   })
 })
 

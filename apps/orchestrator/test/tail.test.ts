@@ -359,6 +359,7 @@ describe("the build at the end of a report", () => {
       assignmentId: "a",
       facts: [],
       holdPhotos,
+      stopStrays: async () => undefined,
     } as unknown as Parameters<typeof finishRevision>[0])
     return { outcome, ran }
   }
@@ -498,6 +499,7 @@ describe("the source snapshot at the end of a report", () => {
   it("goes from the sandbox to R2 without being read back through the caller", async () => {
     const reads: string[] = []
     const saved: [string, string][] = []
+    const order: string[] = []
     const done: Record<string, unknown> = {
       documents: { json: null },
       "astro check": { exit_code: 0, output: "", ms: 0 },
@@ -514,7 +516,10 @@ describe("the source snapshot at the end of a report", () => {
           name in done ? (done[name] as T) : fn(),
       },
       sandbox: {
-        exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+        exec: async () => {
+          order.push("exec")
+          return { exitCode: 0, stdout: "", stderr: "" }
+        },
         readFileBuffer: async (path: string) => {
           reads.push(path)
           return new Uint8Array()
@@ -525,6 +530,7 @@ describe("the source snapshot at the end of a report", () => {
         saved.push([path, key])
         return 1
       },
+      stopStrays: async () => void order.push("stop strays"),
       kit: {},
       sites: {},
       hostSuffix: "-stg.remeai.co.uk",
@@ -537,5 +543,8 @@ describe("the source snapshot at the end of a report", () => {
     ])
     expect(reads).toEqual([])
     expect(out.source.key).toBe("sites/o/rev-1/source.tar.zst")
+    // #697: nothing the Developer left running sees the tail's files.
+    expect(order[0]).toBe("stop strays")
+    expect(order.filter((o) => o === "stop strays")).toHaveLength(1)
   })
 })

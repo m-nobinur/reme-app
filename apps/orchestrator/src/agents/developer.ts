@@ -594,7 +594,9 @@ function render({ id }: AgentProps) {
         })
       }
     }
-    await sandbox.exec(`mkdir -p ${SITE_ROOT}`)
+    // Root's workspace takes the site's directory; nothing the model runs can.
+    const stub = sandboxFor(env, runtime.spec.org_id)
+    await stub.exec(`mkdir -p ${SITE_ROOT}`, { privileged: true })
     if (brief.restore_key) {
       // QE2, one restore and not two: `brief.map` is set only when the
       // Workflow restored this revision or found it warm before admitting
@@ -604,12 +606,7 @@ function render({ id }: AgentProps) {
         (await sandbox.exec(`test -d ${SITE_ROOT}/.git`)).exitCode === 0
       // Straight to the stub, which streams the tar from R2: the harness's
       // writeFile would carry it through this isolate as base64 (#612).
-      if (!prepared)
-        await restore(
-          sandboxFor(env, runtime.spec.org_id),
-          env.SITES,
-          brief.restore_key
-        )
+      if (!prepared) await restore(stub, env.SITES, brief.restore_key)
       // The owner's quote questions as the facts hold them now: a newer
       // `quote.form` replaces the restored file, the same one keeps it.
       await sandbox.writeFile(
@@ -1100,6 +1097,7 @@ export const reportComplete = (current: Session) =>
           assignmentId,
           facts: current.brief.snapshot.facts,
           saveFile: sandboxFor(env, orgId).saveFile,
+          stopStrays: () => sandboxFor(env, orgId).stopStrays(),
           holdPhotos: true,
         })
 

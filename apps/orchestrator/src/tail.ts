@@ -397,12 +397,16 @@ export async function finishRevision(input: {
   facts: readonly FactRecord[]
   /** Streams a file from the site's sandbox into `sites` and returns its size. */
   saveFile: (path: string, key: string) => Promise<number>
+  /** Kills what the Developer's commands left running, before the checks read their files. */
+  stopStrays: () => Promise<unknown>
   /** The Developer's report holds the photos as the pipeline placed them; a quick edit draws its own. */
   holdPhotos?: boolean
 }) {
   const { steps, sandbox, kit, sites, orgId, assignmentId } = input
   const run = (command: string) =>
     sandbox.exec(`cd ${SITE_ROOT} && ${command}`, { timeoutMs: 180_000 })
+
+  await input.stopStrays()
 
   await holdStarterFiles(run)
   if (input.holdPhotos) await holdPhotos(run)

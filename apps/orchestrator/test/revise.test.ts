@@ -61,8 +61,8 @@ describe("restoring the published snapshot into the container", () => {
       "./astro.config.mjs": "export default {}\n",
     }
     const sandbox = {
-      exec: async (command: string) => {
-        commands.push(command)
+      exec: async (command: string, options?: { privileged?: boolean }) => {
+        commands.push(options?.privileged ? `root: ${command}` : command)
         return {
           exitCode: 0,
           stdout: command.includes("find .")
@@ -86,10 +86,14 @@ describe("restoring the published snapshot into the container", () => {
     }
     const map = await restoreAndMap(sandbox, sites, "sites/x/y/source.tar.zst")
     expect(written).toEqual(["/tmp/source.tar.zst"])
-    expect(commands[0]).toContain(
-      "tar --zstd -xf /tmp/source.tar.zst -C /workspace/site"
+    // #697: only the site's own directory takes root; the snapshot unpacks confined.
+    expect(commands[0]).toBe(
+      "root: rm -rf /workspace/site && mkdir -p /workspace/site"
     )
-    expect(commands[0]).toContain(
+    expect(commands[1]).toMatch(
+      /^tar --zstd -xf \/tmp\/source.tar.zst -C \/workspace\/site/
+    )
+    expect(commands[1]).toContain(
       "ln -sfn /opt/astro/node_modules node_modules"
     )
     expect(map).toContain("src/site-config.ts")

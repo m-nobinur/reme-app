@@ -45,17 +45,21 @@ RUN cd /opt/astro \
   && rm -rf /root/.local/share/pnpm /root/.cache \
   && chmod -R a+rX /opt/astro
 
-# Non-root: /workspace, /tmp and the home directory are the writable places
-# and everything else is root's. Under the `durable_object` policy the user
-# sets the owner of the files a command makes and no more: the platform gives
-# every process root's capabilities (ADR-031 amendment, 2026-10-19). The node
-# base's own user holds uid 1000, which reme keeps from the 0.12 image.
+# Non-root: the site and /tmp are the writable places and everything else is
+# root's. Under the `durable_object` policy the platform gives every process
+# root's capabilities whatever its user (ADR-031 amendment, 2026-10-19), so
+# RemeSandbox runs each command through util-linux's `setpriv` as reme with
+# every capability dropped (#697), and at each start gives root /workspace
+# and the home directory, as here. The node base's own user holds uid 1000,
+# which reme keeps from the 0.12 image.
 RUN userdel --remove node \
   && groupadd --gid 1000 reme \
   && useradd --uid 1000 --gid reme --create-home --shell /bin/bash reme \
-  && mkdir /workspace \
-  && chown reme:reme /workspace \
-  && chmod -R go-w /opt /usr/local/lib/node_modules
+  && mkdir -p /workspace/site /workspace/.reme \
+  && chown reme:reme /workspace/site \
+  && chown root:root /home/reme \
+  && chmod -R go-w /opt /usr/local/lib/node_modules \
+  && setpriv --version
 USER reme
 WORKDIR /workspace
 # 1.0 runs commands beside the main process; this one only keeps the

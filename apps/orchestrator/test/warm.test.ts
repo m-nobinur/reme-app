@@ -17,16 +17,28 @@ const lost = new Set<string>()
 /** The site's `RemeSandbox` stub, as `getByName` returns it. */
 const stubFor = (id: string) => ({
   open: async () => !refuse.delete(id),
-  exec: async (command: string) => {
+  exec: async (command: string, options?: { privileged?: boolean }) => {
+    const marks =
+      /^test -d \S+ && printf %s '([^']+)' >\S+\/\.reme\/revision$/.exec(
+        command
+      )
+    const unmark = /^grep -qx '([^']+)' /.exec(command)
+    // #697: the marker sits in root's directory, out of a confined command's reach.
+    if ((marks || unmark || command.startsWith("cat ")) && !options?.privileged)
+      return { exitCode: 1, stdout: "", stderr: "Permission denied" }
     if (command.startsWith("test -d")) {
-      return { exitCode: lost.has(id) ? 1 : 0, stdout: "", stderr: "" }
+      if (lost.has(id)) return { exitCode: 1, stdout: "", stderr: "" }
+      if (marks?.[1]) {
+        files.set(`${id}:revision`, marks[1])
+        await afterMark?.(id)
+      }
+      return { exitCode: 0, stdout: "", stderr: "" }
     }
     if (command.startsWith("cat ")) {
       const held = files.get(`${id}:revision`) ?? ""
       files.delete(`${id}:revision`)
       return { exitCode: 0, stdout: held, stderr: "" }
     }
-    const unmark = /^grep -qx '([^']+)' /.exec(command)
     if (unmark) {
       if (files.get(`${id}:revision`) !== unmark[1]) {
         return { exitCode: 1, stdout: "", stderr: "" }
@@ -34,12 +46,6 @@ const stubFor = (id: string) => ({
       files.delete(`${id}:revision`)
     }
     return { exitCode: 0, stdout: "", stderr: "" }
-  },
-  writeFile: async (path: string, body: string) => {
-    if (path.endsWith("/.reme/revision")) {
-      files.set(`${id}:revision`, body)
-      await afterMark?.(id)
-    }
   },
   destroy: async () => {
     destroyed.push(id)

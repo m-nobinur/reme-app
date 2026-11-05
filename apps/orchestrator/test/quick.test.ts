@@ -238,6 +238,7 @@ describe("quickEdit", () => {
     },
     writeBytes: async () => undefined,
     saveFile: async () => 0,
+    stopStrays: async () => undefined,
   }
   const kit = {
     withOrg: async (_: unknown, fn: (db: unknown) => Promise<unknown>) =>

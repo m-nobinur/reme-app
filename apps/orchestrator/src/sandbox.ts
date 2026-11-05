@@ -40,7 +40,7 @@ export const SLEEP_AFTER = 30 * 60
 /**
  * What a warm sandbox holds: the revision it built, written at
  * `preview_ready`. Outside the site, so no snapshot or build carries it, and
- * outside the Developer's tool root, so the model cannot write it.
+ * in root's directory, so only a privileged command reads or writes it.
  */
 const REVISION_FILE = "/workspace/.reme/revision"
 
@@ -112,6 +112,7 @@ const FILE_CALLS: ReadonlySet<PropertyKey> = new Set([
   "readFile",
   "writeFile",
   "saveFile",
+  "stopStrays",
   "exists",
   "mkdir",
 ])
@@ -171,6 +172,7 @@ export const tailSandbox = (sandbox: ReturnType<typeof sandboxFor>) => ({
   writeFile: (path: string, content: string) =>
     sandbox.writeFile(path, content),
   saveFile: (path: string, key: string) => sandbox.saveFile(path, key),
+  stopStrays: () => sandbox.stopStrays(),
   writeBytes: (path: string, content: Uint8Array) =>
     sandbox.writeFile(path, new Blob([content]).stream()),
 })
@@ -287,10 +289,10 @@ export async function keepWarm(
     // A container replaced since the build has the image's empty disk: no
     // marker may claim it holds the revision, so it ends as before.
     const kept = await sandbox.exec(
-      `test -d ${SITE_ROOT}/.git && mkdir -p /workspace/.reme`
+      `test -d ${SITE_ROOT}/.git && printf %s '${revisionId}' >${REVISION_FILE}`,
+      { privileged: true }
     )
     if (kept.exitCode !== 0) return await endSandbox(env, ids)
-    await sandbox.writeFile(REVISION_FILE, revisionId)
     const set = await env.SITES.put(holderKey(ids.orgId), "", {
       customMetadata: { holder: ids.assignmentId, revision: revisionId },
       onlyIf: { etagMatches: held.etag },
@@ -299,7 +301,8 @@ export async function keepWarm(
     // have looked for a marker and started on the disk, so ours would lie.
     if (!set) {
       await sandbox.exec(
-        `grep -qx '${revisionId}' ${REVISION_FILE} && rm -f ${REVISION_FILE}`
+        `grep -qx '${revisionId}' ${REVISION_FILE} && rm -f ${REVISION_FILE}`,
+        { privileged: true }
       )
     }
   } finally {
@@ -340,10 +343,14 @@ export async function whileHeld<T>(
  * revision its disk no longer matches.
  */
 export async function takeWarm(sandbox: {
-  exec: (command: string) => Promise<{ stdout: string }>
+  exec: (
+    command: string,
+    options: { privileged: boolean }
+  ) => Promise<{ stdout: string }>
 }): Promise<string | null> {
   const read = await sandbox.exec(
-    `cat ${REVISION_FILE} 2>/dev/null; rm -f ${REVISION_FILE}`
+    `cat ${REVISION_FILE} 2>/dev/null; rm -f ${REVISION_FILE}`,
+    { privileged: true }
   )
   return read.stdout.trim() || null
 }
@@ -490,10 +497,17 @@ const PROBE_COMMANDS = [
     command: `curl -fsS -m 20 -o /dev/null -w '%{http_code}' https://${NPM_REGISTRY_HOST}/astro/latest`,
   },
   { name: "credentials", command: "env" },
+  // #697: a command holds no capability, and so cannot write the toolchain
+  // or the workspace, nor read the container's own process; /tmp it can.
+  {
+    name: "confined",
+    command:
+      "grep '^CapEff' /proc/self/status && ! touch /opt/astro/.probe 2>/dev/null && ! touch /workspace/.probe 2>/dev/null && ! cat /proc/1/environ >/dev/null 2>&1 && touch /tmp/.probe && echo confined",
+  },
   {
     name: "astro.build",
     command:
-      "mkdir -p /workspace/bench && cp -r /opt/astro/src /opt/astro/package.json /opt/astro/astro.config.mjs /opt/astro/tsconfig.json /workspace/bench/ && ln -sfn /opt/astro/node_modules /workspace/bench/node_modules && cd /workspace/bench && ./node_modules/.bin/astro build 2>&1 | tail -3",
+      "mkdir -p /tmp/bench && cp -r /opt/astro/src /opt/astro/package.json /opt/astro/astro.config.mjs /opt/astro/tsconfig.json /tmp/bench/ && ln -sfn /opt/astro/node_modules /tmp/bench/node_modules && cd /tmp/bench && ./node_modules/.bin/astro build 2>&1 | tail -3",
   },
 ] as const
 
