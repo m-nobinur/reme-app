@@ -847,6 +847,40 @@ describe("the CoS's model and price", () => {
     }
   })
 
+  it("adds the provider's charge to OpenRouter's fee on a call with our own key", () => {
+    const price = { input: 1, output: 10, cacheRead: 0.1 }
+    const tokens = {
+      inputTokens: 1_000_000,
+      inputTokenDetails: { cacheReadTokens: 0 },
+      outputTokenDetails: {},
+      outputTokens: 0,
+    } as Parameters<typeof stepCost>[1]["usage"]
+    const metadata = (cost: unknown, upstreamInferenceCost: unknown) =>
+      ({
+        openrouter: { usage: { cost, costDetails: { upstreamInferenceCost } } },
+      }) as never
+    expect(
+      stepCost(price, {
+        usage: tokens,
+        providerMetadata: metadata(0, 0.0011546),
+      })
+    ).toBeCloseTo(0.0011546, 12)
+    expect(
+      stepCost(price, {
+        usage: tokens,
+        providerMetadata: metadata(0.0001, 0.0011546),
+      })
+    ).toBeCloseTo(0.0012546, 12)
+    for (const none of [0, null, undefined, -1, Number.NaN, "0.5"]) {
+      expect(
+        stepCost(price, {
+          usage: tokens,
+          providerMetadata: metadata(0.42, none),
+        })
+      ).toBe(0.42)
+    }
+  })
+
   const EMPTY = {
     site: { host: null, live_version: null },
     builds: [],

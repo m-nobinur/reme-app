@@ -798,18 +798,28 @@ export const costOf = (price: Price, usage: Usage) =>
 /**
  * What a step cost: OpenRouter's billed figure from the finish part's
  * metadata when it reports one, else its usage at the table's capped price,
- * which errs high. The metadata is read here and never stored.
+ * which errs high. A call on a provider key we bring bills OpenRouter's fee
+ * in `cost`, which is 0 inside the free allowance, and the provider's charge
+ * in `costDetails.upstreamInferenceCost`, set for those calls only, so a
+ * step spends both. The metadata is read here and never stored.
  */
 export function stepCost(
   price: Price,
   step: { usage: LanguageModelUsage; providerMetadata?: ProviderMetadata }
 ): number {
-  const billed = (
-    step.providerMetadata?.openrouter?.usage as { cost?: unknown } | undefined
-  )?.cost
-  return typeof billed === "number" && Number.isFinite(billed) && billed >= 0
-    ? billed
-    : costOf(price, usageOf(step.usage))
+  const usage = step.providerMetadata?.openrouter?.usage as
+    | { cost?: unknown; costDetails?: { upstreamInferenceCost?: unknown } }
+    | undefined
+  const billed = usage?.cost
+  if (typeof billed !== "number" || !Number.isFinite(billed) || billed < 0) {
+    return costOf(price, usageOf(step.usage))
+  }
+  const upstream = usage?.costDetails?.upstreamInferenceCost
+  return typeof upstream === "number" &&
+    Number.isFinite(upstream) &&
+    upstream > 0
+    ? billed + upstream
+    : billed
 }
 
 /** The labels a workspace's text carries: its builds' goals and the Developer's questions. */
