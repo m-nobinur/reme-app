@@ -489,6 +489,12 @@ export async function readBuilds(
       // Written out rather than interpolated: in a one-table select drizzle
       // drops the table name, and a bare `id` here would mean the revision's.
       revision: sql<RevisionRef | null>`(select json_build_object('revision_id', r.id, 'version', r.version) from site_revisions r where r.assignment_id = assignments.id and r.version is not null order by r.version desc limit 1)`,
+      // The draft a change holds paused (`holdDraft`), which the list leaves
+      // out, with when it became ready in epoch milliseconds.
+      held: sql<
+        | (RevisionRef & { assignment_id: string; ready_ms: number | null })
+        | null
+      >`(select json_build_object('revision_id', r.id, 'version', r.version, 'assignment_id', h.id, 'ready_ms', (select extract(epoch from max(e.occurred_at)) * 1000 from events e where e.assignment_id = h.id and e.type = 'assignment.state_changed' and e.payload->>'to' = 'preview_ready')) from assignments h join site_revisions r on r.assignment_id = h.id and r.version is not null where h.id = assignments.revision_of_assignment_id and h.state = 'paused' order by r.version desc limit 1)`,
       // ADR-038: the plan on the row, the round it is and the plan it
       // changed from the newest `blueprint.proposed`, by `events_assignment_type_idx`.
       blueprint: assignments.blueprint,
@@ -555,6 +561,16 @@ export async function readBuilds(
         step: row.step,
       }),
       revision: row.revision,
+      ...(row.held && {
+        held: {
+          revision_id: row.held.revision_id,
+          version: row.held.version,
+          assignment_id: row.held.assignment_id,
+          ...(row.held.ready_ms && {
+            ready_at: new Date(row.held.ready_ms).toISOString(),
+          }),
+        },
+      }),
       ...planOf(row),
       ...(progress.photos ? { photos: photosOf(plan, settled) } : {}),
       ...(row.reviewMs ? { review_ms: Math.round(row.reviewMs) } : {}),

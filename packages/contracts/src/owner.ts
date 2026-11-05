@@ -616,6 +616,15 @@ export const BuildSummary = z.strictObject({
   restarted: z.literal(true).optional(),
   activity: z.array(BuildActivity).max(BUILD_ACTIVITY_MAX).optional(),
   revision: RevisionRef.nullable(),
+  /**
+   * A change to a draft not yet published: that draft, held paused until
+   * the change has one of its own, and when it became ready, so the draft
+   * card stays up meanwhile. Absent on any other build.
+   */
+  held: RevisionRef.extend({
+    assignment_id: Uuid,
+    ready_at: Timestamp.optional(),
+  }).optional(),
   /** Absent on a build that did not plan: a revise, the quick lane, an older row. */
   blueprint: BuildBlueprint.optional(),
   /** The photos this build makes, in the order they settle; absent before its photo step starts. */

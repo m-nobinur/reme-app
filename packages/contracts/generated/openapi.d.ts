@@ -3930,6 +3930,15 @@ export interface components {
         revision_id: string
         version: number
       } | null
+      held?: {
+        /** Format: uuid */
+        revision_id: string
+        version: number
+        /** Format: uuid */
+        assignment_id: string
+        /** Format: date-time */
+        ready_at?: string
+      }
       blueprint?: {
         plan: {
           direction: string
@@ -7541,6 +7550,15 @@ export interface components {
                     revision_id: string
                     version: number
                   } | null
+                  held?: {
+                    /** Format: uuid */
+                    revision_id: string
+                    version: number
+                    /** Format: uuid */
+                    assignment_id: string
+                    /** Format: date-time */
+                    ready_at?: string
+                  }
                   blueprint?: {
                     plan: {
                       direction: string
@@ -15037,6 +15055,15 @@ export interface components {
               revision_id: string
               version: number
             } | null
+            held?: {
+              /** Format: uuid */
+              revision_id: string
+              version: number
+              /** Format: uuid */
+              assignment_id: string
+              /** Format: date-time */
+              ready_at?: string
+            }
             blueprint?: {
               plan: {
                 direction: string
@@ -16985,6 +17012,15 @@ export interface components {
           revision_id: string
           version: number
         } | null
+        held?: {
+          /** Format: uuid */
+          revision_id: string
+          version: number
+          /** Format: uuid */
+          assignment_id: string
+          /** Format: date-time */
+          ready_at?: string
+        }
         blueprint?: {
           plan: {
             direction: string
