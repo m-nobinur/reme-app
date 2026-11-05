@@ -6,6 +6,7 @@ import {
   parseEcb,
   RATE_KEY,
   RATE_MAX_DAYS,
+  rateNow,
   refreshRate,
 } from "../src/rates.ts"
 
@@ -162,5 +163,32 @@ describe("refreshRate", () => {
     await refreshRate(env, new Date("2026-11-04T18:00:00Z"))
     expect(map.size).toBe(0)
     expect(log).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("rateNow", () => {
+  const now = new Date("2026-11-04T03:00:00Z")
+
+  it("is the stored rate without fetching", async () => {
+    const fetched = vi.fn()
+    vi.stubGlobal("fetch", fetched)
+    expect(await rateNow(store(held("2026-11-03")).env, now)).toBe(0.75)
+    expect(fetched).not.toHaveBeenCalled()
+  })
+
+  it("fetches once when nothing is stored, so the first search has pounds", async () => {
+    const fetched = vi.fn(async () => new Response(SAMPLE))
+    vi.stubGlobal("fetch", fetched)
+    expect(await rateNow(store().env, now)).toBe(POUNDS_PER_DOLLAR)
+    expect(fetched).toHaveBeenCalledOnce()
+  })
+
+  it("is undefined when the ECB cannot be read either", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined)
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("down", { status: 503 }))
+    )
+    expect(await rateNow(store().env, now)).toBeUndefined()
   })
 })

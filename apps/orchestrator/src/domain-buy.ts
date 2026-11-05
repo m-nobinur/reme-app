@@ -48,7 +48,7 @@ import {
 } from "./domain-flow.ts"
 import { DomainError, zoneApex } from "./domains.ts"
 import type { Observed } from "./probe.ts"
-import { freshRate } from "./rates.ts"
+import { rateNow } from "./rates.ts"
 import { rdapLookup } from "./rdap.ts"
 import {
   attachHostname,
@@ -303,9 +303,7 @@ export async function find(
       note: "picking a name",
     })
   })
-  const usd_gbp = await freshRate(env.SCHEDULE, new Date()).catch(
-    () => undefined
-  )
+  const usd_gbp = await rateNow(env, new Date()).catch(() => undefined)
   return {
     outcome: "found",
     rows: out.slice(0, ROWS_MAX),

@@ -99,3 +99,18 @@ export async function refreshRate(
     logFailure({ rate: "usd_gbp" }, error)
   }
 }
+
+/**
+ * The rate a name search shows pounds with: the stored one, else one
+ * refresh first, for when the hourly firing has not stored one yet, as on a
+ * fresh server. Undefined when the ECB cannot be read either.
+ */
+export async function rateNow(
+  env: Pick<Env, "SCHEDULE">,
+  now: Date
+): Promise<number | undefined> {
+  const held = await freshRate(env.SCHEDULE, now)
+  if (held !== undefined) return held
+  await refreshRate(env, now)
+  return await freshRate(env.SCHEDULE, now)
+}
