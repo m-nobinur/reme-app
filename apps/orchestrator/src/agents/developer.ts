@@ -144,25 +144,41 @@ held[OBSERVER] = observe(observed)
 
 export function observed(...[observation, ctx]: Parameters<Observer>) {
   // A submission that throws outside any turn (its container not running
-  // yet, measured locally 2026-10-25) settles with no operation event, so
-  // nothing else would wake the Workflow before its 45 minute watchdog.
+  // yet, measured locally 2026-10-25), or whose every attempt was cut short
+  // (the #593 staging build, #610), settles with no operation event, so nothing
+  // else would wake the Workflow before its stall watchdog. Neither needs the
+  // session: after an isolate restart it is gone.
   const o = observation as {
     type?: string
     operation?: string
     submissionId?: string
+    error?: { type?: string }
   }
   if (o.type === "submission_recovery" && o.operation === "process_submission")
     return unstarted.has(ctx.id)
       ? undefined
       : tell(ctx.id, "interrupted", SANDBOX_UPDATING, o.submissionId)
   const found = sessions.get(ctx.id)
-  if (!found) return
-  found.tee.subscriber(observation)
-  // Typed void | Promise<void>, but the budget guard's observer is synchronous.
-  void found.budget.instrumentation.observe(observation, ctx)
-  interrupted(found, observation)
+  if (found) {
+    found.tee.subscriber(observation)
+    // Typed void | Promise<void>, but the budget guard's observer is synchronous.
+    void found.budget.instrumentation.observe(observation, ctx)
+    interrupted(found, observation)
+  }
+  if (
+    o.type === "submission_settled" &&
+    EXHAUSTED.has(o.error?.type ?? "") &&
+    !unstarted.has(ctx.id)
+  )
+    tell(ctx.id, "interrupted", SANDBOX_UPDATING, o.submissionId)
 }
 type Observer = Parameters<typeof observe>[0]
+
+/** Flue's settlement errors for a submission that ran out of attempts, before or after its input. */
+const EXHAUSTED = new Set([
+  "submission_retry_exhausted",
+  "submission_interrupted",
+])
 
 /**
  * A run that ends in an error (a provider stream that breaks, measured on
