@@ -1670,11 +1670,13 @@ const AssistantMessage: FC = () => {
         </div>
 
         {/* Its space is held from the start, but nothing under the words
-            shows (or counts as moving) until the reply is done. */}
+            shows (or counts as moving) until the reply is done: streamed,
+            and its words revealed, which run on after the stream and can
+            wrap to another line on a phone. */}
         <div
           data-slot="aui_assistant-message-footer"
           className={cn(
-            "flex items-center gap-2",
+            "flex items-center gap-2 group-has-[.aui-md[data-status=running]]/message:invisible",
             ACTION_BAR_HEIGHT,
             writing && "invisible"
           )}
