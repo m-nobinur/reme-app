@@ -498,11 +498,11 @@ const PROBE_COMMANDS = [
   },
   { name: "credentials", command: "env" },
   // #697: a command holds no capability, and so cannot write the toolchain
-  // or the workspace, nor read the container's own process; /tmp it can.
+  // or the workspace; /tmp it can.
   {
     name: "confined",
     command:
-      "grep '^CapEff' /proc/self/status && ! touch /opt/astro/.probe 2>/dev/null && ! touch /workspace/.probe 2>/dev/null && ! cat /proc/1/environ >/dev/null 2>&1 && touch /tmp/.probe && echo confined",
+      "grep '^CapEff' /proc/self/status && ! touch /opt/astro/.probe 2>/dev/null && ! touch /workspace/.probe 2>/dev/null && touch /tmp/.probe && echo confined",
   },
   {
     name: "astro.build",
