@@ -10,6 +10,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest"
 import type { TransportedMessage } from "../lib/api/types"
 import {
   type AISDKStorageFormat,
+  askedSend,
   conversationHistory,
   followThread,
   lastChat,
@@ -329,4 +330,23 @@ describe("following the open thread", () => {
     await follow("srv_1")
     expect(apply).toHaveBeenCalledWith(stored)
   })
+})
+
+it("sends a press's question once, into a new chat only, with the press's intent", () => {
+  const sent = new Set<string>()
+  const press = {
+    ask: "Help me connect my domain",
+    fresh: "p1",
+    intent: "connect_address" as const,
+  }
+  expect(askedSend(press, sent)).toEqual({
+    text: "Help me connect my domain",
+    intent: "connect_address",
+  })
+  expect(askedSend(press, sent)).toBeUndefined()
+  expect(askedSend({ ...press, fresh: "p2", id: "c1" }, sent)).toBeUndefined()
+  expect(askedSend({ ask: "Hello", fresh: "p3" }, sent)).toEqual({
+    text: "Hello",
+  })
+  expect(askedSend({ fresh: "p4" }, sent)).toBeUndefined()
 })

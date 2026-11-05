@@ -205,6 +205,20 @@ export const lastChat = (conversations: Conversation[] | null) =>
 export const asked = new Set<string>()
 
 /**
+ * What a press that carries a question sends as a new chat's first message:
+ * once per press, never into a stored conversation, with the press's intent.
+ */
+export function askedSend<I>(
+  press: { id?: string; ask?: string; fresh?: string; intent?: I },
+  sent: Set<string> = asked
+): { text: string; intent?: I } | undefined {
+  const { id, ask, fresh, intent } = press
+  if (id || !ask || !fresh || sent.has(fresh)) return undefined
+  sent.add(fresh)
+  return { text: ask, ...(intent !== undefined && { intent }) }
+}
+
+/**
  * Conversations the owner opened by address and cannot have: another
  * account's, or an id that was never stored. The chat shows an empty state
  * for them rather than a thread nobody asked for.

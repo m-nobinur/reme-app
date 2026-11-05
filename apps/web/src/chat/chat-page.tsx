@@ -53,7 +53,12 @@ import { conversationList, seedOpening, unstored } from "./conversations"
 import { cosTools, liveKey, liveState, questionTitles } from "./cos-tools"
 import { saveDesignAnswer } from "./design"
 import { domainPurchase } from "./domain-purchase"
-import { asked, missingConversations, startsNewChat, tailOf } from "./history"
+import {
+  askedSend,
+  missingConversations,
+  startsNewChat,
+  tailOf,
+} from "./history"
 import { useConversationRuntime } from "./runtime"
 import { SendAsked } from "./send-asked"
 import { StillWorking } from "./still-working"
@@ -179,13 +184,12 @@ export function ChatPage() {
   useEffect(() => {
     const press = startsNewChat(seen.current, fresh)
     seen.current = fresh
-    const send = !id && ask && fresh && !asked.has(fresh) ? ask : undefined
-    if (send && fresh) asked.add(fresh)
+    const send = askedSend({ id, ask, fresh, intent: askIntent })
     void (async () => {
       if (press) await runtime.threads.switchToNewThread()
       if (send) {
-        intent.current = askIntent
-        runtime.thread.append(send)
+        intent.current = send.intent
+        runtime.thread.append(send.text)
       }
     })()
   }, [id, fresh, ask, askIntent, runtime])
