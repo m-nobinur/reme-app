@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node ../../scripts/floor.mjs api-unit -- vitest run --dir test",
     "test:tenancy": "node ../../scripts/floor.mjs api-tenancy -- vitest run --dir tenancy",
-    "size": "node ../../scripts/size.mjs api --forbid abandoned-head-element-child"
+    "size": "node ../../scripts/size.mjs api --forbid abandoned-head-element-child",
+    "prompt-size": "PROMPT_SIZE=1 vitest run test/cos-prompt-surface.test.ts --silent=false"
   },
   "dependencies": {
     "@openrouter/ai-sdk-provider": "3.1.0",

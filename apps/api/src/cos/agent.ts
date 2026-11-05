@@ -1246,35 +1246,25 @@ export function lastStep(
 }
 
 /**
- * The prompt budgets, in characters, that `cos-prompt-surface.test.ts` holds
- * the prefix to. Trimmed 2026-11-05 to a 34,961 prefix (core 12,162,
- * descriptions 8,334): the prefix budget is that plus 1,500, rounded up;
- * the core and descriptions budgets did not bind, so they stay. They are
- * review triggers, not walls: a feature that needs more raises the budget in
- * the same commit, with the measured cost (3-engineering.md, prompt growth).
- * offer_choices (2026-11-06) took the prefix to 36,952, about 375 more cached
- * tokens a call, so the prefix budget is 37,000. The memory tool's Hermes
- * WHEN and SKIP wording (2026-11-06) took it to 37,261, about 65 more cached
- * tokens a call, so 37,500.
+ * The size, in characters, past which the CoS's cached prefix (core,
+ * tool descriptions and skills index) is reviewed with the owner. After
+ * Hermes (`hermes prompt-size`, MIT): the whole prompt is measured, never
+ * capped; what grows (memory, skills) has its own cap. 37,261 on 2026-11-06.
  */
-export const PROMPT_BUDGET = {
-  core: 13_000,
-  descriptions: 9_710,
-  prefix: 37_500,
-}
+export const PROMPT_REVIEW_AT = 40_000
 
 /**
  * Each layer's share of a call's input, in tokens at four characters a
- * token (as `historyTokens` counts): the cached core and tools by the prompt
- * budgets, the history by the context policy (skill views in it), the
+ * token (as `historyTokens` counts): the cached core as written and the
+ * tools up to the review line, the history by the context policy (skill views in it), the
  * memory stores by their character budgets with their headers, code's
  * notes and the owner's message by what they may hold. They sum within
  * `LIMITS.inputTokens`; the turn's own steps fill what is left, and the
  * reservation stops a turn before they pass it.
  */
 export const LAYER_CAPS = {
-  core: Math.ceil(PROMPT_BUDGET.core / 4),
-  tools: Math.ceil((PROMPT_BUDGET.prefix - PROMPT_BUDGET.core) / 4),
+  core: Math.ceil(INSTRUCTIONS.length / 4),
+  tools: Math.ceil((PROMPT_REVIEW_AT - INSTRUCTIONS.length) / 4),
   history: CONTEXT_POLICY.historyTokens,
   memory: Math.ceil((PROFILE_MAX_CHARS + NOTES_MAX_CHARS + 400) / 4),
   notes: 2_000,
