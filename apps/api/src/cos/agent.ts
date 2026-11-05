@@ -1278,7 +1278,7 @@ const MEMORY_DATA =
  */
 export function layersOf(
   messages: readonly ModelMessage[],
-  prefix: CosPrefix
+  surface: CosPrefix
 ): Layers {
   const tokens = (chars: number) => Math.ceil(chars / 4)
   const text = (m: ModelMessage) =>
@@ -1289,8 +1289,8 @@ export function layersOf(
     (m) => m.role === "user" && text(m).startsWith("Mode: ")
   )
   const out: Layers = {
-    core: tokens(prefix.instructions.length),
-    tools: tokens(JSON.stringify(prefix.tools).length),
+    core: tokens(surface.instructions.length),
+    tools: tokens(JSON.stringify(surface.tools).length),
     history: 0,
     skill_views: 0,
     memory: 0,
@@ -1310,9 +1310,9 @@ export function layersOf(
         : 0
     out.skill_views += tokens(views)
     if (i === at) {
-      const memory = (text(m).match(MEMORY_DATA) ?? []).join("").length
-      out.memory += tokens(memory)
-      out.notes += tokens(size - memory)
+      const stored = (text(m).match(MEMORY_DATA) ?? []).join("").length
+      out.memory += tokens(stored)
+      out.notes += tokens(size - stored)
     } else if (at >= 0 && i === at + 1) out.message += tokens(size)
     else if (at >= 0 && i > at) out.steps += tokens(size - views)
     else out.history += tokens(size - views)
@@ -1324,9 +1324,9 @@ export function layersOf(
 function logLayers(
   run: AgentTurn,
   messages: readonly ModelMessage[],
-  prefix: CosPrefix
+  surface: CosPrefix
 ) {
-  const tokens = layersOf(messages, prefix)
+  const tokens = layersOf(messages, surface)
   console.log(
     JSON.stringify({
       code: "cos.layers",

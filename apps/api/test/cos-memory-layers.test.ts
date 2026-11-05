@@ -77,7 +77,7 @@ describe("what no store accepts", () => {
 
   it("refuses a secret, a business fact, a near-duplicate and a fact another layer holds, each saying why", () => {
     const held = [line("Prefers calls after 4pm")]
-    const code = (ops: MemoryOperation[], elsewhere = []) => {
+    const code = (ops: MemoryOperation[], others = []) => {
       const done = applyOperations(
         held,
         ops,
@@ -86,7 +86,7 @@ describe("what no store accepts", () => {
         null,
         undefined,
         1_500,
-        elsewhere
+        others
       )
       return "refusal" in done ? done.refusal.code : "ok"
     }

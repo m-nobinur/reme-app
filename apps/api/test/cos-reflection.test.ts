@@ -133,7 +133,7 @@ function fakeReviewer(
 /** The user batch of one fixture answer, its replace read as a whole-line patch. */
 const userBatch = (
   op: { action: string; text?: string; match?: string },
-  held: readonly ProfileLine[]
+  lines: readonly ProfileLine[]
 ): MemoryOperation[] =>
   op.action === "add"
     ? [add(op.text as string)]
@@ -142,7 +142,7 @@ const userBatch = (
       : [
           {
             action: "patch",
-            old_text: linesMatching(held, op.match ?? "")[0]?.text ?? op.match,
+            old_text: linesMatching(lines, op.match ?? "")[0]?.text ?? op.match,
             content: op.text,
           },
         ]
@@ -597,7 +597,7 @@ describe.skipIf(!url)("a pass, on a live connection", () => {
     ])
     const logged = vi.spyOn(console, "log")
     await reflectAfterTurn(kit, reviewer, { ...job, idle: true })
-    const line = logged.mock.calls
+    const reported = logged.mock.calls
       .map(([text]) => String(text))
       .find((text) => text.includes('"code":"cos.reflection"'))
     logged.mockRestore()
@@ -610,7 +610,7 @@ describe.skipIf(!url)("a pass, on a live connection", () => {
     expect(await passes(job.sessionId)).toMatchObject([
       { outcome: "written", changes: 2 },
     ])
-    expect(JSON.parse(line ?? "{}")).toMatchObject({
+    expect(JSON.parse(reported ?? "{}")).toMatchObject({
       outcome: "written",
       cache_share: 0.9,
       changes: 2,
