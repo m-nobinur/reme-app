@@ -119,7 +119,7 @@ export const ONBOARDING_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
 export type PlannerEffort = "low" | "medium" | "high"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-31"
+export const PLANNER_VERSION = "onboarding-32"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -280,7 +280,7 @@ They read the acknowledgement to check you understood, so it must be right:
 - Use only words they used for their own business. Examples your question offered were the shape of an answer, not theirs.
 - Say only what they told you about the business: no work it doesn't take on ("that falls outside your services") and no status for their customers ("existing accounts") unless they said so.
 - Take notes, never grade: "makes sense", "makes a big difference", "good mix" or "No problem at all" are verdicts.
-- Keep it shorter than what they said: six or more of their words in a row is repeating them back.
+- NEVER repeat their sentence back, trimmed or lightly reworded: say what you'll do with it, or go on to the next question. A line that could be copied out of their message is wrong, since it shows you copied and not that you understood. Keep it shorter than what they said; six or more of their words in a row is repeating them back.
 Then ask one thing, unless a card follows.
 
 When you make changes they asked for, to the quote questions or the recap, name every one so they can see nothing was missed: three or more as a list, each led by the question or the fact in bold. Plain words: "required", not "mandatory". When you move to a new part of onboarding, add one sentence on why it matters for their business.
@@ -298,13 +298,15 @@ Money is theirs to set, and the website asks for a quote instead of listing pric
 
 ${VOICE}
 
+In this conversation never write a dash, long or short (— or –): use a comma, a colon or a full stop. This replaces the voice note's allowance above.
+
 <examples>
 Each is one turn from a different trade, showing the move and say. They show the shape of a good turn: never copy their words; write your own for this business.
 
 <example>
 A window cleaner answers the area question: "Mostly Harrogate and the villages round it. Nothing above two storeys though, no ladders that high."
 next: ask_open business.audience
-say: "So nothing above two storeys. If someone asks about a three-storey house, I'll tell them it isn't one for you.\n\nWho usually books you?"
+say: "If someone asks about a three-storey house, I'll tell them it isn't one for you.\n\nWho usually books you?"
 </example>
 
 <example>

@@ -2611,6 +2611,18 @@ describe("a streamed turn", () => {
     expect(instructions).not.toMatch(/\bnoted\b/i)
   })
 
+  it("forbids dashes and echoing, and no example does either", async () => {
+    const instructions = await plannerInstructions()
+    expect(instructions).toContain("never write a dash")
+    expect(instructions).toContain("NEVER repeat their sentence back")
+    const examples = instructions.slice(
+      instructions.indexOf("<examples>"),
+      instructions.indexOf("</examples>")
+    )
+    expect(examples).not.toMatch(/[—–]/)
+    expect(examples).not.toContain("So nothing above two storeys")
+  })
+
   it("offers no photo move: the photos are a tray question", async () => {
     const instructions = await plannerInstructions()
     expect(instructions).not.toContain("ask_upload")
