@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto"
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs"
 import {
   bad,
+  ensureLocalSites,
   loadLocalEnv,
   nodeMajor,
   note,
@@ -155,15 +156,8 @@ for (const [path, lines] of [
 // and R2, never to staging. `siteUrl` opens a `.localhost` host over http on
 // `SITE_PORT`, and no deployed config may carry either
 // (apps/router/test/local-links.test.ts). Added to files that already exist
-// too, since an older clone's predate them.
-const LOCAL_SITES = [
-  [API_DEV_VARS, ["SITE_HOST_SUFFIX=.reme.localhost", "SITE_PORT=3004"]],
-  [
-    ORCHESTRATOR_DEV_VARS,
-    ["SITE_HOST_SUFFIX=.reme.localhost", "SITE_PORT=3004"],
-  ],
-  [ROUTER_DEV_VARS, ["SITE_HOST_SUFFIX=.reme.localhost"]],
-]
+// too, since an older clone's predate them, and again by each dev script.
+for (const path of ensureLocalSites()) ok(`${path} gained its local site keys`)
 // Google sign-in: the client id where the consent link is made, and the
 // secret and token key only where the code is exchanged and the refresh
 // token sealed. Copied when .env.local has a value, so a later fill is added.
@@ -180,7 +174,7 @@ const GOOGLE = [
     fromEnv(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_TOKEN_KEY"]),
   ],
 ]
-for (const [path, lines] of [...LOCAL_SITES, ...GOOGLE]) {
+for (const [path, lines] of GOOGLE) {
   const held = readFileSync(path, "utf8")
   const keys = new Set(held.split("\n").map((line) => line.split("=")[0]))
   const missing = lines.filter((line) => !keys.has(line.split("=")[0]))

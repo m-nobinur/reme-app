@@ -15,6 +15,7 @@
 import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { parseArgs } from "node:util"
+import { ensureLocalSites } from "../../../scripts/lib.mjs"
 
 const BINDING = "CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE"
 const router = fileURLToPath(new URL("..", import.meta.url))
@@ -35,6 +36,9 @@ if (!process.env[BINDING]) {
   }
   process.env[BINDING] = process.env.DATABASE_URL
 }
+
+// A router with no `.dev.vars` serves the staging suffix and cannot verify a claim.
+ensureLocalSites()
 
 const { values } = parseArgs({
   options: {
