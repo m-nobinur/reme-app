@@ -21,6 +21,15 @@ import {
   uploadDist,
 } from "../src/tail.ts"
 
+// workerd's FixedLengthStream as a pass-through: these tests run on Node.
+Object.assign(globalThis, {
+  FixedLengthStream: class extends TransformStream {
+    constructor(_length: number) {
+      super()
+    }
+  },
+})
+
 const enc = (s: string) => new TextEncoder().encode(s)
 const sha = async (s: string) =>
   Array.from(
@@ -88,10 +97,14 @@ async function rig(
       const body = bucket.get(key)
       if (body === undefined) return null
       copied.push(key.replace("old/dist/", ""))
-      return { arrayBuffer: async () => enc(body).buffer as ArrayBuffer }
+      const bytes = enc(body)
+      return { size: bytes.byteLength, body: new Blob([bytes]).stream() }
     },
-    put: async (key: string, value: Uint8Array | ArrayBuffer) => {
-      stored.set(key, new TextDecoder().decode(value))
+    put: async (
+      key: string,
+      value: Uint8Array | ArrayBuffer | ReadableStream
+    ) => {
+      stored.set(key, await new Response(value).text())
     },
   }
   const previous = {

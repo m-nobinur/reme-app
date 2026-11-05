@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest"
 
+// workerd's FixedLengthStream as a pass-through: these tests run on Node.
+Object.assign(globalThis, {
+  FixedLengthStream: class extends TransformStream {
+    constructor(_length: number) {
+      super()
+    }
+  },
+})
+
 /**
  * A blocked build's site survives its container stopping: the checkpoint
  * lands in R2 at the block, the rehydrate puts it back only when the
@@ -54,13 +63,19 @@ const bucket = new Map<string, Uint8Array | ArrayBuffer>()
 const env = {
   SANDBOX: { getByName: () => stub },
   SITES: {
-    put: async (key: string, body: Uint8Array) => {
-      bucket.set(key, body)
+    put: async (key: string, body: Uint8Array | ReadableStream) => {
+      bucket.set(
+        key,
+        body instanceof ReadableStream
+          ? new Uint8Array(await new Response(body).arrayBuffer())
+          : body
+      )
     },
     get: async (key: string) => {
       const found = bucket.get(key)
       return found
         ? {
+            size: new Blob([found]).size,
             body: new Blob([found]).stream(),
             arrayBuffer: () => new Blob([found]).arrayBuffer(),
           }

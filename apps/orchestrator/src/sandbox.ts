@@ -408,7 +408,11 @@ export async function takeWork(
 ): Promise<boolean> {
   const work = await sites.get(workKey(failed))
   if (work) {
-    await sites.put(checkpointKey(ids), await work.arrayBuffer())
+    // R2 takes a stream only at a known length; a site tar never sits in the isolate whole.
+    await sites.put(
+      checkpointKey(ids),
+      work.body.pipeThrough(new FixedLengthStream(work.size))
+    )
     await sites.delete(workKey(failed))
     return true
   }

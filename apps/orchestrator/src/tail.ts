@@ -72,10 +72,11 @@ type DistSandbox = {
 
 /** The slice of the site bucket the upload uses. */
 type DistBucket = {
-  get: (
-    key: string
-  ) => Promise<{ arrayBuffer: () => Promise<ArrayBuffer> } | null>
-  put: (key: string, value: Uint8Array | ArrayBuffer) => Promise<unknown>
+  get: (key: string) => Promise<{ body: ReadableStream; size: number } | null>
+  put: (
+    key: string,
+    value: Uint8Array | ArrayBuffer | ReadableStream
+  ) => Promise<unknown>
 }
 
 /** An earlier revision's artifact: where its files are and the hash of each, its routes and its redirects. */
@@ -176,7 +177,10 @@ export async function uploadDist(input: {
         if (known && known === earlier) {
           const object = await sites.get(`${previous?.base}dist/${file}`)
           if (object) {
-            await sites.put(`${prefix}dist/${file}`, await object.arrayBuffer())
+            await sites.put(
+              `${prefix}dist/${file}`,
+              object.body.pipeThrough(new FixedLengthStream(object.size))
+            )
             files[file] = known
             reused++
             return
