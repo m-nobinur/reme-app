@@ -608,6 +608,8 @@ export const BuildSummary = z.strictObject({
   label: Text(40).optional(),
   /** The lane it runs in now: a quick edit that fell through reads `full`. */
   lane: BuildLane.optional(),
+  /** On the quick lane, the kind of change: a section change is the Developer's, so it takes longer. */
+  change_kind: ChangeKind.optional(),
   /** A quick edit that could not be made quickly and moved to a fuller lane; the panel says so once. */
   fell_through: z.boolean().optional(),
   /** Started again on its own after a build that stopped for a reason on our side. */
@@ -848,6 +850,13 @@ export const WorkspaceStatus = z.strictObject({
         p50: z.int().positive(),
         p95: z.int().positive(),
       }),
+      /** A quick lane section change, which the Developer makes; absent, the quick lane's. */
+      section: z
+        .strictObject({
+          p50: z.int().positive(),
+          p95: z.int().positive(),
+        })
+        .optional(),
     })
     .optional(),
   /** Approvals by expiry, then questions, alerts, reports. */

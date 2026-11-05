@@ -98,6 +98,7 @@ import {
 } from "@workspace/db"
 import { rangeText } from "@workspace/ui/lib/activity-copy"
 import type { ModelMessage } from "ai"
+import { timesFor } from "../activity.ts"
 import {
   type Bridged,
   bridge,
@@ -329,7 +330,10 @@ const rangeOf = (
  * owner's plan reviews, as the panel's does.
  */
 export function paceOf(
-  build: Pick<BuildSummary, "state" | "lane" | "created_at" | "review_ms">,
+  build: Pick<
+    BuildSummary,
+    "state" | "lane" | "change_kind" | "created_at" | "review_ms"
+  >,
   life: Life | undefined,
   expected: WorkspaceStatus["expected_seconds"],
   now: number
@@ -337,7 +341,7 @@ export function paceOf(
   if (!WORKING.has(build.state)) return {}
   const started = Date.parse(build.created_at)
   const ran = now - started - (build.review_ms ?? 0)
-  const lane = (expected ?? EXPECTED_SECONDS)[build.lane ?? "full"]
+  const lane = timesFor(expected ?? EXPECTED_SECONDS, build)
   const range = rangeText(lane.p50, lane.p95, Math.max(0, ran / 1000))
   return {
     timing: {

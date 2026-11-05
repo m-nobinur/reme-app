@@ -270,6 +270,24 @@ describe("a build's pace", () => {
     })
   })
 
+  it("times a quick section change by the Developer's measured section time", () => {
+    const section = {
+      ...build,
+      lane: "quick" as const,
+      change_kind: "section" as const,
+      created_at: new Date(ago(2)).toISOString(),
+      review_ms: 0,
+    }
+    expect(paceOf(section, undefined, undefined, now).timing).toMatchObject({
+      overdue: false,
+      range: "about 6 to 13 minutes",
+    })
+    expect(
+      paceOf({ ...section, change_kind: "copy" }, undefined, undefined, now)
+        .timing?.range
+    ).not.toContain("13 minutes")
+  })
+
   it("names the last restart, and whether the build has worked since", () => {
     const life = { work_ms: ago(1), resumed_ms: ago(3), cause: "stalled" }
     expect(paceOf(build, life, expected, now).restarted).toEqual({

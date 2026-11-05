@@ -3904,6 +3904,8 @@ export interface components {
       label?: string
       /** @enum {string} */
       lane?: "full" | "quick"
+      /** @enum {string} */
+      change_kind?: "copy" | "style" | "section" | "photo" | "creative"
       fell_through?: boolean
       /** @constant */
       retry?: true
@@ -6958,6 +6960,10 @@ export interface components {
                 p50: number
                 p95: number
               }
+              section?: {
+                p50: number
+                p95: number
+              }
             }
             expected_range?: {
               quick: string
@@ -7515,6 +7521,13 @@ export interface components {
                   label?: string
                   /** @enum {string} */
                   lane?: "full" | "quick"
+                  /** @enum {string} */
+                  change_kind?:
+                    | "copy"
+                    | "style"
+                    | "section"
+                    | "photo"
+                    | "creative"
                   fell_through?: boolean
                   /** @constant */
                   retry?: true
@@ -12330,6 +12343,10 @@ export interface components {
           p50: number
           p95: number
         }
+        section?: {
+          p50: number
+          p95: number
+        }
       }
       expected_range?: {
         quick: string
@@ -15011,6 +15028,8 @@ export interface components {
             label?: string
             /** @enum {string} */
             lane?: "full" | "quick"
+            /** @enum {string} */
+            change_kind?: "copy" | "style" | "section" | "photo" | "creative"
             fell_through?: boolean
             /** @constant */
             retry?: true
@@ -16959,6 +16978,8 @@ export interface components {
         label?: string
         /** @enum {string} */
         lane?: "full" | "quick"
+        /** @enum {string} */
+        change_kind?: "copy" | "style" | "section" | "photo" | "creative"
         fell_through?: boolean
         /** @constant */
         retry?: true
@@ -17683,6 +17704,10 @@ export interface components {
           p95: number
         }
         quick: {
+          p50: number
+          p95: number
+        }
+        section?: {
           p50: number
           p95: number
         }

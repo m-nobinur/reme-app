@@ -361,6 +361,15 @@ export type ActivityInput = {
 
 type Expected = WorkspaceStatus["expected_seconds"]
 
+/** A build's usual and late seconds: its lane's, or for a quick section change, which the Developer makes, the section time. */
+export const timesFor = (
+  expected: NonNullable<Expected>,
+  build: Pick<BuildSummary, "lane" | "change_kind">
+) =>
+  (build.lane === "quick" && build.change_kind === "section"
+    ? expected.section
+    : undefined) ?? expected[build.lane ?? "full"]
+
 /** A build at work: its lane's usual and late times, the ones the chat quotes too, and whether it was restarted. */
 const usualFor = (
   state: Segment["state"],
@@ -370,8 +379,8 @@ const usualFor = (
   state === "now"
     ? {
         ...(expected && {
-          usual_seconds: expected[build.lane ?? "full"].p50,
-          late_seconds: expected[build.lane ?? "full"].p95,
+          usual_seconds: timesFor(expected, build).p50,
+          late_seconds: timesFor(expected, build).p95,
         }),
         ...(build.restarted && { restarted: true as const }),
       }

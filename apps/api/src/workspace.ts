@@ -12,6 +12,7 @@ import {
   type BuildStopCause,
   type BuildSummary,
   buildFailure,
+  ChangeKind,
   type DerivedReminder,
   type FactRecord,
   FactValue,
@@ -82,11 +83,18 @@ const iso = (at: Date) => at.toISOString()
  * 185 s, implementing 382 s and validating 17 s reach the draft in about 585
  * s, and the repair round its gates sent it back for added 399 s and a second
  * validation. The low end is the run without a repair, the high end the one
- * with it. The quick lane is 34 to 65 s to the ready card.
+ * with it. The quick lane's one-call change is 34 to 65 s to the ready card.
+ * A quick section change is the Developer's, with no plan: update 4c15c3f6
+ * on staging, 2026-11-04, took 384 s to the ready card (briefing and set-up
+ * 4 s, implementing 364 s over 13 turns, validating 16 s), and the local one of
+ * 2026-11-01 406 s. The low end is about their mean, 395 s; the high end
+ * adds one repair round as long as that run's implementing and validating,
+ * 395 + 364 + 16 = 775 s.
  * shortcut: one staging run and a few local ones, until EV3's rolling p50 and p95 per lane exist; swap this one object for them.
  */
 export const EXPECTED_SECONDS = {
   quick: { p50: 45, p95: 90 },
+  section: { p50: 395, p95: 775 },
   full: { p50: 600, p95: 1000 },
 } as const
 
@@ -473,6 +481,9 @@ export async function readBuilds(
       lane: sql<
         string | null
       >`(select e.payload->>'lane' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+      changeKind: sql<
+        string | null
+      >`(select e.payload->>'change_kind' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
       retryOf: sql<
         string | null
       >`(select e.payload->>'retry_of' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
@@ -533,6 +544,7 @@ export async function readBuilds(
   const rows = await (limit === null ? query : query.limit(limit))
   return rows.map((row) => {
     const fellThrough = row.fell && row.lane === "quick"
+    const changeKind = ChangeKind.safeParse(row.changeKind).data
     const lane: BuildLane =
       row.lane === "quick" && !fellThrough ? "quick" : "full"
     const plan = Blueprint.safeParse(row.blueprint).data ?? null
@@ -545,6 +557,7 @@ export async function readBuilds(
       goal: row.goal,
       ...(row.label ? { label: row.label } : {}),
       lane,
+      ...(lane === "quick" && changeKind && { change_kind: changeKind }),
       ...(fellThrough ? { fell_through: true } : {}),
       ...(row.retryOf ? { retry: true as const } : {}),
       ...(row.restarted ? { restarted: true as const } : {}),

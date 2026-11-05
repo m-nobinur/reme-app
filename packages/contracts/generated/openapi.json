@@ -13699,6 +13699,16 @@
               "quick"
             ]
           },
+          "change_kind": {
+            "type": "string",
+            "enum": [
+              "copy",
+              "style",
+              "section",
+              "photo",
+              "creative"
+            ]
+          },
           "fell_through": {
             "type": "boolean"
           },
@@ -24485,6 +24495,26 @@
                           "p95"
                         ],
                         "additionalProperties": false
+                      },
+                      "section": {
+                        "type": "object",
+                        "properties": {
+                          "p50": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "p95": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "p50",
+                          "p95"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -26448,6 +26478,16 @@
                             "enum": [
                               "full",
                               "quick"
+                            ]
+                          },
+                          "change_kind": {
+                            "type": "string",
+                            "enum": [
+                              "copy",
+                              "style",
+                              "section",
+                              "photo",
+                              "creative"
                             ]
                           },
                           "fell_through": {
@@ -44745,6 +44785,26 @@
                   "p95"
                 ],
                 "additionalProperties": false
+              },
+              "section": {
+                "type": "object",
+                "properties": {
+                  "p50": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "p95": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "p50",
+                  "p95"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -54167,6 +54227,16 @@
                       "quick"
                     ]
                   },
+                  "change_kind": {
+                    "type": "string",
+                    "enum": [
+                      "copy",
+                      "style",
+                      "section",
+                      "photo",
+                      "creative"
+                    ]
+                  },
                   "fell_through": {
                     "type": "boolean"
                   },
@@ -61461,6 +61531,16 @@
                     "quick"
                   ]
                 },
+                "change_kind": {
+                  "type": "string",
+                  "enum": [
+                    "copy",
+                    "style",
+                    "section",
+                    "photo",
+                    "creative"
+                  ]
+                },
                 "fell_through": {
                   "type": "boolean"
                 },
@@ -64024,6 +64104,26 @@
                 "additionalProperties": false
               },
               "quick": {
+                "type": "object",
+                "properties": {
+                  "p50": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "p95": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "p50",
+                  "p95"
+                ],
+                "additionalProperties": false
+              },
+              "section": {
                 "type": "object",
                 "properties": {
                   "p50": {
