@@ -195,15 +195,16 @@ test("photos preview, can be taken out, and are sent only on Upload", async ({
   await card.getByRole("button", { name: "Remove van.png" }).click()
   await expect(card.getByRole("img")).toHaveCount(0)
   await expect(upload).toBeDisabled()
-  await card.locator('input[type="file"]').setInputFiles([PNG])
+  // The catalog's upload refuses a file named broken, which shows the
+  // failure state: a reason, and the photos kept for another try.
+  await card
+    .locator('input[type="file"]')
+    .setInputFiles([{ ...PNG, name: "broken.png" }])
   await upload.click()
   await expect(card.getByRole("status")).toHaveText("Uploading 1 photo")
-  // The catalog's runtime takes no tool results, so the answer fails here
-  // after the upload, which shows the failure state: a reason, and the
-  // photos kept for another try.
   await expect(card.getByRole("alert")).toBeVisible()
   await expect(upload).toBeEnabled()
-  await expect(card.getByRole("img", { name: "van.png" })).toBeVisible()
+  await expect(card.getByRole("img", { name: "broken.png" })).toBeVisible()
 })
 
 test("the ready card sits at the end of the thread and never claims an approval early", async ({
@@ -373,6 +374,31 @@ test("a finished design tray reads back as chips: the logo, colours, a pair in i
   }
 })
 
+// A chip is a light tint of the bubble with a hairline edge, never a patch of
+// the page's own colour: dark holes in dark mode, white ones in light.
+for (const theme of ["light", "dark"]) {
+  test(`the design reply's chips tint the bubble, ${theme}`, async ({
+    page,
+  }) => {
+    await open(page, "DesignReply", 1024, theme)
+    const bubble = page.locator('[data-slot="aui_user-message-root"]')
+    const looks = await bubble
+      .locator(".rounded-full.border, img")
+      .evaluateAll((all) =>
+        all.map((each) => {
+          const style = getComputedStyle(each)
+          return [style.backgroundColor, style.borderTopColor]
+        })
+      )
+    expect(looks.length).toBeGreaterThan(4)
+    for (const [background, border] of looks) {
+      expect(background).toMatch(/ 0\.04\)$/)
+      if (border && !border.endsWith(" 0)")) expect(border).toMatch(/ 0\.1\)$/)
+    }
+    await axe(page, `DesignReply ${theme}`)
+  })
+}
+
 test("the quote form preview is the customers' form, live but never sent, and confirms like the card", async ({
   page,
 }) => {
@@ -418,6 +444,16 @@ test("the quote form preview is the customers' form, live but never sent, and co
   )
   await expect(modal).toContainText("The minibus seats up to 16")
   await expect(modal).toContainText("A line is enough")
+  // A text field's hint sits between its label and the input, as on the site.
+  const summary = modal.getByLabel("What do you need doing", { exact: true })
+  await expect(summary).toHaveAccessibleDescription("A line is enough")
+  const [label, line, input] = await Promise.all([
+    modal.getByText("What do you need doing", { exact: true }).boundingBox(),
+    modal.getByText("A line is enough").boundingBox(),
+    summary.boundingBox(),
+  ])
+  expect(label && line && label.y + label.height <= line.y).toBe(true)
+  expect(line && input && line.y + line.height <= input.y).toBe(true)
 
   // Three short options are buttons, with the hint under the label and above them.
   const parking = modal.getByRole("group", {
@@ -520,10 +556,10 @@ test("the card's Preview form shows the questions as the owner has left them, an
   await expect(modal.getByRole("group", { name: "Your details" })).toBeVisible()
   await expect(modal.getByLabel("Pick-up address")).toBeVisible()
   await expect(modal.getByLabel(/^Occasion/)).toHaveCount(0)
-  // The catalog's runtime takes no tool results, so reaching the card's own
-  // confirm shows as the error it throws.
-  const failed = page.waitForEvent("pageerror")
+  // The card's own confirm runs, and the catalog takes its answer quietly.
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
   await modal.getByRole("button", { name: "Looks good" }).click()
-  expect((await failed).message).toMatch(/does not support tool results/)
   await expect(modal).toHaveCount(0)
+  expect(errors).toEqual([])
 })

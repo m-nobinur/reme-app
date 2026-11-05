@@ -286,7 +286,19 @@ const submit = (tray: HTMLElement) =>
       ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
   )
 
-it("shows a card per name with its free endings, the first one Recommended", async () => {
+const names = (tray: HTMLElement) =>
+  [...tray.querySelectorAll<HTMLInputElement>("input[type=radio]")].map(
+    (option) => option.value
+  )
+/** Each name's row as the owner reads it, without what only a screen reader hears. */
+const rows = (tray: HTMLElement) =>
+  [...tray.querySelectorAll('[role="radiogroup"] > label')].map((row) =>
+    [...row.querySelectorAll("[aria-hidden] > span")]
+      .map((part) => part.textContent)
+      .join(" | ")
+  )
+
+it("lists six names at most: the recommended one first, then every .co.uk", async () => {
   const all = { "co.uk": FREE(8), com: FREE(12), uk: FREE(8) }
   const { tray } = await draw("find_domain", {
     args: {},
@@ -296,27 +308,31 @@ it("shows a card per name with its free endings, the first one Recommended", asy
       rows: ["a", "b", "c", "d", "e", "f"].map((stem) => ({
         stem,
         why: "x",
-        endings: all,
+        endings: stem === "b" ? { com: FREE(12) } : all,
       })),
     },
   })
-  const cards = tray.querySelectorAll('[role="radiogroup"] > fieldset')
-  expect(cards).toHaveLength(6)
+  expect(names(tray)).toEqual([
+    "a.co.uk",
+    "c.co.uk",
+    "d.co.uk",
+    "e.co.uk",
+    "f.co.uk",
+    "a.uk",
+  ])
+  expect(tray.textContent?.match(/Recommended/g)).toHaveLength(2)
   expect(
-    [...(cards[0]?.querySelectorAll("input[type=radio]") ?? [])].map(
-      (card) => (card as HTMLInputElement).value
-    )
-  ).toEqual(["a.co.uk", "a.uk", "a.com"])
-  expect(tray.textContent?.match(/Recommended/g)).toHaveLength(1)
+    tray.querySelectorAll('[role="radiogroup"] [data-slot="badge"]')
+  ).toHaveLength(1)
 })
 
-it("offers each free ending of a name, Reme's price only while buying here is on", async () => {
+it("says on each row that the name is free and what it costs, the recommended badge inside its row", async () => {
   const { tray } = await found()
-  const cards = tray.querySelectorAll('[role="radiogroup"] > fieldset')
-  // A taken ending is no pill; the Recommended pill is the first card's only extra.
-  expect([...cards].map((card) => card.textContent)).toEqual([
-    "sparklecleanRecommended. Short, and it is your name.sparkleclean.co.uk.uk£8 a year",
-    "sparklecleanbristolsparklecleanbristol.com",
+  // A taken ending is not offered.
+  expect(rows(tray)).toEqual([
+    "sparkleclean.co.uk | RecommendedAvailable£8 a year",
+    "sparkleclean.uk | Available£8 a year",
+    "sparklecleanbristol.com | Available£12 a year",
   ])
   expect(() => radio(tray, "sparkleclean.com, £12 a year")).toThrow()
   const options = [
@@ -326,23 +342,32 @@ it("offers each free ending of a name, Reme's price only while buying here is on
   expect(
     options.filter((option) => option.checked).map((o) => o.value)
   ).toEqual([NAME])
-  // The reason describes the first card's endings, and no other card's.
+  // The reason describes the recommended name, and no other.
   expect(
     options.map((option) => option.getAttribute("aria-describedby") !== null)
-  ).toEqual([true, true, false])
+  ).toEqual([true, false, false])
+  const why = options[0]?.getAttribute("aria-describedby") ?? ""
+  expect(document.getElementById(why)?.textContent).toBe(
+    "Recommended. Short, and it is your name."
+  )
 })
 
-it("puts a pound estimate beside Cloudflare's dollar price when a rate came with the names, and none beside GoDaddy", async () => {
+it("puts Cloudflare's dollar price with a pound estimate on each name's row when a rate came with the names", async () => {
   const { tray } = await draw("find_domain", {
     args: {},
     result: { ...FOUND_OFF, usd_gbp: 0.7457 },
   })
+  expect(rows(tray)).toEqual([
+    "sparkleclean.co.uk | RecommendedAvailableFrom $5.30 a year (about £4)",
+    "sparkleclean.uk | Available",
+    "sparkleclean.co | Available",
+    "sparklecleanbristol.com | AvailableFrom $10.46 a year (about £8)",
+  ])
+  // Said once: the row has the price, so Cloudflare's own line names the site.
   const where = () =>
     tray.querySelector('[data-slot="connect-rows"]')?.textContent
-  expect(where()).toContain("CloudflareFrom $5.30 a year (about £4)")
+  expect(where()).toContain("Cloudflarecloudflare.com")
   expect(where()).toContain("GoDaddygodaddy.com")
-  await act(async () => radio(tray, "sparklecleanbristol.com").click())
-  expect(where()).toContain("CloudflareFrom $10.46 a year (about £8)")
 })
 
 it("registrarPrice rounds the pounds to the nearest pound, at least £1, and shows dollars alone with no rate", () => {
@@ -366,7 +391,6 @@ it("with buying here off, says where to buy the picked name and connects it once
   const where = () =>
     tray.querySelector('[data-slot="connect-rows"]')?.textContent
   expect(where()).toContain("Buy it from")
-  expect(where()).toContain("CloudflareFrom $5.30 a year")
   expect(where()).toContain("GoDaddygodaddy.com")
   await act(async () => radio(tray, "sparkleclean.co").click())
   expect(where()).toContain("Cloudflarecloudflare.com")

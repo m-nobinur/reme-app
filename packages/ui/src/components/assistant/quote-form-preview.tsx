@@ -127,7 +127,7 @@ function Question({ field, scope }: { field: QuoteField; scope: string }) {
     return <Choices field={field} id={id} />
   }
   return (
-    <Field hint={field.hint} id={id} label={<Label field={field} />}>
+    <Field hint={field.hint} hintAbove id={id} label={<Label field={field} />}>
       {(wiring) => {
         if (field.type === "textarea") {
           return (

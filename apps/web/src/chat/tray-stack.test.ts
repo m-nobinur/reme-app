@@ -5,10 +5,8 @@ import {
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
 import { TrayApproval } from "@workspace/ui/components/assistant/decision"
-import {
-  Docked,
-  TraySlotProvider,
-} from "@workspace/ui/components/assistant/question-tray"
+import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
+import { DockedUpdates } from "@workspace/ui/components/assistant/update-deck"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
@@ -109,7 +107,7 @@ it("shows the newest item first and steps to the older one", async () => {
   expect(slot.childElementCount).toBe(0)
 })
 
-it("shows a message's item before a standing card drawn after the transcript", async () => {
+it("puts a question card in the slot and the update stack behind it", async () => {
   const chat = document.createElement("div")
   const slot = document.createElement("div")
   document.body.appendChild(chat)
@@ -135,17 +133,13 @@ it("shows a message's item before a standing card drawn after the transcript", a
           } as never,
           createElement("p", null, "rows")
         ),
-        // The website-ready card is drawn after the messages but is older.
-        createElement(
-          Docked,
-          {
-            key: "ready",
-            name: "site-ready-tray",
-            settled: true,
-            standing: true,
-          } as never,
-          createElement("p", null, "Publish")
-        ),
+        // The stack is drawn after the messages but stands behind them.
+        createElement(DockedUpdates, {
+          key: "stack",
+          updates: [
+            { id: "site", content: createElement("p", null, "Publish") },
+          ],
+        }),
       ])
     )
   }
@@ -155,7 +149,7 @@ it("shows a message's item before a standing card drawn after the transcript", a
     slot.querySelector<HTMLElement>(`[data-slot="${name}"]`)?.style.display !==
     "none"
   expect(visible("approval")).toBe(true)
-  expect(visible("site-ready-tray")).toBe(false)
-  expect(slot.textContent).toContain("1 of 2")
+  expect(visible("update-stack")).toBe(false)
+  expect(slot.textContent).toContain("1 of 2, also your updates")
   await act(async () => root.unmount())
 })

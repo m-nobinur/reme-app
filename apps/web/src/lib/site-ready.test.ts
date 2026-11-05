@@ -159,49 +159,67 @@ describe("awaitsReadyLine", () => {
   })
 })
 
-const DRAFT = {
-  approvalId: "a",
-  revisionId: "rev-a",
+const HELD = {
+  revision_id: "rev-a",
   version: 1,
-  assignmentId: null,
-  at: "2026-10-01T09:00:00Z",
+  assignment_id: "build-a",
+  ready_at: "2026-10-01T09:00:00Z",
 }
-
-it("keeps the last draft while an update build is at work, and lets it go after", () => {
-  const building = {
+const updating = (held: object | undefined, live: number | null = null) =>
+  ({
     attention: [],
-    open: true,
-    live: null,
-  } as unknown as Workspace
-  expect(draftReview(building, DRAFT)).toBe(DRAFT)
-  // Nothing building, or that version live, or nothing seen: no card.
-  expect(
-    draftReview({ ...building, open: false } as Workspace, DRAFT)
-  ).toBeNull()
-  expect(draftReview({ ...building, live: 1 } as Workspace, DRAFT)).toBeNull()
-  expect(draftReview(building, null)).toBeNull()
+    live,
+    builds: [
+      { assignment_id: "change", created_at: "2026-10-01T09:30:00Z", held },
+    ],
+  }) as unknown as Workspace
+
+it("reads the draft an update is being made to from the workspace, so a reload keeps it", () => {
+  expect(draftReview(updating(HELD))).toEqual({
+    approvalId: null,
+    revisionId: "rev-a",
+    version: 1,
+    assignmentId: "build-a",
+    at: "2026-10-01T09:00:00Z",
+  })
+  // Before it was ready, the change's own start stands in.
+  expect(draftReview(updating({ ...HELD, ready_at: undefined }))?.at).toBe(
+    "2026-10-01T09:30:00Z"
+  )
+  // No update, or that version live: no card.
+  expect(draftReview(updating(undefined))).toBeNull()
+  expect(draftReview(updating(HELD, 1))).toBeNull()
+  expect(draftReview(null)).toBeNull()
   // The update's own review replaces it.
-  const update = workspace([approval("b", 2, "2026-10-01T10:00:00Z")])
-  expect(draftReview(update, DRAFT)?.approvalId).toBe("b")
+  const update = {
+    ...updating(HELD),
+    attention: [approval("b", 2, "2026-10-01T10:00:00Z")],
+  } as Workspace
+  expect(draftReview(update)?.approvalId).toBe("b")
 })
 
-it("offers the web address, then Search Console, then nothing beside Publish", () => {
-  const standing = (segments: object[], host: string | null = null) =>
-    ({ host, activity: { standing: segments } }) as unknown as Workspace
-  const address = { kind: "address", state: "done", steps: [] }
+it("offers beside Publish what the update stack offers, and nothing before the journey is known", () => {
+  const journeyed = (journey: object | undefined) =>
+    ({ journey }) as unknown as Workspace
   expect(readySlot(null)).toBeNull()
-  expect(readySlot({ activity: undefined } as unknown as Workspace)).toBeNull()
-  expect(readySlot(standing([]))).toEqual({
+  expect(readySlot(journeyed(undefined))).toBeNull()
+  const at = (stage: string, google = "waiting_for_domain") =>
+    readySlot(
+      journeyed({
+        website: "draft_ready",
+        address: { stage, offer: stage === "unknown" ? "connect" : null },
+        google,
+      })
+    )
+  expect(at("unknown")).toEqual({
     label: "Connect",
-    ask: "Help me set up my web address",
+    ask: "Help me connect my domain",
     intent: "connect_address",
   })
-  expect(readySlot(standing([address]))).toEqual({
+  expect(at("live", "offerable")).toEqual({
     label: "Connect Search Console",
-    ask: "Connect Google to my website",
+    ask: "Help me connect Google Search Console",
     intent: "connect_google",
   })
-  expect(
-    readySlot(standing([address, { kind: "google", state: "done", steps: [] }]))
-  ).toBeNull()
+  expect(at("live", "connected")).toBeNull()
 })

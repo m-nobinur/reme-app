@@ -487,6 +487,7 @@ function workspaceOf(
     derivedReminders: status.reminders.derived,
     reminderNotes: status.reminders.notes,
     timeZone: status.time_zone ?? null,
+    journey: status.journey,
     etag,
   }
 }

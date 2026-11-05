@@ -1833,7 +1833,7 @@ const TRAY_ITEMS: Readonly<Record<string, string>> = {
   "ask-design": "your design questions",
   "build-questions": "your build's questions",
   "buy-domain": "your domain payment",
-  "site-ready-tray": "your website to publish",
+  "update-stack": "your updates",
   "approval-request": "an approval",
   "answer-question": "an answer to send",
   "create-reminder": "a reminder",

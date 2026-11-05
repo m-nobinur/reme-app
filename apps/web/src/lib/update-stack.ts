@@ -1,0 +1,84 @@
+import type { Journey } from "@workspace/contracts"
+import type { AskIntent } from "@workspace/ui/lib/activity-copy"
+
+/** What a Connect in the stack says for the owner, and the skill its intent loads. */
+export const CONNECT_ADDRESS = {
+  ask: "Help me connect my domain",
+  intent: "connect_address",
+} as const
+export const CONNECT_GOOGLE = {
+  ask: "Help me connect Google Search Console",
+  intent: "connect_google",
+} as const
+
+/** The update stack's own item for the website journey: the address, or Google once there is one. */
+export type JourneyItem = {
+  id: "address" | "google"
+  title: string
+  label: string
+  ask: string
+  intent: AskIntent
+  /** Before the site card: a name the owner went to buy elsewhere, or one the registry shows they bought. */
+  lead: boolean
+}
+
+/**
+ * The journey's item in the update stack, read only from the journey the
+ * workspace sends, so the stack, the draft-ready line and the assistant
+ * agree. The address item stands wherever the journey offers a Connect
+ * (`offer`, the draft-ready line's own rule) or the owner skipped it, once
+ * there is a site to put it on (`site`: a draft on screen, or one ready or
+ * live). Google follows once the address is connecting or live, until it is
+ * connected or turned down.
+ */
+export function journeyItem(
+  journey: Journey | undefined,
+  site: boolean
+): JourneyItem | null {
+  if (!journey) return null
+  const { stage, name, offer } = journey.address
+  const address = (title: string, label: string, lead = false) =>
+    ({ id: "address", title, label, lead, ...CONNECT_ADDRESS }) as const
+  if (stage === "buying_elsewhere" && name) {
+    return address(`Finished buying ${name}?`, "Connect it", true)
+  }
+  if (offer === "connect_bought" && name) {
+    return address(`${name} is ready to connect`, "Connect", true)
+  }
+  const drawn =
+    site || journey.website === "draft_ready" || journey.website === "published"
+  if (drawn && offer) return address("Choose your web address", "Connect")
+  if (drawn && stage === "put_off") {
+    return address("Connect your domain", "Connect")
+  }
+  if (
+    (stage === "connecting" || stage === "live") &&
+    journey.google !== "connected" &&
+    journey.google !== "declined"
+  ) {
+    return {
+      id: "google",
+      title: "Get found on Google",
+      label: "Connect Search Console",
+      lead: false,
+      ...CONNECT_GOOGLE,
+    }
+  }
+  return null
+}
+
+/**
+ * The stack's order: a lead item first, then the site card, then what
+ * waits in between (a new chat's questions, approvals and reminders), then
+ * the journey's other item.
+ */
+export const stackOrder = <T>(
+  item: { lead: boolean; value: T } | null,
+  site: readonly T[],
+  rest: readonly T[] = []
+): T[] => [
+  ...(item?.lead ? [item.value] : []),
+  ...site,
+  ...rest,
+  ...(item && !item.lead ? [item.value] : []),
+]

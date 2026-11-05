@@ -56,11 +56,10 @@ import { domainPurchase } from "./domain-purchase"
 import { asked, missingConversations, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
 import { SendAsked } from "./send-asked"
-import { ChatSiteReadyCard } from "./site-ready"
 import { StillWorking } from "./still-working"
 import { trayServices } from "./tray-services"
 import { alwaysTapped } from "./turn"
-import { ChatUpdates } from "./updates"
+import { ChatUpdates, ConversationUpdates } from "./updates"
 import { uploadPhotos } from "./upload"
 
 const frame = getRouteApi("/app")
@@ -260,7 +259,7 @@ export function ChatPage() {
                             after={
                               <>
                                 <StillWorking />
-                                <ChatSiteReadyCard />
+                                <ConversationUpdates />
                                 <BuildStopped />
                               </>
                             }
