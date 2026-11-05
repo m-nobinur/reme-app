@@ -1,16 +1,20 @@
 import {
   ADDRESS_ASK,
+  AddressStageName,
   addressQuestions,
   type CosWorkspace,
   type OwnerTask,
 } from "@workspace/contracts"
+import { type JourneyInput, journeyOf, offerOf } from "@workspace/db"
 import { describe, expect, it } from "vitest"
 import { contextOf } from "../src/cos/agent.ts"
 import { CONTEXT_POLICY, deriveCosMessages } from "../src/cos/history.ts"
 import {
+  ASIDE_LINE,
   cardState,
   handoverNote,
   openItems,
+  RETURN_LINE,
   sessionNote,
   skillsDue,
 } from "../src/cos/notes.ts"
@@ -24,13 +28,17 @@ const EMPTY: CosWorkspace = {
   missing_facts: [],
 }
 
-const step = (name: string, state: string, note: string | null = null) => ({
+const step = (
+  name: string,
+  state: string,
+  changed_at: string | null = null
+) => ({
   step: name,
   state,
-  note,
+  note: null,
   blocked_on: state === "blocked" ? "owner_action" : null,
   deadline: null,
-  changed_at: null,
+  changed_at,
 })
 const address = (over: Record<string, unknown>): OwnerTask =>
   ({
@@ -108,7 +116,7 @@ describe("the open items note", () => {
       steps: [
         step("find_out", "done"),
         step("choose", "done"),
-        step("purchase", "blocked", "buying sparkleclean.co.uk"),
+        step("purchase", "blocked"),
       ],
     })
     const text = openItems(
@@ -141,6 +149,12 @@ describe("the open items note", () => {
             state: "awaiting_dns",
             last_check: null,
           },
+        ],
+        tasks: [
+          address({
+            detail: { name: "sparkleclean.co.uk" },
+            steps: [step("find_out", "done"), step("records", "blocked")],
+          }),
         ],
       },
       null,
@@ -310,18 +324,203 @@ describe("the skills code loads", () => {
 })
 
 describe("the session-start note", () => {
-  it("carries the last summary as data, and one proactive line only while the address is open, not put off, and a site exists", () => {
-    const live = { ...EMPTY, site: { host: "x.reme.site", live_version: 1 } }
-    const note = sessionNote(live, "Talked about <b>prices</b>.")
+  it("carries the last summary as data, and leaves bringing the address up to the journey", () => {
+    const note = sessionNote("Talked about <b>prices</b>.")
     expect(note[0]).toMatch(/This is a new conversation/)
     expect(note.join("\n")).toContain(
       '<data source="summary" taint="inferred untrusted_input">'
     )
     expect(note.join("\n")).toContain("\\u003cb>prices")
-    expect(note.at(-1)).toMatch(/Want your own address\?[^\n]*call put_off/)
-    // Put off, or nothing built yet: no proactive line.
-    const later = address({ state: "later", later_until: NOW.toISOString() })
-    expect(sessionNote({ ...live, tasks: [later] }, null)).toHaveLength(1)
-    expect(sessionNote(EMPTY, null)).toHaveLength(1)
+    expect(note.join("\n")).not.toMatch(/web address/)
+    expect(sessionNote(null)).toHaveLength(1)
+  })
+})
+
+describe("the journey's lines", () => {
+  const HERE = "11111111-1111-4111-8111-111111111111"
+  const DRAFT = {
+    ...EMPTY,
+    approvals: [{ version: 1, expires_at: NOW.toISOString() }],
+  }
+  const ago = (minutes: number) =>
+    new Date(NOW.getTime() - minutes * 60_000).toISOString()
+  const card = { answer: null, waiting: "have" as const, shown_at: ago(5) }
+  const turn = (over: Partial<JourneyInput> = {}, workspace = DRAFT) => {
+    const journey = journeyOf({
+      tasks: workspace.tasks ?? [],
+      website: {
+        live: false,
+        building: false,
+        drafts: [{ id: "r1", at: ago(20) }],
+      },
+      now: NOW,
+      ...over,
+    })
+    return {
+      journey,
+      lines: openItems(
+        workspace,
+        over.card ?? null,
+        NOW,
+        "Europe/London",
+        journey
+      ),
+    }
+  }
+  const sitting = {
+    conversation: HERE,
+    recent: [
+      { at: ago(1), conversation: HERE },
+      { at: ago(10), conversation: HERE },
+    ],
+  }
+
+  const STAGES: Record<AddressStageName, OwnerTask[]> = {
+    none: [],
+    unknown: [address({ steps: [step("find_out", "pending")] })],
+    put_off: [
+      address({ state: "later", later_until: "2026-11-12T10:00:00.000Z" }),
+    ],
+    declined: [address({ state: "declined" })],
+    choosing: [
+      address({ steps: [step("find_out", "done"), step("choose", "blocked")] }),
+    ],
+    paying: [
+      address({
+        detail: { name: "x.co.uk" },
+        steps: [{ ...step("purchase", "blocked"), blocked_on: "purchase" }],
+      }),
+    ],
+    buying_elsewhere: [
+      address({
+        detail: { name: "x.co.uk", origin: "buying_elsewhere" },
+        steps: [step("purchase", "blocked")],
+      }),
+    ],
+    bought: [
+      address({
+        detail: { name: "x.co.uk", origin: "buying_elsewhere" },
+        steps: [step("purchase", "done")],
+      }),
+    ],
+    connecting: [
+      address({
+        detail: { name: "x.co.uk" },
+        steps: [step("find_out", "done")],
+      }),
+    ],
+    live: [address({ state: "done", detail: { name: "x.co.uk" } })],
+  }
+
+  it("gives an open address its next step and skill part, exactly where the draft-ready line offers Connect", () => {
+    const parts: Partial<Record<AddressStageName, string>> = {
+      none: "Next: view web-address.",
+      unknown: "Next: view web-address.",
+      choosing: "Next: view web-address, buy-new.",
+      buying_elsewhere: "Next: view web-address, bought-elsewhere.",
+      bought: "Next: view web-address, connect-own.",
+    }
+    for (const stage of AddressStageName.options) {
+      const { journey, lines } = turn(
+        { tasks: STAGES[stage] },
+        { ...DRAFT, tasks: STAGES[stage] }
+      )
+      expect(journey.address.stage, stage).toBe(stage)
+      const line = lines.find((l) => l.startsWith("- Web address:")) ?? ""
+      expect(line.includes("Next:"), stage).toBe(offerOf(stage) !== null)
+      if (parts[stage])
+        expect(line.endsWith(parts[stage] as string), stage).toBe(true)
+    }
+    const yes = openItems(EMPTY, { answer: "yes", waiting: null }, NOW)
+    expect(yes.join("\n")).toMatch(/Next: view web-address, connect-own\./)
+  })
+
+  it("points Google's next step at its connect part only once it can be offered", () => {
+    const connecting = { ...DRAFT, tasks: STAGES.connecting }
+    expect(
+      turn({ tasks: STAGES.connecting }, connecting).lines.join("\n")
+    ).toMatch(/it can be offered now[^\n]*Next: view google-search, connect\./)
+    expect(turn().lines.join("\n")).not.toMatch(/google-search/)
+  })
+
+  it("brings a waiting card back after an aside, twice a sitting, then leaves it to the stack", () => {
+    const first = turn({ card, visit: sitting })
+    expect(first.lines).toContain(ASIDE_LINE)
+    expect(first.lines).toContain(
+      "- On screen: the address card asks whether the owner has a web address; they answer it there."
+    )
+    const latch = (minutes: number) => ({
+      key: `bring_back:${ago(minutes)}`,
+      at: ago(minutes),
+    })
+    expect(turn({ card, visit: sitting, latches: [latch(2)] }).lines).toContain(
+      ASIDE_LINE
+    )
+    expect(
+      turn({ card, visit: sitting, latches: [latch(3), latch(2)] }).lines
+    ).not.toContain(ASIDE_LINE)
+    // A turn nobody typed brings nothing back.
+    expect(turn({ card }).lines).not.toContain(ASIDE_LINE)
+  })
+
+  it("settles the card once the owner answers it in words", () => {
+    const { lines } = turn(
+      { card, visit: sitting, tasks: STAGES.connecting },
+      { ...DRAFT, tasks: STAGES.connecting }
+    )
+    expect(lines.join("\n")).toMatch(/No question card waits on screen/)
+    expect(lines).not.toContain(ASIDE_LINE)
+  })
+
+  it("brings an open address up once on a return, and never after Skip or No", () => {
+    const back = {
+      conversation: HERE,
+      recent: [{ at: ago(180), conversation: HERE }],
+    }
+    expect(turn({ visit: back }).lines).toContain(RETURN_LINE)
+    for (const stage of ["put_off", "declined"] as const)
+      expect(
+        turn(
+          { visit: back, tasks: STAGES[stage] },
+          { ...DRAFT, tasks: STAGES[stage] }
+        ).lines,
+        stage
+      ).not.toContain(RETURN_LINE)
+  })
+
+  it("tells what changed while the owner was away in one line, once", () => {
+    const back = {
+      conversation: HERE,
+      recent: [{ at: ago(180), conversation: HERE }],
+    }
+    const bought = [
+      address({
+        detail: { name: "sparkleclean.co.uk", origin: "buying_elsewhere" },
+        steps: [step("purchase", "done", ago(10))],
+      }),
+    ]
+    const away = turn(
+      { visit: back, tasks: bought },
+      { ...DRAFT, tasks: bought }
+    )
+    expect(away.lines).toContain(
+      "The owner was last here 3 hours ago. Since then: the draft became ready at 9:40 AM, and sparkleclean.co.uk shows as registered. Answer their message first, then mention what changed in one line."
+    )
+    const told = away.journey.record.map((key) => ({
+      key,
+      at: NOW.toISOString(),
+    }))
+    expect(
+      turn(
+        { visit: back, tasks: bought, latches: told },
+        { ...DRAFT, tasks: bought }
+      ).lines.join("\n")
+    ).not.toMatch(/last here/)
+    expect(
+      turn(
+        { visit: sitting, tasks: bought },
+        { ...DRAFT, tasks: bought }
+      ).lines.join("\n")
+    ).not.toMatch(/last here/)
   })
 })

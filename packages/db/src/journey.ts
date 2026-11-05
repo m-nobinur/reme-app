@@ -29,12 +29,10 @@ export type OwnerVisit = {
 }
 
 /**
- * A latch is written in the turn's transaction, before the owner's message
- * that starts a sitting is stored, so it may read a moment older than it.
+ * A journey ledger row (`deliveries`, key without its org prefix). It is
+ * written in the turn's transaction, as the owner's message is, so a latch
+ * and the message that began its sitting share one `now()`.
  */
-const LATCH_SLACK_MS = 60_000
-
-/** A journey ledger row (`deliveries`, key without its org prefix). */
 export type Latch = { key: string; at: string }
 
 export type JourneyInput = {
@@ -219,7 +217,7 @@ export function journeyOf(input: JourneyInput): JourneyState {
   const waiting =
     card?.waiting === "have" && open
       ? "have"
-      : card?.waiting === "name" && stage === "unknown"
+      : card?.waiting === "name" && open
         ? "name"
         : null
   const sitting = visit ? sittingOf(visit, now) : null
@@ -230,7 +228,7 @@ export function journeyOf(input: JourneyInput): JourneyState {
     ? latches.filter(
         (l) =>
           l.key.startsWith("bring_back:") &&
-          Date.parse(l.at) >= Date.parse(sitting.since) - LATCH_SLACK_MS
+          Date.parse(l.at) >= Date.parse(sitting.since)
       ).length
     : 0
   const limit =

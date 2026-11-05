@@ -32,11 +32,14 @@ import {
   chiefStaffId,
   conversationMessages,
   conversations,
+  deliveries,
   eq,
   events,
+  journeyOf,
   lowerNextDue,
   newUlid,
   type OrgScopedDb,
+  openApprovals,
   openTask,
   orgs,
   putOff,
@@ -98,6 +101,7 @@ import {
   sessionNote,
   skillsDue,
   TRIGGER_LINES,
+  websiteFrom,
 } from "./cos/notes.ts"
 import { retrying } from "./cos/retry.ts"
 import {
@@ -1943,8 +1947,12 @@ async function addressCardOf(
   db: OrgScopedDb,
   id: string
 ): Promise<AddressCard | null> {
-  const [row] = await db.execute<{ here: boolean; data: unknown }>(sql`
-    select m.conversation_id = ${id} as here, p->'data' as data
+  const [row] = await db.execute<{
+    here: boolean
+    data: unknown
+    at: string
+  }>(sql`
+    select m.conversation_id = ${id} as here, p->'data' as data, m.created_at as at
     from ${conversationMessages} m
     cross join lateral jsonb_array_elements(m.content->'parts') p
     where m.content->'parts' @> '[{"type":"data-build_questions","data":{"kind":"address"}}]'::jsonb
@@ -1952,7 +1960,58 @@ async function addressCardOf(
     order by m.seq desc
     limit 1`)
   const stack = BuildQuestionsPart.shape.data.safeParse(row?.data).data
-  return row && stack ? cardState(stack, row.here) : null
+  return row && stack
+    ? {
+        ...cardState(stack, row.here),
+        shown_at: new Date(row.at).toISOString(),
+      }
+    : null
+}
+
+/** A journey latch's ledger key: a `deliveries` row that sends nothing, as the heartbeat's are. */
+const latchKey = (key: string) =>
+  sql`'journey:' || current_setting('app.org_id') || ':' || ${key}`
+
+/**
+ * What `journeyOf` reads beyond the workspace for a turn the owner typed:
+ * the drafts waiting with when each opened, the owner's earlier messages for
+ * the sitting, and the journey's latches from the ledger.
+ */
+async function journeyRows(db: OrgScopedDb, id: string, byOwner: boolean) {
+  const [drafts, recent, latches] = await Promise.all([
+    openApprovals(db),
+    byOwner
+      ? db.execute<{ at: string; conversation: string }>(sql`
+          select created_at as at, conversation_id as conversation
+          from ${conversationMessages}
+          where content->>'role' = 'user'
+          order by seq desc limit 50`)
+      : [],
+    byOwner
+      ? db.execute<{ key: string; at: string }>(sql`
+          select substr(key, length(${latchKey("")}) + 1) as key, created_at as at
+          from ${deliveries}
+          where key like ${latchKey("%")}
+          order by created_at desc limit 100`)
+      : [],
+  ])
+  const iso = (at: string) => new Date(at).toISOString()
+  return {
+    drafts: drafts.map(({ row }) => ({
+      id: row.id,
+      at: row.requestedAt.toISOString(),
+    })),
+    visit: byOwner
+      ? {
+          conversation: id,
+          recent: [...recent].map((m) => ({
+            at: iso(m.at),
+            conversation: m.conversation,
+          })),
+        }
+      : null,
+    latches: [...latches].map((l) => ({ key: l.key, at: iso(l.at) })),
+  }
 }
 
 /**
@@ -2001,7 +2060,31 @@ export async function turnNotes(
   taint: TaintLabel[]
 }> {
   const card = await addressCardOf(db, id)
-  const lines = openItems(workspace, card, new Date(), zone)
+  const now = new Date()
+  const { drafts, visit, latches } = await journeyRows(db, id, said !== null)
+  const journey = journeyOf({
+    tasks: workspace.tasks ?? [],
+    website: websiteFrom(workspace, drafts),
+    card: card && { ...card, shown_at: card.shown_at ?? now.toISOString() },
+    visit,
+    latches,
+    now,
+  })
+  const lines = openItems(workspace, card, now, zone, journey)
+  if (journey.record.length > 0) {
+    await db
+      .insert(deliveries)
+      .values(
+        journey.record.map((key) => ({
+          orgId: sql`current_setting('app.org_id')::uuid`,
+          key: sql`${latchKey(key)}`,
+          channel: "in_app" as const,
+          state: "sent" as const,
+          sentAt: now,
+        }))
+      )
+      .onConflictDoNothing()
+  }
   const [kind] = fresh
     ? await db
         .select({ kind: conversations.kind })
@@ -2037,7 +2120,7 @@ export async function turnNotes(
       where type = 'cos.compaction' and session_id <> ${id}
       order by seq desc limit 1`)
     return {
-      lines: [...lines, ...sessionNote(workspace, previous?.summary ?? null)],
+      lines: [...lines, ...sessionNote(previous?.summary ?? null)],
       events: [],
       skills,
       skillLine,

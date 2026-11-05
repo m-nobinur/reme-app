@@ -213,7 +213,7 @@ describe("journeyOf: bring-backs and their latches", () => {
     ).toBeNull()
   })
 
-  it("counts the latch written just before the message that began the sitting", () => {
+  it("counts the latch written with the message that began the sitting", () => {
     const begun = {
       conversation: HERE,
       recent: [
@@ -221,17 +221,20 @@ describe("journeyOf: bring-backs and their latches", () => {
         { at: ago(2), conversation: HERE },
       ],
     }
+    const shown = card({ shown_at: ago(2) })
+    expect(
+      journey({ card: shown, visit: begun, latches: [latch(2), latch(1)] })
+        .bring_back
+    ).toBeNull()
+    // One from an earlier sitting a moment before does not count.
     const before = {
       key: "bring_back:x",
       at: new Date(Date.parse(ago(2)) - 50).toISOString(),
     }
     expect(
-      journey({
-        card: card({ shown_at: ago(2) }),
-        visit: begun,
-        latches: [before, latch(1)],
-      }).bring_back
-    ).toBeNull()
+      journey({ card: shown, visit: begun, latches: [before, latch(1)] })
+        .bring_back
+    ).toBe("aside")
   })
 
   it("brings it back once in a new sitting", () => {

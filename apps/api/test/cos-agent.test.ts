@@ -24,6 +24,7 @@ import {
   approvalGrants,
   assignments,
   conversationMessages,
+  deliveries,
   emailMessageId,
   eq,
   events,
@@ -108,6 +109,7 @@ import {
   toolErrorText,
 } from "../src/cos/agent.ts"
 import { sha256 } from "../src/cos/history.ts"
+import { RETURN_LINE } from "../src/cos/notes.ts"
 import { retrying } from "../src/cos/retry.ts"
 import { knownZone, wallToUtc } from "../src/cos/time.ts"
 import { ToolFailed } from "../src/cos/tools.ts"
@@ -3893,6 +3895,37 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const next = scripted(said("Still quiet."))
     await turn(me, typed(id, "And now?", "ask"), { model: next.model })
     expect(JSON.stringify(next.sent[0]?.prompt)).toContain("SECRET-REASONING-5")
+  })
+
+  it("brings an open address up once on a return, and records the latch so the next turn does not", async () => {
+    const who = await owner(kit, url as string, "cos-journey")
+    const building = await seed(kit, who).assignment("implementing")
+    const first = await conversation(who)
+    const reply = () => ({ model: scripted(said("Here you go.")).model })
+    await turn(who, typed(first, "Morning."), reply())
+    // A new conversation is a new sitting.
+    const second = await conversation(who)
+    for (const text of ["Hello again.", "And another thing."])
+      await turn(who, typed(second, text), reply())
+    const texts = async (id: string) =>
+      (await logOf(id))
+        .filter((e) => e.type === "cos.context")
+        .map((e) => String(e.payload.text))
+    const said1 = await texts(first)
+    const said2 = await texts(second)
+    expect(said1.map((t) => t.includes(RETURN_LINE))).toEqual([true])
+    expect(said2.map((t) => t.includes(RETURN_LINE))).toEqual([true, false])
+    const latches = await kit.withOrg({ orgId: who.orgId }, (db) =>
+      db
+        .select({ key: deliveries.key })
+        .from(deliveries)
+        .where(sql`${deliveries.key} like 'journey:%'`)
+    )
+    expect(latches.map((l) => l.key.split(":")[2])).toEqual([
+      "bring_back",
+      "bring_back",
+    ])
+    await seed(kit, who).state(building, "cancelled")
   })
 
   it("counts a turn's spend on the day the database recorded it, not the day the Worker says", async () => {
