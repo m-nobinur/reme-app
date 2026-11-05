@@ -347,12 +347,14 @@ const OfferGrant: ToolCallMessagePartComponent = (props) => (
 
 /**
  * Tools with no card and no working line: what was remembered is a chip in
- * the same turn, and Reme's own words say an offer is put off.
+ * the same turn, Reme's own words say an offer is put off, and quick replies
+ * sit above the composer (`DecisionPills`).
  */
 export const COS_QUIET: Record<string, ToolCallMessagePartComponent> = {
   memory: Remembered,
   remember: Remembered,
   put_off: () => null,
+  offer_choices: () => null,
 }
 
 /** The reads, which the thread may fold together, by tool name. */

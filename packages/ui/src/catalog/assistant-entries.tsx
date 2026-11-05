@@ -2252,6 +2252,36 @@ const answerSlowly = () =>
   new Promise<null>((done) => setTimeout(() => done(null), 400))
 
 /** Messages the assistant posted on its own, each with the button it can carry. */
+/** A decision the CoS ended its reply on, with the pills it offered. */
+const DECISION: ThreadMessageLike[] = [
+  ask("Hi, any news?"),
+  {
+    content: [
+      {
+        text: "Your website is ready to go live. Did you manage to buy brightwaycleaning.co.uk?",
+        type: "text",
+      },
+      {
+        args: {
+          choices: [
+            { label: "Bought it", send: "I've bought brightwaycleaning.co.uk" },
+            {
+              label: "Not yet",
+              send: "I haven't bought brightwaycleaning.co.uk yet",
+            },
+          ],
+        },
+        result: { outcome: "offered" },
+        toolCallId: "call_choices",
+        toolName: "offer_choices",
+        type: "tool-call",
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
 const POSTED: ThreadMessageLike[] = [
   ask("Is my domain connected?"),
   {
@@ -3586,6 +3616,11 @@ const assistantCatalog = [
       ),
     })
   ),
+  // The newest decision's quick replies, the recommendation first.
+  {
+    name: "DecisionPills",
+    render: () => <OwnerThread height="h-[32rem]" messages={DECISION} />,
+  },
   // The question stack and the provider that gives it the app's answer call.
   ...(["BuildQuestionsUI", "AnswerBuildQuestionProvider"] as const).map(
     (name) => ({
