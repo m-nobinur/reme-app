@@ -113,6 +113,8 @@ const ID = FIXTURE.conversation.id
 let stored: unknown
 let turns: (() => Promise<Response>)[] = []
 let sent: unknown[] = []
+/** How many conversations a new chat stored. */
+let created = 0
 /** Each thumb the api was sent, and how it answers the next one. */
 let rated: { body: unknown; key: string | null }[] = []
 let rateStatus = 204
@@ -149,6 +151,7 @@ beforeEach(() => {
   }
   process.env.REME_API_URL = "https://api.test"
   sent = []
+  created = 0
   turns = []
   rated = []
   rateStatus = 204
@@ -165,6 +168,11 @@ beforeEach(() => {
       const path = new URL(url).pathname
       if (hold && path.startsWith("/conversations")) await hold
       if (path === "/org") return Response.json(FIXTURE.org)
+      // A new chat's first send stores it as the fixture's conversation.
+      if (path === "/conversations" && init?.method === "POST") {
+        created += 1
+        return Response.json(FIXTURE.conversation, { status: 201 })
+      }
       if (path === "/conversations") return Response.json(FIXTURE.list)
       if (path === `/conversations/${ID}`) {
         return Response.json(FIXTURE.conversation)
@@ -763,6 +771,53 @@ it("sends a panel action into the stored conversation once its history is in, on
   // A re-render with the same press sends nothing more.
   await act(async () => root.render(createElement(Chat)))
   expect(sent).toHaveLength(1)
+})
+
+/** A new chat, as `/app` mounts it: no stored thread until the first send stores one. */
+function NewChat() {
+  const runtime = useRemoteThreadListRuntime({
+    adapter: conversationList,
+    runtimeHook: useThreadRuntime,
+  })
+  return createElement(
+    AssistantRuntimeProvider,
+    { runtime },
+    createElement(SendAsked, { conversation: undefined, intent }),
+    createElement(Thread, { autoFocus: false })
+  )
+}
+
+it("sends a Connect pressed on a new chat's stack once, with its intent, into the conversation it starts", async () => {
+  stored = { messages: [] }
+  location.state = {
+    send: {
+      text: "Help me connect my domain",
+      key: "press-new-chat",
+      intent: "connect_address",
+    },
+  }
+  turns.push(sse(FIXTURE.streams.typed))
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  mounted.push({ root, container })
+  await act(async () => root.render(createElement(NewChat)))
+  await vi.waitFor(() => expect(sent).toHaveLength(1))
+  expect(created).toBe(1)
+  expect(sent[0]).toMatchObject({
+    conversation_id: ID,
+    intent: "connect_address",
+    turn: { kind: "message", text: "Help me connect my domain" },
+  })
+  // Taken by that send, so the api loads the skill for it once.
+  expect(intent.current).toBeUndefined()
+  await act(async () => root.render(createElement(NewChat)))
+  // The next message the owner types carries no intent of its own.
+  turns.push(sse(FIXTURE.streams.typed))
+  await type(container, "Thanks")
+  await vi.waitFor(() => expect(sent).toHaveLength(2))
+  expect(sent[1]).not.toHaveProperty("intent")
+  expect(created).toBe(1)
 })
 
 it("renders a recorded answer turn the way a reload of the stored row does", async () => {
