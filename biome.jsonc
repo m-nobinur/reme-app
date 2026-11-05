@@ -16,7 +16,10 @@
       "!**/*.gen.ts",
       "!**/worker-configuration.d.ts",
       "!packages/db/drizzle",
-      "!packages/contracts/generated/openapi.json"
+      "!packages/contracts/generated/openapi.json",
+      // Gitignored notes and reference clones, some with their own Biome root
+      // config, which stops a run that is not reading .gitignore.
+      "!!.local"
     ]
   },
   "formatter": {
