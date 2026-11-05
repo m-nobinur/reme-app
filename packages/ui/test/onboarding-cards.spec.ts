@@ -443,6 +443,16 @@ test("the quote form preview is the customers' form, live but never sent, and co
   )
   await expect(modal).toContainText("The minibus seats up to 16")
   await expect(modal).toContainText("A line is enough")
+  // A text field's hint sits between its label and the input, as on the site.
+  const summary = modal.getByLabel("What do you need doing", { exact: true })
+  await expect(summary).toHaveAccessibleDescription("A line is enough")
+  const [label, line, input] = await Promise.all([
+    modal.getByText("What do you need doing", { exact: true }).boundingBox(),
+    modal.getByText("A line is enough").boundingBox(),
+    summary.boundingBox(),
+  ])
+  expect(label && line && label.y + label.height <= line.y).toBe(true)
+  expect(line && input && line.y + line.height <= input.y).toBe(true)
 
   // Three short options are buttons, with the hint under the label and above them.
   const parking = modal.getByRole("group", {
