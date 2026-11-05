@@ -40,7 +40,14 @@ test("the contact tray checks the phone, then offers the sign-in email on the la
   const phone = contact.getByRole("textbox", { name: "Phone number" })
   await expect(phone).toBeFocused()
   await expect(phone).toHaveAttribute("placeholder", "+44 7700 900123")
+  // Typing a number that is still wrong keeps the error; a valid one clears it
+  // at once, before Next.
+  await phone.fill("0770")
+  await expect(contact.getByRole("alert")).toHaveText([
+    "Enter a valid phone number.",
+  ])
   await phone.fill("07700 900123")
+  await expect(contact.getByRole("alert")).toHaveCount(0)
   // Enter in the field moves on, as Next does.
   await page.keyboard.press("Enter")
   await expect(contact.getByText("2 of 2", { exact: true })).toBeVisible()

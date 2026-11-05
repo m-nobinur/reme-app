@@ -378,6 +378,13 @@ function DetailsTray({
     setProblem("error" in result ? result.error : null)
   }
 
+  // An error shown stays only while the field is wrong: typing a valid value clears it.
+  const clearWhenValid = (event: FormEvent<HTMLFormElement>) => {
+    if (!problem || !(event.target instanceof HTMLInputElement)) return
+    if (isPick(key) || event.target.closest("[hidden]")) return
+    if (!("error" in read(key, values()))) setProblem(null)
+  }
+
   /** The keys whose field in `set` holds something other than the card offered. */
   const changedIn = (set: Record<string, string>) =>
     keys.filter((each) => {
@@ -468,6 +475,7 @@ function DetailsTray({
         id={`${id}-form`}
         noValidate
         onBlur={checkOnLeave}
+        onInput={clearWhenValid}
         onChange={(event) => {
           // Stored only, not state: the fields already hold what is typed.
           save({ page, values: values() })
