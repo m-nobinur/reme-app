@@ -35,6 +35,7 @@ import {
 } from "./agent.ts"
 import {
   CONTEXT_POLICY,
+  continuable,
   deriveCosMessages,
   type SessionEvent,
 } from "./history.ts"
@@ -218,7 +219,7 @@ export async function streamTurn(
     // which a continuation must not do: the owner's chat follows a new one.
     originalMessages: (input.attempt || input.post
       ? []
-      : input.uiMessages) as never,
+      : continuable(input.uiMessages)) as never,
     generateMessageId: input.newMessageId,
     onError: (error) => {
       // The SDK reports each error chunk a second time, as an Error holding
@@ -444,8 +445,17 @@ export async function streamTurn(
             code: "cos.close_failed",
             turn_id: run.turn.turnId,
             error: error instanceof Error ? error.name : "unknown",
+            issues:
+              error instanceof Error && "issues" in error
+                ? error.issues
+                : undefined,
           })
         )
+        // Free the session now: left open, the owner's next message waits
+        // out the lapse behind "still working on your last message".
+        await run.kit
+          .withOrg({ orgId: run.turn.orgId }, (db) => abandonTurn(db, run.turn))
+          .catch(() => undefined)
         controller.enqueue({ type: "error", errorText: ERROR_TEXT })
       }
       controller.close()

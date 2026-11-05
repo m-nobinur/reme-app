@@ -334,6 +334,14 @@ export function loggedMessages(
   return [...byId.values()]
 }
 
+/**
+ * The history a reply may continue: no message built from an event. A code
+ * load ends the history on an assistant message whose id is no message id,
+ * and a reply continued in it could not be logged (`cos.close_failed`).
+ */
+export const continuable = <M extends { id: string }>(messages: M[]) =>
+  messages.filter((message) => !message.id.startsWith(EVENT_ID))
+
 /** Whether the owner wrote `message`: a user message that is no event. */
 const byOwner = (message: { id: string; role: string }) =>
   message.role === "user" && !message.id.startsWith(EVENT_ID)

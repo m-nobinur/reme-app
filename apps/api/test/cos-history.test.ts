@@ -3,6 +3,7 @@ import { convertToModelMessages, tool, validateUIMessages } from "ai"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   CONTEXT_POLICY,
+  continuable,
   deriveCosMessages,
   type SessionEvent,
   sha256,
@@ -663,6 +664,29 @@ describe("skill views in the history", () => {
       type: "tool-memory",
       output: { outcome: "saved" },
     })
+  })
+
+  // A code load is the last message of its turn; continued, the reply took
+  // its "event:" id, which no message id may hold, and the close failed.
+  it("never offers a code load as the message a reply continues", () => {
+    const { messages } = deriveCosMessages(
+      session(
+        context(T[0]),
+        said(T[0], "u1", "Help me connect my web address"),
+        [
+          "cos.skill",
+          {
+            name: "web-address",
+            body: "# Web address",
+            status: "Using my domain expertise to set up your address",
+            trigger: "connect_address",
+          },
+        ]
+      ),
+      CONTEXT_POLICY
+    )
+    expect(messages.at(-1)?.id).toMatch(/^event:/)
+    expect(continuable(messages).at(-1)?.id).toBe("u1")
   })
 
   it("names the skills a summary replaced, so they are viewed again", () => {
