@@ -82,6 +82,7 @@ async function draw(props: Props, live?: readonly string[]) {
               value: {
                 googleConnected: null,
                 domainLive: (name) => live.includes(name),
+                published: null,
               },
             },
             card
@@ -504,9 +505,8 @@ it("draws a domain bought elsewhere as the connect's records, or that the regist
     toolName: "domain_bought",
     result: { outcome: "not_registered_yet", name: NAME },
   })
-  expect(waiting.container.textContent).toBe(
-    `I can't see ${NAME} at the registry yet. It can take a few minutes, and I check each day too.`
-  )
+  // The assistant says it isn't registered yet, in its reply.
+  expect(waiting.container.textContent).toBe(`Looked for ${NAME}`)
   await waiting.unmount()
 })
 

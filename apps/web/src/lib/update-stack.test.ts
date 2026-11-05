@@ -35,10 +35,10 @@ const shown = (j: Journey, site = true) => {
 
 describe("the journey's item in the stack", () => {
   it.each([
-    ["none", ["Choose your web address", "Connect", "after"]],
-    ["unknown", ["Choose your web address", "Connect", "after"]],
-    ["choosing", ["Choose your web address", "Connect", "after"]],
-    ["put_off", ["Connect your domain", "Connect", "after"]],
+    ["none", ["Choose your domain", "Connect now", "after"]],
+    ["unknown", ["Choose your domain", "Connect now", "after"]],
+    ["choosing", ["Choose your domain", "Connect now", "after"]],
+    ["put_off", ["Add your domain", "Connect now", "after"]],
     [
       "buying_elsewhere",
       ["Finished buying sparkleclean.co.uk?", "Connect it", "first"],
@@ -85,11 +85,11 @@ describe("the journey's item in the stack", () => {
     expect(shown(journey("put_off", building), false)).toBeNull()
     // A draft held for an update is a site on screen.
     expect(shown(journey("unknown", building), true)?.[0]).toBe(
-      "Choose your web address"
+      "Choose your domain"
     )
     expect(
       shown(journey("unknown", { website: "published" }), false)?.[0]
-    ).toBe("Choose your web address")
+    ).toBe("Choose your domain")
     expect(shown(journey("bought", building), false)?.[2]).toBe("first")
     expect(shown(journey("buying_elsewhere", building), false)?.[2]).toBe(
       "first"
@@ -108,7 +108,7 @@ describe("the journey's item in the stack", () => {
       "bought",
     ] as const) {
       expect(journeyItem(journey(stage), true)).toMatchObject({
-        ask: "Help me connect my domain",
+        ask: "Help me set up my domain",
         intent: "connect_address",
       })
     }

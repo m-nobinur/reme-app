@@ -10,6 +10,8 @@ export type LiveCards = {
   googleConnected: boolean | null
   /** Whether the website is live on this domain now. */
   domainLive: (name: string) => boolean
+  /** A version of the website is published; null when the workspace does not say. */
+  published: boolean | null
 }
 
 const LiveCardsContext = createContext<LiveCards | null>(null)

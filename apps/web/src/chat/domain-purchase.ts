@@ -3,14 +3,12 @@ import {
   buyDomainElsewhere,
   getDomainPurchase,
   getDomainRegistrant,
-  sayDomainBought,
   startDomainCheckout,
 } from "@/lib/api/server"
 
 /**
  * The buy tray's calls to the api. Every Pay opens its own Checkout; the
- * buy-elsewhere note and "I've bought it" are keyed per press too, since
- * each asks the registry afresh.
+ * buy-elsewhere note is keyed per press too.
  */
 export const domainPurchase: DomainPurchase = {
   registrant: (name) => getDomainRegistrant({ data: { name } }),
@@ -20,6 +18,4 @@ export const domainPurchase: DomainPurchase = {
   elsewhere: async (name) => {
     await buyDomainElsewhere({ data: { name, key: crypto.randomUUID() } })
   },
-  bought: (name) =>
-    sayDomainBought({ data: { name, key: crypto.randomUUID() } }),
 }

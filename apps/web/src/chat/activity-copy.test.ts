@@ -451,7 +451,7 @@ describe("segment copy", () => {
       "Reme needs a record added at 123-reg"
     )
     expect(pillLine(address("choose"), ctx)).toBe(
-      "Reme needs your pick of web address"
+      "Reme needs your choice of domain"
     )
     expect(pillLine(address("purchase"), ctx)).toBe("Reme needs your payment")
     // As many records as the card listed, and no number when none is known.
@@ -481,7 +481,7 @@ describe("segment copy", () => {
         },
       ],
     })
-    expect(segmentTitle(asked, ctx)).toBe("Your web address")
+    expect(segmentTitle(asked, ctx)).toBe("Your domain")
     expect(segmentLine(asked, ctx)).toBeNull()
     expect(domainStep(asked, ctx)).toBe("Waiting for your answer")
     expect(segmentTitle(address("records"), ctx)).toBe("Connecting your domain")

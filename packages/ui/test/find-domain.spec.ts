@@ -2,22 +2,26 @@ import { expect, test } from "@playwright/test"
 import { axe, open } from "./helpers"
 
 /**
- * Choose your web address: up to six names in one list, each row saying the
- * name is free and its price, and the recommended one's badge inside its
- * own row. In both themes and at a phone's width.
+ * Choose your domain, in the assistant's message: up to six names, each row
+ * its name, a sub line with its price and provider, the recommended one's
+ * badge inside its own row, and Choose. A chosen row offers Buy from each
+ * provider. In both themes and at a phone's width.
  */
 
 for (const theme of ["light", "dark"]) {
   for (const width of [1024, 390]) {
-    test(`the web address list, ${theme} at ${width} px`, async ({ page }) => {
+    test(`the domain list, ${theme} at ${width} px`, async ({ page }) => {
       await open(page, "FindDomain", width, theme)
-      const list = page.getByRole("radiogroup", { name: "Web address" }).first()
-      const rows = list.locator("label")
+      const picker = page.locator('[data-slot="domain-picker"]').first()
+      await expect(
+        picker.getByRole("heading", { name: "Choose your domain" })
+      ).toBeVisible()
+      const list = picker.getByRole("list", { name: "Domains" })
+      const rows = list.getByRole("listitem")
       const count = await rows.count()
       expect(count).toBeGreaterThan(1)
       expect(count).toBeLessThanOrEqual(6)
-      // The recommended name is first and picked, its badge inside its row.
-      await expect(list.getByRole("radio").first()).toBeChecked()
+      // The recommended name is first, its badge inside its row.
       const first = await rows.first().boundingBox()
       const badge = await rows
         .first()
@@ -35,18 +39,25 @@ for (const theme of ["light", "dark"]) {
         1
       )
       for (let at = 0; at < count; at++) {
-        await expect(rows.nth(at)).toContainText("Available")
+        await expect(rows.nth(at)).toContainText("£")
       }
-      // A name reads whole: nothing in a row is cut but the name itself.
+      // Choosing gives the row its providers, and nothing spills sideways.
+      await rows.first().getByRole("button").click()
+      await expect(
+        rows.first().getByRole("link", { name: /Buy from Cloudflare/ })
+      ).toBeVisible()
+      await expect(
+        rows.first().getByRole("link", { name: /Buy from GoDaddy/ })
+      ).toBeVisible()
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth > window.innerWidth
         )
       ).toBe(false)
-      // Arrow keys move the pick, as one radio group.
-      await list.getByRole("radio").first().focus()
-      await page.keyboard.press("ArrowDown")
-      await expect(list.getByRole("radio").nth(1)).toBeChecked()
+      // A skipped list asked for again gives way to the fresh one.
+      await expect(
+        page.getByText("You skipped choosing, so there's a fresh list below.")
+      ).toBeVisible()
       await axe(page, `FindDomain ${theme} ${width}`)
     })
   }

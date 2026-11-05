@@ -318,23 +318,25 @@ const DOMAIN_CARDS = new Set([
 ])
 
 /**
- * Whether a later message holds another domain card, or the address
- * question: the owner changed course, so this one gives way.
+ * The first domain card, or "address" for the address question, in a later
+ * message: the owner changed course, so this one gives way. Null when none.
  */
-function useSuperseded(): boolean {
+export function useLaterDomainCard(): string | null {
   return useAuiState((s) => {
     const at = s.thread.messages.findIndex((m) => m.id === s.message.id)
-    return s.thread.messages
-      .slice(at + 1)
-      .some((m) =>
-        m.content.some(
-          (p) =>
-            (p.type === "tool-call" && DOMAIN_CARDS.has(p.toolName)) ||
-            (p.type === "data" &&
-              p.name === "build_questions" &&
-              (p.data as { kind?: unknown } | undefined)?.kind === "address")
+    for (const m of s.thread.messages.slice(at + 1)) {
+      for (const p of m.content) {
+        if (p.type === "tool-call" && DOMAIN_CARDS.has(p.toolName))
+          return p.toolName
+        if (
+          p.type === "data" &&
+          p.name === "build_questions" &&
+          (p.data as { kind?: unknown } | undefined)?.kind === "address"
         )
-      )
+          return "address"
+      }
+    }
+    return null
   })
 }
 
@@ -363,7 +365,7 @@ function Paused({ name, onResume }: { name: string; onResume: () => void }) {
  * Never once the website is live on the domain: that line stays.
  */
 function useFold(name: string) {
-  const superseded = useSuperseded()
+  const superseded = useLaterDomainCard() !== null
   const live = useLiveCards()?.domainLive(name) ?? false
   const [resumed, setResumed] = useState(false)
   return {
@@ -489,9 +491,13 @@ export const DomainBought: ToolCallMessagePartComponent = (props) => {
           <ConnectSteps name={name} output={output} />
         </>
       ) : output.outcome === "not_registered_yet" ? (
-        <p className="text-muted-foreground text-sm">
-          {`I can't see ${output.name} at the registry yet. It can take a few minutes, and I check each day too.`}
-        </p>
+        // The assistant says so in its reply.
+        <ToolStatus
+          args={{ domain: name }}
+          className="flex px-1 py-1.5 text-sm"
+          state="done"
+          tool="domain_bought"
+        />
       ) : (
         <Problem
           text={refusalText(

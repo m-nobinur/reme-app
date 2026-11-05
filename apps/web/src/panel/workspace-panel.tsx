@@ -290,6 +290,31 @@ function ConnectAddress() {
 }
 
 /**
+ * A name the owner went to buy themselves: their two answers, each said in
+ * the chat with the address intent, so the assistant takes it from there.
+ */
+function BoughtAnswers({ name }: { name: string }) {
+  const askInChat = useAskInChat()
+  return (
+    <div className="flex flex-wrap gap-2">
+      {(["bought", "not_bought"] as const).map((key) => {
+        const { label, ask } = pageAction(key, name)
+        return (
+          <button
+            className={NEXT_STEP}
+            key={key}
+            onClick={() => askInChat(ask, "connect_address")}
+            type="button"
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
  * Says `text` as the owner's message in the conversation on screen, or in
  * their most recent one from any other page, so the assistant keeps the
  * context, with the button's `intent` when it has one. With no conversation
@@ -701,6 +726,9 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       ? tab
       : "activity"
 
+  const address = workspace.journey?.address
+  const buying =
+    address?.stage === "buying_elsewhere" ? (address.name ?? null) : null
   const segment = (each: SegmentView) => (
     <Segment
       fresh={arrived.has(each.id)}
@@ -708,6 +736,9 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       refresh={refresh}
       segment={each}
     >
+      {each.kind === "address" && buying ? (
+        <BoughtAnswers name={buying} />
+      ) : null}
       {/* The first version's review is the going-live segment's first step. */}
       {each.kind === "golive" && panel.review ? (
         <div

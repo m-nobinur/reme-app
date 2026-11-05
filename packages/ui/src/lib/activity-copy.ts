@@ -1156,7 +1156,7 @@ const JOBS: Record<JobKind, JobCopy> = {
     // Picking a name is the address; from the record on, it is connecting.
     title: (n) =>
       n.step === "find_out" || n.step === "choose" || !n.step
-        ? "Your web address"
+        ? "Your domain"
         : n.step === "purchase" && n.domain
           ? `Buying ${n.domain}`
           : "Connecting your domain",
@@ -1223,7 +1223,7 @@ const WAITING: Partial<Record<ActivitySegment["kind"], string>> = {
 /** What an owner task waits for, by the step that waits. */
 const STEP_WAITING: Readonly<Record<string, string>> = {
   find_out: "your answer",
-  choose: "your choice of web address",
+  choose: "your choice of domain",
   purchase: "your payment",
   records: "your domain setting",
   ownership: "your domain setting",
@@ -1440,7 +1440,7 @@ const addRecords = (segment: ActivitySegment, provider: string | null) => {
 /** What a waiting job's current step needs from the owner, after "{assistant} needs". */
 const NEEDS: Readonly<Record<string, string>> = {
   find_out: "your answer",
-  choose: "your pick of web address",
+  choose: "your choice of domain",
   purchase: "your payment",
   payment: "your payment",
   sign_in: "you to sign in to Google",
@@ -1550,7 +1550,7 @@ export type OwnerWait = {
 
 /** What the owner does, by the step that waits, as a heading. */
 const WAIT_TITLES: Readonly<Record<string, (d: string | null) => string>> = {
-  find_out: () => "Say which web address you want",
+  find_out: () => "Say which domain you want",
   choose: () => "Choose a name for your website",
   purchase: (d) => (d ? `Pay for ${d}` : "Pay for your domain"),
   payment: (d) => (d ? `Pay for ${d}` : "Pay for your domain"),
@@ -1661,7 +1661,7 @@ const STEP_LABELS: Partial<
     ready: "Ready to look at",
   },
   address: {
-    find_out: "Your web address",
+    find_out: "Your domain",
     choose: "Name",
     purchase: "Purchase",
     records: "Record at your provider",
@@ -2067,7 +2067,14 @@ export function workLine(segment: ActivitySegment): string | null {
   )
 }
 
-export type PageActionKey = "own" | "dns" | "pay" | "google" | "failed"
+export type PageActionKey =
+  | "own"
+  | "dns"
+  | "pay"
+  | "google"
+  | "failed"
+  | "bought"
+  | "not_bought"
 
 /** The Connect buttons' intents, which `ChatRequest.intent` carries. */
 export type AskIntent = "connect_address" | "connect_google"
@@ -2086,8 +2093,8 @@ export function pageAction(
   switch (key) {
     case "own":
       return {
-        label: "Connect",
-        ask: "Help me connect my web address",
+        label: "Connect now",
+        ask: "Help me set up my domain",
         intent: "connect_address",
       }
     case "dns":
@@ -2108,5 +2115,9 @@ export function pageAction(
       }
     case "failed":
       return { label: "Ask what happened", ask: `What happened with ${what}?` }
+    case "bought":
+      return { label: "I bought it", ask: `I've bought ${what}` }
+    case "not_bought":
+      return { label: "Not yet", ask: `I haven't bought ${what} yet` }
   }
 }

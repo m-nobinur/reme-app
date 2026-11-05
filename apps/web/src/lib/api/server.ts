@@ -343,14 +343,6 @@ export const buyDomainElsewhere = createServerFn({ method: "POST" })
       await source.domainElsewhere(data.name, data.key)
   )
 
-/** The owner's word that they bought it elsewhere. */
-export const sayDomainBought = createServerFn({ method: "POST" })
-  .validator((input: unknown) => {
-    const data = record(input)
-    return { name: DomainName.parse(data.name), key: keyOf(data.key) }
-  })
-  .handler(async ({ data }) => await source.domainBought(data.name, data.key))
-
 export const createReminder = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const data = record(input)
