@@ -3,7 +3,7 @@ import type { AskIntent } from "@workspace/ui/lib/activity-copy"
 
 /** What a Connect in the stack says for the owner, and the skill its intent loads. */
 export const CONNECT_ADDRESS = {
-  ask: "Help me connect my domain",
+  ask: "Help me set up my domain",
   intent: "connect_address",
 } as const
 export const CONNECT_GOOGLE = {
@@ -47,9 +47,9 @@ export function journeyItem(
   }
   const drawn =
     site || journey.website === "draft_ready" || journey.website === "published"
-  if (drawn && offer) return address("Choose your web address", "Connect")
+  if (drawn && offer) return address("Choose your domain", "Connect now")
   if (drawn && stage === "put_off") {
-    return address("Connect your domain", "Connect")
+    return address("Add your domain", "Connect now")
   }
   if (
     (stage === "connecting" || stage === "live") &&

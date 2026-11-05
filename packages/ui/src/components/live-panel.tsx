@@ -1971,7 +1971,7 @@ function WebAddress({ children }: { children: ReactNode }) {
       data-slot="web-address"
     >
       <p className="text-sm">
-        Web address
+        Domain
         <span className="text-muted-foreground"> · Not connected</span>
       </p>
       {children}

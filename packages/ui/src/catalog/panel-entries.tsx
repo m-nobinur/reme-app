@@ -98,7 +98,7 @@ const STEP = buttonVariants({ variant: "outline", size: "sm" })
 /** Connect, as `apps/web` draws it: a message to the assistant. */
 const connectButton = (
   <a className={STEP} href="#connect">
-    Connect
+    Connect now
   </a>
 )
 

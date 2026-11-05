@@ -2067,7 +2067,14 @@ export function workLine(segment: ActivitySegment): string | null {
   )
 }
 
-export type PageActionKey = "own" | "dns" | "pay" | "google" | "failed"
+export type PageActionKey =
+  | "own"
+  | "dns"
+  | "pay"
+  | "google"
+  | "failed"
+  | "bought"
+  | "not_bought"
 
 /** The Connect buttons' intents, which `ChatRequest.intent` carries. */
 export type AskIntent = "connect_address" | "connect_google"
@@ -2086,8 +2093,8 @@ export function pageAction(
   switch (key) {
     case "own":
       return {
-        label: "Connect",
-        ask: "Help me connect my web address",
+        label: "Connect now",
+        ask: "Help me set up my domain",
         intent: "connect_address",
       }
     case "dns":
@@ -2108,5 +2115,9 @@ export function pageAction(
       }
     case "failed":
       return { label: "Ask what happened", ask: `What happened with ${what}?` }
+    case "bought":
+      return { label: "I bought it", ask: `I've bought ${what}` }
+    case "not_bought":
+      return { label: "Not yet", ask: `I haven't bought ${what} yet` }
   }
 }

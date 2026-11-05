@@ -12,8 +12,8 @@ test.use({ reducedMotion: "reduce" })
 const ENTRY = "DockedUpdates"
 
 const STATES = [
-  ["never-answered", "Brightclean website", ["Publish", "Connect"]],
-  ["skipped", "Brightclean website", ["Publish", "Connect"]],
+  ["never-answered", "Brightclean website", ["Publish", "Connect now"]],
+  ["skipped", "Brightclean website", ["Publish", "Connect now"]],
   [
     "buying-elsewhere",
     "Finished buying sparkleclean.co.uk?",
