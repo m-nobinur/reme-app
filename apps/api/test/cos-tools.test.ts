@@ -63,6 +63,7 @@ import {
   getWorkspace,
   inspectDomain,
   newContact,
+  offerChoices,
   ownersAnswer,
   paceOf,
   putOff,
@@ -3222,6 +3223,12 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       )
       expect(call?.body).toEqual({ name: "sparkleclean.co.uk" })
       expect(call?.request.headers.get("idempotency-key")).toBe("turn:call")
+    })
+  })
+
+  it("offer_choices only closes its call: the chat draws the pills from it", async () => {
+    expect(kept("offer_choices", await offerChoices())).toEqual({
+      outcome: "offered",
     })
   })
 

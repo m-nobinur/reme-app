@@ -51,6 +51,7 @@ import {
   InformationAnswer,
   type InspectDomainInput,
   type InspectDomainOutput,
+  type OfferChoicesOutput,
   OwnerAnswerText,
   PreviewLink,
   type ProfileLine,
@@ -1936,6 +1937,14 @@ export async function removal(
 
 const NEVER = "9999-12-31T00:00:00.000Z"
 const isTip = (kind: string): kind is TipKind => TipKind.safeParse(kind).success
+
+/**
+ * Quick replies for the decision a reply ends on. The chat draws them from
+ * the call; its result only closes it, so the history holds a whole call.
+ */
+export const offerChoices = async (): Promise<OfferChoicesOutput> => ({
+  outcome: "offered",
+})
 
 /**
  * An offer the owner said not now to, asked again after `days` (a week when
