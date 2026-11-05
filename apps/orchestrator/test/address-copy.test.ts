@@ -100,6 +100,19 @@ it("tells the brief about the business so the model can use its name, trade and 
     "About the business: DOX Cleaning, a cleaning business, serving London."
   )
   expect(liveOffer(BARE).brief).not.toContain("About the business")
+  // The trade as customers look for it, by the contracts' one rule.
+  expect(
+    liveOffer({
+      ...DOX,
+      trade: "Domestic and end of tenancy cleaning",
+      category: "cleaning",
+    }).brief
+  ).toContain(
+    "About the business: DOX Cleaning, a cleaning company, serving London."
+  )
+  expect(liveOffer({ ...DOX, trade: "Electrician" }).brief).toContain(
+    "DOX Cleaning, an electrician, serving London."
+  )
 })
 
 it("assumes no van", () => {

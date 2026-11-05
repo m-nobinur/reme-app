@@ -1,4 +1,4 @@
-import { IndustryId, type ServerButton } from "@workspace/contracts"
+import { IndustryId, type ServerButton, tradeOf } from "@workspace/contracts"
 import { currentFacts, type Tenancy } from "@workspace/db"
 import type { Update } from "./heartbeat-write.ts"
 
@@ -42,10 +42,10 @@ export async function aboutOf(kit: Tenancy, orgId: string): Promise<About> {
   }
 }
 
-const context = ({ business, trade, area }: About) => {
+const context = ({ business, trade, category, area }: About) => {
   const bits = [
     business,
-    trade && `a ${trade.toLowerCase()} business`,
+    tradeOf({ name: trade, category }),
     area && `serving ${area}`,
   ].filter(Boolean)
   return bits.length > 0 ? `About the business: ${bits.join(", ")}. ` : ""
