@@ -240,8 +240,7 @@ import { readFacts } from "./workspace.ts"
 export { ONBOARDING_GOAL }
 
 /** Ask mode's one line when the Chief of Staff cannot answer: the script's, or the fallback's. */
-export const ASK_REPLY =
-  "I can't answer right now. Try again in a moment, or switch to Act and tell me what to change on your site."
+export const ASK_REPLY = "I can't answer right now. Try again in a moment."
 
 /** The one line, in either mode, when the model was asked and failed: never a card it did not propose. */
 export const NO_ANSWER =
