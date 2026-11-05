@@ -2765,8 +2765,13 @@ describe("the turn's first line", () => {
     )
   })
 
+  it("names the opener's step when no card waits", () => {
+    expect(turnLine(typed("We clean offices and homes"))).toBe(
+      "Noting your services"
+    )
+  })
+
   it("falls back to a plain line when nothing names the step", () => {
-    expect(turnLine(typed("hello"))).toBe(ANSWER_LINE)
     expect(
       turnLine(
         typed(

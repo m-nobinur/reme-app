@@ -2068,7 +2068,10 @@ export const ANSWER_LINE = "Reading your answer"
  */
 export function turnLine(s: PlanState): string {
   const card = s.input.kind === "card" ? s.input.card : s.pending
-  if (!card) return ANSWER_LINE
+  // The opener asks in words, so the first answer has no card: the script's
+  // current step names it.
+  if (!card)
+    return STEP_LINES[currentStep(s.onboarding)?.id ?? ""] ?? ANSWER_LINE
   const about =
     card.type === "tool-ask_open" ? (card.input as AskOpenInput).about : null
   if (about === "recap") {

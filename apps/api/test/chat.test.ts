@@ -3361,7 +3361,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         {
           type: ONBOARDING_STATUS,
           data: {
-            on: { kind: "doing", text: "Reading your answer" },
+            on: { kind: "doing", text: "Noting your services" },
             facts: [],
           },
           transient: true,
