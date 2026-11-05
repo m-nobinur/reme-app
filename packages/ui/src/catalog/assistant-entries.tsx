@@ -1217,6 +1217,10 @@ const REVIEW_QUOTE_OPEN: ThreadMessageLike[] = [
 /** Stands in for the web's upload: a moment's wait, then the one photo stored. */
 const fakeUpload = async (files: File[]) => {
   await new Promise((resolve) => setTimeout(resolve, 600))
+  // A way to see the card's failure state: a file named broken never goes up.
+  if (files.some((file) => file.name.startsWith("broken"))) {
+    throw new Error("The upload failed.")
+  }
   return {
     assets: files.map((file, index) => ({
       ...PHOTO,

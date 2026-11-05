@@ -195,15 +195,16 @@ test("photos preview, can be taken out, and are sent only on Upload", async ({
   await card.getByRole("button", { name: "Remove van.png" }).click()
   await expect(card.getByRole("img")).toHaveCount(0)
   await expect(upload).toBeDisabled()
-  await card.locator('input[type="file"]').setInputFiles([PNG])
+  // The catalog's upload refuses a file named broken, which shows the
+  // failure state: a reason, and the photos kept for another try.
+  await card
+    .locator('input[type="file"]')
+    .setInputFiles([{ ...PNG, name: "broken.png" }])
   await upload.click()
   await expect(card.getByRole("status")).toHaveText("Uploading 1 photo")
-  // The catalog's runtime takes no tool results, so the answer fails here
-  // after the upload, which shows the failure state: a reason, and the
-  // photos kept for another try.
   await expect(card.getByRole("alert")).toBeVisible()
   await expect(upload).toBeEnabled()
-  await expect(card.getByRole("img", { name: "van.png" })).toBeVisible()
+  await expect(card.getByRole("img", { name: "broken.png" })).toBeVisible()
 })
 
 test("the ready card sits at the end of the thread and never claims an approval early", async ({
@@ -555,10 +556,10 @@ test("the card's Preview form shows the questions as the owner has left them, an
   await expect(modal.getByRole("group", { name: "Your details" })).toBeVisible()
   await expect(modal.getByLabel("Pick-up address")).toBeVisible()
   await expect(modal.getByLabel(/^Occasion/)).toHaveCount(0)
-  // The catalog's runtime takes no tool results, so reaching the card's own
-  // confirm shows as the error it throws.
-  const failed = page.waitForEvent("pageerror")
+  // The card's own confirm runs, and the catalog takes its answer quietly.
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
   await modal.getByRole("button", { name: "Looks good" }).click()
-  expect((await failed).message).toMatch(/does not support tool results/)
   await expect(modal).toHaveCount(0)
+  expect(errors).toEqual([])
 })
