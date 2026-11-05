@@ -2,7 +2,12 @@ import { DurableObject, WorkerEntrypoint } from "cloudflare:workers"
 import { Buffer } from "node:buffer"
 import { posix } from "node:path"
 import { Files, SandboxFileError } from "@cloudflare/sandbox"
-import { NPM_REGISTRY_HOST, POOL_SIZE, SLEEP_AFTER } from "./sandbox.ts"
+import {
+  NPM_REGISTRY_HOST,
+  POOL_SIZE,
+  SANDBOX_INSTANCE,
+  SLEEP_AFTER,
+} from "./sandbox.ts"
 
 /**
  * The container behind every site (ADR-031, as amended for Sandbox SDK 1.0):
@@ -153,7 +158,7 @@ export class RemeSandbox extends DurableObject<Env> {
       this.renewedAt = Date.now()
       this.container.start({
         image: this.container.images.sandbox,
-        instance: "standard-2",
+        instance: SANDBOX_INSTANCE,
         enableInternet: false,
       })
     }

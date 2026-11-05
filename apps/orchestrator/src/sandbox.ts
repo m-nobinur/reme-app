@@ -50,6 +50,17 @@ const REVISION_FILE = "/workspace/.reme/revision"
  */
 export const POOL_SIZE = 5
 
+/**
+ * The container's size (#614): `standard-2`'s one vCPU, which `astro check`
+ * and `astro build` pin, with 3 GiB in place of 6, the least a custom type
+ * allows per vCPU. Over 30 days the highest memory any container reached was
+ * 1,342 MiB and 90% of container-days peaked under 1,096 MiB. Memory bills
+ * on what is provisioned, so this halves it. `SANDBOX_CLASS` is its name in
+ * the runtime spec.
+ */
+export const SANDBOX_INSTANCE = { vcpu: 1, memoryMib: 3072, diskMb: 12_000 }
+export const SANDBOX_CLASS = "custom-1vcpu-3gib"
+
 /** The reason a full pool reports, as 0.12's platform cap named it. */
 const POOL_FULL = "max_container_instances_exceeded"
 

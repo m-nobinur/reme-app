@@ -165,7 +165,7 @@ describe("a sandbox's first command", () => {
     expect(container.started).toEqual([
       {
         image: "registry.example/reme-sandbox@sha256:abc",
-        instance: "standard-2",
+        instance: { vcpu: 1, memoryMib: 3072, diskMb: 12_000 },
         enableInternet: false,
       },
     ])

@@ -26,6 +26,7 @@ import {
 // critic.ts reaches brief.ts, which names the registry host from sandbox.ts.
 vi.mock("../src/sandbox.ts", () => ({
   NPM_REGISTRY_HOST: "registry.npmjs.org",
+  SANDBOX_CLASS: "custom-1vcpu-3gib",
 }))
 
 const fix = (section: string, page = "home"): Fix => ({
