@@ -13,6 +13,7 @@ import {
   type GateName,
   type Journey,
   PLANNED_PAGES,
+  type ServerMessageKind,
   TONES,
 } from "@workspace/contracts"
 import {
@@ -440,7 +441,7 @@ const NEXT_WORDS: Record<
   resumed:
     "You already restarted it from where it left off, and it is back at work. Nothing is needed from the owner, and you will tell them here when the draft is ready.",
   retrying:
-    "You have already started it again by yourself. The owner need do nothing, and you will say here when the draft is ready.",
+    "You have already started it again by yourself. Nothing is needed from the owner, and you will say here when the draft is ready.",
   stopped:
     "Nothing more happens until the owner says try again or tells you what to change.",
 }
@@ -538,6 +539,13 @@ export async function narrate(
   }
 }
 
+/** A note's kind, by its key: a draft ready is done, a stop or a draft given back is for the owner. */
+const NOTE_KINDS: Record<string, ServerMessageKind> = {
+  "site.ready": "done",
+  "site.stopped": "note",
+  "site.draft_back": "note",
+}
+
 /** A post the chat could not take yet throws, so the step's retries try again. */
 export async function postNote(
   kit: Tenancy,
@@ -547,7 +555,10 @@ export async function postNote(
   const posted = await postAssistantMessage(kit, {
     orgId,
     key: note.key,
-    message: { text: [note.text] },
+    message: {
+      text: [note.text],
+      kind: NOTE_KINDS[note.key.split(":")[0] ?? ""] ?? "update",
+    },
   })
   if (posted === "busy" || posted === "waiting") {
     throw new Error(`build.note_${posted}`)
@@ -673,7 +684,7 @@ export async function noteResumed(
   return postAssistantMessage(kit, {
     orgId: ids.orgId,
     key: note.key,
-    message: { text: [text] },
+    message: { text: [text], kind: "update" },
   })
 }
 

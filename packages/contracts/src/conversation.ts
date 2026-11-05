@@ -258,9 +258,30 @@ export const QuestionReply = z.strictObject({
 })
 
 /**
+ * What a message the server posts is, set by the code that posts it, for the
+ * label and icon above it: `reply` answers what the owner just did and reads
+ * as any reply; `update` is news on work under way; `note` is something for
+ * them to see to; `done` is work finished; `reminder` is one of theirs come
+ * due. A message with none is an update.
+ */
+export const ServerMessageKind = z.enum([
+  "reply",
+  "update",
+  "note",
+  "done",
+  "reminder",
+])
+
+/** How a message's kind is stored among its parts: an AI SDK data part. */
+export const ServerKindPart = z.strictObject({
+  type: z.literal("data-kind"),
+  data: ServerMessageKind,
+})
+
+/**
  * A message the server posts on its own, with no owner turn: the text parts,
  * then the button part if there is one, then the questions if there are any,
- * then a quote request from the website if it carries one.
+ * then a quote request from the website if it carries one, then its kind.
  * `id` is derived from what happened, not generated, so posting it twice
  * stores it once.
  */
@@ -270,6 +291,7 @@ export const ServerMessage = z.strictObject({
   button: ServerButton.optional(),
   questions: BuildQuestions.optional(),
   enquiry: Enquiry.optional(),
+  kind: ServerMessageKind.optional(),
 })
 
 /**
@@ -291,6 +313,8 @@ export type MessageFeedback = z.infer<typeof MessageFeedback>
 export type ServerButton = z.infer<typeof ServerButton>
 export type ServerButtonPart = z.infer<typeof ServerButtonPart>
 export type ServerMessage = z.infer<typeof ServerMessage>
+export type ServerMessageKind = z.infer<typeof ServerMessageKind>
+export type ServerKindPart = z.infer<typeof ServerKindPart>
 export type QuestionInput = z.infer<typeof QuestionInput>
 export type QuestionAnswer = z.infer<typeof QuestionAnswer>
 export type BuildQuestion = z.infer<typeof BuildQuestion>

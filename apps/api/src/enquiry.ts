@@ -187,6 +187,7 @@ export async function receiveQuote(
         : []),
     ],
     enquiry,
+    kind: "note",
   }
   const delivery = {
     orgId,

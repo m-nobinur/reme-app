@@ -1,6 +1,6 @@
 ---
 name: site-change
-description: Use before any change to the website's words, layout, pages or look.
+description: Use before any change to the website's words, layout, pages or look, not a rebuild.
 expertise: web design
 status:
   - Using my web design skills

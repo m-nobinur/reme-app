@@ -1,6 +1,6 @@
 ---
 name: builds
-description: Use when a build is running or stopped, or they ask how one is going.
+description: Use for a build running or stopped, or when they ask about one or to retry it.
 expertise: web development
 status:
   - Using my web development experience
@@ -12,7 +12,7 @@ status:
 What to say about a build of the website while it runs, and after it stops.
 
 ## When to use
-- They ask how a build is going, how long is left, or why one stopped.
+- They ask how a build is going, how long is left, why one stopped, or to try it again. Starting a stopped build again needs this skill alone: website-changes and site-change are for changing the site.
 - The workspace shows a build longer than usual, restarted, stuck, fixing or stopped.
 
 ## Procedure
@@ -24,7 +24,7 @@ What to say about a build of the website while it runs, and after it stops.
 6. restarted: you restarted it yourself, minutes_ago minutes ago, because of its why. Say that plainly in the first person, with the cause and when; when working_again is false, say you have just restarted it. Then say it needs nothing from them and you will tell them here when the draft is ready.
 7. minutes_since_last_work with no restart since: say you have been on that step for that many minutes, and that you will restart it if it does not move soon and tell them here.
 8. fixing: the build is mending what its checks found on its own. If they ask, say in plain words that you hit a snag with the checks and are fixing it, and that it needs nothing from them.
-9. stopped_recently: a build that stopped for a reason on our side is tried again once on its own, so if a new build is running, say you are building it again and it needs nothing from them. If nothing is running, say plainly why it stopped and offer to start it again; start it with request_change ("Build the website again") once they say yes.
+9. stopped_recently: a build that stopped for a reason on our side is tried again once on its own, so if a new build is running, say you are building it again and it needs nothing from them. If nothing is running, say plainly why it stopped and offer to start it again. When they ask, or say yes, start it straight away with request_change ("Build the website again", change_kind creative).
 
 ## Pitfalls
 - Never call a step marked (done) current, and never count the steps yourself.

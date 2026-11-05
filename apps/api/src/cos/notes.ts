@@ -169,7 +169,7 @@ function cardLine({ waiting }: JourneyState): string {
   return "No question card waits on screen: never tell the owner to answer or type on a card."
 }
 
-/** Said after an aside while the address card waits, at most twice a sitting. */
+/** Said after an aside while the address card waits, once a sitting. */
 export const ASIDE_LINE =
   "The web address question is still open and the owner wrote about something else: answer their message first, then bring the question back in one line."
 
@@ -212,6 +212,8 @@ function changeWords(c: JourneyChange, now: Date, zone: string | null): string {
   switch (c.kind) {
     case "draft_ready":
       return `the draft became ready ${when}`
+    case "build_stopped":
+      return `the website build stopped ${when} and waits for them to say try again`
     case "bought":
       return `${c.name ?? "the domain they bought"} shows as registered`
     case "live":
@@ -221,7 +223,11 @@ function changeWords(c: JourneyChange, now: Date, zone: string | null): string {
   }
 }
 
-/** One line for everything that changed while the owner was away, each change told once. */
+/** Said after what changed since the owner last wrote. */
+export const NEWS_RULE =
+  "Open your reply with it in one natural line, even though the app posted it, unless their message already answers it; then answer them."
+
+/** One line for everything that changed since the owner last wrote, each change told once. */
 function gapLine(
   { sitting, changes }: JourneyState,
   now: Date,
@@ -233,7 +239,10 @@ function gapLine(
     words.length === 1
       ? words[0]
       : `${words.slice(0, -1).join(", ")}, and ${words.at(-1)}`
-  return `The owner was last here ${awayWords(sitting.away_ms)} ago. Since then: ${list}. Answer their message first, then mention what changed in one line.`
+  const since = sitting.fresh
+    ? `The owner was last here ${awayWords(sitting.away_ms)} ago. Since then`
+    : "Since the owner last wrote"
+  return `${since}: ${list}. ${NEWS_RULE}`
 }
 
 /** Onboarding's steps as the hand-over names them. */
@@ -300,6 +309,7 @@ export const websiteFrom = (
   live: workspace.site.live_version !== null,
   building: workspace.builds.some((b) => !IN_REVIEW.has(STATE[b.state])),
   drafts,
+  stopped: (workspace.stopped ?? []).map((s) => s.at),
 })
 
 /** The journey from the workspace alone, for a turn with no visit or ledger read. */
@@ -325,7 +335,7 @@ export const journeyFrom = (
  * The open items note (plan §3), built every turn from the journey: one line
  * per open item with its next step and the skill part it is in, the card on
  * screen, and when the journey says so, the bring-back and the one line of
- * what changed while the owner was away.
+ * what changed since the owner last wrote.
  */
 export function openItems(
   workspace: CosWorkspace,

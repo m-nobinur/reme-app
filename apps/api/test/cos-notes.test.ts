@@ -14,6 +14,7 @@ import {
   cardState,
   handoverNote,
   leftOutLine,
+  NEWS_RULE,
   openItems,
   RETURN_LINE,
   sessionNote,
@@ -444,7 +445,7 @@ describe("the journey's lines", () => {
     expect(turn().lines.join("\n")).not.toMatch(/google-search/)
   })
 
-  it("brings a waiting card back after an aside, twice a sitting, then leaves it to the stack", () => {
+  it("brings a waiting card back after an aside once a sitting, then leaves it to the stack", () => {
     const first = turn({ card, visit: sitting })
     expect(first.lines).toContain(ASIDE_LINE)
     expect(first.lines).toContain(
@@ -454,11 +455,8 @@ describe("the journey's lines", () => {
       key: `bring_back:${ago(minutes)}`,
       at: ago(minutes),
     })
-    expect(turn({ card, visit: sitting, latches: [latch(2)] }).lines).toContain(
-      ASIDE_LINE
-    )
     expect(
-      turn({ card, visit: sitting, latches: [latch(3), latch(2)] }).lines
+      turn({ card, visit: sitting, latches: [latch(2)] }).lines
     ).not.toContain(ASIDE_LINE)
     // A turn nobody typed brings nothing back.
     expect(turn({ card }).lines).not.toContain(ASIDE_LINE)
@@ -505,7 +503,7 @@ describe("the journey's lines", () => {
       { ...DRAFT, tasks: bought }
     )
     expect(away.lines).toContain(
-      "The owner was last here 3 hours ago. Since then: the draft became ready at 9:40 AM, and sparkleclean.co.uk shows as registered. Answer their message first, then mention what changed in one line."
+      `The owner was last here 3 hours ago. Since then: the draft became ready at 9:40 AM, and sparkleclean.co.uk shows as registered. ${NEWS_RULE}`
     )
     const told = away.journey.record.map((key) => ({
       key,
@@ -523,6 +521,52 @@ describe("the journey's lines", () => {
         { ...DRAFT, tasks: bought }
       ).lines.join("\n")
     ).not.toMatch(/last here/)
+  })
+
+  it("leads with a draft ready or a build stopped since the owner last wrote, within a sitting too", () => {
+    const ready = turn({
+      visit: sitting,
+      website: {
+        live: false,
+        building: false,
+        drafts: [{ id: "r2", at: ago(0.5) }],
+      },
+    })
+    expect(ready.lines).toContain(
+      `Since the owner last wrote: the draft became ready at 9:59 AM. ${NEWS_RULE}`
+    )
+    expect(ready.journey.record).toEqual(["told:draft:r2"])
+    const stopped = turn(
+      {
+        visit: sitting,
+        website: {
+          live: false,
+          building: false,
+          drafts: [],
+          stopped: [ago(0.5)],
+        },
+      },
+      EMPTY
+    )
+    expect(stopped.lines).toContain(
+      `Since the owner last wrote: the website build stopped at 9:59 AM and waits for them to say try again. ${NEWS_RULE}`
+    )
+    // Said once: with its latch, the next message hears nothing of it.
+    const told = ready.journey.record.map((key) => ({
+      key,
+      at: NOW.toISOString(),
+    }))
+    expect(
+      turn({
+        visit: sitting,
+        latches: told,
+        website: {
+          live: false,
+          building: false,
+          drafts: [{ id: "r2", at: ago(0.5) }],
+        },
+      }).lines.join("\n")
+    ).not.toMatch(/Since the owner last wrote/)
   })
 
   it("says what the newest draft left out in its own line, on up to three turns", () => {

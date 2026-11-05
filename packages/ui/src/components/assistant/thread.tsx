@@ -34,6 +34,7 @@ import {
   AskDesignOutput,
   RECAP_REPLY,
   type ServerButton,
+  type ServerMessageKind,
   SKIP_REPLY,
 } from "@workspace/contracts"
 import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
@@ -78,6 +79,7 @@ import {
   writingBack,
 } from "@workspace/ui/lib/activity-copy"
 import { formatTime } from "@workspace/ui/lib/format"
+import type { StateName } from "@workspace/ui/lib/status-icons"
 import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
   designText,
@@ -940,14 +942,42 @@ const UPDATE_KINDS: Partial<Record<Action, StatusKind>> = {
   open: "domain",
 }
 
+type Labelled = Exclude<ServerMessageKind, "reply">
+
+/** Each kind of posted message's label and mark; an update's mark may be its button's. */
+const MESSAGE_KINDS: Record<Labelled, { label: string; state: StateName }> = {
+  update: { label: "Update", state: "notifications" },
+  note: { label: "Note", state: "waiting" },
+  done: { label: "Done", state: "done" },
+  reminder: { label: "Reminder", state: "reminder" },
+}
+
+type Parts = readonly { type: string; name?: string; data?: unknown }[]
+
+/** A message the app posted on its own (a `srv_` id) by its kind; null for any other. */
+const postedKind = (message: {
+  id: string
+  parts: Parts
+}): ServerMessageKind | null => {
+  if (!message.id.startsWith("srv_")) return null
+  const part = message.parts.find((p) => p.type === "data" && p.name === "kind")
+  return (part?.data as ServerMessageKind | undefined) ?? "update"
+}
+
+/** A posted message that carries a label: every kind but a reply, which reads as any reply. */
+const labelled = (message: { id: string; parts: Parts }) => {
+  const kind = postedKind(message)
+  return kind === null || kind === "reply" ? null : kind
+}
+
 /**
- * Above a message the app posted on its own (a `srv_` id): its kind's icon,
- * else the bell, "Update" and when it landed, on the device's clock. The
- * newest update in the thread is in the primary colour, its icon ringing as
- * it arrives.
+ * Above a message the app posted on its own, other than a reply: its kind's
+ * mark (an update's button may give its own) and label, and when it landed,
+ * on the device's clock. The newest labelled message in the thread is in the
+ * primary colour, its mark ringing as it arrives.
  */
-const UpdateLabel: FC = () => {
-  const kind = useAuiState((s) => {
+const UpdateLabel: FC<{ kind: Labelled }> = ({ kind }) => {
+  const about = useAuiState((s) => {
     const button = s.message.parts.find(
       (part) => part.type === "data" && part.name === "button"
     )
@@ -957,25 +987,26 @@ const UpdateLabel: FC = () => {
   })
   const at = useAuiState((s) => sentAt(s.message))
   const latest = useAuiState(
-    (s) =>
-      s.thread.messages.filter((m) => m.id.startsWith("srv_")).at(-1)?.id ===
-      s.message.id
+    (s) => s.thread.messages.filter(labelled).at(-1)?.id === s.message.id
   )
+  const { label, state } = MESSAGE_KINDS[kind]
   const icon = cn(
     "size-3.5",
-    latest && "origin-top text-primary motion-safe:animate-update-ring"
+    latest
+      ? "origin-top text-primary motion-safe:animate-update-ring"
+      : "text-muted-foreground"
   )
   return (
     <p
       data-slot="aui_update-label"
       className="mb-1 flex items-center gap-1.5 text-[0.8125rem] text-muted-foreground"
     >
-      {kind ? (
-        <StatusIcon className={icon} kind={kind} still />
+      {about && kind === "update" ? (
+        <StatusIcon className={icon} kind={about} still />
       ) : (
-        <StateIcon className={icon} state="notifications" />
+        <StateIcon className={icon} state={state} />
       )}
-      <span className={cn(latest && "font-medium text-primary")}>Update</span>
+      <span className={cn(latest && "font-medium text-primary")}>{label}</span>
       <span aria-hidden>·</span>
       <time className="tabular-nums" dateTime={at}>
         {formatTime(new Date(at))}
@@ -1580,7 +1611,7 @@ const AssistantMessage: FC = () => {
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`
 
   const reveal = useReveal()
-  const posted = useAuiState((s) => s.message.id.startsWith("srv_"))
+  const posted = useAuiState((s) => labelled(s.message))
   const running = useAuiState((s) => s.message.status?.type === "running")
   const writing =
     running || reveal.phase === "typing" || reveal.phase === "writing"
@@ -1604,7 +1635,7 @@ const AssistantMessage: FC = () => {
       className="group/message relative -mb-7.5 ps-2 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
       <div className="min-w-0">
-        {posted ? <UpdateLabel /> : null}
+        {posted ? <UpdateLabel kind={posted} /> : null}
         <div
           data-slot="aui_assistant-message-content"
           // What follows words still typing in waits for them (the markdown

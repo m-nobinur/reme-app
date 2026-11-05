@@ -145,7 +145,12 @@ export async function googleResult(
   await postAssistantMessage(kit, {
     orgId: owner.orgId,
     key: `google.result:${attempt}`,
-    message: { text: [text], ...(button && { button }) },
+    // Google's own result on the owner's return is news finished; the rest answers what they did.
+    message: {
+      text: [text],
+      ...(button && { button }),
+      kind: said === "connected" ? "done" : "reply",
+    },
   })
   return new Response(null, { status: 204 })
 }

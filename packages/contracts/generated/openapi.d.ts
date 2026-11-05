@@ -16339,6 +16339,12 @@ export interface components {
             }
       }
     }
+    ServerKindPart: {
+      /** @constant */
+      type: "data-kind"
+      /** @enum {string} */
+      data: "reply" | "update" | "note" | "done" | "reminder"
+    }
     ServerMessage: {
       id: string
       text: string[]
@@ -16511,6 +16517,8 @@ export interface components {
         }[]
         photos: string[]
       }
+      /** @enum {string} */
+      kind?: "reply" | "update" | "note" | "done" | "reminder"
     }
     SetFactsRequest: {
       facts: (

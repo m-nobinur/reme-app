@@ -193,7 +193,7 @@ describe.skipIf(!url)("a proactive turn", () => {
         channel: "in_app",
         key: expect.stringMatching(`^wake:${me.orgId}:`),
         conversationId: id,
-        message: { text: ["Your photo gallery page is live."] },
+        message: { text: ["Your photo gallery page is live."], kind: "update" },
       }),
     ])
     expect(await posted(`wake:${me.orgId}:`)).toHaveLength(1)
@@ -368,6 +368,7 @@ describe.skipIf(!url)("a proactive turn", () => {
     expect(sends[0]).toMatchObject({
       channel: "in_app",
       message: {
+        kind: "note",
         button: {
           label: "Connect Google",
           action: { kind: "connect", service: "google" },

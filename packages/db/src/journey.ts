@@ -9,8 +9,8 @@ import { addressStage } from "./tasks.ts"
 /** A sitting ends after this long with no owner message, or with a new conversation. */
 export const SITTING_GAP_MS = 30 * 60_000
 
-/** Bring-backs of an open question in the sitting its card was shown in; any later sitting gets one. */
-export const BRING_BACKS = 2
+/** Bring-backs of an open question a sitting: once, as Hermes reports a thing once and then stays silent. */
+export const BRING_BACKS = 1
 
 /** The address card as a turn reads it (`cardState`), with when it was shown. */
 export type JourneyCard = {
@@ -46,6 +46,8 @@ export type JourneyInput = {
      * for the newest, what its build left out for want of a fact.
      */
     drafts: readonly { id: string; at: string; left_out?: readonly string[] }[]
+    /** When builds stopped lately, as the workspace lists them. */
+    stopped?: readonly string[]
   }
   card?: JourneyCard | null
   /** Set only for a turn the owner typed. */
@@ -60,10 +62,10 @@ const NOTHING: NonNullable<JourneyInput["website"]> = {
   drafts: [],
 }
 
-/** Something that happened while the owner was away, told once. */
+/** Something that happened since the owner last wrote, told once. */
 export type JourneyChange = {
   key: string
-  kind: "draft_ready" | "bought" | "live" | "google_connected"
+  kind: "draft_ready" | "build_stopped" | "bought" | "live" | "google_connected"
   at: string
   name?: string
 }
@@ -73,7 +75,7 @@ export type JourneyState = Journey & {
   /** The card on screen in this conversation, if any, settled once the stage moved past it. */
   waiting: JourneyCard["waiting"]
   sitting: { fresh: boolean; away_ms: number | null; since: string } | null
-  /** Untold changes since the owner's last message, on a fresh sitting only. */
+  /** Untold changes since the owner's last message, on a turn they typed. */
   changes: JourneyChange[]
   /** Bring the open address back this turn: after an aside while its card waits, or on a return. */
   bring_back: "aside" | "return" | null
@@ -147,12 +149,17 @@ function changesOf(
 ): JourneyChange[] {
   const after = (at: string | null | undefined): at is string =>
     !!at && at > since
-  const found: JourneyChange[] = (input.website ?? NOTHING).drafts.flatMap(
-    (d) =>
-      after(d.at)
-        ? [{ key: `draft:${d.id}`, kind: "draft_ready" as const, at: d.at }]
-        : []
+  const site = input.website ?? NOTHING
+  const found: JourneyChange[] = site.drafts.flatMap((d) =>
+    after(d.at)
+      ? [{ key: `draft:${d.id}`, kind: "draft_ready" as const, at: d.at }]
+      : []
   )
+  // The newest stop, while no build runs and no draft came after it: a stop
+  // its own retry or a later build took over is not news.
+  const stop = [...(site.stopped ?? [])].sort().at(-1)
+  if (after(stop) && !site.building && !site.drafts.some((d) => d.at > stop))
+    found.push({ key: `stopped:${stop}`, kind: "build_stopped", at: stop })
   for (const task of input.tasks) {
     if (task.kind === "address") {
       const name = task.detail.name
@@ -201,8 +208,8 @@ export const LEFT_OUT_TURNS = 3
  * aside; skipped is `put_off` (the stack and the heartbeat's follow-up only);
  * "no, I don't want one" is `declined` (never again); buying elsewhere, the
  * registry showing it bought, DNS live, a draft ready and Google connected or
- * declined each move a stage and, while the owner was away, become a change
- * told once on their return.
+ * declined each move a stage, and with a build stopping, become a change told
+ * once on the owner's next message.
  */
 export function journeyOf(input: JourneyInput): JourneyState {
   const now = input.now ?? new Date()
@@ -231,7 +238,7 @@ export function journeyOf(input: JourneyInput): JourneyState {
   const sitting = visit ? sittingOf(visit, now) : null
   const told = new Set(latches.map((l) => l.key))
   const last = visit?.recent[0]?.at
-  const changes = sitting?.fresh && last ? changesOf(input, last, told) : []
+  const changes = sitting && last ? changesOf(input, last, told) : []
   const brought = sitting
     ? latches.filter(
         (l) =>
@@ -239,13 +246,11 @@ export function journeyOf(input: JourneyInput): JourneyState {
           Date.parse(l.at) >= Date.parse(sitting.since)
       ).length
     : 0
-  const limit =
-    card && sitting && card.shown_at >= sitting.since ? BRING_BACKS : 1
   const due =
     sitting !== null &&
     offer !== null &&
     (card !== null || website !== "none") &&
-    brought < limit
+    brought < BRING_BACKS
   const newest = site.drafts.reduce<(typeof site.drafts)[number] | undefined>(
     (a, d) => (!a || d.at > a.at ? d : a),
     undefined

@@ -1618,6 +1618,7 @@ export const samples: Record<ContractName, unknown> = {
       action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
     },
   },
+  ServerKindPart: { type: "data-kind", data: "note" },
   BuildQuestionsPart: {
     type: "data-build_questions",
     data: {
@@ -1652,6 +1653,7 @@ export const samples: Record<ContractName, unknown> = {
       label: "See the site",
       action: { kind: "open", url: "https://brightclean.example" },
     },
+    kind: "done",
   },
   SetTimeZoneRequest: { time_zone: "Asia/Dhaka" },
   SetFactsRequest: {

@@ -36,6 +36,7 @@ import {
   MessageFeedback,
   QuestionReply,
   ServerButtonPart,
+  ServerKindPart,
   ServerMessage,
 } from "./conversation.ts"
 import {
@@ -381,6 +382,7 @@ export const contracts = {
   ReviewQuoteFormOutput,
   RuntimeSpec,
   ServerButtonPart,
+  ServerKindPart,
   ServerMessage,
   BuildQuestionsPart,
   QuestionReply,

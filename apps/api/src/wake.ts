@@ -341,6 +341,8 @@ export async function wakeTurn(
         channel: "in_app",
         message: {
           text: [reply],
+          // A heartbeat asks after what waits on the owner; an event's turn tells news.
+          kind: heartbeat ? "note" : "update",
           ...(beat?.chip && {
             button: {
               label: beat.chip,

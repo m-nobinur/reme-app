@@ -379,7 +379,7 @@ export async function answerQuestions(
       orgId: owner.orgId,
       key: `address.skipped:${messageId}`,
       conversationId: id,
-      message: { text: [ADDRESS_SKIPPED] },
+      message: { text: [ADDRESS_SKIPPED], kind: "reply" },
     })
   }
   return Response.json(stack)

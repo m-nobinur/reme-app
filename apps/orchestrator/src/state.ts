@@ -1,5 +1,6 @@
 import {
   type AssignmentState,
+  buildFailure,
   CompletionReport,
   HANDOFF_STATUS,
   HandoffResult,
@@ -251,11 +252,30 @@ async function handoffResult(
         .join(". ")
     }
   }
+  // An owner's build that failed on our side is started again or stopped by
+  // retry.ts, which tells them itself; its result asks for no turn of its own.
+  const [made] =
+    to === "failed" &&
+    row.kind.startsWith("site.") &&
+    buildFailure(reason ?? null).retry !== null
+      ? await db
+          .select({ origin: sql<string>`${events.payload}->>'origin'` })
+          .from(events)
+          .where(
+            sql`${events.assignmentId} = ${row.id} and ${events.type} = 'assignment.created'`
+          )
+          .limit(1)
+      : []
   return HandoffResult.parse({
     outcome: HANDOFF_STATUS[to],
     summary: summary.slice(0, 1500),
     evidence,
-    metadata: { kind: row.kind, state: to, ...(reason && { reason }) },
+    metadata: {
+      kind: row.kind,
+      state: to,
+      ...(reason && { reason }),
+      ...(made?.origin === "owner" && { told: true }),
+    },
   })
 }
 

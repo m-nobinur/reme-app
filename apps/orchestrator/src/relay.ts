@@ -362,6 +362,7 @@ export async function askOwner(
     orgId: ids.orgId,
     key: `question:${requestId}`,
     message: {
+      kind: "note",
       text: [askLead(asked.kind ?? "site.build")],
       questions: {
         kind: "build",

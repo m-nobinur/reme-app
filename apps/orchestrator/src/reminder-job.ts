@@ -55,7 +55,7 @@ export const reminderJob: Handler = async ({ db, env, job, now }) => {
       orgId: reminder.orgId,
       key,
       channel: "in_app",
-      message: { text: lines },
+      message: { text: lines, kind: "reminder" },
       // Null for the owner's own, which goes to the newest conversation.
       ...(reminder.conversationId && {
         conversationId: reminder.conversationId,

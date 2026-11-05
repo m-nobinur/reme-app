@@ -109,6 +109,7 @@ import {
   stepCost,
   TONE_LINES,
   toolErrorText,
+  WAKE_LINE,
 } from "../src/cos/agent.ts"
 import { sha256 } from "../src/cos/history.ts"
 import { leftOutLine, RETURN_LINE } from "../src/cos/notes.ts"
@@ -343,6 +344,37 @@ const skillPart = (name: string, of: string) =>
   procedure("cos", name)?.parts.find((p) => p.name === of)?.body ?? ""
 
 describe("the CoS's instructions", () => {
+  it("keep one account of what happened, never naming a mode or calling a notice wrong", () => {
+    expect(INSTRUCTIONS).toMatch(
+      /Never mention your tools, notes, steps or modes to them/
+    )
+    expect(INSTRUCTIONS).toMatch(
+      /the workspace is right: say what changed since, never that an earlier message was wrong/
+    )
+    const ask = contextOf("ask", {
+      site: { host: null, live_version: null },
+      builds: [],
+      questions: [],
+      approvals: [],
+      missing_facts: [],
+    })
+    expect(ask.text).toMatch(/^Mode: ask\. [^\n]*Never name a mode/)
+    expect(ask.text).not.toMatch(/switch(es)? to Act/)
+    expect(WAKE_LINE).toMatch(/A message the app posted already told them/)
+  })
+
+  it("bring up the unasked once a sitting, and keep a wish not to be reminded where check-ins read it", () => {
+    expect(INSTRUCTIONS).toMatch(
+      /Bring up what they did not ask about once a sitting, in one line after your answer[^\n]*never what their profile says not to raise/
+    )
+    expect(INSTRUCTIONS).toMatch(
+      /call put_off[^\n]*Save a wish not to be reminded in their profile with memory: check-ins read it/
+    )
+    expect(WAKE_LINE).toMatch(
+      /their profile's wishes on what not to raise come first/
+    )
+  })
+
   it("tell the model a declined card is the owner's no, and not to propose it again", () => {
     expect(INSTRUCTIONS).toMatch(
       /A declined proposal comes back as "The owner declined"[^\n]*not a refusal: acknowledge it, and don't retry or propose it again unless they ask/
@@ -396,7 +428,10 @@ describe("the CoS's instructions", () => {
         /Never say DNS, CNAME, record, SSL, certificate, property, sitemap or propagation to them/
       )
       expect(INSTRUCTIONS).toMatch(
-        /Never open with "Good news", "Great" or "Nice work", and keep an exclamation mark for a real win/
+        /Never open with "Good news", "Great" or "Nice work"\./
+      )
+      expect(INSTRUCTIONS).toMatch(
+        /Keep to one exclamation mark at most[^\n]*so the rare one still means something/
       )
       expect(skill("web-address")).toMatch(
         /customers trust an address of their own/

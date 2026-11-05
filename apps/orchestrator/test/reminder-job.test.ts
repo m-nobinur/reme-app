@@ -133,7 +133,10 @@ describe.skipIf(!url)("firing a reminder", () => {
         orgId,
         key,
         channel: "in_app",
-        message: { text: ["Reminder: “Ring the boiler engineer”"] },
+        message: {
+          text: ["Reminder: “Ring the boiler engineer”"],
+          kind: "reminder",
+        },
         conversationId,
       },
       {

@@ -196,20 +196,13 @@ describe("journeyOf: bring-backs and their latches", () => {
     at: ago(minutes),
   })
 
-  it("brings a waiting card back after an aside, at most twice in the sitting it was shown in", () => {
+  it("brings a waiting card back after an aside once in the sitting", () => {
     const first = journey({ card: card(), visit: sameSitting })
     expect(first.bring_back).toBe("aside")
     expect(first.record).toEqual([`bring_back:${NOW.toISOString()}`])
     expect(
       journey({ card: card(), visit: sameSitting, latches: [latch(2)] })
         .bring_back
-    ).toBe("aside")
-    expect(
-      journey({
-        card: card(),
-        visit: sameSitting,
-        latches: [latch(3), latch(2)],
-      }).bring_back
     ).toBeNull()
   })
 
@@ -223,8 +216,7 @@ describe("journeyOf: bring-backs and their latches", () => {
     }
     const shown = card({ shown_at: ago(2) })
     expect(
-      journey({ card: shown, visit: begun, latches: [latch(2), latch(1)] })
-        .bring_back
+      journey({ card: shown, visit: begun, latches: [latch(2)] }).bring_back
     ).toBeNull()
     // One from an earlier sitting a moment before does not count.
     const before = {
@@ -232,8 +224,7 @@ describe("journeyOf: bring-backs and their latches", () => {
       at: new Date(Date.parse(ago(2)) - 50).toISOString(),
     }
     expect(
-      journey({ card: shown, visit: begun, latches: [before, latch(1)] })
-        .bring_back
+      journey({ card: shown, visit: begun, latches: [before] }).bring_back
     ).toBe("aside")
   })
 
@@ -367,8 +358,19 @@ describe("journeyOf: the sitting and what changed", () => {
     ).toEqual([])
   })
 
-  it("tells nothing within a sitting, nor what happened before the owner left", () => {
+  it("tells what happened since the owner last wrote within a sitting too, never what came before", () => {
     expect(journey({ tasks: [bought], visit: sameSitting }).changes).toEqual([])
+    const ready = {
+      live: false,
+      building: false,
+      drafts: [{ id: "r2", at: ago(0.5) }],
+    }
+    const state = journey({ website: ready, visit: sameSitting })
+    expect(state.sitting?.fresh).toBe(false)
+    expect(state.changes).toEqual([
+      { key: "draft:r2", kind: "draft_ready", at: ago(0.5) },
+    ])
+    expect(state.record).toEqual(["told:draft:r2"])
     // A new conversation 25 minutes after leaving: the name was bought before they left.
     const before = {
       conversation: OTHER,
@@ -376,6 +378,27 @@ describe("journeyOf: the sitting and what changed", () => {
     }
     expect(
       journey({ tasks: [bought], visit: before }).changes.map((c) => c.kind)
+    ).toEqual(["draft_ready"])
+  })
+
+  it("tells the newest stop of a build, unless a build runs or a draft came after it", () => {
+    const stopped = (over: object = {}) =>
+      journey({
+        website: {
+          live: false,
+          building: false,
+          drafts: [],
+          stopped: [ago(0.8), ago(0.5)],
+          ...over,
+        },
+        visit: sameSitting,
+      }).changes
+    expect(stopped()).toEqual([
+      { key: `stopped:${ago(0.5)}`, kind: "build_stopped", at: ago(0.5) },
+    ])
+    expect(stopped({ building: true })).toEqual([])
+    expect(
+      stopped({ drafts: [{ id: "r3", at: ago(0.2) }] }).map((c) => c.kind)
     ).toEqual(["draft_ready"])
   })
 

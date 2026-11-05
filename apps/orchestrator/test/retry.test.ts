@@ -17,6 +17,7 @@ import {
 } from "@workspace/db"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import type { writeText } from "../src/heartbeat-write.ts"
+import { openChat } from "./chat.ts"
 import { freshOrg, kit, newAssignment } from "./fixture.ts"
 
 // app.ts loads both at import time; neither is reached here.
@@ -35,6 +36,7 @@ const {
   narrate,
   noteProblem,
   noteResumed,
+  postNote,
   readyNote,
   readyText,
   resumedText,
@@ -739,6 +741,28 @@ live("a failed owner build's retry", () => {
         next: "retrying",
       }),
       expect.objectContaining({ kind: "resumed", attempt: 3 }),
+    ])
+  })
+})
+
+live("a build note's kind in the chat", () => {
+  it("posts a ready draft as done, a stop or a draft given back as a note, and the rest as updates", async () => {
+    const orgId = await freshOrg(kit)
+    await openChat(kit, orgId)
+    const id = crypto.randomUUID()
+    for (const key of ["ready", "stopped", "draft_back", "retrying"])
+      await postNote(kit, orgId, { key: `site.${key}:${id}`, text: key })
+    const rows = await kit.withOrg({ orgId }, (db) =>
+      db.execute<{ text: string; kind: string }>(sql`
+        select p->>'text' as text, (select k->>'data' from jsonb_array_elements(content->'parts') k where k->>'type' = 'data-kind') as kind
+        from conversation_messages, jsonb_array_elements(content->'parts') p
+        where p->>'type' = 'text' order by seq`)
+    )
+    expect([...rows].map((r) => [r.text, r.kind])).toEqual([
+      ["ready", "done"],
+      ["stopped", "note"],
+      ["draft_back", "note"],
+      ["retrying", "update"],
     ])
   })
 })
