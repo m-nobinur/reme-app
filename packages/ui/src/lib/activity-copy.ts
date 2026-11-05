@@ -577,6 +577,12 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: ["Noted that for later"],
     fail: ["note that for later"],
   },
+  offer_choices: {
+    kind: "thinking",
+    working: ["Lining up your options"],
+    done: ["Lined up your options"],
+    fail: ["line up your options"],
+  },
   offer_grant: {
     kind: "thinking",
     working: ["Saving your choice"],

@@ -5823,6 +5823,14 @@ export interface components {
             message: string
           }
         }
+    ChoicesPart: {
+      /** @constant */
+      type: "data-choices"
+      data: {
+        label: string
+        send: string
+      }[]
+    }
     CompletionReport: {
       /** Format: uuid */
       report_id: string
@@ -6131,6 +6139,7 @@ export interface components {
         | "memory"
         | "search_conversations"
         | "put_off"
+        | "offer_choices"
         | "inspect_domain"
         | "domain_bought"
         | "offer_grant"
@@ -6627,6 +6636,7 @@ export interface components {
           | "memory"
           | "search_conversations"
           | "put_off"
+          | "offer_choices"
           | "inspect_domain"
           | "domain_bought"
           | "offer_grant"
@@ -9296,6 +9306,16 @@ export interface components {
           turn_id: string
           tool_call_id: string
           /** @constant */
+          tool: "offer_choices"
+          output: {
+            /** @constant */
+            outcome: "offered"
+          }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
           tool: "inspect_domain"
           output:
             | {
@@ -11849,6 +11869,7 @@ export interface components {
             | "memory"
             | "search_conversations"
             | "put_off"
+            | "offer_choices"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -11904,6 +11925,7 @@ export interface components {
             | "memory"
             | "search_conversations"
             | "put_off"
+            | "offer_choices"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -11957,6 +11979,7 @@ export interface components {
             | "memory"
             | "search_conversations"
             | "put_off"
+            | "offer_choices"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -12011,6 +12034,7 @@ export interface components {
             | "memory"
             | "search_conversations"
             | "put_off"
+            | "offer_choices"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -12064,6 +12088,7 @@ export interface components {
             | "memory"
             | "search_conversations"
             | "put_off"
+            | "offer_choices"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -12117,6 +12142,7 @@ export interface components {
             | "memory"
             | "search_conversations"
             | "put_off"
+            | "offer_choices"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -12170,6 +12196,7 @@ export interface components {
             | "memory"
             | "search_conversations"
             | "put_off"
+            | "offer_choices"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -14605,6 +14632,16 @@ export interface components {
       /** @enum {string} */
       rating: "up" | "down"
     }
+    OfferChoicesInput: {
+      choices: {
+        label: string
+        send: string
+      }[]
+    }
+    OfferChoicesOutput: {
+      /** @constant */
+      outcome: "offered"
+    }
     OfferGrantInput: {
       /** @enum {string} */
       kind: "create_reminder" | "record_review"
@@ -16517,6 +16554,10 @@ export interface components {
         }[]
         photos: string[]
       }
+      choices?: {
+        label: string
+        send: string
+      }[]
       /** @enum {string} */
       kind?: "reply" | "update" | "note" | "done" | "reminder"
     }

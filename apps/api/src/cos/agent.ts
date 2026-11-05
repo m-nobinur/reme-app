@@ -53,6 +53,7 @@ import {
   asSchema,
   convertToModelMessages,
   type FlexibleSchema,
+  hasToolCall,
   isStepCount,
   type JSONSchema7,
   type JSONValue,
@@ -104,6 +105,7 @@ import {
   inspectDomain,
   isLive,
   newContact,
+  offerChoices,
   ownerSaid,
   putOff,
   readSite,
@@ -254,7 +256,7 @@ const isWarning = (message: ModelMessage) =>
   )
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "65"
+const PREFIX_VERSION = "66"
 
 /**
  * The prompt-cache key every call on the prefix sends, the review's too:
@@ -299,6 +301,7 @@ ${VOICE}
 - A declined proposal comes back as "The owner declined", then their words if they gave any. That is them saying no, not a refusal: acknowledge it, and don't retry or propose it again unless they ask.
 - "User cancelled tool call by sending a new message." means they talked over a proposal: neither yes nor no. Don't act on it, and ask about it again only if it still matters.
 - A refused or corrected call is your slip: call it again correctly and leave them out of it. Don't tell them, don't ask them to decline or ignore a card, and don't name fields such as proof or contact.
+- When moving on needs their decision (choosing or buying a domain, connecting Google, going ahead with a website change, a stopped build), end the reply with offer_choices. Never for what you can sensibly decide or just do (a note to memory, a wording call, advice), an open question such as a phone number, or what a card on screen asks. Ignored pills are no yes: the decision stays where it lives and comes back only as the open items note says. When their message answers it, that is their answer; when it is about something else, answer that and don't ask again in the same reply.
 </cards_and_tools>
 
 <what_you_can_do>
@@ -311,6 +314,7 @@ ${VOICE}
 
 <memory>
 The memory tool says what belongs where: a skill's notes come first, the profile only for what holds in every conversation. Write facts, not instructions to yourself: "Prefers short replies", never "Always reply briefly": an imperative is re-read as a directive later and can override what they ask then. Never store a password, card number, door or lockbox code or other access secret.
+Save what is worth keeping as you learn it, without asking first: they see and undo notes on the memory screen.
 When they mention an earlier conversation, or one may hold what you need, recall it with search_conversations before asking them to repeat themselves.
 </memory>
 
@@ -430,6 +434,9 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
     "Save durable facts to memory that lasts across conversations. It is in every turn's context: keep entries compact and high-signal.\nHOW: make ALL changes to one target in ONE call: add, patch (old_text, a span of one entry, becomes content) or remove (the entry holding old_text). The limit is checked only on the FINAL result, so one call can remove or patch stale entries AND add new ones.\nWHEN: only what holds beyond this conversation. Preferences and corrections for one kind of work go in that skill's notes, which load only when relevant.\nIF FULL: refused with the current entries. Reissue as ONE batch that removes or shortens stale entries and adds the new one.\nTARGETS: user = who they are and how they want you to talk to them, 1,500 chars; notes = how this business runs where the facts hold nothing, 2,200; skill:<name> = how they want that work done, 600 each.\nWrite facts in words they wrote here; a standing request is their whole sentence as typed: Asked: \"their sentence\".\nSKIP: what the facts or workspace hold, raw data, task progress, finished work, to-dos, anything stale within a week (search_conversations finds those), business facts (request_change), time zones (set_time_zone), promises (create_reminder). Procedures belong in skills.",
   search_conversations:
     "Search this business's earlier conversations, their words and yours, by words they used: short dated snippets, best and newest first.",
+  // After hermes-agent tools/clarify_tool.py CLARIFY_SCHEMA, MIT.
+  offer_choices:
+    'Show quick replies above their composer for the one decision your reply ends on: a tap sends its send as their message, and typing is always their other answer. Call it last, after your words, and alone: it ends your turn.\nORDER MATTERS: put the option you recommend FIRST; the app marks it recommended, so any other order recommends the wrong thing.\nCRITICAL: put each option ONLY in choices, NEVER list them in your reply, where they read as dead text they cannot tap. Right: "Shall I start the new About page?" with Go ahead, Not now. Wrong: "Go ahead, or wait?".\nlabel is a few words; send is their whole message, naming the thing, such as "I haven\'t bought brightwaycleaning.co.uk yet". Prefer making a reasonable default choice yourself when the decision is low-stakes.',
   offer_grant:
     "Offer them a card that lets one kind of action run with no card from now on: create_reminder for a reminder they did not ask for in so many words, record_review for saving a customer's review.",
   put_off:
@@ -468,8 +475,8 @@ const MEMORY_TOOLS: readonly CosToolName[] = [
   "save_correction",
   "put_off",
 ]
-/** Asks about the website and changes nothing: no card, in both modes, never in a turn nobody typed. */
-const ASK_TOOLS: readonly CosToolName[] = ["ask_developer"]
+/** Asks the Developer or the owner and changes nothing: no card, in both modes, never in a turn nobody typed. */
+const ASK_TOOLS: readonly CosToolName[] = ["ask_developer", "offer_choices"]
 const ACT_TOOLS: readonly CosToolName[] = [
   "request_change",
   "answer_question",
@@ -1244,11 +1251,13 @@ export function lastStep(
  * the core and descriptions budgets did not bind, so they stay. They are
  * review triggers, not walls: a feature that needs more raises the budget in
  * the same commit, with the measured cost (3-engineering.md, prompt growth).
+ * offer_choices (2026-11-06) took the prefix to 36,952, about 375 more cached
+ * tokens a call, so the prefix budget is 37,000.
  */
 export const PROMPT_BUDGET = {
   core: 13_000,
   descriptions: 9_710,
-  prefix: 36_500,
+  prefix: 37_000,
 }
 
 /**
@@ -1459,6 +1468,7 @@ const BODIES = {
   memory,
   search_conversations: searchConversations,
   put_off: putOff,
+  offer_choices: offerChoices,
   offer_grant: offerGrant,
   skill_view: skillView,
   save_correction: saveCorrection,
@@ -1983,6 +1993,10 @@ function toolsFor(run: AgentTurn, allowed: readonly CosToolName[] | null) {
       ...describe("put_off"),
       inputSchema: modelInput("put_off"),
     }),
+    offer_choices: tool({
+      ...describe("offer_choices"),
+      inputSchema: modelInput("offer_choices"),
+    }),
     offer_grant: tool({
       ...describe("offer_grant"),
       inputSchema: modelInput("offer_grant"),
@@ -2232,6 +2246,8 @@ export function cosAgent(
     // that step added, counted from its characters.
     stopWhen: [
       isStepCount(LIMITS.steps),
+      // Quick replies end the turn on the step that offers them, with no call after.
+      hasToolCall("offer_choices"),
       ({ steps }) => {
         const last = steps.at(-1)
         if (!last) return false

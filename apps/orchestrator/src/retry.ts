@@ -9,6 +9,7 @@ import {
   CHANGE_CHECKED,
   CHANGE_REFUSED,
   ChangeChecked,
+  type Choices,
   CompletionReport,
   type GateName,
   type Journey,
@@ -125,6 +126,17 @@ export function resumedText(kind: string): string {
 /** A change to an unpublished draft failed, and the draft it started from is back. */
 export const DRAFT_BACK =
   "I couldn't make your change, so your earlier draft is still ready to publish. Nothing for you to do."
+
+/** The stopped note's one quick reply: the try again its words ask for. */
+export const tryAgain = (kind: string): Choices => [
+  {
+    label: "Try again",
+    send:
+      kind === "site.revise"
+        ? "Try my website change again."
+        : "Try building my website again.",
+  },
+]
 
 export function stoppedText(kind: string, reason: string): string {
   if (reason === CHANGE_REFUSED) {
@@ -343,7 +355,7 @@ export function addressLine({
 }
 
 /** A chat line to post. */
-export type Note = { key: string; text: string }
+export type Note = { key: string; text: string; choices?: Choices }
 
 /** The change's label from its creation, its new words from the quick lane and whether its report says it was not made as asked, each absent when not recorded. */
 async function changeOf(db: OrgScopedDb, ids: Ids): Promise<Change> {
@@ -557,6 +569,7 @@ export async function postNote(
     key: note.key,
     message: {
       text: [note.text],
+      ...(note.choices && { choices: note.choices }),
       kind: NOTE_KINDS[note.key.split(":")[0] ?? ""] ?? "update",
     },
   })
@@ -783,6 +796,7 @@ export async function afterFailure(
       note: {
         key: note.key,
         text: await narrate(env, kit, ids.orgId, row.kind, note, text),
+        choices: tryAgain(row.kind),
       },
     }
   }

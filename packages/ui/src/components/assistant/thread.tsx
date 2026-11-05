@@ -43,6 +43,7 @@ import {
   waitsToSkip,
 } from "@workspace/ui/components/assistant/ask-open"
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
+import { DecisionPills } from "@workspace/ui/components/assistant/decision-pills"
 import { DesignReply } from "@workspace/ui/components/assistant/design-reply"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
@@ -833,6 +834,7 @@ const ThreadRoot: FC<{
                 <div className="flex flex-col gap-2">
                   <SkipThisOne />
                   <RecapReplies />
+                  <LatestChoices />
                   <div className="empty:hidden" ref={setTray} />
                   <Composer autoFocus={autoFocus} expanded={isEmpty} />
                   {/* The same gap as the tray above the composer. */}
@@ -1153,6 +1155,9 @@ const RecapReplies: FC = () => {
     </ReplyPills>
   )
 }
+
+/** The newest decision's quick replies, once this conversation's history is in. */
+const LatestChoices: FC = () => (useSendable() ? <DecisionPills /> : null)
 
 /** One row per suggestion under the composer; a press sends it. */
 const ThreadSuggestions: FC = () => {

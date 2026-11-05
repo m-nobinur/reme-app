@@ -1205,6 +1205,38 @@ describe("the CoS's model and price", () => {
     }
   })
 
+  it("offers quick replies in both modes with no card, never in a turn nobody typed, at most three, each a label and a message", () => {
+    expect(activeTools("ask")).toContain("offer_choices")
+    expect(activeTools("act")).toContain("offer_choices")
+    expect(activeTools("ask", true)).not.toContain("offer_choices")
+    const input = COS_TOOLS.offer_choices.input
+    const one = { label: "Not yet", send: "I haven't bought it yet" }
+    expect(input.safeParse({ choices: [one, one, one] }).success).toBe(true)
+    expect(input.safeParse({ choices: [one, one, one, one] }).success).toBe(
+      false
+    )
+    expect(input.safeParse({ choices: [] }).success).toBe(false)
+    expect(input.safeParse({ choices: ["Not yet"] }).success).toBe(false)
+    expect(
+      input.safeParse({ choices: [{ ...one, label: "x".repeat(33) }] }).success
+    ).toBe(false)
+  })
+
+  it("tells the model to offer choices only for a real decision, recommendation first, never listed in the reply, and to save notes without asking", () => {
+    expect(INSTRUCTIONS).toContain("end the reply with offer_choices")
+    expect(INSTRUCTIONS).toContain("Ignored pills are no yes")
+    expect(INSTRUCTIONS).toContain("without asking first")
+    expect(DESCRIPTIONS.offer_choices).toContain(
+      "put the option you recommend FIRST"
+    )
+    expect(DESCRIPTIONS.offer_choices).toContain(
+      "NEVER list them in your reply"
+    )
+    expect(DESCRIPTIONS.offer_choices).toContain(
+      "Prefer making a reasonable default choice yourself when the decision is low-stakes."
+    )
+  })
+
   it("asks about the site in both modes with no card, never in a turn nobody typed, which still reads a review", async () => {
     expect(activeTools("ask")).toContain("ask_developer")
     expect(activeTools("act")).toContain("ask_developer")
@@ -1873,7 +1905,53 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await shownAsStored(me, id, done.chunks)
   })
 
-  it("gives Ask mode the read tools, ask_developer, memory, save_correction and put_off", async () => {
+  it("ends the turn on offer_choices with no call after it, and the next turn's history holds the offer", async () => {
+    const id = await conversation(me)
+    const choices = [
+      { label: "Bought it", send: "I've bought brightwaycleaning.co.uk" },
+      {
+        label: "Not yet",
+        send: "I haven't bought brightwaycleaning.co.uk yet",
+      },
+    ]
+    const asked = "Did you manage to buy brightwaycleaning.co.uk?"
+    const { model, sent } = scripted([
+      ...said(asked).slice(0, -1),
+      {
+        type: "tool-call",
+        toolCallId: "call_choices",
+        toolName: "offer_choices",
+        input: JSON.stringify({ choices }),
+      } as StreamPart,
+      {
+        type: "finish",
+        finishReason: { unified: "tool-calls", raw: "tool_calls" },
+        usage: usage(),
+      },
+    ])
+    const done = await turn(me, typed(id, "Hi"), { model })
+    expect(done.response.status, done.text).toBe(200)
+    expect(sent).toHaveLength(1)
+    const [ended] = await turnsOf(id)
+    expect(ended).toMatchObject({ outcome: "answered", steps: 1 })
+    expect((await tailOf(me, id)).parts).toContainEqual(
+      expect.objectContaining({
+        type: "tool-offer_choices",
+        state: "output-available",
+        input: { choices },
+        output: { outcome: "offered" },
+      })
+    )
+
+    const next = scripted(said("No rush."))
+    await turn(me, typed(id, "Not yet"), { model: next.model })
+    const history = wire(next.sent)
+    expect(history).toContain(asked)
+    expect(history).toContain('"toolName":"offer_choices"')
+    expect(history).toContain("I haven't bought brightwaycleaning.co.uk yet")
+  })
+
+  it("gives Ask mode the read tools, ask_developer, offer_choices, memory, save_correction and put_off", async () => {
     const id = await conversation(me)
     const { model, sent } = scripted(said("Here is what I can see."))
     await turn(me, typed(id, "What can you do?", "ask"), { model })
@@ -1893,6 +1971,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "get_workspace",
       "inspect_domain",
       "memory",
+      "offer_choices",
       "put_off",
       "read_site",
       "save_correction",

@@ -279,9 +279,28 @@ export const ServerKindPart = z.strictObject({
 })
 
 /**
+ * One quick reply to a decision the message asks: `label` on the pill, and
+ * `send` the owner's message a tap sends, which reads whole in the chat.
+ */
+export const Choice = z.strictObject({ label: Text(32), send: Text(300) })
+
+/**
+ * The quick replies, the recommendation first. Typing in the composer is
+ * the other answer, so none is "Other".
+ */
+export const Choices = z.array(Choice).min(1).max(3)
+
+/** How `Choices` is stored among a message's parts: an AI SDK data part. */
+export const ChoicesPart = z.strictObject({
+  type: z.literal("data-choices"),
+  data: Choices,
+})
+
+/**
  * A message the server posts on its own, with no owner turn: the text parts,
  * then the button part if there is one, then the questions if there are any,
- * then a quote request from the website if it carries one, then its kind.
+ * then a quote request from the website if it carries one, then its quick
+ * replies, then its kind.
  * `id` is derived from what happened, not generated, so posting it twice
  * stores it once.
  */
@@ -291,6 +310,7 @@ export const ServerMessage = z.strictObject({
   button: ServerButton.optional(),
   questions: BuildQuestions.optional(),
   enquiry: Enquiry.optional(),
+  choices: Choices.optional(),
   kind: ServerMessageKind.optional(),
 })
 
@@ -315,6 +335,9 @@ export type ServerButtonPart = z.infer<typeof ServerButtonPart>
 export type ServerMessage = z.infer<typeof ServerMessage>
 export type ServerMessageKind = z.infer<typeof ServerMessageKind>
 export type ServerKindPart = z.infer<typeof ServerKindPart>
+export type Choice = z.infer<typeof Choice>
+export type Choices = z.infer<typeof Choices>
+export type ChoicesPart = z.infer<typeof ChoicesPart>
 export type QuestionInput = z.infer<typeof QuestionInput>
 export type QuestionAnswer = z.infer<typeof QuestionAnswer>
 export type BuildQuestion = z.infer<typeof BuildQuestion>

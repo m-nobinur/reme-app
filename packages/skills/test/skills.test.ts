@@ -179,7 +179,7 @@ describe("skills", () => {
       /"I haven't bought <name> yet"\), reply in two or three short sentences/
     )
     expect(part("bought-elsewhere")).toContain(
-      "one sentence asking how they'd like to go on, which never lists the options"
+      "Name no options in your words; end with offer_choices"
     )
     expect(part("bought-elsewhere")).toContain(
       "Do not infer that silence means it's bought."

@@ -10,7 +10,7 @@ import {
   Ulid,
   Uuid,
 } from "./common.ts"
-import { ConversationMessage, MessageRating } from "./conversation.ts"
+import { Choices, ConversationMessage, MessageRating } from "./conversation.ts"
 import {
   DnsRecord,
   DomainCheck,
@@ -842,6 +842,14 @@ export const PutOffOutput = z.discriminatedUnion("outcome", [
   Refused,
 ])
 
+/** `offer_choices`'s input: the quick replies to the question the reply ends on, the recommendation first. */
+export const OfferChoicesInput = z.strictObject({ choices: Choices })
+
+/** `offer_choices`'s output: the pills are on screen, and the turn ends. */
+export const OfferChoicesOutput = z.strictObject({
+  outcome: z.literal("offered"),
+})
+
 /**
  * The kinds of action the owner may let the Chief of Staff do with no card,
  * named by the tool that does each. Paying money and a new phone or email on
@@ -912,6 +920,7 @@ export const COS_TOOLS = {
     output: SearchConversationsOutput,
   },
   put_off: { input: PutOffInput, output: PutOffOutput },
+  offer_choices: { input: OfferChoicesInput, output: OfferChoicesOutput },
   inspect_domain: { input: InspectDomainInput, output: InspectDomainOutput },
   domain_bought: { input: DomainBoughtInput, output: BoughtElsewhereOutput },
   offer_grant: { input: OfferGrantInput, output: OfferGrantOutput },
@@ -1158,6 +1167,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
   }),
   z.strictObject({
     ...Called,
+    tool: z.literal("offer_choices"),
+    output: COS_TOOLS.offer_choices.output,
+  }),
+  z.strictObject({
+    ...Called,
     tool: z.literal("inspect_domain"),
     output: COS_TOOLS.inspect_domain.output,
   }),
@@ -1379,6 +1393,8 @@ export type SearchConversationsOutput = z.infer<
   typeof SearchConversationsOutput
 >
 export type PutOffOutput = z.infer<typeof PutOffOutput>
+export type OfferChoicesInput = z.infer<typeof OfferChoicesInput>
+export type OfferChoicesOutput = z.infer<typeof OfferChoicesOutput>
 export type GrantKind = z.infer<typeof GrantKind>
 export type OfferGrantInput = z.infer<typeof OfferGrantInput>
 export type OfferGrantOutput = z.infer<typeof OfferGrantOutput>
