@@ -2,11 +2,7 @@ import {
   type ToolCallMessagePartComponent,
   useAuiState,
 } from "@assistant-ui/react"
-import {
-  ArrowSquareOutIcon,
-  CaretDownIcon,
-  CheckCircleIcon,
-} from "@phosphor-icons/react"
+import { ArrowSquareOutIcon, CaretDownIcon } from "@phosphor-icons/react"
 import {
   type BoughtElsewhereOutput,
   BuyDomainInput,
@@ -336,7 +332,7 @@ function NameRow({
         >
           {offer.why ? <Badge variant="secondary">Recommended</Badge> : null}
           <span className="inline-flex items-center gap-1">
-            <CheckCircleIcon className="size-3.5 text-primary" />
+            <DoneIcon className="size-3.5" />
             Available
           </span>
           {price ? (
