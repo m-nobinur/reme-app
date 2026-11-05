@@ -87,9 +87,9 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
         />
       ))}
       {count > 1 ? (
-        // On the card's top edge at its right, mostly above it, so a row's own button keeps
+        // On the card's top edge at its left, mostly above it, so a row's own button keeps
         // the whole width of the row.
-        <div className="absolute end-3 top-0 z-10 flex items-center rounded-full border border-border bg-card px-0.5 text-muted-foreground shadow-xs">
+        <div className="absolute start-3 top-0 z-10 flex items-center rounded-full border border-border bg-card px-0.5 text-muted-foreground shadow-xs">
           <Button
             aria-label="Previous update"
             onClick={() => step(-1)}
