@@ -214,6 +214,7 @@ const RELEASED: Record<
   "20": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "21": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "22": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "23": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
 }
 
 describe("CONTEXT_POLICY", () => {
@@ -630,6 +631,37 @@ describe("skill views in the history", () => {
     expect(
       messages.find((m) => m.id === "a1")?.parts.map((p) => p.type)
     ).toEqual(["step-start", "tool-skill_view", "text"])
+  })
+
+  it("reads a logged remember call as memory, so a conversation from before the rename replays", () => {
+    const { messages } = deriveCosMessages(
+      session(
+        context(T[0]),
+        said(T[0], "u1", "I prefer calls after 4pm"),
+        replied(T[0], "a1", [
+          { type: "step-start" },
+          {
+            type: "tool-remember",
+            toolCallId: "call_r",
+            state: "output-available",
+            input: {
+              operations: [{ action: "add", text: "Prefers calls after 4pm" }],
+            },
+            output: {
+              outcome: "saved",
+              note: "Saved. This update is complete; do not repeat it.",
+              fullness: "2%, 23/1,500 chars",
+            },
+          },
+          { type: "text", text: "Noted.", state: "done" },
+        ])
+      ),
+      CONTEXT_POLICY
+    )
+    expect(messages.find((m) => m.id === "a1")?.parts[1]).toMatchObject({
+      type: "tool-memory",
+      output: { outcome: "saved" },
+    })
   })
 
   it("names the skills a summary replaced, so they are viewed again", () => {

@@ -1,12 +1,12 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { join, relative } from "node:path"
 import {
+  type MemoryOperation,
   OWNER_MEMORY_REVIEW_KEY,
   OWNER_PROFILE_KEY,
   OwnerProfile,
   PROFILE_MAX_CHARS,
   type ProfileLine,
-  type RememberOperation,
 } from "@workspace/contracts"
 import {
   appendSessionEvent,
@@ -27,11 +27,11 @@ import {
   fullness,
   inOwnersWords,
   inverse,
+  memory,
   memoryView,
   quoteOf,
   readProfile,
   refusalOf,
-  remember,
   takeChip,
   undoVersion,
 } from "../src/cos/memory.ts"
@@ -54,7 +54,7 @@ const line = (text: string, source: ProfileLine["source"] = "owner_said") => ({
   source,
   at: AT,
 })
-const add = (text: string): RememberOperation => ({ action: "add", text })
+const add = (content: string): MemoryOperation => ({ action: "add", content })
 
 /** The rules for what may be saved, against lines an owner and an attacker would write. */
 const CORPUS: [string, "accept" | "reject"][] = [
@@ -226,17 +226,13 @@ describe("applying operations", () => {
     line("Quotes go out on Fridays"),
   ]
 
-  it("adds, replaces and removes by a short unique piece, in one call", () => {
+  it("adds, patches a span and removes by a short unique piece, in one call", () => {
     const done = applyOperations(
       held,
       [
         add("Has a spaniel called Biscuit"),
-        {
-          action: "replace",
-          match: "calls after",
-          text: "Prefers calls after 5pm",
-        },
-        { action: "remove", match: "Fridays" },
+        { action: "patch", old_text: "4PM", content: "5pm" },
+        { action: "remove", old_text: "Fridays" },
       ],
       "owner_said",
       AT
@@ -255,9 +251,7 @@ describe("applying operations", () => {
       "owner_said",
       AT
     )
-    expect(done).toMatchObject({
-      refusal: { code: "memory.duplicate", message: "already saved" },
-    })
+    expect(done).toMatchObject({ refusal: { code: "memory.duplicate" } })
   })
 
   it("changes nothing when any operation fails", () => {
@@ -265,7 +259,7 @@ describe("applying operations", () => {
       held,
       [
         add("Has a spaniel called Biscuit"),
-        { action: "remove", match: "nothing like it" },
+        { action: "remove", old_text: "nothing like it" },
       ],
       "owner_said",
       AT
@@ -277,7 +271,7 @@ describe("applying operations", () => {
     expect(
       applyOperations(
         held,
-        [{ action: "remove", match: "s" }],
+        [{ action: "remove", old_text: "s" }],
         "owner_said",
         AT
       )
@@ -285,7 +279,7 @@ describe("applying operations", () => {
     expect(
       applyOperations(
         held,
-        [{ action: "replace", match: "calls" }],
+        [{ action: "patch", old_text: "calls" }],
         "owner_said",
         AT
       )
@@ -313,10 +307,10 @@ describe("applying operations", () => {
     ]
     expect(profileChars(full)).toBeLessThanOrEqual(PROFILE_MAX_CHARS)
     const over = applyOperations(full, [add(long("f"))], "owner_said", AT)
-    expect(over).toMatchObject({ full })
+    expect(over).toMatchObject({ full: { lines: full } })
     const merged = applyOperations(
       full,
-      [{ action: "remove", match: "aaa" }, add(long("f"))],
+      [{ action: "remove", old_text: "aaa" }, add(long("f"))],
       "owner_said",
       AT
     )
@@ -441,8 +435,8 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
 
   const said = (
     turn: Awaited<ReturnType<typeof turnOf>>,
-    ...ops: RememberOperation[]
-  ) => remember(context(), { operations: ops }, "", turn)
+    ...ops: MemoryOperation[]
+  ) => memory(context(), { target: "user", operations: ops }, "", turn)
 
   const lines = () =>
     kit.withOrg({ orgId: me.orgId }, async (db) =>
@@ -454,7 +448,8 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     const out = await said(turn, add("Prefers calls after 4pm"))
     expect(out).toEqual({
       outcome: "saved",
-      note: "Saved. This update is complete; do not repeat it.",
+      target: "user",
+      note: "Write saved. This update is complete; do not repeat it.",
       fullness: "2%, 23/1,500 chars",
     })
     expect(await lines()).toEqual(["Prefers calls after 4pm"])
@@ -470,9 +465,9 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
   it("keeps working notes apart from the profile, in their own budget, and reads them into the turn", async () => {
     const turn = await turnOf()
     const before = await lines()
-    const out = await remember(
+    const out = await memory(
       context(),
-      { operations: [add("Quotes go out on Fridays")], store: "notes" },
+      { target: "notes", operations: [add("Quotes go out on Fridays")] },
       "",
       turn
     )
@@ -492,7 +487,7 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
       personaOf([], [], notes)
     )
     expect(text).toMatch(
-      /<data source="working_notes" taint="untrusted_input">\n\[1%, 24\/2,200 chars\]\nQuotes go out on Fridays/
+      /<data source="working_notes" taint="untrusted_input">\nWORKING NOTES \(how this business runs\) \[1%, 24\/2,200 chars\]\nQuotes go out on Fridays/
     )
   })
 
@@ -511,7 +506,7 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     const out = await said(turn, add("Prefers calls after 4pm"))
     expect(out).toMatchObject({
       outcome: "refused",
-      error: { message: "already saved" },
+      error: { code: "memory.duplicate" },
     })
     const row = await kit.withOrg({ orgId: me.orgId }, (db) =>
       currentFact(db, OWNER_PROFILE_KEY)
@@ -533,8 +528,8 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     const full = await said(turn, add(long("f")))
     expect(full).toMatchObject({
       outcome: "full",
-      note: "full: merge or remove first",
-      lines: expect.arrayContaining(["Prefers calls after 4pm"]),
+      note: expect.stringContaining("Retry as ONE batch"),
+      current_entries: expect.arrayContaining(["Prefers calls after 4pm"]),
     })
     // The runner logs each result; the count reads them back.
     for (let i = 0; i < FULL_REFUSALS; i++) {
@@ -548,21 +543,21 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
           payload: {
             turn_id: turn.turnId,
             tool_call_id: `call_${i}`,
-            tool: "remember",
+            tool: "memory",
             output: full,
           },
           taint: ["untrusted_input"],
         })
       )
     }
-    expect(await said(turn, add("Likes short replies"))).toEqual({
+    expect(await said(turn, add("Likes short replies"))).toMatchObject({
       outcome: "stopped",
-      note: "stop retrying memory and continue your reply",
+      note: expect.stringContaining("Stop retrying memory"),
     })
     // Another turn starts over, and a merge that fits is saved.
     const next = { ...turn, turnId: "01J00000000000000000000002" }
     expect(
-      await said(next, { action: "remove", match: "bbb" }, add(long("f")))
+      await said(next, { action: "remove", old_text: "bbb" }, add(long("f")))
     ).toMatchObject({ outcome: "saved" })
   })
 

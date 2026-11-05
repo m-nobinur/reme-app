@@ -101,9 +101,11 @@ export type ContextPolicy = {
  * Version 21 reads a `cos.skill` as a `skill_view` call and its result after
  * the turn's messages, keeps skill views in older turns, reads `read_skill`
  * as `skill_view`, and names the skills a summary replaced.
+ * Version 23 reads `remember` as `memory` and heads each memory store in
+ * the context with its name and fullness, as Hermes's blocks are headed.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "22",
+  version: "23",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,
@@ -388,9 +390,17 @@ const skillMessage = (seq: number, skill: CosSkill): Message => {
   }
 }
 
-/** A part as the model reads it: `read_skill`, renamed `skill_view`, keeps one name in the history. */
+/** Retired tools by the tool that replaced them, so the history keeps one name for each. */
+const RENAMED: Record<string, string> = {
+  "tool-read_skill": "tool-skill_view",
+  "tool-remember": "tool-memory",
+}
+
+/** A part as the model reads it: `read_skill` as `skill_view`, `remember` as `memory`. */
 const renamed = (part: Part): Part =>
-  part.type === "tool-read_skill" ? { ...part, type: "tool-skill_view" } : part
+  part.type in RENAMED
+    ? { ...part, type: RENAMED[part.type] as Part["type"] }
+    : part
 
 /** The skills `rows` hold, viewed by the model or loaded by code, by name, in order. */
 function skillsIn(rows: readonly SessionEvent[]): string[] {
@@ -399,8 +409,7 @@ function skillsIn(rows: readonly SessionEvent[]): string[] {
     if (e.type !== "cos.message") return []
     return CosMessage.parse(e.payload).message.parts.flatMap((p) => {
       const name = (p.input as { name?: unknown } | undefined)?.name
-      return (p.type === "tool-skill_view" || p.type === "tool-read_skill") &&
-        typeof name === "string"
+      return renamed(p).type === "tool-skill_view" && typeof name === "string"
         ? [name]
         : []
     })

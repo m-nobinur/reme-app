@@ -39,7 +39,8 @@ import {
 } from "vitest"
 import { settleCard } from "../src/build-questions.ts"
 import { grantedKinds, offerGrant, saveGrant } from "../src/cos/grants.ts"
-import { remember } from "../src/cos/memory.ts"
+import { memory } from "../src/cos/memory.ts"
+import { searchConversations } from "../src/cos/recall.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
 import { saveCorrection, scheduleSkill, skillView } from "../src/cos/skills.ts"
 import { wallToUtc } from "../src/cos/time.ts"
@@ -3324,19 +3325,38 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     })
   })
 
-  describe("remember", () => {
+  describe("memory", () => {
     it("saves a line of the owner's profile and answers that the write is complete", async () => {
       const output = kept(
-        "remember",
-        await remember(
+        "memory",
+        await memory(
           context(me),
-          { operations: [{ action: "add", text: "Prefers calls after 4pm" }] },
+          {
+            target: "user",
+            operations: [{ action: "add", content: "Prefers calls after 4pm" }],
+          },
           "",
           await turnOf(me, ["I prefer calls after 4pm."])
         )
       )
-      expect(COS_TOOLS.remember.output.parse(output)).toEqual(output)
+      expect(COS_TOOLS.memory.output.parse(output)).toEqual(output)
       expect(output).toMatchObject({ outcome: "saved" })
+    })
+  })
+
+  describe("search_conversations", () => {
+    it("finds what the owner said in an earlier conversation, never the one in hand", async () => {
+      await turnOf(me, ["Our van is parked behind the bakery on Tuesdays."])
+      const now = await turnOf(me, ["Where is the van on Tuesdays?"])
+      const found = kept(
+        "search_conversations",
+        await searchConversations(context(me), { query: "van parked" }, "", now)
+      )
+      expect(found).toMatchObject({
+        outcome: "found",
+        results: [{ by: "owner", snippet: expect.stringContaining("bakery") }],
+      })
+      expect(JSON.stringify(found)).not.toContain(now.sessionId)
     })
   })
 

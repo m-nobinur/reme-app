@@ -24,7 +24,13 @@ import {
 import { PROCEDURES, type Procedure, procedure } from "@workspace/skills"
 import type { ModelMessage } from "ai"
 import { thoughtLine } from "../thinking.ts"
-import { lockProfile, ownerWords, quotedFrom, refusalOf } from "./memory.ts"
+import {
+  lockProfile,
+  ownerWords,
+  quotedFrom,
+  refusalOf,
+  skillNotesText,
+} from "./memory.ts"
 import type { ToolContext } from "./tools.ts"
 import type { Turn } from "./turns.ts"
 
@@ -69,11 +75,16 @@ export function statusOf(
   return skill.status.find((s) => s !== last) ?? (skill.status[0] as string)
 }
 
-/** The skill, or its part, as a view returns it, with the line to show. */
+/**
+ * The skill, or its part, as a view returns it, with the line to show. The
+ * core carries this business's notes for the skill, so they load only with
+ * it and a part never repeats them.
+ */
 export function viewOf(
   skill: Procedure,
   part: string | undefined,
-  status: string
+  status: string,
+  notes?: string
 ): ViewedSkill | null {
   if (!part) {
     return {
@@ -81,6 +92,7 @@ export function viewOf(
       body: skill.body,
       ...(skill.parts.length > 0 && { parts: skill.parts.map((p) => p.name) }),
       status,
+      ...(notes && { notes }),
     }
   }
   const found = skill.parts.find((p) => p.name === part)
@@ -120,7 +132,7 @@ export const logView = (
  * the next view returns the text again.
  */
 export async function skillView(
-  _ctx: ToolContext,
+  ctx: ToolContext,
   input: SkillViewInput,
   _key: string,
   turn: Turn,
@@ -139,7 +151,12 @@ export async function skillView(
   const view = viewOf(
     skill,
     input.part,
-    statusOf(skill, input.step, held.at(-1)?.status)
+    statusOf(skill, input.step, held.at(-1)?.status),
+    input.part
+      ? undefined
+      : await ctx.kit.withOrg({ orgId: ctx.owner.orgId }, (db) =>
+          skillNotesText(db, skill.name)
+        )
   )
   if (!view) {
     logView(turn, input, "model", "refused", null)
@@ -153,7 +170,10 @@ export async function skillView(
   if (
     held.some(
       (h) =>
-        h.name === view.name && h.part === view.part && h.body === view.body
+        h.name === view.name &&
+        h.part === view.part &&
+        h.body === view.body &&
+        h.notes === view.notes
     )
   ) {
     logView(turn, input, "model", "unchanged", null)

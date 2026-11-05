@@ -26,7 +26,11 @@ const EMPTY = {
   stopped: [],
 }
 
-const ctx = {} as ToolContext
+/** No notes for this business: the skills here are shared, the notes per org. */
+const ctx = {
+  owner: { orgId: "o1" },
+  kit: { withOrg: async () => undefined },
+} as unknown as ToolContext
 const turn = { turnId: "t1", sessionId: "s1" } as Turn
 const view = (
   input: Parameters<typeof skillView>[1],

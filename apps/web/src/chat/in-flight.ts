@@ -1,4 +1,4 @@
-import { CHAT_TURN_MS } from "@workspace/contracts"
+import { CHAT_TURN_MS, COS_GRACE_MS, COS_TURN_MS } from "@workspace/contracts"
 import { useSyncExternalStore } from "react"
 
 /**
@@ -8,8 +8,13 @@ import { useSyncExternalStore } from "react"
 
 export type InFlight = { id: string; text: string; at: number }
 
-/** How long a turn may run before a reload stops waiting for its reply. */
-export const IN_FLIGHT_MS = CHAT_TURN_MS + 15_000
+/**
+ * How long a turn may run before a reload stops waiting for its reply: the
+ * longer of an onboarding turn's start and a Chief of Staff turn with its
+ * lapse (160 s + 30 s), then 15 s to read its reply back, so 205 s.
+ */
+export const IN_FLIGHT_MS =
+  Math.max(CHAT_TURN_MS, COS_TURN_MS + COS_GRACE_MS) + 15_000
 
 const key = (thread: string) => `turn:${thread}`
 

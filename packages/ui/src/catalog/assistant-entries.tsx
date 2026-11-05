@@ -131,11 +131,17 @@ const REMEMBER_CALL: ThreadMessageLike[] = [
     content: [
       {
         args: {
-          operations: [{ action: "add", text: "Prefers calls after 4pm" }],
+          target: "user",
+          operations: [{ action: "add", content: "Prefers calls after 4pm" }],
         },
-        result: { outcome: "saved", note: "Saved.", fullness: "3 of 40" },
-        toolCallId: "call_remember",
-        toolName: "remember",
+        result: {
+          outcome: "saved",
+          target: "user",
+          note: "Saved.",
+          fullness: "2%, 23/1,500 chars",
+        },
+        toolCallId: "call_memory",
+        toolName: "memory",
         type: "tool-call",
       },
       { text: "Got it, after 4pm from now on.", type: "text" },

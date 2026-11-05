@@ -92,7 +92,7 @@ import {
   readSession,
   sha256,
 } from "./cos/history.ts"
-import { takeChip } from "./cos/memory.ts"
+import { skillNotesText, takeChip } from "./cos/memory.ts"
 import {
   type AddressCard,
   cardState,
@@ -2015,16 +2015,21 @@ async function journeyRows(db: OrgScopedDb, id: string, byOwner: boolean) {
 }
 
 /**
- * The skills, and parts, code loaded in this session since its last
- * compaction, as `name/part`: a view stays in the history until then.
- * shortcut: a view the model made itself is not counted, so a trigger after
- * one loads it again; read `cos.message` parts too if that shows up live.
+ * The skills, and parts, this session holds since its last compaction, as
+ * `name/part`: loaded by code (`cos.skill`) or viewed by the model (its
+ * `skill_view` result), since a view stays in the history until then.
  */
-async function recentSkills(db: OrgScopedDb, id: string): Promise<string[]> {
+export async function recentSkills(
+  db: OrgScopedDb,
+  id: string
+): Promise<string[]> {
   const rows = await db.execute<{ key: string }>(sql`
-    select distinct (s.payload->>'name') || '/' || coalesce(s.payload->>'part', '') as key
+    select distinct coalesce(s.payload->>'name', s.payload->'output'->>'name') || '/'
+      || coalesce(s.payload->>'part', s.payload->'output'->>'part', '') as key
     from ${events} s
-    where s.session_id = ${id} and s.type = 'cos.skill'
+    where s.session_id = ${id}
+      and (s.type = 'cos.skill' or (s.type = 'cos.tool_result'
+        and s.payload->>'tool' = 'skill_view' and s.payload->'output'->>'outcome' = 'skill'))
       and s.seq > coalesce((select (k.payload->'replaced_range'->>'to_seq')::bigint
         from ${events} k where k.session_id = ${id} and k.type = 'cos.compaction'
         order by k.seq desc limit 1), -1)`)
@@ -2094,24 +2099,31 @@ export async function turnNotes(
   const handover = kind?.kind === "onboarding"
   const loaded = await recentSkills(db, id)
   let last: string | undefined
-  const skills = skillsDue({
+  const due = skillsDue({
     handover,
     intent: intent === "site_change" ? null : intent,
     card,
     said,
     scheduled,
-  }).flatMap(({ name, part, trigger }): CosSkill[] => {
+  }).filter(({ name, part }) => !loaded.includes(`${name}/${part ?? ""}`))
+  const skills: CosSkill[] = []
+  for (const { name, part, trigger } of due) {
     const found = procedure("cos", name)
-    if (!found || loaded.includes(`${name}/${part ?? ""}`)) return []
+    if (!found) continue
     const line =
       trigger === "schedule"
         ? (found.status[0] as string)
         : TRIGGER_LINES[trigger]
-    const view = viewOf(found, part, statusOf(found, line, last))
-    if (!view) return []
+    const view = viewOf(
+      found,
+      part,
+      statusOf(found, line, last),
+      part ? undefined : await skillNotesText(db, name)
+    )
+    if (!view) continue
     last = view.status
-    return [{ ...view, trigger }]
-  })
+    skills.push({ ...view, trigger })
+  }
   const skillLine = skills[0]?.status ?? null
   if (kind && !handover) {
     // shortcut: a conversation too short to compact leaves no summary; persist one at its end if that loses too much.

@@ -559,11 +559,17 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: ["Checked your pages on Google"],
     fail: ["check your pages on Google"],
   },
-  remember: {
+  memory: {
     kind: "thinking",
     working: ["Noting that down", "Making a note of that"],
     done: ["Noted that down"],
     fail: ["note that down"],
+  },
+  search_conversations: {
+    kind: "thinking",
+    working: ["Looking back through our chats", "Checking what we said before"],
+    done: ["Looked back through our chats"],
+    fail: ["look back through our chats"],
   },
   put_off: {
     kind: "thinking",
