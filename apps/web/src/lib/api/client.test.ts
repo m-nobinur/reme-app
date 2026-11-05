@@ -1066,6 +1066,12 @@ it("reads the details page, notes buying elsewhere, and asks the registry once b
   expect(await apiSource.domainElsewhere(NAME, "k-12")).toEqual({ done: true })
   expect(headerOf(calls.at(-1), "idempotency-key")).toBe("k-12")
 
+  answers[`POST /domains/${NAME}/not-yet`] = new Response(null, {
+    status: 204,
+  })
+  expect(await apiSource.domainNotYet(NAME, "k-13")).toEqual({ done: true })
+  expect(headerOf(calls.at(-1), "idempotency-key")).toBe("k-13")
+
   // A name that is not a hostname never becomes a path.
   const before = calls.length
   await expect(

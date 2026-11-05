@@ -343,6 +343,17 @@ export const buyDomainElsewhere = createServerFn({ method: "POST" })
       await source.domainElsewhere(data.name, data.key)
   )
 
+/** The owner has not bought the name they went to buy: the address is put off. */
+export const putOffDomain = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const data = record(input)
+    return { name: DomainName.parse(data.name), key: keyOf(data.key) }
+  })
+  .handler(
+    async ({ data }): Promise<WriteOutcome> =>
+      await source.domainNotYet(data.name, data.key)
+  )
+
 export const createReminder = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const data = record(input)

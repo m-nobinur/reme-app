@@ -62,6 +62,7 @@ import {
   decideApproval,
   deleteReminder,
   getPreview,
+  putOffDomain,
 } from "@/lib/api/server"
 import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
 import { DECISION_REFUSED } from "@/lib/decision"
@@ -292,8 +293,15 @@ function ConnectAddress() {
 /**
  * A name the owner went to buy themselves: their two answers, each said in
  * the chat with the address intent, so the assistant takes it from there.
+ * Not yet also puts the address off, which `onNotYet` shows at once.
  */
-function BoughtAnswers({ name }: { name: string }) {
+function BoughtAnswers({
+  name,
+  onNotYet,
+}: {
+  name: string
+  onNotYet: () => void
+}) {
   const askInChat = useAskInChat()
   return (
     <div className="flex flex-wrap gap-2">
@@ -303,7 +311,10 @@ function BoughtAnswers({ name }: { name: string }) {
           <button
             className={NEXT_STEP}
             key={key}
-            onClick={() => askInChat(ask, "connect_address")}
+            onClick={() => {
+              askInChat(ask, "connect_address")
+              if (key === "not_bought") onNotYet()
+            }}
             type="button"
           >
             {label}
@@ -701,6 +712,13 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const chat = lastChat(frame.useLoaderData().conversations)
   const [status, setStatus] = useAnnouncement(workspace)
   const [tab, setTab] = useState<Tab>("activity")
+  const [notYet, setNotYet] = useState<string | null>(null)
+  const address = workspace?.journey?.address
+  const buying =
+    address?.stage === "buying_elsewhere" ? (address.name ?? null) : null
+  useEffect(() => {
+    if (!buying) setNotYet(null)
+  }, [buying])
   const thumbnail = liveThumbnail(workspace?.liveRevision ?? null)
   const upcoming = upcomingNotes(workspace?.reminderNotes ?? [])
   const tabList = useFocusAfterDone(upcoming)
@@ -726,9 +744,16 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       ? tab
       : "activity"
 
-  const address = workspace.journey?.address
-  const buying =
-    address?.stage === "buying_elsewhere" ? (address.name ?? null) : null
+  const leaving = (each: SegmentView) =>
+    each.kind === "address" && buying !== null && buying === notYet
+  const putOff = async (name: string) => {
+    setNotYet(name)
+    const outcome = await putOffDomain({
+      data: { name, key: crypto.randomUUID() },
+    }).catch(() => null)
+    if (outcome?.done) await refresh()
+    else setNotYet(null)
+  }
   const segment = (each: SegmentView) => (
     <Segment
       fresh={arrived.has(each.id)}
@@ -737,7 +762,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       segment={each}
     >
       {each.kind === "address" && buying ? (
-        <BoughtAnswers name={buying} />
+        <BoughtAnswers name={buying} onNotYet={() => putOff(buying)} />
       ) : null}
       {/* The first version's review is the going-live segment's first step. */}
       {each.kind === "golive" && panel.review ? (
@@ -767,8 +792,19 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
     </Segment>
   )
   const row = (each: SegmentView) => (
-    <div className="py-3" key={each.id}>
-      {segment(each)}
+    <div
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-enter ease-standard motion-reduce:transition-none",
+        leaving(each)
+          ? "grid-rows-[0fr] opacity-0"
+          : "grid-rows-[1fr] opacity-100"
+      )}
+      inert={leaving(each)}
+      key={each.id}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <div className="py-3">{segment(each)}</div>
+      </div>
     </div>
   )
   // Not listed twice: a piece showing its tick in Now joins Completed after.

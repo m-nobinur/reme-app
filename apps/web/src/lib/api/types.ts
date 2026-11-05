@@ -377,6 +377,8 @@ export type OwnerDataSource = {
   ) => Promise<DomainRegistrantPrefill | { refused: string | null }>
   /** The owner buys the name themselves; the api watches the registry for it. */
   domainElsewhere: (name: string, key: string) => Promise<WriteOutcome>
+  /** The owner has not bought the name yet: the api puts the address off. */
+  domainNotYet: (name: string, key: string) => Promise<WriteOutcome>
   /** Mark one reminder done. Doing it twice changes nothing. */
   completeReminder: (id: string) => Promise<WriteOutcome>
   /** Delete one reminder. One already gone counts as deleted. */
