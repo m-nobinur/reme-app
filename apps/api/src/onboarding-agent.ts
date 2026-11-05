@@ -119,7 +119,7 @@ export const ONBOARDING_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
 export type PlannerEffort = "low" | "medium" | "high"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-34"
+export const PLANNER_VERSION = "onboarding-35"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -297,8 +297,6 @@ Money is theirs to set, and the website asks for a quote instead of listing pric
 </say>
 
 ${VOICE}
-
-In this conversation never write a dash, long or short (— or –): use a comma, a colon or a full stop. This replaces the voice note's allowance above.
 
 <examples>
 Each is one turn from a different trade, showing the move and say. They show the shape of a good turn: never copy their words; write your own for this business.

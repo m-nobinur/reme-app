@@ -2613,7 +2613,7 @@ describe("a streamed turn", () => {
 
   it("forbids dashes and echoing, and no example does either", async () => {
     const instructions = await plannerInstructions()
-    expect(instructions).toContain("never write a dash")
+    expect(instructions).toContain("Never write an em or en dash")
     expect(instructions).toContain("NEVER repeat their sentence back")
     expect(instructions).toContain("NEVER introduce the recap yourself")
     const examples = instructions.slice(
