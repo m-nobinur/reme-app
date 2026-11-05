@@ -1440,6 +1440,16 @@ export const samples: Record<ContractName, unknown> = {
   ApprovalGrantSwitch: { kind: "record_review", on: false },
   PutOffInput: { kind: "google", days: 7 },
   PutOffOutput: { outcome: "put_off", until: "2026-11-03T08:00:00.000Z" },
+  OfferChoicesInput: {
+    choices: [
+      {
+        label: "Not yet",
+        send: "I haven't bought brightwaycleaning.co.uk yet",
+      },
+      { label: "Bought it", send: "I've bought brightwaycleaning.co.uk" },
+    ],
+  },
+  OfferChoicesOutput: { outcome: "offered" },
   RememberInput: {
     operations: [{ action: "add", text: "Prefers calls after 4pm" }],
   },
@@ -1619,6 +1629,10 @@ export const samples: Record<ContractName, unknown> = {
     },
   },
   ServerKindPart: { type: "data-kind", data: "note" },
+  ChoicesPart: {
+    type: "data-choices",
+    data: [{ label: "Try again", send: "Try building my website again." }],
+  },
   BuildQuestionsPart: {
     type: "data-build_questions",
     data: {

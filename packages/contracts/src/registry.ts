@@ -28,6 +28,7 @@ import {
 } from "./chat.ts"
 import {
   BuildQuestionsPart,
+  ChoicesPart,
   Conversation,
   ConversationHistory,
   ConversationList,
@@ -82,6 +83,8 @@ import {
   GetReviewOutput,
   InspectDomainInput,
   InspectDomainOutput,
+  OfferChoicesInput,
+  OfferChoicesOutput,
   OfferGrantInput,
   OfferGrantOutput,
   PutOffInput,
@@ -368,6 +371,8 @@ export const contracts = {
   ApprovalGrantSwitch,
   PutOffInput,
   PutOffOutput,
+  OfferChoicesInput,
+  OfferChoicesOutput,
   QuoteField,
   RecordReviewInput,
   RecordReviewOutput,
@@ -383,6 +388,7 @@ export const contracts = {
   RuntimeSpec,
   ServerButtonPart,
   ServerKindPart,
+  ChoicesPart,
   ServerMessage,
   BuildQuestionsPart,
   QuestionReply,

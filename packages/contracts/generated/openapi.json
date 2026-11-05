@@ -20371,6 +20371,48 @@
           }
         ]
       },
+      "ChoicesPart": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "data-choices"
+          },
+          "data": {
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32,
+                  "pattern": "\\S"
+                },
+                "send": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "label",
+                "send"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "type",
+          "data"
+        ],
+        "additionalProperties": false
+      },
       "CompletionReport": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -21687,6 +21729,7 @@
                 "memory",
                 "search_conversations",
                 "put_off",
+                "offer_choices",
                 "inspect_domain",
                 "domain_bought",
                 "offer_grant",
@@ -23336,6 +23379,7 @@
                     "memory",
                     "search_conversations",
                     "put_off",
+                    "offer_choices",
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
@@ -32672,6 +32716,43 @@
                     "additionalProperties": false
                   }
                 ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "offer_choices"
+              },
+              "output": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "const": "offered"
+                  }
+                },
+                "required": [
+                  "outcome"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -43231,6 +43312,7 @@
                     "memory",
                     "search_conversations",
                     "put_off",
+                    "offer_choices",
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
@@ -43373,6 +43455,7 @@
                     "memory",
                     "search_conversations",
                     "put_off",
+                    "offer_choices",
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
@@ -43508,6 +43591,7 @@
                     "memory",
                     "search_conversations",
                     "put_off",
+                    "offer_choices",
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
@@ -43650,6 +43734,7 @@
                     "memory",
                     "search_conversations",
                     "put_off",
+                    "offer_choices",
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
@@ -43785,6 +43870,7 @@
                     "memory",
                     "search_conversations",
                     "put_off",
+                    "offer_choices",
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
@@ -43919,6 +44005,7 @@
                     "memory",
                     "search_conversations",
                     "put_off",
+                    "offer_choices",
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
@@ -44053,6 +44140,7 @@
                     "memory",
                     "search_conversations",
                     "put_off",
+                    "offer_choices",
                     "inspect_domain",
                     "domain_bought",
                     "offer_grant",
@@ -53150,6 +53238,57 @@
         ],
         "additionalProperties": false
       },
+      "OfferChoicesInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "choices": {
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32,
+                  "pattern": "\\S"
+                },
+                "send": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "label",
+                "send"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "choices"
+        ],
+        "additionalProperties": false
+      },
+      "OfferChoicesOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "const": "offered"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "additionalProperties": false
+      },
       "OfferGrantInput": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -59802,6 +59941,33 @@
               "photos"
             ],
             "additionalProperties": false
+          },
+          "choices": {
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32,
+                  "pattern": "\\S"
+                },
+                "send": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "label",
+                "send"
+              ],
+              "additionalProperties": false
+            }
           },
           "kind": {
             "type": "string",

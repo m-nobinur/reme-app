@@ -85,6 +85,7 @@ describe("COS_TOOLS", () => {
       "memory",
       "search_conversations",
       "put_off",
+      "offer_choices",
       "inspect_domain",
       "domain_bought",
       "offer_grant",
