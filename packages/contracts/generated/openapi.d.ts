@@ -9150,7 +9150,7 @@ export interface components {
             | {
                 /** @constant */
                 outcome: "saved"
-                /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+                /** @description user, notes or skill:<name> */
                 target: string
                 note: string
                 fullness: string
@@ -9158,7 +9158,7 @@ export interface components {
             | {
                 /** @constant */
                 outcome: "full"
-                /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+                /** @description user, notes or skill:<name> */
                 target: string
                 note: string
                 fullness: string
@@ -14367,15 +14367,14 @@ export interface components {
       }[]
     }
     MemoryInput: {
-      /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+      /** @description user, notes or skill:<name> */
       target: string
-      /** @description Applied together against the final character budget; a single change is a one-item list. */
       operations: {
         /** @enum {string} */
         action: "add" | "patch" | "remove"
-        /** @description Required for add and patch. For add, the new entry. For patch, the text that replaces old_text; the rest of the entry is kept. */
+        /** @description add: the new entry. patch: what old_text becomes. */
         content?: string
-        /** @description Required for patch and remove: text from one entry. patch replaces exactly this span; remove deletes the whole entry. */
+        /** @description patch, remove: text from one entry. */
         old_text?: string
       }[]
     }
@@ -14390,7 +14389,7 @@ export interface components {
       | {
           /** @constant */
           outcome: "saved"
-          /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+          /** @description user, notes or skill:<name> */
           target: string
           note: string
           fullness: string
@@ -14398,7 +14397,7 @@ export interface components {
       | {
           /** @constant */
           outcome: "full"
-          /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+          /** @description user, notes or skill:<name> */
           target: string
           note: string
           fullness: string
@@ -14432,7 +14431,7 @@ export interface components {
       id: string
       /** @enum {string} */
       action: "add" | "replace" | "patch" | "remove"
-      /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+      /** @description user, notes or skill:<name> */
       target?: string
       text?: string
       was?: string
@@ -14549,7 +14548,7 @@ export interface components {
         id: string
         /** @enum {string} */
         action: "add" | "replace" | "patch" | "remove"
-        /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+        /** @description user, notes or skill:<name> */
         target?: string
         text?: string
         was?: string
@@ -14809,7 +14808,7 @@ export interface components {
         id: string
         /** @enum {string} */
         action: "add" | "replace" | "patch" | "remove"
-        /** @description user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done. */
+        /** @description user, notes or skill:<name> */
         target?: string
         text?: string
         was?: string
@@ -16199,7 +16198,6 @@ export interface components {
       connected_at: string | null
     }
     SearchConversationsInput: {
-      /** @description Words or a phrase they used, or that would be in the answer. */
       query: string
     }
     SearchConversationsOutput:

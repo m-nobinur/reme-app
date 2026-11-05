@@ -112,9 +112,7 @@ export const SkillNotes = z
 export const MemoryTarget = z
   .string()
   .regex(/^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$/)
-  .describe(
-    "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
-  )
+  .describe("user, notes or skill:<name>")
 
 /** The stores the owner's page edits and undoes: every skill's notes are one store. */
 export const MemoryStoreName = z.enum(["user", "notes", "skills"])
@@ -205,26 +203,16 @@ export const MemoryOperation = z.strictObject({
   action: z.enum(["add", "patch", "remove"]),
   content: Text(PROFILE_LINE_MAX)
     .optional()
-    .describe(
-      "Required for add and patch. For add, the new entry. For patch, the text that replaces old_text; the rest of the entry is kept."
-    ),
+    .describe("add: the new entry. patch: what old_text becomes."),
   old_text: Text(PROFILE_LINE_MAX)
     .optional()
-    .describe(
-      "Required for patch and remove: text from one entry. patch replaces exactly this span; remove deletes the whole entry."
-    ),
+    .describe("patch, remove: text from one entry."),
 })
 
 /** `memory`'s input: one target, every change to it in one batch, applied together or not at all. */
 export const MemoryInput = z.strictObject({
   target: MemoryTarget,
-  operations: z
-    .array(MemoryOperation)
-    .min(1)
-    .max(8)
-    .describe(
-      "Applied together against the final character budget; a single change is a one-item list."
-    ),
+  operations: z.array(MemoryOperation).min(1).max(8),
 })
 
 /**

@@ -808,9 +808,7 @@ export const PutOffInput = z.strictObject({
 
 /** `search_conversations`'s input, after Hermes's session search: words to find in earlier conversations. */
 export const SearchConversationsInput = z.strictObject({
-  query: Text(200).describe(
-    "Words or a phrase they used, or that would be in the answer."
-  ),
+  query: Text(200),
 })
 
 /**

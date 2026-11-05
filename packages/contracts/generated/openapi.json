@@ -32199,7 +32199,7 @@
                       "target": {
                         "type": "string",
                         "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
-                        "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+                        "description": "user, notes or skill:<name>"
                       },
                       "note": {
                         "type": "string",
@@ -32232,7 +32232,7 @@
                       "target": {
                         "type": "string",
                         "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
-                        "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+                        "description": "user, notes or skill:<name>"
                       },
                       "note": {
                         "type": "string",
@@ -52112,7 +52112,7 @@
           "target": {
             "type": "string",
             "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
-            "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+            "description": "user, notes or skill:<name>"
           },
           "operations": {
             "minItems": 1,
@@ -52130,14 +52130,14 @@
                   ]
                 },
                 "content": {
-                  "description": "Required for add and patch. For add, the new entry. For patch, the text that replaces old_text; the rest of the entry is kept.",
+                  "description": "add: the new entry. patch: what old_text becomes.",
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 300,
                   "pattern": "\\S"
                 },
                 "old_text": {
-                  "description": "Required for patch and remove: text from one entry. patch replaces exactly this span; remove deletes the whole entry.",
+                  "description": "patch, remove: text from one entry.",
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 300,
@@ -52148,8 +52148,7 @@
                 "action"
               ],
               "additionalProperties": false
-            },
-            "description": "Applied together against the final character budget; a single change is a one-item list."
+            }
           }
         },
         "required": [
@@ -52208,7 +52207,7 @@
               "target": {
                 "type": "string",
                 "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
-                "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+                "description": "user, notes or skill:<name>"
               },
               "note": {
                 "type": "string",
@@ -52241,7 +52240,7 @@
               "target": {
                 "type": "string",
                 "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
-                "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+                "description": "user, notes or skill:<name>"
               },
               "note": {
                 "type": "string",
@@ -52365,7 +52364,7 @@
           "target": {
             "type": "string",
             "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
-            "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+            "description": "user, notes or skill:<name>"
           },
           "text": {
             "type": "string",
@@ -52921,7 +52920,7 @@
                 "target": {
                   "type": "string",
                   "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
-                  "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+                  "description": "user, notes or skill:<name>"
                 },
                 "text": {
                   "type": "string",
@@ -53610,7 +53609,7 @@
                 "target": {
                   "type": "string",
                   "pattern": "^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
-                  "description": "user: who the owner is. notes: how this business runs. skill:<name>: how they want that skill's work done."
+                  "description": "user, notes or skill:<name>"
                 },
                 "text": {
                   "type": "string",
@@ -58647,8 +58646,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200,
-            "pattern": "\\S",
-            "description": "Words or a phrase they used, or that would be in the answer."
+            "pattern": "\\S"
           }
         },
         "required": [
