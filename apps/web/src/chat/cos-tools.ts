@@ -31,7 +31,8 @@ export const cosTools = (titles: string, zone: string | null = null) => {
 /**
  * What the cards' live state is read from, as one string that changes only
  * when it does: whether Google is signed in (null before the api says), the
- * domains the website is live on, and the open reminders (null unread).
+ * domains the website is live on, the open reminders (null unread) and
+ * whether a version is published.
  */
 export const liveKey = (workspace: Workspace | null | undefined) => {
   const standing = workspace?.activity?.standing
@@ -53,6 +54,7 @@ export const liveKey = (workspace: Workspace | null | undefined) => {
         : []
     ),
     reminders: workspace ? workspace.reminderNotes.map((r) => r.id) : null,
+    published: workspace ? workspace.live !== null : null,
   })
 }
 
@@ -62,6 +64,7 @@ export const liveState = (key: string) => {
     google: boolean | null
     domains: string[]
     reminders: string[] | null
+    published: boolean | null
   } = JSON.parse(key)
   const domains = new Set(live.domains)
   const reminders = live.reminders && new Set(live.reminders)
@@ -69,6 +72,7 @@ export const liveState = (key: string) => {
     cards: {
       googleConnected: live.google,
       domainLive: (name: string) => domains.has(name),
+      published: live.published,
     },
     reminderOpen: reminders ? (id: string) => reminders.has(id) : undefined,
   }

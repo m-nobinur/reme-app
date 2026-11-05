@@ -1066,26 +1066,11 @@ it("reads the details page, notes buying elsewhere, and asks the registry once b
   expect(await apiSource.domainElsewhere(NAME, "k-12")).toEqual({ done: true })
   expect(headerOf(calls.at(-1), "idempotency-key")).toBe("k-12")
 
-  answers[`POST /domains/${NAME}/bought`] = {
-    outcome: "not_registered_yet",
-    name: NAME,
-  }
-  expect(await apiSource.domainBought(NAME, "k-13")).toEqual({
-    outcome: "not_registered_yet",
-    name: NAME,
-  })
-  const connecting = {
-    outcome: "connecting",
-    method: "records",
-    email_affected: false,
-    steps: [{ type: "CNAME", name: "www", value: "domains.remeai.co.uk" }],
-  }
-  answers[`POST /domains/${NAME}/bought`] = connecting
-  expect(await apiSource.domainBought(NAME, "k-14")).toEqual(connecting)
-
   // A name that is not a hostname never becomes a path.
   const before = calls.length
-  await expect(apiSource.domainBought("../account", "k-15")).rejects.toThrow()
+  await expect(
+    apiSource.domainElsewhere("../account", "k-15")
+  ).rejects.toThrow()
   expect(calls).toHaveLength(before)
 })
 

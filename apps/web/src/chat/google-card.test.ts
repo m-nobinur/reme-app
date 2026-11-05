@@ -130,6 +130,7 @@ it("keeps a call that has no result quiet, and an unreadable one honest", async 
 const connected = (googleConnected: boolean | null): LiveCards => ({
   googleConnected,
   domainLive: () => false,
+  published: null,
 })
 
 it("says connected, with nothing to press, on an offer from before the owner signed in", async () => {

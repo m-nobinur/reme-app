@@ -4,7 +4,6 @@ import {
   type ApprovalGrantSwitch,
   ApprovalGrants,
   type AttentionItem as Attention,
-  BoughtElsewhereOutput,
   BuildQuestions,
   CHAT_TURN_MS,
   type ChangeKind,
@@ -746,18 +745,6 @@ async function domainElsewhere(
   return await outcome(await post(path, undefined, key), path)
 }
 
-async function domainBought(
-  name: string,
-  key: string
-): ReturnType<OwnerDataSource["domainBought"]> {
-  const path = `/domains/${DomainName.parse(name)}/bought`
-  return await domainAnswer(
-    await post(path, undefined, key),
-    path,
-    BoughtElsewhereOutput.parse
-  )
-}
-
 async function completeReminder(id: string): Promise<WriteOutcome> {
   const path = `/reminders/${segment(id)}`
   // Done is done: a second press is the same request.
@@ -1047,7 +1034,6 @@ export const apiSource: OwnerDataSource = {
   domainStatus,
   domainRegistrant,
   domainElsewhere,
-  domainBought,
   googleConnect,
   googleResult,
   conversations,

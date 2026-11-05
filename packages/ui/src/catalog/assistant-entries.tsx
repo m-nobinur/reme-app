@@ -33,6 +33,7 @@ import {
 import {
   type DomainPurchase,
   DomainPurchaseProvider,
+  SKIP_DOMAIN,
 } from "@workspace/ui/components/assistant/buy-domain"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
@@ -1867,7 +1868,7 @@ const CONNECT_STEPS_PAUSED: ThreadMessageLike[] = [
 ]
 
 // What find_domain answers: a search still running, a refusal with none
-// free, then six names with buying here off, the tray docked for them.
+// free, then six names with buying here off, in the message.
 const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
   ask("No, help me get one"),
   cosCall(
@@ -1883,7 +1884,16 @@ const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
   cosCall("find_domain", "find_found", { args: {}, result: PRUNING_ROWS }),
 ]
 
-/** The same names with buying here on: Reme's price, and Continue to Your details. */
+/** Skipped, then asked again: the first list gives way to the fresh one. */
+const FIND_DOMAIN_AGAIN: ThreadMessageLike[] = [
+  ask("No, help me get one"),
+  cosCall("find_domain", "find_first", { args: {}, result: PRUNING_ROWS }),
+  ask(SKIP_DOMAIN),
+  ask("Can you show me some domains again?"),
+  cosCall("find_domain", "find_again", { args: {}, result: PRUNING_ROWS }),
+]
+
+/** The same names with buying here on: Reme's price, and Buy for it once chosen. */
 const FIND_DOMAIN_BUY_HERE: ThreadMessageLike[] = [
   ask("I don't have a website address. Can you sort one?"),
   cosCall("find_domain", "find_found_here", {
@@ -1968,7 +1978,6 @@ const CATALOG_PURCHASE: DomainPurchase = {
     missing: ["street", "city", "postal_code", "country_code"],
   }),
   elsewhere: async () => undefined,
-  bought: async (name) => ({ outcome: "not_registered_yet", name }),
   checkout: async () => ({
     outcome: "refused",
     code: "domain.buy_unavailable",
@@ -2879,14 +2888,14 @@ const STACK_STATES: [string, ReactNode, ThreadMessageLike[]?][] = [
     "never-answered",
     <StackedReady
       key="never-answered"
-      tail={[journeyRow("Choose your web address", "Connect")]}
+      tail={[journeyRow("Choose your domain", "Connect now")]}
     />,
   ],
   [
     "skipped",
     <StackedReady
       key="skipped"
-      tail={[journeyRow("Connect your domain", "Connect")]}
+      tail={[journeyRow("Add your domain", "Connect now")]}
     />,
   ],
   [
@@ -2915,7 +2924,7 @@ const STACK_STATES: [string, ReactNode, ThreadMessageLike[]?][] = [
     "question-open",
     <StackedReady
       key="question-open"
-      tail={[journeyRow("Choose your web address", "Connect")]}
+      tail={[journeyRow("Choose your domain", "Connect now")]}
     />,
     ASK_FACT_OPEN.slice(0, 1),
   ],
@@ -3455,6 +3464,7 @@ const assistantCatalog = [
         <div className="flex flex-col gap-4">
           <FixtureThread height="h-[64rem]" messages={FIND_DOMAIN_STATES} />
           <FixtureThread height="h-[48rem]" messages={FIND_DOMAIN_BUY_HERE} />
+          <FixtureThread height="h-[56rem]" messages={FIND_DOMAIN_AGAIN} />
         </div>
       </DomainPurchaseProvider>
     ),

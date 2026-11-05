@@ -4,7 +4,6 @@ import type {
   ApprovalGrants,
   ApprovalRequest,
   AvatarId,
-  BoughtElsewhereOutput,
   BuildQuestions,
   BuildStopCause,
   BuildSummary,
@@ -378,11 +377,6 @@ export type OwnerDataSource = {
   ) => Promise<DomainRegistrantPrefill | { refused: string | null }>
   /** The owner buys the name themselves; the api watches the registry for it. */
   domainElsewhere: (name: string, key: string) => Promise<WriteOutcome>
-  /** The owner says they bought it: the connect, not registered yet, or the refusal code. */
-  domainBought: (
-    name: string,
-    key: string
-  ) => Promise<BoughtElsewhereOutput | { refused: string | null }>
   /** Mark one reminder done. Doing it twice changes nothing. */
   completeReminder: (id: string) => Promise<WriteOutcome>
   /** Delete one reminder. One already gone counts as deleted. */
