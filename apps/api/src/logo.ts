@@ -590,7 +590,8 @@ function openrouterDirector(
   kit: Tenancy,
   orgId: string
 ): Director | null {
-  const model = plannerModel(apiKey, modelId)
+  // The planner's session, so OpenRouter's sticky routing keeps the director's cache too.
+  const model = plannerModel(apiKey, modelId, { session: orgId })
   const price = priceOf(modelId)
   if (!model || !price) return null
   return async (subject, brief, types) => {

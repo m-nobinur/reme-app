@@ -433,6 +433,37 @@ describe("drawing a round in the queue", () => {
     expect(stored?.type).toBe("image/png")
   })
 
+  it("asks the director under the planner's session, so its cache stays on one route", async () => {
+    const { env } = await setup()
+    const chats: Record<string, unknown>[] = []
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit) => {
+      if (input === JEV.url) return new Response("{}", { status: 503 })
+      const body = JSON.parse(String(init.body))
+      if (!body.messages)
+        return Response.json({
+          data: [{ b64_json: btoa(String.fromCharCode(...PNG)) }],
+          usage: { cost: 0.01 },
+        })
+      chats.push(body)
+      return Response.json({
+        id: "gen-1",
+        model: body.model,
+        created: 0,
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: '{"ideas":["a mop"]}' },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      })
+    })
+    await drawRound(env, ledger().kit, job).catch(() => undefined)
+    expect(chats).toHaveLength(1)
+    expect(chats[0]?.session_id).toBe(ORG)
+  })
+
   it("pays for nothing twice: a retry skips what is drawn, a finished round is left", async () => {
     const { sites, env, read } = await setup()
     const first = manifest().planned[0] as string
