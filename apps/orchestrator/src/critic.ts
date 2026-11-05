@@ -26,7 +26,7 @@ import { creationChoices } from "./brief.ts"
 import { PAGE_FIELDS, slotValue, whereIs } from "./documents.ts"
 import { CROP_WIDTHS, CROPS_MAX, cropKey } from "./shots.ts"
 import type { Ids } from "./state.ts"
-import type { Artifacts } from "./validate.ts"
+import { type Artifacts, assignmentFacts } from "./validate.ts"
 
 /**
  * The design critic (ADR-038, BA5): after the lead's build and before the
@@ -199,6 +199,8 @@ const FIELD_KEYS = [
 /** The critic's prompt: the stable part first, then this build's Blueprint and what was asked before. */
 export function criticPrompt(input: {
   blueprint: unknown
+  /** The owner's facts the site was built from, as `key: value` lines. */
+  facts?: readonly string[]
   earlier?: readonly Fix[]
   pieces?: readonly Piece[]
 }): { system: string; user: string } {
@@ -206,9 +208,11 @@ export function criticPrompt(input: {
   const system = [
     "You are the design critic at Reme. A small business's website has just been built from a Blueprint. You are shown its home page at 390 and 1440 px wide, each cut into pieces the height of a screen, top to bottom. Say what a studio's art director would send back, and nothing else.",
     "",
-    `Return at most ${FIXES_MAX} fixes, the most visible first, or none when the site holds. Each fix names the page, the section, the problem you can see in the screenshots and the change that fixes it, in one sentence each, and what the change needs. Never ask for a claim the business has not made, a photo that is not there, a new section the Blueprint does not list, or a number, name or review you cannot see in the Blueprint.`,
+    `Return at most ${FIXES_MAX} fixes, the most visible first, or none when the site holds. Each fix names the page, the section, the problem you can see in the screenshots and the change that fixes it, in one sentence each, and what the change needs. Never ask for a claim the business has not made, a photo that is not there, a new section the Blueprint does not list, or a number, name or review you cannot see in the Blueprint or the owner's facts.`,
     "",
-    "Mark a fix severe only when the business would be embarrassed by the site as it stands: copy that cannot be read, a section that shows empty or broken, a name, claim or number the Blueprint does not hold, or a rule below broken where a visitor sees it first. Most fixes are not severe; a severe one is checked again after the builder's round.",
+    "The owner's facts are the business's own details, given by the owner: a name, phone number, email address, address or claim in them is real, however it looks. An email with a + in it, a number that looks like a placeholder or a name that reads as a test is still the owner's choice. Never call such a detail made up, test-style or missing from the Blueprint, and never ask for it to be removed or emptied; judge only where and how the site shows it.",
+    "",
+    "Mark a fix severe only when the business would be embarrassed by the site as it stands: copy that cannot be read, a section that shows empty or broken, a name, claim or number that neither the Blueprint nor the owner's facts hold, or a rule below broken where a visitor sees it first. Most fixes are not severe; a severe one is checked again after the builder's round.",
     "",
     'The builder can change only these: the words of a site field from the field list below, which "copy" fixes; and which sections a page shows and in what order, each section\'s variant from its own list below, the palette and the fonts, which "layout" fixes. It cannot edit a component\'s markup or styles: spacing, sizes, alignment within a variant, a variant a section does not have, an icon (an empty icon field is picked from its words), or the items and links a component adds on its own (a trust strip\'s area and quote items fill its row, no field holds them). A problem only that would fix needs "component": it is logged for the platform team and never reaches the builder, so list one only when it is plain to see, after the builder\'s fixes. Ask for exactly one change a fix, never two joined by "and".',
     "",
@@ -230,6 +234,9 @@ export function criticPrompt(input: {
   const user = [
     "The Blueprint this site was built from:",
     JSON.stringify(input.blueprint),
+    "",
+    "The owner's facts, which the copy may use:",
+    ...(input.facts?.length ? input.facts : ["- (none)"]),
     "",
     "Screenshots, in order, the home page in pieces one screen tall (a long page shows only its first pieces), each with its place counted in screens from the top:",
     ...WIDTHS.map((w) => {
@@ -503,6 +510,8 @@ export async function critique(input: {
   route: { model: string; effort: Effort; maxTokens: number }
   sessionId: string
   blueprint: unknown
+  /** The owner's facts, as the Developer read them. */
+  facts?: readonly string[]
   /** The pieces of the home page, in `WIDTHS` order and top to bottom within a width. */
   images: Piece[]
   earlier?: readonly Fix[]
@@ -825,6 +834,11 @@ export async function critiqueRound(input: {
       },
       sessionId: ids.assignmentId,
       blueprint: Blueprint.safeParse(row.blueprint).data ?? null,
+      facts: await assignmentFacts(kit, ids)
+        .then((held) =>
+          held.map((f) => `- ${f.key}: ${JSON.stringify(f.value)}`)
+        )
+        .catch(() => []),
       images,
       earlier: earlier.length > 0 ? earlier : input.earlier,
       // Pictures were taken but none changed: the repair left the page as it was.
