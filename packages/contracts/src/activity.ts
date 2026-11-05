@@ -85,8 +85,9 @@ export const ActivitySegment = z.strictObject({
   /** A website or change build the pipeline started again mid-build. */
   restarted: z.literal(true).optional(),
   /**
-   * Onboarding only, while the design tray's logo question waits: its
-   * newest round drawing, or drawn and not picked yet, and how many options.
+   * Onboarding only, until the site is first live and while its logo is not
+   * picked: the design tray's newest round drawing, or drawn and waiting on
+   * a pick, and how many options.
    */
   logo: z
     .strictObject({

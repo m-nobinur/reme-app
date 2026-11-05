@@ -505,6 +505,25 @@ describe("the first run", () => {
     expect(tray(undefined)?.id).not.toBe("logo")
   })
 
+  it("keeps the logo row under the build while the logo waits on a pick", () => {
+    const building = (logo: ActivitySegment["logo"]) =>
+      firstRun([
+        { ...onboarding(9, "done"), logo },
+        segment("website", "now", along(WEBSITE_STEPS, 2), BUSINESS),
+      ])?.journey
+    const [website, row] = building({ status: "ready", options: 3 }) ?? []
+    expect(website?.title).toBe("Your website")
+    expect(row).toMatchObject({
+      id: "logo",
+      line: "Waiting for your pick",
+      state: "waiting",
+    })
+    expect(building({ status: "drawing", options: 3 })?.at(-1)?.line).toBe(
+      "Designing 3 options"
+    )
+    expect(building(undefined)?.map((each) => each.id)).not.toContain("logo")
+  })
+
   it("puts the review in going live, not in Waiting on you", () => {
     const review = approval("build-first")
     const panel = firstRun(
