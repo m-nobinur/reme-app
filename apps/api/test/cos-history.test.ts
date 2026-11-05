@@ -190,10 +190,7 @@ const tools = {
  * The eval replay derives an old turn with its logged version, so a version's
  * numbers never change: a new policy is a new row and a new version.
  */
-const RELEASED: Record<
-  string,
-  { turns: number; toolTurns: number; historyTokens?: number }
-> = {
+const RELEASED: Record<string, Record<string, number>> = {
   "1": { turns: 12, toolTurns: 2 },
   "2": { turns: 12, toolTurns: 2 },
   "3": { turns: 12, toolTurns: 2 },
@@ -218,6 +215,7 @@ const RELEASED: Record<
   "23": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "24": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "25": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "26": { keepLast: 20, historyTokens: 128_000 },
 }
 
 describe("CONTEXT_POLICY", () => {
@@ -311,7 +309,7 @@ describe("deriveCosMessages", () => {
     expect(first).toMatch(/^[0-9a-f]{64}$/)
   })
 
-  it("keeps the newest turns, and tool calls only in the newest two", () => {
+  it("keeps every turn with its tool calls under the cap, as Hermes keeps them", () => {
     const rows: Row[] = []
     for (let i = 0; i < 14; i++) {
       rows.push(said(TURN_1, `m${i}`, `Question ${i}`))
@@ -333,21 +331,15 @@ describe("deriveCosMessages", () => {
       )
     }
     rows.push(context(TURN_1))
-    const { messages } = deriveCosMessages(session(...rows), {
-      ...CONTEXT_POLICY,
-      turns: 12,
-      toolTurns: 2,
-    })
+    const { messages } = deriveCosMessages(session(...rows), CONTEXT_POLICY)
     const ids = messages.map((m) => m.id)
-    // Turns 0 and 1 are gone; turn 5's reply held only a tool call.
-    expect(ids.slice(0, 4)).toEqual(["m2", "a2", "m3", "a3"])
-    expect(ids).not.toContain("a5")
-    expect(ids).toContain("m5")
+    expect(ids.slice(0, 4)).toEqual(["m0", "a0", "m1", "a1"])
+    expect(ids).toContain("a5")
     const calls = (id: string) =>
       messages
         .find((m) => m.id === id)
         ?.parts.filter((p) => p.type.startsWith("tool-")).length
-    expect(calls("a11")).toBe(0)
+    expect(calls("a0")).toBe(1)
     expect(calls("a12")).toBe(1)
     expect(calls("a13")).toBe(1)
     expect(messages.at(-3)?.id).toBe(`context-${TURN_1}`)
@@ -576,12 +568,6 @@ describe("deriveCosMessages", () => {
     )
     expect(deriveCosMessages(events, CONTEXT_POLICY).steps).toHaveLength(1)
   })
-
-  it("refuses a policy that keeps no turns", () => {
-    expect(() =>
-      deriveCosMessages(twoTurns(), { ...CONTEXT_POLICY, turns: 0 })
-    ).toThrow(/at least one turn/)
-  })
 })
 
 describe("skill views in the history", () => {
@@ -604,7 +590,7 @@ describe("skill views in the history", () => {
     },
   })
 
-  it("keeps a skill view in an older turn, as skill_view, where other calls go", () => {
+  it("reads read_skill in an older turn as skill_view, its other calls kept", () => {
     const { messages } = deriveCosMessages(
       session(
         context(T[0]),
@@ -633,7 +619,7 @@ describe("skill views in the history", () => {
     )
     expect(
       messages.find((m) => m.id === "a1")?.parts.map((p) => p.type)
-    ).toEqual(["step-start", "tool-skill_view", "text"])
+    ).toEqual(["step-start", "tool-skill_view", "tool-get_workspace", "text"])
   })
 
   it("reads a logged remember call as memory, so a conversation from before the rename replays", () => {
@@ -722,7 +708,7 @@ describe("skill views in the history", () => {
       CONTEXT_POLICY
     )
     expect(JSON.stringify(messages)).toContain(
-      "Skills viewed before this summary: web-address, builds. Their text is no longer here"
+      "reload them first: skill_view(name='web-address'); skill_view(name='builds')."
     )
   })
 })

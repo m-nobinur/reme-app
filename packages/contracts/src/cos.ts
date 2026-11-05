@@ -1299,10 +1299,11 @@ export const CosToolUnknown = z.strictObject({
  * The `cos.compaction` payload (§10.6): `summary` stands in for the events in
  * `replaced_range`, which stay in the log. `dropped_refs` are the ids of
  * events the summary does not carry. The summary is model-written, so the
- * event is labelled `inferred`.
+ * event is labelled `inferred`. Up to 48,000 characters: Hermes's
+ * 10,000-token ceiling at about four characters a token, with room.
  */
 export const CosCompaction = z.strictObject({
-  summary: Text(8000),
+  summary: Text(48_000),
   /** Positions in the session's stream, both included. */
   replaced_range: z.strictObject({
     from_seq: z.int().nonnegative(),

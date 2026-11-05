@@ -488,8 +488,7 @@ type Call = {
 const logged = (rows: SessionEvent[]): UIMessage[] =>
   deriveCosMessages(rows, {
     ...CONTEXT_POLICY,
-    turns: Number.POSITIVE_INFINITY,
-    toolTurns: Number.POSITIVE_INFINITY,
+    keepLast: Number.POSITIVE_INFINITY,
     historyTokens: Number.POSITIVE_INFINITY,
   }).messages
 
