@@ -545,6 +545,6 @@ describe("the source snapshot at the end of a report", () => {
     expect(out.source.key).toBe("sites/o/rev-1/source.tar.zst")
     // #697: nothing the Developer left running sees the tail's files.
     expect(order[0]).toBe("stop strays")
-    expect(order.filter((o) => o === "stop strays")).toHaveLength(1)
+    expect(order.filter((o) => o === "stop strays")).toHaveLength(3)
   })
 })

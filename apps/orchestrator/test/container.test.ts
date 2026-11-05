@@ -27,51 +27,6 @@ vi.mock("cloudflare:workers", () => ({
   WorkerEntrypoint: class {},
 }))
 
-const { disk, links } = vi.hoisted(() => ({
-  disk: new Map<string, Uint8Array>(),
-  links: new Set<string>(),
-}))
-vi.mock("@cloudflare/sandbox", () => {
-  const fail = (code: string) => Object.assign(new Error(code), { code })
-  const parent = (path: string) => path.slice(0, path.lastIndexOf("/")) || "/"
-  return {
-    SandboxFileError: {
-      is: (e: unknown) => typeof (e as { code?: unknown }).code === "string",
-    },
-    // A filesystem with directories and nothing else, as `sandbox-shim` reports it.
-    Files: class {
-      readFile(path: string) {
-        const found = disk.get(path)
-        if (!found) throw fail("ENOENT")
-        return Promise.resolve(new Response(found))
-      }
-      async writeFile(path: string, content: string | Uint8Array) {
-        if (!disk.has(`${parent(path)}/`)) throw fail("ENOENT")
-        disk.set(
-          path,
-          typeof content === "string"
-            ? new TextEncoder().encode(content)
-            : content
-        )
-      }
-      async mkdir(path: string) {
-        disk.set(`${path}/`, new Uint8Array())
-      }
-      async lstat(path: string) {
-        const found = disk.get(path)
-        if (!found) throw fail("ENOENT")
-        return {
-          type: links.has(path) ? "symlink" : "file",
-          size: BigInt(found.length),
-        }
-      }
-      async remove(path: string) {
-        disk.delete(path)
-      }
-    },
-  }
-})
-
 const {
   CONFINED,
   EXEC_SCRIPT,
@@ -98,7 +53,7 @@ const fakeContainer = () => {
     intercepts: [] as string[],
     timeouts: [] as number[],
     destroyed: 0,
-    answer: (_argv: string[]): Answer => ({
+    answer: (_argv: string[], _env: Record<string, string>): Answer => ({
       exitCode: 0,
       stdout: "",
       stderr: "",
@@ -118,9 +73,14 @@ const fakeContainer = () => {
             await new Response(stdin as ReadableStream).arrayBuffer()
           )
         )
-      const out = c.answer(argv)
+      const out = c.answer(argv, (options?.env ?? {}) as Record<string, string>)
+      const bytes =
+        typeof out.stdout === "string"
+          ? new TextEncoder().encode(out.stdout)
+          : out.stdout
       return {
         exitCode: Promise.resolve(out.exitCode),
+        stdout: new Blob([bytes]).stream(),
         output: async () => ({
           exitCode: out.exitCode,
           stdout:
@@ -187,7 +147,6 @@ const bucket = new Map<string, Uint8Array>()
 
 beforeEach(() => {
   ;({ pool, kv: slots } = newPool())
-  disk.clear()
   vi.useRealTimers()
 })
 
@@ -432,7 +391,7 @@ describe("a file call", () => {
 
   // #593: R2 takes a stream only when its length is known, and the bytes never
   // become a string in any isolate on the way.
-  it("streams a file into the bucket at its known length, never through a link", async () => {
+  it("streams a file into the bucket at its known length, read confined", async () => {
     const lengths: number[] = []
     vi.stubGlobal(
       "FixedLengthStream",
@@ -443,19 +402,31 @@ describe("a file call", () => {
         }
       }
     )
-    const { sandbox } = newSandbox()
-    disk.set("/tmp/source.tar.zst", new Uint8Array([0, 1, 255]))
+    const { sandbox, container } = newSandbox()
+    container.answer = (_argv, env) =>
+      env.REME_COMMAND?.startsWith("stat")
+        ? { exitCode: 0, stdout: "3\n", stderr: "" }
+        : { exitCode: 0, stdout: new Uint8Array([0, 1, 255]), stderr: "" }
     expect(
       await sandbox.saveFile("/tmp/source.tar.zst", "sites/o/r/source")
     ).toBe(3)
     expect([...(bucket.get("sites/o/r/source") ?? [])]).toEqual([0, 1, 255])
     expect(lengths).toEqual([3])
-    links.add("/tmp/source.tar.zst")
+    // #697: a planted link reaches only what reme may read.
+    expect(container.ran.slice(-2).map((r) => r.argv)).toEqual([shell, shell])
+    expect(container.ran.at(-1)?.options?.env).toMatchObject({
+      REME_COMMAND: FILE_SCRIPTS.read,
+      REME_PATH: "/tmp/source.tar.zst",
+    })
+    container.answer = () => ({
+      exitCode: 1,
+      stdout: "",
+      stderr: "stat: cannot statx '/root/x': Permission denied\n",
+    })
     await expect(
-      sandbox.saveFile("/tmp/source.tar.zst", "sites/o/r/other")
-    ).rejects.toThrow("not a plain file")
+      sandbox.saveFile("/root/x", "sites/o/r/other")
+    ).rejects.toThrow("Permission denied")
     expect(bucket.has("sites/o/r/other")).toBe(false)
-    links.clear()
     vi.unstubAllGlobals()
   })
 })

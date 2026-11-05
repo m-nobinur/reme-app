@@ -436,6 +436,7 @@ export async function finishRevision(input: {
       ms: since(started),
     }
   })
+  await input.stopStrays()
   // Canonical URLs, the sitemap and robots name the tenant host; without
   // --site the starter leaves them out rather than invent one.
   const host = await steps.do("site host", async () =>
@@ -465,6 +466,8 @@ export async function finishRevision(input: {
       `astro build failed or wrote no pages, fix it before reporting:\n${build.output}`
     )
   }
+  // The build ran the site's own code, which may have left something running.
+  await input.stopStrays()
 
   const revisionId = await steps.do("revision", async () =>
     kit.withOrg({ orgId }, async (db) => {

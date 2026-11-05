@@ -1,6 +1,5 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers"
 import { Buffer } from "node:buffer"
-import { Files } from "@cloudflare/sandbox"
 import {
   NPM_REGISTRY_HOST,
   POOL_SIZE,
@@ -100,10 +99,12 @@ export const FILE_SCRIPTS = {
 
 /**
  * Kills every process with no capabilities: what the Developer's commands
- * left running (a `setsid` escapes the timeout), so none of it touches the
- * tail's files. Never the container's own process or this shell.
+ * or the site's own build code left running (a `setsid` escapes the
+ * timeout), so none of it touches the tail's files. Each pass stops what it
+ * finds before killing it, so nothing forks past it, and passes repeat until
+ * one finds nothing. Never the container's own process or this shell.
  */
-const STOP_STRAYS = `for s in /proc/[0-9]*/status; do p=\${s#/proc/}; p=\${p%/status}; [ "$p" = 1 ] || [ "$p" = $$ ] && continue; grep -qE '^CapEff:[[:space:]]*0+$' "$s" 2>/dev/null && kill -KILL "$p" 2>/dev/null; done; true`
+export const STOP_STRAYS = `for _ in $(seq 20); do found=; for s in /proc/[0-9]*/status; do p=\${s#/proc/}; p=\${p%/status}; { [ "$p" = 1 ] || [ "$p" = $$ ]; } && continue; grep -qE '^CapEff:[[:space:]]*0+$' "$s" 2>/dev/null && kill -STOP "$p" 2>/dev/null && found="$found $p"; done; [ -z "$found" ] && break; kill -KILL $found 2>/dev/null; done; true`
 
 /**
  * What bash runs for every `exec`: the cwd and the command come in its env.
@@ -145,14 +146,12 @@ type ExecOptions = {
 }
 
 export class RemeSandbox extends DurableObject<Env> {
-  private readonly files: Files
   private setup: Promise<void> | null = null
   private ready = false
   private renewedAt = 0
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
-    this.files = new Files(this.container)
     const container = ctx.container
     // A restarted Durable Object has lost the timeout; the platform keeps
     // the container.
@@ -293,6 +292,18 @@ export class RemeSandbox extends DurableObject<Env> {
     options: ExecOptions & { stdin?: ReadableStream<Uint8Array> }
   ) {
     const seconds = options.timeout ? Math.ceil(options.timeout / 1000) : 0
+    const out = await (await this.spawn(command, options)).output()
+    if (seconds && out.exitCode === TIMED_OUT) {
+      throw new Error(`Command timeout after ${options.timeout}ms`)
+    }
+    return out
+  }
+
+  private spawn(
+    command: string,
+    options: ExecOptions & { stdin?: ReadableStream<Uint8Array> }
+  ) {
+    const seconds = options.timeout ? Math.ceil(options.timeout / 1000) : 0
     // The command reaches bash in a variable, never in argv: as in a 0.12
     // session, no command line holds it, so its own `pkill -f` cannot match
     // the shell running it (the screenshot step's does). Un-exported, so
@@ -306,7 +317,7 @@ export class RemeSandbox extends DurableObject<Env> {
       "-c",
       EXEC_SCRIPT,
     ]
-    const process = await this.container.exec(
+    return this.container.exec(
       seconds ? ["timeout", "--kill-after=5", `${seconds}`, ...shell] : shell,
       {
         cwd: WORKSPACE,
@@ -319,11 +330,6 @@ export class RemeSandbox extends DurableObject<Env> {
         ...(options.stdin ? { stdin: options.stdin } : {}),
       }
     )
-    const out = await process.output()
-    if (seconds && out.exitCode === TIMED_OUT) {
-      throw new Error(`Command timeout after ${options.timeout}ms`)
-    }
-    return out
   }
 
   /** One file call, confined; a failure throws with what the command said. */
@@ -357,21 +363,24 @@ export class RemeSandbox extends DurableObject<Env> {
   /**
    * Stream a file from the container into the sites bucket under `key` and
    * return its size. A site's tar is tens of MB: as a base64 string decoded
-   * in the caller it ran the Developer's isolate out of memory (#593). The
-   * read keeps root's capabilities, so a symlink is refused: the tail's own
-   * tar is a plain file.
+   * in the caller it ran the Developer's isolate out of memory (#593). Read
+   * confined, as every file call is, so a planted link yields only what
+   * `reme` could read; a file that changes length on the way fails the put.
    */
   async saveFile(path: string, key: string): Promise<number> {
     return this.use(async () => {
-      const at = { cwd: WORKSPACE }
-      const stat = await this.files.lstat(path, at)
-      if (stat.type !== "file") throw new Error(`${path} is not a plain file`)
-      const size = Number(stat.size)
-      const file = await this.files.readFile(path, at)
+      const env = { REME_PATH: path }
+      const sized = await this.run('stat -L -c %s -- "$REME_PATH"', { env })
+      const size = Number(text(sized.stdout).trim())
+      if (sized.exitCode !== 0 || !Number.isSafeInteger(size))
+        throw new Error(text(sized.stderr).trim() || `cannot read ${path}`)
+      const reading = await this.spawn(FILE_SCRIPTS.read, { env })
+      if (!reading.stdout) throw new Error(`no output reading ${path}`)
       await this.env.SITES.put(
         key,
-        file.body ? file.body.pipeThrough(new FixedLengthStream(size)) : ""
+        reading.stdout.pipeThrough(new FixedLengthStream(size))
       )
+      if ((await reading.exitCode) !== 0) throw new Error(`cannot read ${path}`)
       return size
     })
   }
