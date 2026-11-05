@@ -183,6 +183,50 @@ describe("the copy gate", () => {
     ])
   })
 
+  it("fails the area card's line when it says its section's heading again, and passes one that adds the main town", () => {
+    const home = (line: string) => [
+      page(
+        "index.html",
+        "Greenleaf garden landscaping in Bristol and Bath homes",
+        `<h1>Gardens made for Bristol</h1><section><h2>Stockport and the towns nearby</h2><div class="area-art" aria-hidden="true"><p class="area-card-line">${line}</p></div></section>`
+      ),
+    ]
+    const found = copyFindings(home("Covering Stockport and nearby towns"))
+    expect(found.map((f) => [f.problem, f.text])).toEqual([
+      ["duplicate", "Covering Stockport and nearby towns"],
+    ])
+    expect(found[0]?.detail).toContain(
+      'the area card line (areaCardLine) repeats "Stockport and the towns nearby" on the same page'
+    )
+    expect(copyFindings(home("Based in Heaton Moor"))).toEqual([])
+  })
+
+  it("fails a sentence about the trade in general and a service hedged into existence, and passes plain copy", () => {
+    const said = (text: string) =>
+      copyFindings([
+        page(
+          "about/index.html",
+          "About Greenleaf Garden Landscaping in Bristol and Bath",
+          `<h1>About Greenleaf</h1><p>${text}</p>`
+        ),
+      ])
+        .filter((f) => f.problem === "generic")
+        .map((f) => f.detail.match(/says "([^"]+)"/)?.[1])
+    expect(
+      said(
+        "Most domestic cleaning is booked around a routine and worked room by room."
+      )
+    ).toEqual(["Most domestic cleaning is booked"])
+    expect(
+      said("Depending on the job, we may arrange a walk-through.")
+    ).toEqual(["we may arrange"])
+    expect(
+      said(
+        "We clean homes in Stockport, and most of our customers are homeowners."
+      )
+    ).toEqual([])
+  })
+
   it("fails every form of why-choose-us, as an eyebrow or a heading", () => {
     const found = copyFindings([
       page(
