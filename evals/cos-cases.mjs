@@ -747,11 +747,9 @@ export const CASES = [
   },
 ]
 
-/** The site-change skill viewed and the site read before a change; `read_skill` is its old name, in older recordings. */
+/** The site-change skill viewed and the site read before a change. */
 const readsTheSite = (parts) => [
-  ...([...called(parts, "skill_view"), ...called(parts, "read_skill")].some(
-    (c) => c.input?.name === "site-change"
-  )
+  ...(called(parts, "skill_view").some((c) => c.input?.name === "site-change")
     ? []
     : ["it did not view the site-change skill"]),
   ...(called(parts, "read_site").length > 0
