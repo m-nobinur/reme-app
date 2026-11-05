@@ -5,6 +5,7 @@ import sharp from "sharp"
 import { beforeAll, describe, expect, test } from "vitest"
 import {
   initialOf,
+  MARK_FILE,
   markColours,
   markSvg,
   siteMark,
@@ -75,6 +76,7 @@ const BLUE = { r: 0, g: 0, b: 255 }
 const RED = { r: 255, g: 0, b: 0 }
 const WHITE = { r: 255, g: 255, b: 255 }
 const BLACK = { r: 0, g: 0, b: 0 }
+const GREEN = { r: 20, g: 160, b: 40 }
 type Rect = [x: number, y: number, w: number, h: number, colour: Colour]
 
 /** A logo of `rects` on `background`, transparent when there is none. */
@@ -214,12 +216,23 @@ const logo = () =>
 describe("a built site's favicon set", () => {
   let initial: Built
   let logoed: Built
+  let marked: Built
   beforeAll(async () => {
-    ;[initial, logoed] = await Promise.all([
+    const withLogo = {
+      site: { ...FILLED, logo: "/uploads/logo.png", logoAlt: "BrightClean" },
+    }
+    ;[initial, logoed, marked] = await Promise.all([
       build({ site: { ...FILLED, logo: "", logoAlt: "" } }),
       build({
-        site: { ...FILLED, logo: "/uploads/logo.png", logoAlt: "BrightClean" },
+        ...withLogo,
         files: { "src/assets/uploads/logo.png": await logo() },
+      }),
+      build({
+        ...withLogo,
+        files: {
+          "src/assets/uploads/logo.png": await logo(),
+          [MARK_FILE]: await picture(64, 64, GREEN, []),
+        },
       }),
     ])
   }, 180_000)
@@ -309,5 +322,17 @@ describe("a built site's favicon set", () => {
       join(logoed.dist, iconPath(logoed.dist, "icon-192", "png") ?? "")
     ).stats()
     expect(dominant.r).toBeGreaterThan(dominant.g)
+  })
+
+  test("draws the logo's placed mark in place of the logo", async () => {
+    const svg = readFileSync(
+      join(marked.dist, iconPath(marked.dist, "favicon", "svg") ?? ""),
+      "utf8"
+    )
+    expect(svg).toContain("<image")
+    const { dominant } = await sharp(
+      join(marked.dist, iconPath(marked.dist, "icon-192", "png") ?? "")
+    ).stats()
+    expect(dominant.g).toBeGreaterThan(dominant.r)
   })
 })

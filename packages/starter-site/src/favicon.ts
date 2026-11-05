@@ -386,19 +386,31 @@ function logoFile(path: string): string | undefined {
 }
 
 /**
- * This site's mark: the owner's logo cut to its symbol when there is one,
- * else its initial. A logo with no symbol to draw (a wordmark) is marked
- * `data-logo="no-symbol"`, so the favicon gate tells it from a logo the
- * build never found.
+ * Where the platform places the kept logo's mark, its symbol drawn alone
+ * for icons, before every build; absent until it is drawn. Not the
+ * Developer's to write.
+ */
+export const MARK_FILE = "src/assets/mark.png"
+
+/**
+ * This site's mark: the logo's own mark when the platform placed one, else
+ * the owner's logo cut to its symbol when there is one, else its initial. A
+ * logo with no symbol to draw (a wordmark) is marked `data-logo="no-symbol"`,
+ * so the favicon gate tells it from a logo the build never found.
  */
 export async function siteMark(site: MarkSite): Promise<string> {
+  const colours = markColours(site.palette, site.brandColor)
+  const mark = resolve(process.cwd(), MARK_FILE)
+  if (existsSync(mark)) {
+    const png = await sharp(mark)
+      .resize(256, 256, { fit: "inside" })
+      .png()
+      .toBuffer()
+    return markSvg(site.businessName, colours, dataUri(png))
+  }
   const file = logoFile(site.logo)
   const image = file ? await symbolOf(readFileSync(file)) : undefined
-  const svg = markSvg(
-    site.businessName,
-    markColours(site.palette, site.brandColor),
-    image
-  )
+  const svg = markSvg(site.businessName, colours, image)
   return file && !image
     ? svg.replace("<svg ", '<svg data-logo="no-symbol" ')
     : svg
