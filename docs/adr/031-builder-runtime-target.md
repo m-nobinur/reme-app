@@ -168,6 +168,7 @@ What behaves differently:
   running.
 - Under this policy every process has root's capabilities, whatever its user. The `reme` user
   now only sets who owns new files, so file permissions no longer keep a command off `/opt`.
+  ADR-044 (2026-11-05): every command runs as root and the harness refuses none.
   The egress rule and the no-credential rule are enforced outside the container and still hold.
 - `output()` waits for every process that holds the command's output open, so a command that
   backgrounds a process must redirect its output, as the screenshot script does.
