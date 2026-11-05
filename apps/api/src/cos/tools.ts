@@ -1936,13 +1936,14 @@ const isTip = (kind: string): kind is TipKind => TipKind.safeParse(kind).success
 /**
  * An offer the owner said not now to, asked again after `days` (a week when
  * left out). The kind's open task is made if the offer came before it, then
- * set to `later`, so the same row comes back as the offer it was. Only the
- * owner's words move it, and the owner can start it again whenever they ask.
- * A tip just given is remembered instead, and never comes back.
+ * set to `later`, so the same row comes back as the offer it was; with
+ * `never` it is declined and never offered again. Only the owner's words
+ * move it, and the owner can start it again whenever they ask. A tip just
+ * given is remembered instead, and never comes back.
  */
 export async function putOff(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
-  { kind, days = 7 }: PutOffInput
+  { kind, days = 7, never = false }: PutOffInput
 ): Promise<PutOffOutput> {
   const until = new Date(Date.now() + days * 86_400_000).toISOString()
   if (isTip(kind)) {
@@ -1953,11 +1954,15 @@ export async function putOff(
   }
   await kit.withOrg({ orgId: owner.orgId }, async (db) => {
     await openTask(db, owner.orgId, kind)
-    await db.execute(sql`
-      update owner_tasks set state = 'later', later_until = ${until}::timestamptz
-      where kind = ${kind}::task_kind and state in ('active', 'later')`)
+    await db.execute(
+      never
+        ? sql`update owner_tasks set state = 'declined', later_until = null
+            where kind = ${kind}::task_kind and state in ('active', 'later')`
+        : sql`update owner_tasks set state = 'later', later_until = ${until}::timestamptz
+            where kind = ${kind}::task_kind and state in ('active', 'later')`
+    )
   })
-  return { outcome: "put_off", until }
+  return { outcome: "put_off", until: never ? NEVER : until }
 }
 
 /** A connected domain taken off the site once the owner said yes, keyed by the approval. */

@@ -12,6 +12,7 @@ import {
   domains,
   eq,
   facts,
+  journeyOf,
   memberships,
   NEXT_DUE_KEY,
   openTask,
@@ -3245,6 +3246,28 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(await kit.withOrg({ orgId: fresh.orgId }, readTasks)).toHaveLength(
         2
       )
+    })
+  })
+
+  describe("put_off, never", () => {
+    it("declines the address for good, so the journey offers it no more", async () => {
+      const fresh = await owner(kit, url as string, "cos-put-off-never")
+      const output = kept(
+        "put_off",
+        await putOff(context(fresh), { kind: "address", never: true })
+      )
+      expect(output).toEqual({
+        outcome: "put_off",
+        until: "9999-12-31T00:00:00.000Z",
+      })
+      const tasks = await kit.withOrg({ orgId: fresh.orgId }, readTasks)
+      expect(tasks.map((t) => [t.kind, t.state, t.later_until])).toEqual([
+        ["address", "declined", null],
+      ])
+      expect(journeyOf({ tasks }).address).toEqual({
+        stage: "declined",
+        offer: null,
+      })
     })
   })
 

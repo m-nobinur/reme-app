@@ -797,11 +797,13 @@ const Empty = z.strictObject({})
 
 /**
  * `put_off`'s input: the offer the owner said not now to, and for how many
- * days (7 when left out); or a tip just given, which is never offered again.
+ * days (7 when left out), or `never` when they want none at all; or a tip
+ * just given, which is never offered again.
  */
 export const PutOffInput = z.strictObject({
   kind: z.enum([...TaskKind.options, ...TipKind.options]),
   days: z.int().min(1).max(60).optional(),
+  never: z.boolean().optional(),
 })
 
 /** `put_off`'s output: when the offer may come back. */

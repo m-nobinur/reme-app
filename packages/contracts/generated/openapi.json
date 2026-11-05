@@ -53213,6 +53213,9 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 60
+          },
+          "never": {
+            "type": "boolean"
           }
         },
         "required": [

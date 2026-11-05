@@ -14733,6 +14733,7 @@ export interface components {
       /** @enum {string} */
       kind: "address" | "google" | "business_email" | "local_phone"
       days?: number
+      never?: boolean
     }
     PutOffOutput:
       | {
