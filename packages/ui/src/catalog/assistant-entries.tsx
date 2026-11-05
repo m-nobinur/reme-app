@@ -15,6 +15,7 @@ import {
   PALETTES,
   PRONOUNS,
   type QuoteField,
+  type ServerMessageKind,
   TEMPLATES,
   TONES,
   TOOL_CALL_CANCELLED,
@@ -2661,6 +2662,60 @@ const NEW_SINCE: ThreadMessageLike[] = [
   }),
 ]
 
+/** One posted message of a kind, as the app stores it: words, then its kind. */
+const posted = (
+  at: string,
+  id: string,
+  text: string,
+  kind?: ServerMessageKind
+): ThreadMessageLike =>
+  on(at, {
+    content: [
+      { text, type: "text" },
+      ...(kind ? [{ type: "data" as const, name: "kind", data: kind }] : []),
+    ],
+    id,
+    role: "assistant",
+    status: DONE,
+  })
+
+/**
+ * Every kind of message the app posts: a reply reads as any reply, and the
+ * rest carry their label and mark, the newest in the primary colour.
+ */
+const KINDS: ThreadMessageLike[] = [
+  on("29T13:04:00.000", { ...ask("Skip for now"), id: "skip" }),
+  posted(
+    "29T13:04:02.000",
+    "srv_reply",
+    "No problem. Your site can go live on its free address, and you can add your own any time from the Connect button.",
+    "reply"
+  ),
+  posted(
+    "29T13:09:00.000",
+    "srv_update",
+    "Your website build hit a problem, so I'm starting it again. Nothing for you to do: I'll say here when the draft is ready."
+  ),
+  posted(
+    "29T13:10:00.000",
+    "srv_note",
+    "Your website build stopped again: a service it relies on kept failing. Say try again, or tell me what to change.",
+    "note"
+  ),
+  posted(
+    "29T13:31:00.000",
+    "srv_done",
+    "Your draft is ready, with Home, Services, About and Contact pages. Have a look below.",
+    "done"
+  ),
+  posted(
+    "29T15:00:00.000",
+    "srv_reminder",
+    "Reminder: “call Sam about Friday”",
+    "reminder"
+  ),
+]
+
 /**
  * The "New" rule and the update labels. The mark moves as the thread shows
  * messages, as the app's does; Open again is the next visit, with none new.
@@ -3627,6 +3682,10 @@ const assistantCatalog = [
   { name: "ThreadSendStreamed", render: () => <SendingThread streamed /> },
   { name: "ThreadReveal", render: () => <RevealSample /> },
   { name: "ThreadNewSince", render: () => <NewSinceSample /> },
+  {
+    name: "ThreadMessageKinds",
+    render: () => <OwnerThread height="h-[40rem]" messages={KINDS} />,
+  },
   {
     name: "ThreadLoading",
     render: () => (
