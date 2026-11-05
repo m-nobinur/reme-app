@@ -1,15 +1,9 @@
 // @vitest-environment happy-dom
 import {
-  AssistantRuntimeProvider,
-  type ThreadMessageLike,
-  useExternalStoreRuntime,
-} from "@assistant-ui/react"
-import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
-import {
   PUBLISH_LATE_MS,
   SiteReady,
 } from "@workspace/ui/components/assistant/site-ready"
-import { act, createElement, type ReactNode } from "react"
+import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, expect, it, vi } from "vitest"
 
@@ -18,7 +12,7 @@ import { afterEach, expect, it, vi } from "vitest"
 ).IS_REACT_ACT_ENVIRONMENT = true
 
 /**
- * The ready card docks above the composer once the owner writes. It moves
+ * The ready card docks into its row of the update stack once the owner writes. It moves
  * there as the same node, so nothing in it is drawn again, and an opened
  * card closes on the owner's next message without a remount.
  */
@@ -26,16 +20,6 @@ import { afterEach, expect, it, vi } from "vitest"
 afterEach(() => {
   document.body.innerHTML = ""
 })
-
-/** An empty thread, which the docked card's tray item reads. */
-function Runtime({ children }: { children: ReactNode }) {
-  const runtime = useExternalStoreRuntime({
-    messages: [] as ThreadMessageLike[],
-    convertMessage: (message: ThreadMessageLike) => message,
-    onNew: async () => undefined,
-  })
-  return createElement(AssistantRuntimeProvider, { runtime }, children)
-}
 
 it("moves into the tray as the same card and closes on a new message", async () => {
   const tray = document.createElement("div")
@@ -46,24 +30,17 @@ it("moves into the tray as the same card and closes on a new message", async () 
   const draw = (docked: boolean, closeOn: string | null) =>
     act(async () =>
       root.render(
-        createElement(
-          Runtime,
-          null,
-          createElement(
-            TraySlotProvider,
-            { value: tray },
-            createElement(SiteReady, {
-              closeOn,
-              docked,
-              meta: "Ready now",
-              onApprove: () => undefined,
-              onMakeChanges: () => undefined,
-              pictures: null,
-              preview: "loading",
-              title: "Sparkle website",
-            })
-          )
-        )
+        createElement(SiteReady, {
+          closeOn,
+          docked,
+          meta: "Ready now",
+          onApprove: () => undefined,
+          onMakeChanges: () => undefined,
+          pictures: null,
+          preview: "loading",
+          spot: tray,
+          title: "Sparkle website",
+        })
       )
     )
 
