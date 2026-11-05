@@ -196,7 +196,7 @@ const bare = (text: string) =>
     .trim()
     .replace(/[.!]+$/, "")
     .replace(
-      /^(?:(?:we|i) (?:cover|serve|work in|go to)|(?:our|my) (?:customers|clients) are)\s+/i,
+      /^(?:(?:we|i) (?:cover|serve|work in|go to)|(?:(?:we're|we are|i'm|i am) )?based in|(?:our|my) (?:customers|clients) are)\s+/i,
       ""
     )
 

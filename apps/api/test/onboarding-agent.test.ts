@@ -2385,7 +2385,9 @@ describe("the recap", () => {
     const change = {
       ...next,
       facts: {
-        "service_area.text": { text: "Greater Manchester and Cheshire" },
+        "service_area.text": {
+          text: "Based in Greater Manchester and Cheshire",
+        },
       },
       say: "Added Cheshire. Now a bit about me, since I'll be the one answering for Regal Rides.",
     }
