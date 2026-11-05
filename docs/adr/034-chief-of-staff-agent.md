@@ -258,10 +258,8 @@ A step is logged at what OpenRouter billed for it, the `usage.cost` on the finis
 metadata, and the Developer's calls are logged the same way, so both reconcile against one
 OpenRouter bill. A step with no reported cost is priced from its usage at the table. The routing
 cap stays the pre-call limit on providers (`max_price`). Since 2026-11-06 the table prices a model
-at the average its admitted providers charge, not at the cap (Terra's local turns were billed at
-1.19 times the list price, the average is 1.13 and the cap 2.1), so the reservation, which still
-counts the prompt at two characters a token and the whole output cap, is close to the bill rather
-than twice it, and the daily cap counts an open turn at its reservation. The check before the CoS ships, run by
+at the dearest rate its admitted providers charge, not at the cap, so a step is never priced under
+what OpenRouter can bill for it, and the daily cap counts an open turn at its reservation. The check before the CoS ships, run by
 the tier-2 eval, is that the logged sum is within 5% of the bill. An abandoned turn lost its last
 step's usage, so the bill must then fall between the sum with it at its logged spend and the sum
 with it at the greater of that and its reservation, each widened by 5%. The cap is a ceiling,

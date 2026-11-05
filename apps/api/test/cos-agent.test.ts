@@ -806,8 +806,8 @@ describe("the CoS's model and price", () => {
         1_000_000,
       12
     )
-    // On 2026-11-06's table (Terra at its providers' average) and limits (16 steps, 150,000 input): about $2.99 a turn.
-    expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(2.99, 2)
+    // On 2026-11-06's table (Terra at its dearest provider) and limits (16 steps, 150,000 input): about $5.30 a turn.
+    expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(5.3, 2)
   })
 
   it("prices cached input at the cache rate, as pi-ai does", () => {

@@ -117,12 +117,12 @@ const rate = (key: string) => (r: Rates) => perMillion(r[key])
  * The cap is the factor times the list price, the day's hourly peak without
  * long-context tiers. OpenRouter compares a provider against it when a
  * request is made, so a provider under it at any hour can serve a call.
- * The entry's cost is what such a call is billed on average (owner,
- * 2026-11-06: count as OpenRouter bills): each live admitted provider's
- * dearest rate at the hours the cap admits it, averaged over them, every
- * rate alike, a long-context tier from each provider's own tier. Terra's
- * local turns were billed 1.19 times the list price that day; the average
- * was 1.13 and the cap 2.1. A call is logged at what OpenRouter billed
+ * The entry's cost is the most such a call is billed (owner, 2026-11-06:
+ * count as OpenRouter bills, never under it): for each rate, the dearest
+ * any admitted provider charges at the hours the cap admits it, a
+ * long-context tier from each provider's own tier. Terra's local turns
+ * were billed 1.19 times the list price that day; its dearest provider is
+ * 2 and the cap 2.1. A call is logged at what OpenRouter billed
  * (`billed` in `transport.ts`); the cost prices only a call OpenRouter
  * reports no cost for, and the CoS's reservations. With no admitted
  * provider it is the list price. pi-ai takes written tokens out of the
@@ -149,25 +149,22 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
       !ignore.includes(e.tag?.split("/")[0] ?? "") &&
       hours(e.pricing).some(routable)
   )
-  const up = admitted.filter((e) => e.status === 0)
-  const billing = up.length > 0 ? up : admitted
-  /** The billing providers' average for `key`, each at its dearest rate in `blocksOf`; the list's with none. */
-  const average = (
+  /** The dearest rate for `key` any admitted provider bills in `blocksOf`; the list's with none. */
+  const dearest = (
     key: string,
     blocksOf: (e: Endpoint) => Rates[],
     list: Rates[]
   ) =>
     rounded(
-      billing.length > 0
-        ? billing.reduce((sum, e) => sum + peak(key, blocksOf(e)), 0) /
-            billing.length
+      admitted.length > 0
+        ? Math.max(...admitted.map((e) => peak(key, blocksOf(e))))
         : peak(key, list)
     )
   const costs = (blocksOf: (e: Endpoint) => Rates[], list: Rates[]) => ({
-    input: average("prompt", blocksOf, list),
-    output: average("completion", blocksOf, list),
-    cacheRead: average("input_cache_read", blocksOf, list),
-    cacheWrite: average("input_cache_write", blocksOf, list),
+    input: dearest("prompt", blocksOf, list),
+    output: dearest("completion", blocksOf, list),
+    cacheRead: dearest("input_cache_read", blocksOf, list),
+    cacheWrite: dearest("input_cache_write", blocksOf, list),
   })
   const open = (e: Endpoint) => hours(e.pricing).filter(routable)
   // pi-ai applies a tier above `inputTokensAbove`; an override applies from

@@ -72,18 +72,18 @@ describe("a generated OpenRouter entry", () => {
     ).toEqual({ prompt: 0.21, completion: 0.84 })
   })
 
-  it("costs a call at the live admitted providers' average, each at its dearest routable hour", () => {
-    // Cheap, both Double endpoints, and Offpeak at its off-peak rates; not
-    // Down, which is degraded, nor Dear, which routing never reaches.
+  it("costs a call at the dearest rate an admitted provider bills, at the hours it can be routed", () => {
+    // Double's input and output, and Offpeak's cache read at its off-peak
+    // hours; never Dear, which routing never reaches.
     expect(openrouterEntry(listed, providers).entry.cost).toEqual({
-      input: 0.1425,
-      output: 0.575,
-      cacheRead: 0.03025,
+      input: 0.2,
+      output: 0.8,
+      cacheRead: 0.06,
       cacheWrite: 0,
     })
   })
 
-  it("prices cache writes at the admitted providers' average, as reads are", () => {
+  it("prices cache writes at the dearest admitted provider's, as reads are", () => {
     const writes = (write: number) => ({
       ...rates(0.1, 0.4, 0.01),
       input_cache_write: perToken(write),
@@ -93,7 +93,7 @@ describe("a generated OpenRouter entry", () => {
       provider("Double", writes(0.2)),
       provider("Dear", { ...rates(0.3, 0.9, 0.2), input_cache_write: "1" }),
     ])
-    expect(entry.cost.cacheWrite).toBe(0.1625)
+    expect(entry.cost.cacheWrite).toBe(0.2)
   })
 
   it("promises only the window and output every admitted provider serves", () => {
@@ -121,7 +121,7 @@ describe("a generated OpenRouter entry", () => {
       data_collection: "deny",
     })
     expect(live).toBe(3)
-    expect(entry.cost.cacheRead).toBe(0.03025)
+    expect(entry.cost.cacheRead).toBe(0.06)
     expect(entry.contextWindow).toBe(250_000)
   })
 
@@ -168,26 +168,26 @@ describe("a generated OpenRouter entry", () => {
       prompt: 4.2,
       completion: 12.6,
     })
-    // Over the tier's threshold the log prices at the providers' average
+    // Over the tier's threshold the log prices at the dearest provider's
     // tier, which pi-ai's `calculateCost` applies to the whole request. From
     // 200,000 tokens, since the tier starts there and pi-ai tests "above".
     expect(entry.cost).toEqual({
-      input: 2.733333,
-      output: 8.2,
-      cacheRead: 0.683333,
+      input: 4,
+      output: 12,
+      cacheRead: 1,
       cacheWrite: 0,
       tiers: [
         {
           inputTokensAbove: 199_999,
-          input: 5.466667,
-          output: 16.4,
-          cacheRead: 1.366667,
+          input: 8,
+          output: 24,
+          cacheRead: 2,
           cacheWrite: 0,
         },
       ],
     })
     expect(live).toBe(2)
-    // pi-ai reads the tier: 250,000 input tokens cost 5.466667 per million.
+    // pi-ai reads the tier: 250,000 input tokens cost 8 per million.
     const usage = {
       input: 250_000,
       output: 0,
@@ -197,7 +197,7 @@ describe("a generated OpenRouter entry", () => {
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     }
     calculateCost(entry as unknown as Model<"openai-completions">, usage)
-    expect(usage.cost.input).toBeCloseTo(1.36666675, 10)
+    expect(usage.cost.input).toBeCloseTo(2, 10)
   })
 })
 
