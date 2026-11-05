@@ -287,7 +287,7 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
           <span className="inline-flex items-center gap-1">
             <Mark required /> Required
           </span>
-          <span>Name, email and phone are always asked.</span>
+          <span>Name and email are always asked, phone is optional.</span>
         </p>
         <QuoteFormPreview fields={keptFields(draft)} onConfirm={confirm} />
       </div>

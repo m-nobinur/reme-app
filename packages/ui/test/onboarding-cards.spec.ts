@@ -148,6 +148,12 @@ test("a reviewed quote form leaves only a broken one's note", async ({
   page,
 }) => {
   await open(page, "ReviewQuoteForm")
+  // The preview marks the phone optional, so the card says the same.
+  await expect(
+    page
+      .getByText("Name and email are always asked, phone is optional.")
+      .first()
+  ).toBeVisible()
   await expect(page.locator('[data-slot="aui_user-message-root"]')).toHaveText([
     /Looks good/,
     /Ask about luggage too/,
