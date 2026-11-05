@@ -263,7 +263,10 @@ summary call itself is Haiku 5.5, uncapped, its input bounded to 160,000 charact
   `_PRUNED_TOOL_PLACEHOLDER` as `salvage_grown_transcript` does, the newest two spared, then the
   oldest turns go. A skill over 5,000 characters leaves `[SKILL_PRUNED: ...]`, a skill viewed in
   the tail or named there by the owner is spared, and the summary names the skills it replaced
-  with `_pruned_skill_reload_notice`'s wording (newest twenty).
+  after `_pruned_skill_reload_notice` (newest twenty, with the exact reload calls), worded so
+  it never asks the model to carry out a preserved task. The summariser reads logged events
+  labelled as such, never as the owner, and counts only the owner's lines as their asks and
+  rules, so a website visitor's text cannot become an owner request in the summary.
 - Head and tail: `protect_first_n` 3 before a session's first summary only (Hermes's decay), the
   tail at a fifth of the trigger, half again at most, at least `_MAX_TAIL_MESSAGE_FLOOR` 8
   messages, never parting a call from its result or an open approval from its card.
