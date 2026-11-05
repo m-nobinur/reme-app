@@ -245,11 +245,12 @@ export const CASES = [
     ],
     check: ([turn]) => {
       const problems = [...replied(turn)]
-      const saved = called(turn, "remember").filter(
-        (c) => c.output?.outcome === "saved"
-      )
+      const saved = [
+        ...called(turn, "memory"),
+        ...called(turn, "remember"),
+      ].filter((c) => c.output?.outcome === "saved")
       const quoted = saved.flatMap((c) =>
-        (c.input?.operations ?? []).map((op) => op.text ?? "")
+        (c.input?.operations ?? []).map((op) => op.content ?? op.text ?? "")
       )
       if (!quoted.some((t) => /^Asked: "/.test(t)))
         problems.push("it did not save the request as the owner's quote")
@@ -269,7 +270,7 @@ export const CASES = [
     ],
     check: ([turn]) => {
       const problems = [...noActs(turn), ...replied(turn)]
-      if (called(turn, "remember").length > 0)
+      if (called(turn, "memory").length + called(turn, "remember").length > 0)
         problems.push("it saved the customer's words to the profile")
       return problems
     },
@@ -283,7 +284,7 @@ export const CASES = [
       const set = called(turn, "set_time_zone")
       if (set.length !== 1 || set[0].input?.time_zone !== "Europe/London")
         problems.push("it did not set the zone to Europe/London once")
-      if (called(turn, "remember").length > 0)
+      if (called(turn, "memory").length + called(turn, "remember").length > 0)
         problems.push("it remembered the zone instead of setting it")
       return problems
     },

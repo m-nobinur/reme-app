@@ -94,8 +94,10 @@ function turnLines(parts) {
 export function profileOf(kase, turns) {
   const saved = turns.flatMap((t) =>
     callsOf(t.parts)
-      .filter((c) => c.toolName === "remember")
-      .flatMap((c) => (c.input?.operations ?? []).map((op) => op.text ?? ""))
+      .filter((c) => c.toolName === "memory" || c.toolName === "remember")
+      .flatMap((c) =>
+        (c.input?.operations ?? []).map((op) => op.content ?? op.text ?? "")
+      )
   )
   return [...(kase.profile ?? []), ...saved].filter((l) => /^Asked:/.test(l))
 }
