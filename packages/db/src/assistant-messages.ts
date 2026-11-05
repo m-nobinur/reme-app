@@ -70,13 +70,18 @@ export async function postAssistantMessage(
     conversationId?: string
   }
 ): Promise<Posted> {
-  const { id, text, button, questions, enquiry, kind } = ServerMessage.parse({
-    ...message,
-    id: serverMessageId(key),
-  })
+  const { id, text, button, questions, enquiry, choices, kind } =
+    ServerMessage.parse({
+      ...message,
+      id: serverMessageId(key),
+    })
   // A card's questions, as the words the owner read, so a typed answer is recognised.
   const asked = questions
     ? [`On a card I asked: ${questions.questions.map((q) => q.text).join(" ")}`]
+    : []
+  // The pills, so the model knows what was offered and whether it went unanswered.
+  const offered = choices
+    ? [`I offered quick replies: ${choices.map((c) => c.label).join("; ")}.`]
     : []
   // The model reads a notice back as its own words, so one carrying a
   // visitor's request says only our own line; the request follows as data.
@@ -84,7 +89,7 @@ export async function postAssistantMessage(
     source: "notice",
     summary: enquiry
       ? "I showed the owner a quote request from their website."
-      : [...text, ...asked].join("\n\n").slice(0, 1500),
+      : [...text, ...asked, ...offered].join("\n\n").slice(0, 1500),
     evidence: [],
     wake: false,
     message_id: id,
@@ -100,6 +105,7 @@ export async function postAssistantMessage(
       ...(button ? [{ type: "data-button", data: button }] : []),
       ...(questions ? [{ type: "data-build_questions", data: questions }] : []),
       ...(enquiry ? [{ type: "data-enquiry", data: enquiry }] : []),
+      ...(choices ? [{ type: "data-choices", data: choices }] : []),
       ...(kind ? [{ type: "data-kind", data: kind }] : []),
     ],
     // The visitor's words go in as data of their own, never inside the
