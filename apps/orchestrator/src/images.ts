@@ -323,7 +323,7 @@ type Drawn =
   /** `down`: the model, not the prompt, failed (quota, outage, timeout), so the build skips it. */
   | { ok: false; reason: string; down: boolean; status: number | null }
 
-/** One image, or the reason there is none. A refusal is a 400 or an answer without a picture. */
+/** One image, or the reason there is none. A refusal is a 4xx the model did not cause, or an answer without a picture. */
 async function draw(
   { key, fetch }: Deps,
   { id: model, sized }: PhotoModel,
@@ -358,13 +358,28 @@ async function draw(
           : {}),
       }),
     })
-    if (!response.ok)
+    if (!response.ok) {
+      const said = await response
+        .json()
+        .then((b) =>
+          String((b as { error?: { message?: unknown } }).error?.message ?? "")
+        )
+        .catch(() => "")
+      const status = response.status
       return {
         ok: false,
-        reason: `http ${response.status}`,
-        down: response.status !== 400,
-        status: response.status,
+        reason: `http ${status}${said ? `: ${said.slice(0, 160)}` : ""}`,
+        // A moderation or guardrail 403 refuses this prompt, not the model
+        // (OpenRouter's errors page); one flagged hero once took every model
+        // down for the build's other photos.
+        down:
+          status === 402 ||
+          status === 429 ||
+          status >= 500 ||
+          (status === 403 && /limit|budget|credit/i.test(said)),
+        status,
       }
+    }
     const body = (await response.json()) as {
       data?: { b64_json?: string; media_type?: string }[]
       usage?: { cost?: number }

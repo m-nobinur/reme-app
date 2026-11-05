@@ -86,6 +86,8 @@ function openrouter(
     refuse?: (body: Call["body"]) => boolean
     /** Answers 429, the way a provider out of quota does. */
     down?: (body: Call["body"]) => boolean
+    /** Answers 403, the way OpenRouter refuses a prompt its moderation flags. */
+    flag?: (body: Call["body"]) => boolean
     noPrompts?: boolean
     /** The defect check's answers in turn, a clean one once they run out; null answers 503. */
     verdicts?: (Record<string, unknown> | null)[]
@@ -127,6 +129,11 @@ function openrouter(
     }
     if (options.refuse?.(body)) return new Response("no", { status: 400 })
     if (options.down?.(body)) return new Response("quota", { status: 429 })
+    if (options.flag?.(body))
+      return Response.json(
+        { error: { code: 403, message: "Your input was flagged" } },
+        { status: 403 }
+      )
     return Response.json({
       data: [{ b64_json: PNG, media_type: "image/png" }],
       usage: { cost: 0.034 },
@@ -635,6 +642,39 @@ describe("the photo director", () => {
     )
     expect(String(images(calls)[1]?.body.prompt)).toContain("a sunlit hero")
     expect(String(images(calls)[1]?.body.prompt)).not.toContain("with a plant")
+  })
+
+  it("takes a moderation refusal as the prompt's, so the next photo still draws", async () => {
+    const { calls, fetcher } = openrouter({
+      flag: (body) => String(body.prompt).includes("for hero"),
+    })
+    const log = vi.spyOn(console, "log").mockReturnValue(undefined)
+    await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+      orgId: ORG,
+      plan: plan([
+        ["hero", "hero"],
+        ["banner", "hero"],
+      ]),
+      brief: BRIEF,
+      fetch: fetcher,
+    })
+    const lines = log.mock.calls.map(([line]) => JSON.parse(String(line)))
+    log.mockRestore()
+    const draws = lines.filter((l) => l.type === "photos.draw")
+    expect(draws.find((l) => l.slot === "hero")).toMatchObject({
+      outcome: "refused",
+      status: 403,
+      reason: "http 403: Your input was flagged",
+    })
+    expect(draws.find((l) => l.slot === "banner")).toMatchObject({
+      model: FAST_MODELS[0]?.id,
+      outcome: "drawn",
+    })
+    expect(lines.find((l) => l.type === "photos.summary")?.models_down).toEqual(
+      []
+    )
+    expect(calls.length).toBeGreaterThan(0)
   })
 
   it("moves past a model out of quota and skips it for the rest of the build", async () => {
