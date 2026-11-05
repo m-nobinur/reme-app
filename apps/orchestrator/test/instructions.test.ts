@@ -256,6 +256,11 @@ describe("the pack voice slot", () => {
 
   it("carries the cleaning pack's notes and none for an industry without a pack", () => {
     expect(packVoice([cleaning]).length).toBeGreaterThan(0)
+    const voice = packVoice([cleaning]).join(" ")
+    expect(voice).toContain(
+      "a walk-through, a quote visit or a call is a step only when a fact says the business does it"
+    )
+    expect(voice).not.toContain("the walk-through or quote,")
     expect(instructions(brief([cleaning]), 20)).toContain("Industry pack")
     const other = fact("business.industry", { name: "X", category: null })
     expect(instructions(brief([other]), 20)).not.toContain("Industry pack")

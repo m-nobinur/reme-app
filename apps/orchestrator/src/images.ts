@@ -607,6 +607,8 @@ export async function directPhotos(input: {
   siblings?: string[]
   /** Makes the hash, so the picture, new: "Try another" passes its assignment id. */
   variation?: string
+  /** Pictures this build, or the one it retries, already drew for these slots: used as they are while still stored, never hashed or drawn again. */
+  kept?: readonly PhotoResult[]
   /** Told as each slot settles, for the build's per-photo progress; a throw is ignored. */
   onSlot?: (result: PhotoResult) => unknown
   fetch?: typeof fetch
@@ -631,12 +633,29 @@ export async function directPhotos(input: {
   const wanted = plan.images.filter(
     (s): s is Slot => s.source === "generated" && !s.asset_id
   )
-  const hero = wanted.find((s) => s.section === "hero") ?? wanted[0]
-  const ordered = [...(hero ? [hero] : []), ...wanted.filter((s) => s !== hero)]
+  // The plan's hero, not the first slot left to draw: a retry that keeps the first
+  // photos must not turn another slot into the hero (2K, so another hash) and draw it again.
+  const generated = plan.images.filter(
+    (s): s is Slot => s.source === "generated"
+  )
+  const hero = generated.find((s) => s.section === "hero") ?? generated[0]
+  const ordered = [
+    ...wanted.filter((s) => s === hero),
+    ...wanted.filter((s) => s !== hero),
+  ]
+  const kept = new Map<string, PhotoResult>()
+  for (const k of input.kept ?? []) {
+    if (!k.key || k.status === "fallback") continue
+    const found = await env.SITES.list({ prefix: k.key })
+    if (found.objects.some((o) => o.key === k.key)) kept.set(k.slot_id, k)
+  }
   const planned: Planned[] = []
   for (const slot of ordered) {
+    const again = kept.get(slot.id)
     if (claims.has(slot.id)) {
       settle(slot.id, fallback(slot.id, "claim section"))
+    } else if (again) {
+      settle(slot.id, { ...again, status: "reused", cost_usd: 0, reason: null })
     } else if (planned.length >= MAX_PER_BUILD) {
       settle(slot.id, fallback(slot.id, "build cap"))
     } else {

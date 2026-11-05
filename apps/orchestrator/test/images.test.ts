@@ -619,6 +619,113 @@ describe("the photo director", () => {
     expect(out[0]).toMatchObject({ status: "reused", cost_usd: 0 })
   })
 
+  it("keeps the plan's hero when a retry carries the first photos, so no slot is drawn again at 2K", async () => {
+    const sites = bucket()
+    const first = plan([
+      ["hero", "hero"],
+      ["extra", "hero"],
+    ]) as unknown as { images: Record<string, unknown>[] }
+    await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: sites },
+      orgId: ORG,
+      plan: first as never,
+      brief: BRIEF,
+      fetch: openrouter().fetcher,
+    })
+    const retry = {
+      ...first,
+      images: [
+        {
+          ...first.images[0],
+          asset_id: "10000001-0000-4000-8000-0000000000aa",
+        },
+        first.images[1],
+      ],
+    }
+    const second = openrouter()
+    const out = await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: sites },
+      orgId: ORG,
+      plan: retry as never,
+      brief: BRIEF,
+      fetch: second.fetcher,
+    })
+    expect(second.calls).toHaveLength(0)
+    expect(out.map((r) => [r.slot_id, r.status])).toEqual([["extra", "reused"]])
+  })
+
+  it("uses the pictures an earlier attempt drew even when the brief has changed, and draws only the rest", async () => {
+    const sites = bucket()
+    const input = {
+      env: { OPENROUTER_API_KEY: "k", SITES: sites },
+      orgId: ORG,
+      plan: plan([
+        ["hero", "hero"],
+        ["lawn", "service_cards"],
+        ["patio", "service_cards"],
+      ]),
+    }
+    const firstRun = await directPhotos({
+      ...input,
+      brief: BRIEF,
+      fetch: openrouter().fetcher,
+    })
+    const drawn = firstRun.filter((r) => r.slot_id !== "patio")
+    const again = openrouter()
+    const out = await directPhotos({
+      ...input,
+      brief: { ...BRIEF, palette: "a new palette" },
+      kept: drawn,
+      fetch: again.fetcher,
+    })
+    expect(out.map((r) => [r.slot_id, r.status, r.cost_usd])).toEqual([
+      ["hero", "reused", 0],
+      ["lawn", "reused", 0],
+      ["patio", "generated", expect.any(Number)],
+    ])
+    expect(images(again.calls)).toHaveLength(1)
+  })
+
+  it("draws a slot again when its kept picture is gone from the bucket, and never reuses a fallback", async () => {
+    const sites = bucket()
+    const { calls, fetcher } = openrouter()
+    const out = await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: sites },
+      orgId: ORG,
+      plan: plan([
+        ["hero", "hero"],
+        ["lawn", "service_cards"],
+      ]),
+      brief: BRIEF,
+      kept: [
+        {
+          slot_id: "hero",
+          status: "reused",
+          asset_id: "a",
+          key: `generated/${ORG}/a.png`,
+          content_type: "image/png",
+          cost_usd: 0,
+          reason: null,
+        },
+        {
+          slot_id: "lawn",
+          status: "fallback",
+          asset_id: null,
+          key: null,
+          content_type: null,
+          cost_usd: null,
+          reason: "http 403",
+        },
+      ],
+      fetch: fetcher,
+    })
+    expect(out.map((r) => [r.slot_id, r.status])).toEqual([
+      ["hero", "generated"],
+      ["lawn", "generated"],
+    ])
+    expect(images(calls)).toHaveLength(2)
+  })
+
   it("never draws a claim section, and falls back instead of failing on a refusal", async () => {
     const { calls, fetcher } = openrouter({ refuse: () => true })
     const out = await directPhotos({
