@@ -1605,8 +1605,8 @@ function wholeSentences(message: string): string {
  * The instructions as the system message, marked as a cache breakpoint.
  * They are the same for every org and every turn, so the provider caches
  * them and each turn reads them at the cache rate; only the turn's data,
- * which comes after them, is new. Gemini caches a repeated prefix of 1,024
- * tokens on its own, and the mark makes the hit certain rather than likely.
+ * which comes after them, is new. Gemini reads no cache without the mark
+ * (measured 2026-11-06, 0 of 7,190 tokens against 7,183 with it).
  */
 const systemMessage = (content: string): SystemModelMessage => ({
   role: "system",

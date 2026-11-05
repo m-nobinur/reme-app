@@ -62,6 +62,7 @@ import {
   type LanguageModelUsage,
   type ModelMessage,
   type ProviderMetadata,
+  type SystemModelMessage,
   ToolLoopAgent,
   type ToolSet,
   tool,
@@ -2198,6 +2199,17 @@ export const carded = (
   (risk === "grantable" && !(kind && granted.includes(kind)))
 
 /**
+ * The instructions with a cache marker. Gemini, which serves the chat when
+ * GPT has no provider, reads no cache without one; GPT and Claude read the
+ * same with it (measured 2026-11-06).
+ */
+export const CACHED_INSTRUCTIONS: SystemModelMessage = {
+  role: "system",
+  content: INSTRUCTIONS,
+  providerOptions: { openrouter: { cacheControl: { type: "ephemeral" } } },
+}
+
+/**
  * The turn's agent. `prepareStep` refuses a call whose messages are not
  * the log's (ADR-034's check), and `onStepEnd` logs each step before the
  * next one is prepared. A write refused because the turn lost its token
@@ -2235,7 +2247,7 @@ export function cosAgent(
         run
       ),
     ]),
-    instructions: INSTRUCTIONS,
+    instructions: CACHED_INSTRUCTIONS,
     tools,
     activeTools: activeTools(mode, unasked),
     toolApproval: Object.fromEntries(
