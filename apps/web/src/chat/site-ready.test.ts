@@ -150,3 +150,34 @@ it("says a publish is slow to come online once the load check runs long, until i
   await act(async () => root.unmount())
   vi.useRealTimers()
 })
+
+it("says why Publish waits while an update to the draft is being made", async () => {
+  const chat = document.createElement("div")
+  document.body.appendChild(chat)
+  const root = createRoot(chat)
+  const render = (held: boolean) =>
+    act(async () =>
+      root.render(
+        createElement(SiteReady, {
+          held,
+          meta: "Not published",
+          onApprove: () => undefined,
+          onMakeChanges: () => undefined,
+          pictures: null,
+          preview: "loading",
+          title: "Sparkle website",
+        })
+      )
+    )
+  await render(true)
+  const publish = [...chat.querySelectorAll("button")].find(
+    (b) => b.textContent?.trim() === "Publish"
+  )
+  expect(publish?.disabled).toBe(true)
+  expect(chat.textContent).toContain(
+    "Publishing waits until your update is ready."
+  )
+  await render(false)
+  expect(chat.textContent).not.toContain("Publishing waits")
+  await act(async () => root.unmount())
+})

@@ -3233,6 +3233,7 @@ const assistantCatalog = [
         />
         <div className="flex max-w-xl flex-col gap-6">
           <SiteReady {...READY} pending />
+          <SiteReady {...READY} held />
           <SiteReady
             {...READY}
             error="A newer version replaced that one. Check the latest before you decide."

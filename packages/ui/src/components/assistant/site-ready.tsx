@@ -177,6 +177,10 @@ export function SiteReady({
     <p className="px-3 pb-3 text-[0.8125rem] text-destructive" role="alert">
       {error}
     </p>
+  ) : held ? (
+    <p className="px-3 pb-3 text-[0.8125rem] text-muted-foreground">
+      Publishing waits until your update is ready.
+    </p>
   ) : null
   if (row) {
     return approved ? (
