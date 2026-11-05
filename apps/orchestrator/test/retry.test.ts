@@ -513,6 +513,9 @@ live("a failed owner build's retry", () => {
       note: {
         key: `site.stopped:${retry.assignmentId}`,
         text: "Your website build couldn't finish: it stopped making progress. Say try again, or tell me what to change.",
+        choices: [
+          { label: "Try again", send: "Try building my website again." },
+        ],
       },
     })
     expect(created).toHaveLength(1)
