@@ -59181,6 +59181,31 @@
         ],
         "additionalProperties": false
       },
+      "ServerKindPart": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "data-kind"
+          },
+          "data": {
+            "type": "string",
+            "enum": [
+              "reply",
+              "update",
+              "note",
+              "done",
+              "reminder"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "data"
+        ],
+        "additionalProperties": false
+      },
       "ServerMessage": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -59777,6 +59802,16 @@
               "photos"
             ],
             "additionalProperties": false
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "reply",
+              "update",
+              "note",
+              "done",
+              "reminder"
+            ]
           }
         },
         "required": [
