@@ -254,7 +254,7 @@ const isWarning = (message: ModelMessage) =>
   )
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "61"
+const PREFIX_VERSION = "62"
 
 /**
  * The prompt-cache key every call on the prefix sends, the review's too:
@@ -396,7 +396,7 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
   get_review:
     "Read a finished site review in full: the verdict, the strengths and every finding by id with its page, the words it is about, the issue and the fix. ref is the one ask_developer returned; left out, the latest. running means not finished yet; none means no report.",
   request_change:
-    'Start one change to the website, in their words. change_kind is the biggest part: copy is words only (a headline, a phone number, a button label); style is colours, fonts or spacing across the site; section adds, removes, moves or reworks a section or page; photo replaces, adds or removes a picture; creative is a new look, new pages or anything unsure. contact.phone (E.164) or contact.email is a new phone or email exactly as they typed it in full; proof is something about the business they stated for the site to say. label is what changes as they would name it, at most 40 characters, such as "your hero title".',
+    'Start one change to the website, in their words. change_kind is the biggest part: copy is words only (a headline, a phone number, a button label); style is colours, fonts or spacing across the site; section is moving, removing or reworking an existing one; photo replaces, adds or removes a picture; creative is a new section, page or look, or unsure. contact.phone (E.164) or contact.email is a new phone or email exactly as they typed it in full; proof is something about the business they stated for the site to say. label is what changes as they would name it, at most 40 characters, such as "your hero title".',
   answer_question:
     "Answer one of the Developer's open questions by its ref, with what they told you. For a fact field, value is {key, value}: key is the ref's field and value the fact's own object, such as {open, close} for hours; otherwise it is their text. A value that does not fit the field is refused.",
   create_reminder:
