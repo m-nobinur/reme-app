@@ -74,6 +74,7 @@ import { grantedKinds, grantOf, offerGrant } from "./grants.ts"
 import {
   CONTEXT_POLICY,
   deriveCosMessages,
+  isTool,
   type LoggedEvent,
   readSessionSince,
   type SessionEvent,
@@ -2092,6 +2093,39 @@ async function derivedCall(
     CONTEXT_POLICY
   )
   return [...(await convertToModelMessages(messages, { tools })), ...steps]
+}
+
+/**
+ * What a call after the session's latest turn sends ahead of its own
+ * request, so it reads the prefix that turn left cached: the tools of the
+ * turn's mode, and the history as the turn's first call sent it, redacted
+ * (ADR-042). The warm summary runs on it (`compaction.ts`).
+ */
+export async function afterTurnCall(rows: readonly SessionEvent[]) {
+  const tools = toolsFor({} as AgentTurn, null)
+  const { messages } = deriveCosMessages(rows, CONTEXT_POLICY)
+  const context = rows.filter((e) => e.type === "cos.context").at(-1)
+  // A card still waiting has no result, which no call may send, and the
+  // turn's first call never held its reply: the history stops at the owner.
+  const waiting = messages
+    .at(-1)
+    ?.parts.some(
+      (p) =>
+        isTool(p as never) &&
+        !["output-available", "output-error", "output-denied"].includes(
+          String((p as { state?: unknown }).state)
+        )
+    )
+  const sent = waiting
+    ? messages.slice(0, messages.map((m) => m.role).lastIndexOf("user") + 1)
+    : messages
+  return {
+    tools,
+    activeTools:
+      (context?.payload as { active_tools?: CosToolName[] } | undefined)
+        ?.active_tools ?? [],
+    messages: redacted(await convertToModelMessages(sent, { tools })),
+  }
 }
 
 /** The domain states in which a connection reports back on its own. */

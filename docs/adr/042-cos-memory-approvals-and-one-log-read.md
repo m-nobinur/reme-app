@@ -245,19 +245,39 @@ switch to a 64,000-token model would trigger at 54,400. A warm summary runs once
 (the layer caps sum to about 141,300) and `firstChunkMs` from 8 s to 20 s, since a cold cache
 prefills the whole history.
 
-**Cost.** On the facade's price table Terra bills $2.10 a million uncached and $0.20 cached, so a
-step carrying 128,000 history tokens costs about $0.026 cached and $0.27 cold; the turn
-reservation is about $5.56 while a turn is open. The brief's figures ($1 and $0.05 a million,
-about $0.13 cold and $0.006 cached a step) do not match the table; whichever is current, a warm
-cache is about ten to twenty times cheaper than a cold one, which is why the summary runs while it
-is warm and why clearing waits to save 4,096 tokens before it rewrites a cached prefix. The
-summary call itself is Haiku 5.5, uncapped, its input bounded to 160,000 characters.
+**Cost.** OpenRouter bills Terra $1 a million uncached, $0.05 cached and $5 out (models API,
+2026-11-06), so a step carrying 128,000 history tokens costs about $0.006 cached and $0.13 cold.
+The facade's price table still holds $2.10 and $0.20, so reservations and the cap count about
+twice the real cost until it is refreshed. A warm cache is about twenty times cheaper than a cold
+one, which is why the summary runs while it is warm and why clearing waits to save 4,096 tokens
+before it rewrites a cached prefix.
+
+**The summary call (owner, 2026-11-06).** The summary is written by the CoS's own model on the
+owner turn's route, at the end of the last turn's call: the same instructions, the tools of the
+turn's mode, the history as that turn sent it, redacted, and the same `prompt_cache_key` and
+`session_id`, with no tool call allowed (`afterTurnCall`, `summarise`). Everything up to the
+owner's last message is read from the cache the turn left warm, as Claude Code's `/compact` reads
+its own; only the last reply and the request are new. The request carries Hermes's preamble,
+template and iterative update, and names the span where it sits in the history (its first message
+and the first one kept) instead of copying it out. Hermes writes summaries on a cheap auxiliary
+model and falls back to the main one; here the main model sees its own instructions, tools,
+memory and skills, so it knows what a card, a staff correction or a quick reply means. When the
+last reply holds a card still waiting, the history stops at the owner's message, since a call
+with no result cannot be sent. A session whose last turn was logged under an older context policy
+is skipped (`old_policy`).
+
+Measured on 2026-11-06 over the scripted 60-turn session with thresholds scaled to it (6,000 and
+12,000), three runs each, a run passing when every summary is kept, both approvals stay open and
+the CoS answers all ten seeded facts: Terra over its own cache passed 3 of 3, read 82 to 84% of
+its input from cache, took 10.2 s at the median and 12.5 s at most, wrote about 780 tokens a
+summary and cost about $0.046 a run. Terra as a separate call passed 3 of 3 at $0.105 a run with
+one 72 s summary; Haiku 5.5 passed 3 of 3 at $0.020 a run, 16 s at the median, with summaries
+about six times longer. Of the cheaper models tried, Mercury 3, Luna and MiniMax M3.1 Flash also
+passed 3 of 3, DeepSeek V4.1 Flash 2 of 3 (it dropped a renewal date), and GLM 5.3 Flash and
+Command A Plus 0 of 3, each with a summary past the 120 s timeout in every run.
 
 **Ported from hermes-agent (MIT, agent/context_compressor.py and agent/conversation_compression.py).**
-- Tool output clearing, before any summary: `_prune_old_tool_results` as the summary's first pass
-  (outputs over `_PRUNE_MIN_CHARS` 200 outside the tail become Hermes's one-line
-  `_summarize_tool_result`, repeats become a back-reference, long inputs are cut), and
-  `prune_tool_results_only` between summaries (outputs over 8,000 characters outside the newest
+- Tool output clearing: `prune_tool_results_only` between summaries (outputs over 8,000 characters outside the newest
   `protect_last_n` 20 messages, committed only when it saves 4,096 tokens). This replaces the
   `toolTurns` rule and the turn count. Past the cap, outputs give way to
   `_PRUNED_TOOL_PLACEHOLDER` as `salvage_grown_transcript` does, the newest two spared, then the
@@ -275,13 +295,12 @@ summary call itself is Haiku 5.5, uncapped, its input bounded to 160,000 charact
   Fixes, Resolved Questions, Critical Context, Pruned Skills, temporal anchoring from the newest
   Now line), worded for a business owner, and its iterative update of the previous summary.
   `_SUMMARY_RATIO` 0.20 within `_MIN_SUMMARY_TOKENS` 2,000 and `_SUMMARY_TOKENS_CEILING` 10,000,
-  `_SUMMARY_INPUT_MAX_CHARS` 160,000 with Hermes's per-message limits, and no output cap on the
-  call. The event's summary now holds up to 48,000 characters.
+  and no output cap on the call. The event's summary now holds up to 48,000 characters.
 - Anti-thrash, read from the log: a compaction that left history over the warm threshold is a
   strike; after one, a middle under `_FEASIBILITY_SKIP_MIDDLE_FRACTION` (a tenth) of the trigger
   gets no summary; after two in a row only the hard trigger tries again (Hermes's recovery probe).
-- Clarify non-responses (`_CLARIFY_NON_RESPONSE_PREFIXES`): quick replies the owner did not tap
-  reach the summariser as "no answer", never with their text; a tapped one as the owner's reply.
+- Clarify non-responses (`_CLARIFY_NON_RESPONSE_PREFIXES`): the request says quick replies are
+  the owner's answer only when their next message is word for word one of them.
 
 **Ported from OpenMausBot (Apache-2.0, server/warm-summary.ts, server/host/warm-summary-host.ts,
 server/compaction-summary.ts).** The after-turn queue job that used to compact at once now arms
@@ -303,4 +322,6 @@ prune's regrowth re-arm (the log holds no such state; the two-minute retry and t
 saving gate stand in); clearing tool output in the protected tail at summary time (it would need
 the cleared calls recorded; the 20-message proactive rule covers the large ones); OpenMausBot's
 abandon-on-turn-start and turn-waits-for-summary paths (our turns never wait, and the summary is
-kept for the next turn).
+kept for the next turn). Hermes's first pass at summary time, `_prune_old_tool_results`, and
+`_SUMMARY_INPUT_MAX_CHARS`: the summary reads the history as the turn sent it, so its prefix stays
+the cached one, and the history is never over the 128,000 cap.

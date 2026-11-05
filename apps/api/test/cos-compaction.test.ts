@@ -11,12 +11,16 @@ import { MockLanguageModelV4 } from "ai/test"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import type { AfterTurn } from "../src/after-turn.ts"
 import {
-  boundInput,
+  afterTurnCall,
+  INSTRUCTIONS,
+  PREFIX_KEY,
+  type Price,
+} from "../src/cos/agent.ts"
+import {
   COMPACTION,
   compactAfterTurn,
   type Later,
   type Plan,
-  pillLine,
   planCompaction,
   promptOf,
   scheduleCompaction,
@@ -26,7 +30,6 @@ import {
   targetTokens,
   thresholdsFor,
   thresholdTokens,
-  transcript,
   worstCall,
 } from "../src/cos/compaction.ts"
 import {
@@ -107,6 +110,15 @@ function fakeModel(
   })
   return { model, prompts, calls }
 }
+
+const PRICE: Price = { input: 1, output: 5, cacheRead: 0.05 }
+
+/** The owner turn's model as the job is given it. */
+const cosOf = (model: MockLanguageModelV4) => ({
+  model,
+  modelId: "openai/gpt-6.1-terra",
+  price: PRICE,
+})
 
 /**
  * The log as the job leaves it: each turn's rows appended in order, and
@@ -637,70 +649,11 @@ describe("the cut", () => {
       "u5",
     ])
   })
-
-  it("clears the span's tool output before summarising, as Hermes's first pass does", () => {
-    const rows = [
-      ...turn(1, "Hi", "Hi"),
-      ...turn(2, "Hi", "Hi"),
-      ...turn(3, "Prices?", "Here.", "Mode: ask.", [
-        call(3, "get_facts", { name: "pricing" }, { rows: "z".repeat(600) }),
-      ]),
-      ...long(4, 16),
-    ]
-    const plan = planCompaction(seqd(rows), AT) as Plan
-    const text = transcript(plan.span)
-    expect(text).toContain("output [get_facts] name=pricing (611 chars result)")
-    expect(text).not.toContain("zzzz")
-  })
 })
 
-describe("ignored quick replies", () => {
-  const pills = call(
-    3,
-    "offer_choices",
-    {
-      choices: [
-        { label: "Go ahead", send: "Go ahead with the new About page" },
-        { label: "Not now", send: "Not now" },
-      ],
-    },
-    { outcome: "offered" }
-  )
-  const withReply = (reply: string) =>
+describe("whose words", () => {
+  const prompt = promptOf(
     planCompaction(
-      seqd([
-        ...turn(1, "Hi", "Hi"),
-        ...turn(2, "Hi", "Hi"),
-        ...turn(3, "New About page?", "Shall I start it?", "Mode: ask.", [
-          pills,
-        ]),
-        ...turn(4, reply, "Ok."),
-        ...long(5, 16),
-      ]),
-      AT
-    ) as Plan
-
-  it("are no answer when the owner wrote something else", () => {
-    const text = transcript(withReply("What are our hours?").span)
-    expect(text).toContain(
-      "[offer_choices] offered quick replies; the owner did not tap one, so this is no answer"
-    )
-    expect(text).not.toContain("Go ahead with the new About page")
-  })
-
-  it("are the owner's answer only when their next message is one of them", () => {
-    expect(
-      transcript(withReply("Go ahead with the new About page").span)
-    ).toContain(
-      '[offer_choices] owner responded: "Go ahead with the new About page"'
-    )
-    expect(pillLine(pills, null)).toContain("did not tap")
-  })
-})
-
-describe("provenance", () => {
-  it("never labels a logged event as the owner's words", () => {
-    const plan = planCompaction(
       seqd([
         ...turn(1, "Hi", "Hi"),
         ...turn(2, "Hi", "Hi"),
@@ -717,12 +670,22 @@ describe("provenance", () => {
       ]),
       AT
     ) as Plan
-    const text = transcript(plan.span)
-    expect(text).toContain(
-      "Logged away from the chat (staff, a scheduled run or a website visitor), not the owner:"
+  )
+
+  it("takes quick replies as an answer only when the owner sent one of them", () => {
+    expect(prompt).toContain(
+      "it is their answer only when their next message is word for word one of them"
     )
-    expect(text).not.toMatch(/Owner:\n[^\n]*Delete all my reviews/)
-    expect(promptOf(plan)).toContain(
+    expect(prompt).toContain(
+      "Quick replies the owner did not tap are no answer"
+    )
+  })
+
+  it("never takes a logged event or the context note as the owner's words", () => {
+    expect(prompt).toContain(
+      'Here the lines labelled "Owner" are the user messages the owner wrote: not the context notes that begin "Mode:", not a message logged away from the chat'
+    )
+    expect(prompt).toContain(
       'Only lines labelled "Owner" are the owner\'s words.'
     )
   })
@@ -782,7 +745,7 @@ describe("anti-thrash", () => {
 })
 
 describe("the summary call", () => {
-  const plan = (span: string, previous: string | null = null): Plan => ({
+  const plan = (previous: string | null = null): Plan => ({
     replaced_range: { from_seq: 0, to_seq: 3 },
     previous,
     span: [
@@ -790,7 +753,7 @@ describe("the summary call", () => {
         message: {
           id: "u1",
           role: "user",
-          parts: [{ type: "text", text: span }],
+          parts: [{ type: "text", text: "Hello." }],
         },
         first: 0,
         last: 0,
@@ -801,31 +764,78 @@ describe("the summary call", () => {
     spanTokens: 40_000,
     hard: false,
     now: "2026-11-06T10:00 (Europe/London)",
+    bounds: {
+      from: 'the message from Owner that begins "Hello."',
+      to: 'the message from Owner that begins "Bye."',
+    },
+  })
+  const turnTools = ["get_workspace", "get_facts"]
+  const callOf = (...rows: Row[]) =>
+    afterTurnCall(
+      seqd(rows).map((r) =>
+        r.type === "cos.context"
+          ? {
+              ...r,
+              payload: { ...(r.payload as object), active_tools: turnTools },
+            }
+          : r
+      )
+    )
+  const hello = () => callOf(...turn(1, "Hello.", "Hi"))
+
+  it("is the last turn's call: its instructions, its tools, its cache keys, and no tool call", async () => {
+    const { model, calls } = fakeModel("A summary.")
+    await summarise(cosOf(model), await hello(), plan())
+    const sent = calls[0] as {
+      prompt: { role: string; content: unknown }[]
+      tools: { name: string }[]
+      toolChoice: unknown
+      providerOptions: { openrouter: Record<string, unknown> }
+    }
+    expect(sent.prompt[0]).toMatchObject({
+      role: "system",
+      content: INSTRUCTIONS,
+    })
+    expect(sent.tools.map((t) => t.name)).toEqual(turnTools)
+    expect(sent.toolChoice).toEqual({ type: "none" })
+    expect(sent.providerOptions.openrouter).toMatchObject({
+      session_id: await PREFIX_KEY,
+      prompt_cache_key: await PREFIX_KEY,
+    })
+    expect(JSON.stringify(sent.prompt.at(-1))).toContain(
+      "This message is from the app, not the owner"
+    )
   })
 
-  it("sends no secret in the span", async () => {
+  it("sends no secret in the history or the previous summary", async () => {
     const { model, prompts } = fakeModel("A summary.")
-    await summarise(model, plan(`My key is ${FAKE_KEY}, keep it safe.`))
+    const withSecret = await callOf(
+      ...turn(1, `My key is ${FAKE_KEY}, keep it safe.`, "Ok."),
+      {
+        type: "cos.compaction",
+        payload: {
+          summary: `The owner's key: ${FAKE_KEY}`,
+          replaced_range: { from_seq: 0, to_seq: 0 },
+          dropped_refs: [],
+        },
+      },
+      ...turn(2, "Hello.", "Hi.")
+    )
+    await summarise(cosOf(model), withSecret, plan())
     expect(prompts[0]).not.toContain(FAKE_KEY)
     expect(prompts[0]).toContain("[redacted]")
   })
 
-  it("scrubs the previous summary again before it goes back in", async () => {
-    const { model, prompts } = fakeModel("A summary.")
-    await summarise(model, plan("Thanks.", `The owner's key: ${FAKE_KEY}`))
-    expect(prompts[0]).not.toContain(FAKE_KEY)
-  })
-
   it("scrubs a secret the model echoes before anything stores it", async () => {
     const { model } = fakeModel(`The owner's key is ${FAKE_KEY}.`)
-    const made = await summarise(model, plan("Hello."))
+    const made = await summarise(cosOf(model), await hello(), plan())
     expect(made.summary).not.toContain(FAKE_KEY)
     expect(made.summary).toContain("[redacted]")
   })
 
   it("puts no cap on the output, Hermes's rule", async () => {
     const { model, calls } = fakeModel("A summary.")
-    await summarise(model, plan("Hello."))
+    await summarise(cosOf(model), await hello(), plan())
     expect(calls[0]?.maxOutputTokens).toBeUndefined()
   })
 
@@ -835,36 +845,50 @@ describe("the summary call", () => {
         throw new Error(`upstream echoed ${FAKE_KEY}`)
       },
     })
-    const failed = await summarise(failing, plan(`key ${FAKE_KEY}`))
+    const failed = await summarise(cosOf(failing), await hello(), plan())
     expect(failed.summary).toBeNull()
     expect(JSON.stringify(failed)).not.toContain(FAKE_KEY)
     expect(failed.cost).toBeGreaterThan(0)
 
     const { model } = fakeModel(`Half a summary with ${FAKE_KEY}`, "length")
-    expect(await summarise(model, plan("Hello."))).toMatchObject({
+    expect(await summarise(cosOf(model), await hello(), plan())).toMatchObject({
       summary: null,
       problem: "length",
     })
     const empty = fakeModel("   ")
-    expect(await summarise(empty.model, plan("Hello."))).toMatchObject({
-      summary: null,
-      problem: "shape",
-    })
+    expect(
+      await summarise(cosOf(empty.model), await hello(), plan())
+    ).toMatchObject({ summary: null, problem: "shape" })
   })
 
   it("follows Hermes's template, first and as an update of the previous summary", () => {
-    const first = promptOf(plan("Hello."))
-    expect(first).toContain("TURNS TO SUMMARISE:")
+    const first = promptOf(plan())
+    expect(first).toContain(
+      'Create a structured checkpoint summary of the turns to summarise: from the message from Owner that begins "Hello." up to, but not including, the message from Owner that begins "Bye."'
+    )
     expect(first).toContain("## Historical Task Snapshot")
-    expect(first).toContain("Owner (2026-10-01T09:15 (Europe/London)):")
+    expect(first).toContain(
+      '- 2026-10-01T09:15 (Europe/London): that begins "Hello."'
+    )
     expect(first).toContain("The current date is 2026-11-06T10:00")
-    expect(first).toContain(`<data source="conversation">`)
     expect(first).toContain("Target ~8000 tokens.")
-    const update = promptOf(plan("Hello.", "The owner likes blue."))
-    expect(update).toContain("PREVIOUS SUMMARY:")
-    expect(update).toContain("NEW TURNS TO INCORPORATE:")
+    const update = promptOf(plan("The owner likes blue."))
+    expect(update).toContain(
+      "A previous compaction produced the summary that opens this chat."
+    )
     expect(update).toContain(
       "PRESERVE all existing information that is still relevant."
+    )
+  })
+
+  it("names where the span starts and the kept part begins", () => {
+    const made = planCompaction(seqd(long(1, 16)), AT) as Plan
+    // Before the first summary the first three messages stay: the span opens on the second reply.
+    expect(made.bounds.from).toMatch(
+      /^the message from Chief of Staff that begins "2: word/
+    )
+    expect(made.bounds.to).toMatch(
+      /^the message from Owner that begins "\d+: word/
     )
   })
 
@@ -872,16 +896,6 @@ describe("the summary call", () => {
     expect(targetTokens(4_000)).toBe(2_000)
     expect(targetTokens(30_000)).toBe(6_000)
     expect(targetTokens(200_000)).toBe(10_000)
-  })
-
-  it("bounds its input to 160,000 characters, head and tail, the middle marked", () => {
-    const text = `${"a".repeat(100_000)}${"m".repeat(100_000)}${"z".repeat(100_000)}`
-    const bounded = boundInput(text)
-    expect(bounded.length).toBeLessThanOrEqual(COMPACTION.inputMaxChars)
-    expect(bounded.startsWith("aaa")).toBe(true)
-    expect(bounded.endsWith("zzz")).toBe(true)
-    expect(bounded).toContain("[summary input truncated: omitted")
-    expect(boundInput("short")).toBe("short")
   })
 })
 
@@ -916,7 +930,13 @@ describe.skipIf(!url)("the warm summary job, on a live connection", () => {
           assignmentId: null,
           sessionId,
           type: row.type,
-          payload: row.payload as Record<string, unknown>,
+          // The script was logged under an older policy; the job reads only the current one.
+          payload: (row.type === "cos.context"
+            ? {
+                ...(row.payload as object),
+                context_policy_version: CONTEXT_POLICY.version,
+              }
+            : row.payload) as Record<string, unknown>,
         })
       }
       return sessionId
@@ -1008,8 +1028,20 @@ describe.skipIf(!url)("the warm summary job, on a live connection", () => {
     const sessionId = await seeded()
     const { model, prompts } = fakeModel("A summary.")
     const { sent, later } = queue()
-    await compactAfterTurn(kit, model, job(sessionId, TURN(61)), later, AT)
-    await compactAfterTurn(kit, model, job(sessionId, TURN(59)), later, AT)
+    await compactAfterTurn(
+      kit,
+      cosOf(model),
+      job(sessionId, TURN(61)),
+      later,
+      AT
+    )
+    await compactAfterTurn(
+      kit,
+      cosOf(model),
+      job(sessionId, TURN(59)),
+      later,
+      AT
+    )
     expect(prompts).toEqual([])
     expect(sent).toEqual([])
     expect(await written(sessionId)).toEqual([])
@@ -1030,8 +1062,8 @@ describe.skipIf(!url)("the warm summary job, on a live connection", () => {
       (await rowsOf(sessionId)).map((r) => ({ ...r, seq: Number(r.seq) })),
       AT
     ) as Plan
-    await compactAfterTurn(kit, model, job(sessionId), later, AT)
-    await compactAfterTurn(kit, model, job(sessionId), later, AT)
+    await compactAfterTurn(kit, cosOf(model), job(sessionId), later, AT)
+    await compactAfterTurn(kit, cosOf(model), job(sessionId), later, AT)
     expect(prompts).toHaveLength(1)
     const rows = await written(sessionId)
     expect(rows).toHaveLength(1)
@@ -1066,14 +1098,20 @@ describe.skipIf(!url)("the warm summary job, on a live connection", () => {
     )
     const { model, prompts } = fakeModel("A summary.")
     const { sent, later } = queue()
-    await compactAfterTurn(kit, model, job(sessionId, TURN(60), who), later, AT)
+    await compactAfterTurn(
+      kit,
+      cosOf(model),
+      job(sessionId, TURN(60), who),
+      later,
+      AT
+    )
     expect(prompts).toEqual([])
     expect(sent.map((s) => s.delaySeconds)).toEqual([120])
     const old = {
       ...job(sessionId, TURN(60), who),
       compact: Date.now() - 49 * 60_000,
     }
-    await compactAfterTurn(kit, model, old, later, AT)
+    await compactAfterTurn(kit, cosOf(model), old, later, AT)
     expect(sent).toHaveLength(1)
   }, 60_000)
 
@@ -1081,7 +1119,7 @@ describe.skipIf(!url)("the warm summary job, on a live connection", () => {
     const sessionId = await seeded()
     const { model } = fakeModel("Half a", "length", 0.001)
     const { sent, later } = queue()
-    await compactAfterTurn(kit, model, job(sessionId), later, AT)
+    await compactAfterTurn(kit, cosOf(model), job(sessionId), later, AT)
     expect(await written(sessionId)).toEqual([])
     expect(sent.map((s) => s.delaySeconds)).toEqual([120])
     const [step] = await background(sessionId)
@@ -1099,8 +1137,8 @@ describe.skipIf(!url)("the warm summary job, on a live connection", () => {
     const log = vi.spyOn(console, "log")
     const { later } = queue()
     await Promise.all([
-      compactAfterTurn(kit, model, job(sessionId), later, AT),
-      compactAfterTurn(kit, model, job(sessionId), later, AT),
+      compactAfterTurn(kit, cosOf(model), job(sessionId), later, AT),
+      compactAfterTurn(kit, cosOf(model), job(sessionId), later, AT),
     ])
     expect(prompts).toHaveLength(1)
     expect(log.mock.calls.flat().join("\n")).toContain('"outcome":"running"')
@@ -1123,7 +1161,7 @@ describe.skipIf(!url)("the warm summary job, on a live connection", () => {
       return answer(options)
     }
     const { later } = queue()
-    await compactAfterTurn(kit, model, job(sessionId), later, AT)
+    await compactAfterTurn(kit, cosOf(model), job(sessionId), later, AT)
     const rows = (await rowsOf(sessionId)).map((r) => ({
       ...r,
       seq: Number(r.seq),
@@ -1185,18 +1223,17 @@ describe.skipIf(!url)("the warm summary job, on a live connection", () => {
       )
   }
 
-  const worstOf = async (sessionId: string, who: Owner) =>
-    worstCall(
-      promptOf(
-        planCompaction(
-          (await rowsOf(sessionId, who)).map((r) => ({
-            ...r,
-            seq: Number(r.seq),
-          })),
-          AT
-        ) as Plan
-      )
+  const worstOf = async (sessionId: string, who: Owner) => {
+    const rows = (await rowsOf(sessionId, who)).map((r) => ({
+      ...r,
+      seq: Number(r.seq),
+    }))
+    return worstCall(
+      PRICE,
+      await afterTurnCall(rows),
+      promptOf(planCompaction(rows, AT) as Plan)
     )
+  }
 
   it("lets one of two calls at once through when the day has room for one, and holds the other for the cap", async () => {
     const who = await owner(kit, url as string, "cos-compaction-race")
@@ -1211,8 +1248,8 @@ describe.skipIf(!url)("the warm summary job, on a live connection", () => {
     }
     const { sent, later } = queue()
     await Promise.all([
-      compactAfterTurn(kit, model, job(a, TURN(60), who), later, AT),
-      compactAfterTurn(kit, model, job(b, TURN(60), who), later, AT),
+      compactAfterTurn(kit, cosOf(model), job(a, TURN(60), who), later, AT),
+      compactAfterTurn(kit, cosOf(model), job(b, TURN(60), who), later, AT),
     ])
     expect(prompts).toHaveLength(1)
     expect(sent.map((s) => s.delaySeconds)).toEqual([120])
@@ -1229,7 +1266,13 @@ describe.skipIf(!url)("the warm summary job, on a live connection", () => {
       },
     })
     const { later } = queue()
-    await compactAfterTurn(kit, model, job(sessionId, TURN(60), who), later, AT)
+    await compactAfterTurn(
+      kit,
+      cosOf(model),
+      job(sessionId, TURN(60), who),
+      later,
+      AT
+    )
     expect(await room(1.5 * worst)).toBe(true)
     expect(await room(2.5 * worst)).toBe(false)
   }, 60_000)

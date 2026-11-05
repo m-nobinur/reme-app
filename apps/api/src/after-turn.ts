@@ -8,9 +8,8 @@ import {
 } from "@workspace/db"
 import { cosModel } from "./chat.ts"
 import { type ContinueJob, continueTurn, isContinueJob } from "./continue.ts"
-import { LIMITS, openrouterModel } from "./cos/agent.ts"
+import { LIMITS } from "./cos/agent.ts"
 import {
-  COMPACTION,
   compactAfterTurn,
   type Later,
   scheduleCompaction,
@@ -110,10 +109,7 @@ export async function afterTurnBatch(
   const logos = batch.messages
     .filter((m): m is Message<LogoJob> => isLogoJob(m.body))
     .map((m) => drawLogoMessage(env, kit, m))
-  const model = env.OPENROUTER_API_KEY
-    ? openrouterModel(env.OPENROUTER_API_KEY, COMPACTION.model)
-    : null
-  // The review runs on the owner turn's model and route, so it reads their cached prefix.
+  // The review and the summary run on the owner turn's model and route, so they read its cached prefix.
   const cos = cosModel(env)
   const reviewer =
     cos.model && cos.price
@@ -146,7 +142,7 @@ export async function afterTurnBatch(
             JSON.stringify({ type: "cos.woke", job_id: body.jobId, woke })
           )
         } else if (body.compact !== undefined) {
-          await compactAfterTurn(kit, model, body, later, thresholds)
+          await compactAfterTurn(kit, reviewer, body, later, thresholds)
         } else {
           if (!body.idle) {
             await scheduleCompaction(kit, body, later, thresholds)
