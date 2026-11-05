@@ -373,6 +373,31 @@ test("a finished design tray reads back as chips: the logo, colours, a pair in i
   }
 })
 
+// A chip is a light tint of the bubble with a hairline edge, never a patch of
+// the page's own colour: dark holes in dark mode, white ones in light.
+for (const theme of ["light", "dark"]) {
+  test(`the design reply's chips tint the bubble, ${theme}`, async ({
+    page,
+  }) => {
+    await open(page, "DesignReply", 1024, theme)
+    const bubble = page.locator('[data-slot="aui_user-message-root"]')
+    const looks = await bubble
+      .locator(".rounded-full.border, img")
+      .evaluateAll((all) =>
+        all.map((each) => {
+          const style = getComputedStyle(each)
+          return [style.backgroundColor, style.borderTopColor]
+        })
+      )
+    expect(looks.length).toBeGreaterThan(4)
+    for (const [background, border] of looks) {
+      expect(background).toMatch(/ 0\.04\)$/)
+      if (border && !border.endsWith(" 0)")) expect(border).toMatch(/ 0\.1\)$/)
+    }
+    await axe(page, `DesignReply ${theme}`)
+  })
+}
+
 test("the quote form preview is the customers' form, live but never sent, and confirms like the card", async ({
   page,
 }) => {
