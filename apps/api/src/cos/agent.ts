@@ -712,9 +712,10 @@ async function buildPrefix(): Promise<CosPrefix> {
 export type Price = { input: number; output: number; cacheRead: number }
 
 /**
- * The model's price at its routing cap, from the table the Developer's
- * metering reads, or null for a model the table does not hold. Reservations
- * are priced at it, and a step OpenRouter reports no cost for.
+ * The model's price as OpenRouter bills it on average across the providers
+ * its routing admits, from the table the Developer's metering reads, or
+ * null for a model the table does not hold. Reservations are priced at it,
+ * and a step OpenRouter reports no cost for.
  */
 export function priceOf(modelId: string): Price | null {
   const entry = (models as { id: string; cost: Price }[]).find(
@@ -730,9 +731,9 @@ export function priceOf(modelId: string): Price | null {
 }
 
 /**
- * The CoS's model through OpenRouter, with the table's routing: capped at
- * its price so no provider can bill more than the reservation assumes, and
- * kept off the hosts the table excludes, fastest host first. Asks for the billed cost on each
+ * The CoS's model through OpenRouter, with the table's routing: under its
+ * `max_price` (2.1 times the list price, so several providers can serve
+ * it), kept off the hosts the table excludes, fastest host first. Asks for the billed cost on each
  * finish part. Null for a model the table does not hold, which the chat
  * treats as no model at all.
  */

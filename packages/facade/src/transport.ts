@@ -169,7 +169,8 @@ function tapCost(
 }
 
 /**
- * pi-ai prices every OpenRouter call from the table, at the routing cap, and
+ * pi-ai prices every OpenRouter call from the table, at the admitted
+ * providers' average, and
  * drops the `usage.cost` OpenRouter bills on the stream's last chunk. This
  * wraps the API so each call asks for that cost, reads it off the response
  * body, and writes it into the finished message's `usage.cost` before the
@@ -177,7 +178,7 @@ function tapCost(
  * all see what was billed. The per-part figures are scaled to the same
  * total, since OpenRouter reports only the total; a sum over parts then
  * still matches. A call with no reported cost keeps the table's figure,
- * which errs high. Behind the AI Gateway the body passes through unchanged,
+ * which is close to the bill. Behind the AI Gateway the body passes through unchanged,
  * so the same tap reads it.
  */
 function billed(

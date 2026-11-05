@@ -140,8 +140,8 @@ export const worstGate = (state: GateState) =>
 
 /**
  * One reply from the writer model at its effort, with no tools, through the
- * same OpenRouter routing the CoS uses: capped at the table's price and kept
- * off the hosts it excludes. `data` goes in as the user turn, as JSON.
+ * same OpenRouter routing the CoS uses: under the table's `max_price` and
+ * kept off the hosts it excludes. `data` goes in as the user turn, as JSON.
  */
 export async function writeText(
   apiKey: string,

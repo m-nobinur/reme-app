@@ -806,8 +806,8 @@ describe("the CoS's model and price", () => {
         1_000_000,
       12
     )
-    // On 2026-11-06's table and limits (Terra, 16 steps, 150,000 input): about $5.56 a turn.
-    expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(5.56, 2)
+    // On 2026-11-06's table (Terra at its providers' average) and limits (16 steps, 150,000 input): about $2.99 a turn.
+    expect(reservation(PRICE as NonNullable<typeof PRICE>)).toBeCloseTo(2.99, 2)
   })
 
   it("prices cached input at the cache rate, as pi-ai does", () => {
@@ -821,7 +821,7 @@ describe("the CoS's model and price", () => {
     ).toBeCloseTo(0.6 + 0.04 + 1, 12)
   })
 
-  it("costs a step at what OpenRouter billed, and at the capped price without it", () => {
+  it("costs a step at what OpenRouter billed, and at the table's price without it", () => {
     const price = { input: 1, output: 10, cacheRead: 0.1 }
     const tokens = {
       inputTokens: 1_000_000,
