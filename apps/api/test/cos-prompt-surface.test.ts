@@ -49,8 +49,8 @@ describe("the CoS's prompt surface", () => {
           { turn: { orgId, turnId, sessionId: turnId } } as AgentTurn,
           {} as LanguageModel,
           "act"
-        ) as unknown as { settings: { instructions: string } }
-      ).settings.instructions
+        ) as unknown as { settings: { instructions: { content: string } } }
+      ).settings.instructions.content
     const first = sent("00000000-0000-4000-8000-00000000000a", "t1")
     expect(first).toBe(INSTRUCTIONS)
     expect(sent("00000000-0000-4000-8000-00000000000b", "t2")).toBe(first)
