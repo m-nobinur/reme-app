@@ -763,5 +763,44 @@ live("the handoff result", () => {
       ])
       expect(await wakes(ids.orgId)).toEqual([])
     })
+
+    it("does not wake for an owner's build the pipeline starts again or stops itself", async () => {
+      const failed = async (origin: string, reason: string) => {
+        const ids = await newAssignment(await freshOrg())
+        const session = await chat(ids.orgId)
+        await kit.withOrg({ orgId: ids.orgId }, (db) =>
+          appendEvent(db, {
+            orgId: ids.orgId,
+            assignmentId: ids.assignmentId,
+            staffId: null,
+            type: "assignment.created",
+            payload: { origin },
+          })
+        )
+        await walk(ids, PATH.implementing)
+        await advance(kit, ids, "failed", { reason })
+        const [event] = await logged(ids.orgId, session)
+        return {
+          wake: (event?.payload as { wake?: boolean } | undefined)?.wake,
+          told: ((await resultOf(ids)) as { metadata: { told?: true } })
+            .metadata.told,
+          wakes: await wakes(ids.orgId),
+        }
+      }
+      // Its retry or stop notice is the one voice: no turn of its own.
+      expect(await failed("owner", "sandbox.updating")).toEqual({
+        wake: false,
+        told: true,
+        wakes: [],
+      })
+      // The pipeline says nothing for these, so the CoS speaks.
+      expect(await failed("console", "sandbox.updating")).toMatchObject({
+        wake: true,
+      })
+      expect(await failed("owner", "information.unanswered")).toMatchObject({
+        wake: true,
+        told: undefined,
+      })
+    })
   })
 })

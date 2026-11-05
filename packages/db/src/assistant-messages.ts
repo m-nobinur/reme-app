@@ -164,7 +164,8 @@ const OWNER_ENDED = [
 
 /**
  * What a handoff result reads as in the CoS log: it may quote the owner's
- * goal. It asks for a turn of its own unless the owner ended it.
+ * goal. It asks for a turn of its own unless the owner ended it, or the
+ * pipeline posts its own notice for it (`told`), so the chat hears one voice.
  */
 export const handoffEvent = (result: HandoffResult) => ({
   type: "cos.event",
@@ -172,7 +173,9 @@ export const handoffEvent = (result: HandoffResult) => ({
     source: "staff",
     summary: result.summary,
     evidence: result.evidence,
-    wake: !OWNER_ENDED.includes(String(result.metadata.reason ?? "")),
+    wake:
+      result.metadata.told !== true &&
+      !OWNER_ENDED.includes(String(result.metadata.reason ?? "")),
   }),
   taint: ["inferred", "untrusted_input"] as TaintLabel[],
 })

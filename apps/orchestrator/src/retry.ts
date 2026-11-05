@@ -440,7 +440,7 @@ const NEXT_WORDS: Record<
   resumed:
     "You already restarted it from where it left off, and it is back at work. Nothing is needed from the owner, and you will tell them here when the draft is ready.",
   retrying:
-    "You have already started it again by yourself. The owner need do nothing, and you will say here when the draft is ready.",
+    "You have already started it again by yourself. Nothing is needed from the owner, and you will say here when the draft is ready.",
   stopped:
     "Nothing more happens until the owner says try again or tells you what to change.",
 }
