@@ -2,7 +2,11 @@ import {
   type ToolCallMessagePartComponent,
   useAuiState,
 } from "@assistant-ui/react"
-import { ArrowSquareOutIcon, CaretDownIcon } from "@phosphor-icons/react"
+import {
+  ArrowSquareOutIcon,
+  CaretDownIcon,
+  CheckCircleIcon,
+} from "@phosphor-icons/react"
 import {
   type BoughtElsewhereOutput,
   BuyDomainInput,
@@ -35,7 +39,12 @@ import { Field } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { DoneIcon, ToolStatus } from "@workspace/ui/components/status-line"
 import type { ToolArgs } from "@workspace/ui/lib/activity-copy"
-import { FIELD_ERROR, OPTION, OPTION_PILL } from "@workspace/ui/lib/card"
+import {
+  FIELD_ERROR,
+  OPTION,
+  OPTION_PILL,
+  PICKED_LINE,
+} from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { type Failure, readView, stepOf } from "@workspace/ui/lib/tool-state"
 import { cn, META } from "@workspace/ui/lib/utils"
@@ -52,8 +61,8 @@ import {
 
 /**
  * Choosing and buying a domain, in the question tray. `find_domain`'s rows
- * open it on Choose: a card for each name, best first and marked
- * Recommended, with its free endings to pick from. While buying here is off
+ * open it on Choose: up to six free names, the recommended one first and
+ * then every .co.uk, each with its price. While buying here is off
  * (no `buy_here`), the picked name shows "Buy it from" Cloudflare and
  * GoDaddy, each opening its own search, and "I've bought it" connects it.
  * While it is on, Continue goes to Your details, prefilled from what the api
@@ -239,78 +248,108 @@ function ToolLine({
 
 /* Choose ------------------------------------------------------------------ */
 
+/** The most names Choose offers. */
+const SHORTLIST = 6
+
+/** A name on Choose, with why it is offered when it is the recommended one. */
+type Listed = Offer & { why?: string }
+
 /**
- * One name: its stem, then its free endings as pills. Every pill is a radio
- * of the tray's one group, so the arrow keys and the announcing are the
- * browser's. The recommended card wears a pill on its top edge, which also
- * describes its radios to a screen reader with the reason.
+ * The names Choose lists, at most six: the finder's best name first, as the
+ * recommended one, then every free .co.uk, then the other endings, each in
+ * the finder's order.
  */
-function NameCard({
-  row,
-  recommended,
+export function shortlist(rows: readonly DomainStemOffer[]): Listed[] {
+  const all = rows.flatMap(offersOf)
+  const [best] = offersOf(rows[0])
+  const rest = all.filter((offer) => offer.name !== best?.name)
+  return [
+    ...(best ? [{ ...best, why: rows[0]?.why }] : []),
+    ...rest.filter((offer) => offer.ending === "co.uk"),
+    ...rest.filter((offer) => offer.ending !== "co.uk"),
+  ].slice(0, SHORTLIST)
+}
+
+/** A name's price on Choose: Reme's own while buying here is on, else the registrar's. */
+const priceOf = (offer: Offer, buyHere: boolean, usdGbp?: number) =>
+  buyHere
+    ? offer.price && `${pounds(offer.price)} a year`
+    : offer.usd && registrarPrice(offer.usd, usdGbp)
+
+/**
+ * One name, as one radio of the tray's group, so the arrow keys and the
+ * announcing are the browser's: the full name, that it is free and what it
+ * costs. The recommended one says so inside its own row, and its reason
+ * describes its radio to a screen reader.
+ */
+function NameRow({
+  offer,
   group,
   picked,
   onPick,
   buyHere,
+  usdGbp,
 }: {
-  row: DomainStemOffer
-  recommended: boolean
+  offer: Listed
   group: string
   picked: string | null
   onPick: (name: string) => void
   buyHere: boolean
+  usdGbp?: number | undefined
 }) {
-  const pill = `${group}-${row.stem}`
-  const offers = offersOf(row)
-  const price = buyHere ? offers.find((o) => o.name === picked)?.price : null
+  const reason = `${group}-why`
+  const price = priceOf(offer, buyHere, usdGbp)
   return (
-    <fieldset className="relative min-w-0 rounded-xl border border-border bg-card p-2.5 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
-      <legend className="sr-only">{row.stem}</legend>
-      {recommended ? (
-        <Badge className="absolute end-3 -top-2.5" id={pill}>
-          Recommended
-          <span className="sr-only">. {row.why}</span>
-        </Badge>
-      ) : null}
-      {/* The stem and its endings share a line where they fit. */}
-      <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span aria-hidden className="truncate font-medium" title={row.stem}>
-          {row.stem}
+    <label
+      className={cn(
+        OPTION,
+        PICKED_LINE,
+        "min-w-0 items-center gap-3 rounded-xl px-3 py-2"
+      )}
+    >
+      <input
+        aria-describedby={offer.why ? reason : undefined}
+        aria-label={
+          buyHere && offer.price
+            ? `${offer.name}, ${pounds(offer.price)} a year`
+            : offer.name
+        }
+        checked={picked === offer.name}
+        className="peer sr-only"
+        name={group}
+        onChange={() => onPick(offer.name)}
+        type="radio"
+        value={offer.name}
+      />
+      {/* The radio's face: a ring, filled once picked. */}
+      <span
+        aria-hidden
+        className="grid size-4 shrink-0 place-items-center rounded-full border border-foreground/30 after:size-2 after:rounded-full after:bg-foreground after:opacity-0 peer-checked:border-foreground peer-checked:after:opacity-100"
+      />
+      <span aria-hidden className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate font-medium text-sm" title={offer.name}>
+          {offer.name}
         </span>
-        <span className="flex flex-wrap gap-1.5">
-          {offers.map((offer) => (
-            <label
-              className={cn(
-                OPTION,
-                "min-h-7 items-center rounded-full px-2.5 text-xs tabular-nums has-[:checked]:bg-primary has-[:checked]:text-primary-foreground"
-              )}
-              key={offer.name}
-            >
-              <input
-                aria-describedby={recommended ? pill : undefined}
-                aria-label={
-                  buyHere && offer.price
-                    ? `${offer.name}, ${pounds(offer.price)} a year`
-                    : offer.name
-                }
-                checked={picked === offer.name}
-                className="sr-only"
-                name={group}
-                onChange={() => onPick(offer.name)}
-                type="radio"
-                value={offer.name}
-              />
-              .{offer.ending}
-            </label>
-          ))}
+        {/* Under the name, so a long one keeps its whole width on a phone. */}
+        <span
+          className={cn(META, "flex flex-wrap items-center gap-x-2.5 gap-y-1")}
+        >
+          {offer.why ? <Badge variant="secondary">Recommended</Badge> : null}
+          <span className="inline-flex items-center gap-1">
+            <CheckCircleIcon className="size-3.5 text-primary" />
+            Available
+          </span>
+          {price ? (
+            <span className="whitespace-nowrap tabular-nums">{price}</span>
+          ) : null}
         </span>
       </span>
-      {price ? (
-        <span className={cn(META, "mt-1.5 block tabular-nums")}>
-          {pounds(price)} a year
+      {offer.why ? (
+        <span className="sr-only" id={reason}>
+          Recommended. {offer.why}
         </span>
       ) : null}
-    </fieldset>
+    </label>
   )
 }
 
@@ -408,9 +447,9 @@ function ChoosePage({
   onNotNow: () => void
 }) {
   const [away, setAway] = useState(false)
-  const best = offersOf(rows[0])[0]?.name ?? null
-  const [picked, setPicked] = useState(best)
-  const offer = rows.flatMap(offersOf).find((o) => o.name === picked)
+  const names = shortlist(rows)
+  const [picked, setPicked] = useState(names[0]?.name ?? null)
+  const offer = names.find((o) => o.name === picked)
   const bought = useBought(picked ?? "", (output) =>
     picked ? onBought(picked, output) : undefined
   )
@@ -450,32 +489,30 @@ function ChoosePage({
             }
       }
     >
-      {/* The top padding clears the recommended card's pill. */}
       <div
         aria-label="Web address"
-        className="grid grid-cols-1 gap-2 px-2 pt-3 sm:grid-cols-2"
+        className="flex flex-col gap-2 px-2"
         role="radiogroup"
       >
-        {rows.map((row, at) => (
-          <NameCard
+        {names.map((name) => (
+          <NameRow
             buyHere={buyHere}
             group={group}
-            key={row.stem}
+            key={name.name}
+            offer={name}
             onPick={pick}
             picked={picked}
-            recommended={at === 0}
-            row={row}
+            usdGbp={usdGbp}
           />
         ))}
       </div>
       {picked && !buyHere ? (
+        // The picked row already says Cloudflare's price.
         <div className="flex flex-col gap-2 px-2 pb-1" ref={places}>
           <Elsewhere
             heading="Buy it from"
             name={picked}
             onFollow={() => onFollow(picked)}
-            usd={offer?.usd}
-            usdGbp={usdGbp}
           />
         </div>
       ) : null}
