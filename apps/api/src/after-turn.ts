@@ -6,6 +6,7 @@ import {
   sql,
   tenancy,
 } from "@workspace/db"
+import { cosModel } from "./chat.ts"
 import { type ContinueJob, continueTurn, isContinueJob } from "./continue.ts"
 import { LIMITS, openrouterModel } from "./cos/agent.ts"
 import { COMPACTION, compactAfterTurn } from "./cos/compaction.ts"
@@ -102,6 +103,12 @@ export async function afterTurnBatch(
   const model = env.OPENROUTER_API_KEY
     ? openrouterModel(env.OPENROUTER_API_KEY, COMPACTION.model)
     : null
+  // The review runs on the owner turn's model and route, so it reads their cached prefix.
+  const cos = cosModel(env)
+  const reviewer =
+    cos.model && cos.price
+      ? { model: cos.model, modelId: cos.modelId, price: cos.price }
+      : null
   try {
     for (const message of batch.messages) {
       const { body } = message
@@ -123,7 +130,7 @@ export async function afterTurnBatch(
           )
         } else {
           if (!body.idle) await compactAfterTurn(kit, model, body)
-          await reflectAfterTurn(kit, model, body, onboardingWords)
+          await reflectAfterTurn(kit, reviewer, body, onboardingWords)
         }
         message.ack()
       } catch (error) {

@@ -350,6 +350,7 @@ const OfferGrant: ToolCallMessagePartComponent = (props) => (
  * the same turn, and Reme's own words say an offer is put off.
  */
 export const COS_QUIET: Record<string, ToolCallMessagePartComponent> = {
+  memory: Remembered,
   remember: Remembered,
   put_off: () => null,
 }

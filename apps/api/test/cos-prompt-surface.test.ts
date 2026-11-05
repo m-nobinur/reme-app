@@ -3,6 +3,7 @@ import type { LanguageModel } from "ai"
 import { describe, expect, it } from "vitest"
 import {
   type AgentTurn,
+  PROMPT_BUDGET as BUDGET,
   cosAgent,
   cosPrefix,
   DESCRIPTIONS,
@@ -15,9 +16,6 @@ import {
  * in review, and it fails once the core, the tool descriptions or the whole
  * prefix grow past their budgets. Topic rules belong in a procedure.
  */
-
-/** Characters, as measured on 2026-11-05 with skill_view: core 12.6k (from 32.6k), descriptions 9.4k, prefix 36.4k. */
-const BUDGET = { core: 13_000, descriptions: 9_600, prefix: 36_500 }
 
 describe("the CoS's prompt surface", () => {
   it("renders the core as committed", async () => {

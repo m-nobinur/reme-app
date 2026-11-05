@@ -21,7 +21,9 @@ import type {
   FactRecord,
   FactValueKey,
   GoogleResultRequest,
+  MemoryLineEdit,
   MemoryReviewAction,
+  MemoryUndo,
   MemoryView,
   MessageFeedback,
   PushSubscribeRequest,
@@ -277,7 +279,14 @@ export type OwnerDataSource = {
    * Undoes one remembered change. "stale" when it was already undone or
    * edited since, so nothing is left to undo.
    */
-  undoMemory: (version: number) => Promise<MemoryView | "stale" | null>
+  undoMemory: (undo: MemoryUndo) => Promise<MemoryView | "stale" | null>
+  /**
+   * The owner rewrites or removes one line. "stale" when the line is gone;
+   * `refused` says why the words were not saved, such as a code or a price.
+   */
+  editMemoryLine: (
+    edit: MemoryLineEdit
+  ) => Promise<MemoryView | "stale" | { refused: string } | null>
   /** The owner's choice about asking first, or their answer to one proposal. "stale" when it is gone. */
   reviewMemory: (
     action: MemoryReviewAction

@@ -10,6 +10,7 @@ import {
 } from "@workspace/db"
 import postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { LIMITS } from "../src/cos/agent.ts"
 import {
   CONTEXT_POLICY,
   deriveCosMessages,
@@ -37,7 +38,8 @@ import { type Owner, owner } from "./owner-fixture.ts"
 
 const url = process.env.DATABASE_URL
 const SHA = "b".repeat(64)
-const TOTAL_MS = 60_000
+/** The run's own limit: a 16-step turn lapses 160 s + 30 s after its context. */
+const TOTAL_MS = LIMITS.totalMs
 
 describe.skipIf(!url)("the CoS turn writers, on a live connection", () => {
   const kit: Tenancy = tenancy(url as string, { max: 3 })
@@ -369,6 +371,7 @@ describe.skipIf(!url)("the CoS turn writers, on a live connection", () => {
   })
 
   it("keeps a turn open until totalMs plus the grace has passed", async () => {
+    expect(TOTAL_MS + GRACE_MS).toBe(190_000)
     const turn = turnIn(me, await conversation(me))
     await open(turn, TOTAL_MS + GRACE_MS - 5_000)
     expect(await lapsed(me, turn.sessionId)).toBe(true)

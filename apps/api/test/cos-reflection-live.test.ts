@@ -1,45 +1,47 @@
+import type { MemoryInput, ProfileLine } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import fixture from "../../../evals/fixtures/reflection-sessions.json" with {
   type: "json",
 }
-import { openrouterModel } from "../src/cos/agent.ts"
-import { refusalOf } from "../src/cos/memory.ts"
+import { DEFAULT_MODEL, openrouterModel, priceOf } from "../src/cos/agent.ts"
+import { type Layer, layerOf, refusalOf } from "../src/cos/memory.ts"
 import {
-  guard,
-  promptOf,
   REFLECTION,
-  reflect,
+  reviewBatch,
+  reviewMessages,
+  runReview,
   verdictOf,
   windowOf,
 } from "../src/cos/reflection.ts"
 
 /**
- * Live: reflection (ADR-042) over the twenty sessions with the real model.
- * Each session the cadence would run goes through the same prompt, answer
- * parser and guards as the job; the held profile each session starts from is
- * its own. It passes when no line the guards let through reads as an
- * instruction, and prints every line the model proposed that the guards
- * dropped, with why, and what the run cost. It spends money, so it runs only
- * with `REFLECTION_LIVE=1` and `OPENROUTER_API_KEY`.
+ * Live: the review (ADR-042) over the twenty sessions with the real model
+ * the CoS runs on. Each session the cadence would run goes through the same
+ * messages, prefix and guards as the job, against an in-memory profile its
+ * session starts from. It passes when no line the guards let through reads
+ * as an instruction, and prints every batch the model made, what the guards
+ * refused and why, what each review cost and its cache share. It spends
+ * money, so it runs only with `REFLECTION_LIVE=1` and `OPENROUTER_API_KEY`.
  */
 
 const KEY = process.env.OPENROUTER_API_KEY ?? ""
 const LIVE = process.env.REFLECTION_LIVE === "1" && KEY !== ""
 const AT = "2026-10-21T10:00:00.000Z"
 
-describe.skipIf(!LIVE)("reflection with the real model", () => {
+describe.skipIf(!LIVE)("the review with the real model", () => {
   it("writes no instruction-shaped line", async () => {
-    const model = openrouterModel(KEY, REFLECTION.model)
-    if (!model) throw new Error(`no route for ${REFLECTION.model}`)
+    const model = openrouterModel(KEY, DEFAULT_MODEL)
+    const price = priceOf(DEFAULT_MODEL)
+    if (!model || !price) throw new Error(`no route for ${DEFAULT_MODEL}`)
     let cost = 0
     let calls = 0
     const written: string[] = []
     const shaped: string[] = []
     for (const [n, session] of fixture.sessions.entries()) {
-      const held = (session.held ?? []).map((h, i) => ({
+      let lines: ProfileLine[] = (session.held ?? []).map((h, i) => ({
         id: `00000000-0000-4000-8000-${String(n * 100 + i).padStart(12, "0")}`,
         text: h.text,
-        source: h.source as "owner_said" | "owner_confirmed" | "reflection",
+        source: h.source as ProfileLine["source"],
         at: AT,
       }))
       const rows = session.turns.flatMap((t, i) => [
@@ -73,25 +75,48 @@ describe.skipIf(!LIVE)("reflection with the real model", () => {
         )
         continue
       }
-      const made = await reflect(model, promptOf(window, held))
+      const cap = Math.max(1, Math.floor(lines.length * REFLECTION.share))
+      let used = 0
+      const log: unknown[] = []
+      const made = await runReview(
+        { model, modelId: DEFAULT_MODEL, price },
+        reviewMessages(window, [{ layer: layerOf("user") as Layer, lines }]),
+        {
+          memory: async (raw) => {
+            const input = raw as MemoryInput
+            for (const op of input.operations) {
+              if (op.content && refusalOf(op.content)) shaped.push(op.content)
+            }
+            if (input.target !== "user") return { outcome: "refused" }
+            const done = reviewBatch(
+              lines,
+              input.operations,
+              window.owner,
+              cap - used,
+              1_500
+            )
+            log.push([input.operations, done.ok || Object.keys(done)[1]])
+            if (!done.ok) return done
+            used += input.operations.length
+            lines = done.lines
+            return { outcome: "saved" }
+          },
+        }
+      )
       calls += 1
       cost += made.cost
-      const done = guard(held, made.ops ?? [], window.owner, AT)
-      const lines = done.steps.at(-1)?.lines ?? held
       written.push(...lines.map((l) => l.text))
-      for (const d of done.dropped) {
-        if (d.op.text && refusalOf(d.op.text)) shaped.push(d.op.text)
-      }
+      const share = made.usage
+        ? made.usage.cached_input_tokens / Math.max(1, made.usage.input_tokens)
+        : null
       console.log(
-        `      ${session.id}: proposed ${JSON.stringify(made.ops)}, kept ${done.steps.length}, ` +
-          `dropped ${JSON.stringify(done.dropped.map((d) => [d.op.text ?? d.op.match, d.why]))}` +
-          `${made.problem ? `, problem ${made.problem}` : ""}, $${made.cost.toFixed(5)}, ${made.ms} ms`
+        `      ${session.id}: ${JSON.stringify(log)}${made.problem ? `, problem ${made.problem}` : ""}, $${made.cost.toFixed(5)}, cache ${share}, ${made.ms} ms`
       )
     }
     console.log(
-      `      ${calls} calls, $${cost.toFixed(5)} in all; instruction-shaped lines proposed and dropped: ${JSON.stringify(shaped)}`
+      `      ${calls} reviews, $${cost.toFixed(5)} in all; instruction-shaped lines proposed: ${JSON.stringify(shaped)}`
     )
     expect(calls).toBeGreaterThan(10)
     expect(written.filter((t) => refusalOf(t) !== null)).toEqual([])
-  }, 300_000)
+  }, 600_000)
 })

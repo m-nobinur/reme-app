@@ -1,4 +1,5 @@
 import {
+  COS_GRACE_MS,
   CosApproval,
   CosCall,
   CosCompaction,
@@ -60,9 +61,10 @@ export type Turn = {
 /**
  * How long `ctx.waitUntil` may run after the response ends or the client
  * disconnects: up to 30 s (Cloudflare's workers/platform/limits, checked
- * 2026-09-27). A turn is abandoned this long after its `totalMs` has passed.
+ * 2026-11-05). A turn is abandoned this long after its `totalMs` has passed:
+ * 160 s + 30 s = 190 s after its context.
  */
-export const GRACE_MS = 30_000
+export const GRACE_MS = COS_GRACE_MS
 
 /** The write's turn no longer holds the token, so nothing was written. */
 export class TurnClosed extends Error {
@@ -505,7 +507,8 @@ export async function beginTurn(
     ...(opening.skills ?? []).map((skill) => ({
       type: "cos.skill",
       payload: CosSkill.parse(skill),
-      taint: [] as TaintLabel[],
+      // A skill's notes for this business are the owner's words.
+      taint: (skill.notes ? ["untrusted_input"] : []) as TaintLabel[],
     })),
     { type: "cos.context", payload: context, taint: opening.contextTaint },
   ]

@@ -1285,7 +1285,48 @@ export const samples: Record<ContractName, unknown> = {
       { kind: "added", text: "Prefers calls after 4pm", source: "owner_said" },
     ],
   },
-  MemoryUndo: { version: 3 },
+  MemoryUndo: { version: 3, store: "notes" },
+  MemoryLineEdit: {
+    store: "user",
+    id: CONVERSATION,
+    text: "Prefers calls after 5pm",
+  },
+  MemoryInput: {
+    target: "skill:quote-reply",
+    operations: [
+      { action: "add", content: "Quotes include parking costs" },
+      { action: "patch", old_text: "4pm", content: "5pm" },
+    ],
+  },
+  MemoryOutput: {
+    outcome: "saved",
+    target: "user",
+    note: "Write saved. This update is complete; do not repeat it.",
+    fullness: "2% (23/1,500 chars)",
+  },
+  SkillNotes: {
+    lines: [
+      {
+        id: CONVERSATION,
+        skill: "quote-reply",
+        text: "Quotes include parking costs",
+        source: "owner_said",
+        at: NOW,
+      },
+    ],
+  },
+  SearchConversationsInput: { query: "parking" },
+  SearchConversationsOutput: {
+    outcome: "found",
+    results: [
+      {
+        conversation: CONVERSATION,
+        at: NOW,
+        by: "owner",
+        snippet: "Add parking to every quote in the city centre",
+      },
+    ],
+  },
   MemoryView: {
     version: 3,
     lines: [
@@ -1310,6 +1351,39 @@ export const samples: Record<ContractName, unknown> = {
         undoable: true,
       },
     ],
+    notes: {
+      version: 1,
+      lines: [
+        {
+          id: CONVERSATION,
+          text: "Keys are kept in the lockbox by the back door",
+          source: "owner_said",
+          at: NOW,
+        },
+      ],
+      max: 2200,
+      versions: [],
+    },
+    skills: {
+      version: 1,
+      notes: [
+        {
+          name: "quote-reply",
+          title: "Quote reply",
+          max: 600,
+          lines: [
+            {
+              id: CONVERSATION,
+              text: "Quotes include parking costs",
+              source: "owner_said",
+              at: NOW,
+              stale: false,
+            },
+          ],
+        },
+      ],
+      versions: [],
+    },
     ask_first: false,
     proposals: [],
     corrections: [

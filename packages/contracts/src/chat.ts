@@ -49,6 +49,21 @@ export const PLANNER_TURN_MS = 60_000
 export const CHAT_TURN_MS = PLANNER_TURN_MS + 10_000 + 5_000
 
 /**
+ * The most a Chief of Staff turn runs (`apps/api`'s `LIMITS.totalMs`): 16
+ * steps at the 10 s a step the 6-step limit allowed (60 s / 6), so 160 s.
+ * Its response starts within the first step's `firstChunkMs`, so only the
+ * streamed body runs this long.
+ */
+export const COS_TURN_MS = 16 * 10_000
+
+/**
+ * How long after `COS_TURN_MS` a turn the Worker lost is abandoned: the
+ * 30 s `ctx.waitUntil` may run after the client goes (Cloudflare's Workers
+ * limits, checked 2026-11-05).
+ */
+export const COS_GRACE_MS = 30_000
+
+/**
  * The error text of a call a typed message overtook: assistant-ui's own
  * words, stored by the api and read by the web, so a reload matches.
  */

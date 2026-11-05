@@ -6,6 +6,8 @@ import {
 import { BrainIcon } from "@phosphor-icons/react"
 import {
   type MemoryChip,
+  MemoryInput,
+  MemoryOutput,
   RememberInput,
   RememberOutput,
 } from "@workspace/contracts"
@@ -31,8 +33,25 @@ export const memoryChipText = ({
   version?: number
 }) => `Saved to memory: ${changes.map(memoryChangeText).join("; ")}`
 
-/** What a saved `remember` call changed, or nothing for one that did not save. */
+/**
+ * What a saved `memory` call changed, or a `remember` call from before it,
+ * or nothing for one that did not save.
+ */
 const remembered = (input: unknown, output: unknown): Change[] => {
+  const batch = MemoryInput.safeParse(input)
+  if (batch.success) {
+    if (MemoryOutput.safeParse(output).data?.outcome !== "saved") return []
+    return batch.data.operations.map((op) => ({
+      kind:
+        op.action === "add"
+          ? "added"
+          : op.action === "patch"
+            ? "changed"
+            : "removed",
+      // A patch or removal names a piece of its line; the next chip says the whole line.
+      text: (op.action === "remove" ? op.old_text : op.content) ?? "",
+    }))
+  }
   const call = RememberInput.safeParse(input)
   const saved = RememberOutput.safeParse(output)
   if (!call.success || saved.data?.outcome !== "saved") return []
@@ -68,7 +87,8 @@ function MemoryChipPart({ data }: { data: MemoryChip }) {
     s.thread.messages
       .flatMap((message) =>
         message.content.flatMap((part) =>
-          part.type === "tool-call" && part.toolName === "remember"
+          part.type === "tool-call" &&
+          (part.toolName === "memory" || part.toolName === "remember")
             ? remembered(part.args, part.result).map((each) => each.text)
             : []
         )

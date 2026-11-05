@@ -89,6 +89,8 @@ import {
   RecordReviewOutput,
   RemoveDomainInput,
   RemoveDomainOutput,
+  SearchConversationsInput,
+  SearchConversationsOutput,
   SetTimeZoneInput,
   SetTimeZoneOutput,
   UpdateReminderInput,
@@ -120,6 +122,9 @@ import { EventEnvelope } from "./event.ts"
 import { FactRecord, FactSnapshot } from "./fact.ts"
 import {
   MemoryChip,
+  MemoryInput,
+  MemoryLineEdit,
+  MemoryOutput,
   MemoryProposal,
   MemoryReviewAction,
   MemoryUndo,
@@ -129,6 +134,7 @@ import {
   ProfileLine,
   RememberInput,
   RememberOutput,
+  SkillNotes,
 } from "./memory.ts"
 import {
   Asset,
@@ -329,6 +335,9 @@ export const contracts = {
   JobRun,
   MessageFeedback,
   MemoryChip,
+  MemoryInput,
+  MemoryLineEdit,
+  MemoryOutput,
   MemoryProposal,
   MemoryReviewAction,
   MemoryUndo,
@@ -338,6 +347,7 @@ export const contracts = {
   ProfileLine,
   RememberInput,
   RememberOutput,
+  SkillNotes,
   OnboardingStatus,
   Org,
   OrgSchedule,
@@ -360,6 +370,8 @@ export const contracts = {
   QuoteField,
   RecordReviewInput,
   RecordReviewOutput,
+  SearchConversationsInput,
+  SearchConversationsOutput,
   RedirectPointer,
   HoldingPointer,
   RemoveDomainInput,

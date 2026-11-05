@@ -19,7 +19,9 @@ import {
   ErrorEnvelope,
   FactList,
   type GoogleResultRequest,
+  type MemoryLineEdit,
   type MemoryReviewAction,
+  type MemoryUndo,
   MemoryView,
   type MessageFeedback,
   Org,
@@ -781,11 +783,11 @@ async function memory(): Promise<MemoryView | null> {
 }
 
 async function undoMemory(
-  version: number
+  undo: MemoryUndo
 ): Promise<MemoryView | "stale" | null> {
   const response = await call("/memory/undo", {
     method: "POST",
-    body: { version },
+    body: undo,
   })
   if (!response || response.status === 401 || response.status === 403) {
     return null
@@ -793,6 +795,28 @@ async function undoMemory(
   if (response.status === 409) return "stale"
   if (!response.ok) {
     throw new Error(`apps/api answered ${response.status} for /memory/undo`)
+  }
+  return MemoryView.parse(await response.json())
+}
+
+async function editMemoryLine(
+  edit: MemoryLineEdit
+): Promise<MemoryView | "stale" | { refused: string } | null> {
+  const response = await call("/memory/lines", { method: "POST", body: edit })
+  if (!response || response.status === 401 || response.status === 403) {
+    return null
+  }
+  if (response.status === 404) return "stale"
+  if (response.status === 409) {
+    const refusal = ErrorEnvelope.safeParse(await response.json())
+    return {
+      refused: refusal.success
+        ? refusal.data.message
+        : "That could not be saved. Nothing was changed.",
+    }
+  }
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for /memory/lines`)
   }
   return MemoryView.parse(await response.json())
 }
@@ -1009,6 +1033,7 @@ export const apiSource: OwnerDataSource = {
   deleteReminder,
   memory,
   undoMemory,
+  editMemoryLine,
   reviewMemory,
   grants,
   setGrant,

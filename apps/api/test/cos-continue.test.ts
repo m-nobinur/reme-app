@@ -318,7 +318,7 @@ describe.skipIf(!url)("a turn cut off, and its continuation", () => {
 
   it("marks a turn out of steps partial and queues a continuation, which a new owner message supersedes", async () => {
     const id = await conversation()
-    const previews = Array.from({ length: 5 }, (_, i) =>
+    const previews = Array.from({ length: 15 }, (_, i) =>
       called("get_change", { ref: crypto.randomUUID() }, `call_${i}`)
     )
     await typed(
@@ -327,7 +327,7 @@ describe.skipIf(!url)("a turn cut off, and its continuation", () => {
       scripted(...previews, said("Still checking.")).model
     )
     const [capped] = await turns(id)
-    expect(capped).toMatchObject({ outcome: "answered", steps: 6 })
+    expect(capped).toMatchObject({ outcome: "answered", steps: 16 })
     const [reply] = await replies(id)
     expect(reply?.message.partial).toBe(true)
     expect(reply?.message.stopped).toBeUndefined()
