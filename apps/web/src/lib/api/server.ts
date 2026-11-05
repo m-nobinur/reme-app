@@ -8,6 +8,7 @@ import {
   DomainName,
   type DomainPurchaseStatus,
   GOAL_MAX,
+  MemoryLineEdit,
   MemoryReviewAction,
   MemoryUndo,
   type MemoryView,
@@ -395,7 +396,17 @@ export const undoMemory = createServerFn({ method: "POST" })
   .validator((input: unknown) => MemoryUndo.parse(record(input)))
   .handler(
     async ({ data }): Promise<MemoryView | "stale" | null> =>
-      await source.undoMemory(data.version)
+      await source.undoMemory(data)
+  )
+
+/** One line the owner rewrote or removed; "stale" when it is gone, `refused` with why when not saved. */
+export const editMemoryLine = createServerFn({ method: "POST" })
+  .validator((input: unknown) => MemoryLineEdit.parse(record(input)))
+  .handler(
+    async ({
+      data,
+    }): Promise<MemoryView | "stale" | { refused: string } | null> =>
+      await source.editMemoryLine(data)
   )
 
 /** The owner's choice about being asked first, or their answer to one proposal. */

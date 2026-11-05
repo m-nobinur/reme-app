@@ -3,6 +3,7 @@ import {
   memoryChipText,
   Remembered,
 } from "@workspace/ui/components/assistant/memory-chip"
+import { MemoryLines } from "@workspace/ui/components/memory-lines"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { expect, it } from "vitest"
@@ -27,6 +28,59 @@ it("says each remembered change in the owner's own line", () => {
     })
   ).toBe(
     'Saved to memory: Prefers calls after 4pm; Quotes go out on Fridays (updated); removed "Away in August"'
+  )
+})
+
+it("says what a saved memory call changed in its own turn", () => {
+  const chip = renderToStaticMarkup(
+    createElement(Remembered as never, {
+      args: {
+        target: "notes",
+        operations: [
+          { action: "add", content: "Spare keys are in the van" },
+          { action: "patch", old_text: "4pm", content: "5pm" },
+        ],
+      },
+      result: {
+        outcome: "saved",
+        target: "notes",
+        note: "Write saved.",
+        fullness: "1%, 25/2,200 chars",
+      },
+    })
+  )
+  expect(chip).toContain(
+    "Saved to memory: Spare keys are in the van; 5pm (updated)"
+  )
+})
+
+it("lists a store's lines with how full it is, a stale line marked, and named edit and remove buttons", () => {
+  const html = renderToStaticMarkup(
+    createElement(MemoryLines, {
+      busy: false,
+      id: "quote-reply",
+      lines: [
+        {
+          id: "1",
+          text: "City centre quotes add parking",
+          source: "You said it",
+          stale: true,
+        },
+      ],
+      max: 600,
+      onRemove: () => undefined,
+      onSave: () => undefined,
+      title: "Quote reply",
+      used: 30,
+    })
+  )
+  expect(html).toContain("30 of 600 characters")
+  expect(html).toContain("Not used for 60 days")
+  expect(html).toContain(
+    'aria-label="Edit &quot;City centre quotes add parking&quot;"'
+  )
+  expect(html).toContain(
+    'aria-label="Remove &quot;City centre quotes add parking&quot;"'
   )
 })
 

@@ -7,21 +7,25 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router"
 import {
   type ApprovalGrantSwitch,
   type MemoryReviewAction,
+  type MemoryStoreName,
+  type MemoryView,
   PROFILE_MAX_CHARS,
   type ProfileLine,
+  type ProfileVersion,
   profileText,
 } from "@workspace/contracts"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { memoryChangeText } from "@workspace/ui/components/assistant/memory-chip"
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent } from "@workspace/ui/components/card"
 import { EmptyState } from "@workspace/ui/components/empty-state"
+import { MemoryLines } from "@workspace/ui/components/memory-lines"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { GRANT_TEXT } from "@workspace/ui/lib/grants"
 import { META } from "@workspace/ui/lib/utils"
 import { useRef, useState } from "react"
 import {
+  editMemoryLine,
   getGrants,
   getMemory,
   removeCorrection,
@@ -34,10 +38,11 @@ import { useLiveWorkspace } from "@/lib/workspace"
 import { useBrowserZone } from "@/panel/workspace-panel"
 
 /**
- * What the Chief of Staff remembers of the owner: the lines it reads at the
- * start of every conversation, and every change to them, each with its undo.
- * Business facts such as prices and hours are the business page's. It also
- * lists what the owner lets it do without asking, each with its switch.
+ * What the Chief of Staff remembers: about the owner, how the business runs,
+ * and how they like each kind of work done, every line with its edit and
+ * remove, and every change with its undo. Business facts such as prices and
+ * hours are the business page's. It also lists what the owner lets it do
+ * without asking, each with its switch.
  */
 export const Route = createFileRoute("/app/memory")({
   loader: async () => {
@@ -52,6 +57,28 @@ const SOURCE: Record<ProfileLine["source"], string> = {
   owner_confirmed: "You confirmed it",
   reflection: "Learned from chat",
 }
+
+/** Where a change in the history was made, in the owner's terms. */
+const STORE_NAME: Record<MemoryStoreName, string> = {
+  user: "About you",
+  notes: "How your business runs",
+  skills: "How you like each job done",
+}
+
+/** Every store's versions as one history, newest first. */
+const historyOf = (view: MemoryView) =>
+  (
+    [
+      ["user", view.versions],
+      ["notes", view.notes.versions],
+      ["skills", view.skills.versions],
+    ] as [MemoryStoreName, ProfileVersion[]][]
+  )
+    .flatMap(([store, versions]) => versions.map((v) => ({ store, ...v })))
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+
+const withSource = (lines: readonly (ProfileLine & { stale?: boolean })[]) =>
+  lines.map((l) => ({ ...l, source: SOURCE[l.source] }))
 
 function Memory() {
   const view = Route.useLoaderData()
@@ -79,46 +106,44 @@ function Memory() {
     )
   }
 
-  async function undo(version: number) {
-    setBusy(version)
-    try {
-      const done = await undoMemory({ data: { version } })
-      setStatus(
-        done === "stale"
-          ? "That change was already undone or has been edited since. Nothing was changed."
-          : "Undone."
-      )
-      await router.invalidate()
-    } catch {
-      setStatus("That could not be undone. Nothing was changed.")
-    } finally {
-      setBusy(null)
-      // The button that was pressed is gone, so focus moves to the line that says so.
-      announcer.current?.focus()
-    }
-  }
-
-  async function answer(
-    action: MemoryReviewAction,
-    done: string,
-    key: string | number
-  ) {
+  /** Runs one change, says how it went, and moves focus to the line that says so. */
+  async function act(key: string | number, run: () => Promise<string>) {
     setBusy(key)
     try {
-      const out = await reviewMemory({ data: action })
-      setStatus(
-        out === "stale"
-          ? "That suggestion is gone or no longer fits. Nothing was changed."
-          : done
-      )
+      setStatus(await run())
       await router.invalidate()
     } catch {
       setStatus("That could not be saved. Nothing was changed.")
     } finally {
       setBusy(null)
+      // The button that was pressed may be gone, so focus moves to the line that says so.
       announcer.current?.focus()
     }
   }
+
+  const undo = (store: MemoryStoreName, version: number) =>
+    act(`${store}:${version}`, async () =>
+      (await undoMemory({ data: { version, store } })) === "stale"
+        ? "That change was already undone or has been edited since. Nothing was changed."
+        : "Undone."
+    )
+
+  const edit = (store: MemoryStoreName, id: string, text?: string) =>
+    act(id, async () => {
+      const out = await editMemoryLine({
+        data: text === undefined ? { store, id } : { store, id, text },
+      })
+      if (out === "stale") return "That line was already removed or changed."
+      if (out && "refused" in out) return out.refused
+      return text === undefined ? "Removed." : "Saved."
+    })
+
+  const answer = (action: MemoryReviewAction, done: string, key: string) =>
+    act(key, async () =>
+      (await reviewMemory({ data: action })) === "stale"
+        ? "That suggestion is gone or no longer fits. Nothing was changed."
+        : done
+    )
 
   async function flip(change: ApprovalGrantSwitch) {
     setBusy(change.kind)
@@ -137,32 +162,22 @@ function Memory() {
     }
   }
 
-  async function remove(id: string) {
-    setBusy(id)
-    try {
+  const remove = (id: string) =>
+    act(id, async () => {
       const out = await removeCorrection({ data: { id } })
-      setStatus(
-        out === null
-          ? "Only the owner can remove this. Nothing was changed."
-          : out === "stale"
-            ? "That was already removed."
-            : "Removed. Your next website change will not follow it."
-      )
-      await router.invalidate()
-    } catch {
-      setStatus("That could not be removed. Nothing was changed.")
-    } finally {
-      setBusy(null)
-      announcer.current?.focus()
-    }
-  }
+      return out === null
+        ? "Only the owner can remove this. Nothing was changed."
+        : out === "stale"
+          ? "That was already removed."
+          : "Removed. Your next website change will not follow it."
+    })
 
-  const used = profileText(view.lines).length
+  const history = historyOf(view)
 
   return (
     <>
       <PageHeader
-        description={`${leading(assistant)} reads these at the start of every chat. Prices, hours and contact details are on the business page.`}
+        description={`${leading(assistant)} reads these in every chat. Prices, hours and contact details are on the business page.`}
         title="Memory"
       />
 
@@ -175,43 +190,62 @@ function Memory() {
         {status}
       </p>
 
-      <section aria-labelledby="memory-lines" className="mb-8">
-        <h2
-          className="flex items-baseline gap-2 font-semibold text-sm"
-          id="memory-lines"
-        >
-          What your assistant remembers
-          <span className="font-normal text-muted-foreground tabular-nums">
-            {used.toLocaleString("en-GB")} of{" "}
-            {PROFILE_MAX_CHARS.toLocaleString("en-GB")} characters
-          </span>
-        </h2>
-        {view.lines.length === 0 ? (
+      <MemoryLines
+        busy={busy !== null}
+        empty={
           <EmptyState
             description={`Tell ${assistant} how you like to work.`}
             icon={<BrainIcon />}
             title="Nothing yet"
           />
-        ) : (
-          <Card className="mt-2">
-            <CardContent>
-              <ul className="flex flex-col divide-y divide-border">
-                {view.lines.map((line) => (
-                  <li
-                    className="flex flex-wrap items-start justify-between gap-2 py-2.5 first:pt-0 last:pb-0"
-                    key={line.id}
-                  >
-                    <span className="wrap-break-word min-w-0 flex-1 text-sm">
-                      {line.text}
-                    </span>
-                    <Badge variant="secondary">{SOURCE[line.source]}</Badge>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
-      </section>
+        }
+        id="memory-lines"
+        lines={withSource(view.lines)}
+        max={PROFILE_MAX_CHARS}
+        onRemove={(id) => void edit("user", id)}
+        onSave={(id, text) => void edit("user", id, text)}
+        title="About you"
+        used={profileText(view.lines).length}
+      />
+
+      <MemoryLines
+        busy={busy !== null}
+        description="Day-to-day details the business facts don't hold, such as where the keys are kept."
+        empty={<p className={`mt-1 ${META}`}>Nothing yet.</p>}
+        id="memory-notes"
+        lines={withSource(view.notes.lines)}
+        max={view.notes.max}
+        onRemove={(id) => void edit("notes", id)}
+        onSave={(id, text) => void edit("notes", id, text)}
+        title="How your business runs"
+        used={profileText(view.notes.lines).length}
+      />
+
+      {view.skills.notes.length > 0 ? (
+        <section aria-labelledby="memory-skills" className="mb-8">
+          <h2 className="font-semibold text-sm" id="memory-skills">
+            How you like each job done
+          </h2>
+          <p className={`mt-1 mb-3 ${META}`}>
+            Used only when {assistant} does that kind of work. A line not used
+            for 60 days is marked, never removed for it.
+          </p>
+          {view.skills.notes.map((skill) => (
+            <MemoryLines
+              busy={busy !== null}
+              heading="h3"
+              id={`memory-skill-${skill.name}`}
+              key={skill.name}
+              lines={withSource(skill.lines)}
+              max={skill.max}
+              onRemove={(id) => void edit("skills", id)}
+              onSave={(id, text) => void edit("skills", id, text)}
+              title={skill.title}
+              used={profileText(skill.lines).length}
+            />
+          ))}
+        </section>
+      ) : null}
 
       <section aria-labelledby="memory-ask" className="mb-8">
         <h2 className="font-semibold text-sm" id="memory-ask">
@@ -245,9 +279,14 @@ function Memory() {
                 <span className="wrap-break-word min-w-0 flex-1 text-sm">
                   {proposal.action === "add"
                     ? `Add "${proposal.text}"`
-                    : proposal.action === "replace"
-                      ? `Change "${proposal.was}" to "${proposal.text}"`
-                      : `Remove "${proposal.was}"`}
+                    : proposal.action === "remove"
+                      ? `Remove "${proposal.was}"`
+                      : `Change "${proposal.was}" to "${proposal.text}"`}
+                  <span className={`block ${META}`}>
+                    {proposal.target?.startsWith("skill:")
+                      ? STORE_NAME.skills
+                      : STORE_NAME[(proposal.target ?? "user") as "user"]}
+                  </span>
                 </span>
                 <Button
                   disabled={busy !== null}
@@ -355,18 +394,18 @@ function Memory() {
         </section>
       ) : null}
 
-      {view.versions.length > 0 ? (
+      {history.length > 0 ? (
         <section aria-labelledby="memory-history">
           <h2 className="font-semibold text-sm" id="memory-history">
             Changes
           </h2>
           <ol className="mt-2 flex flex-col divide-y divide-border">
-            {view.versions.map((version) => {
+            {history.map((version) => {
               const when = zone ? formatDateTime(version.at, zone) : null
               return (
                 <li
                   className="flex items-start gap-3 py-2.5"
-                  key={version.version}
+                  key={`${version.store}:${version.version}`}
                 >
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     {version.changes.map((change) => (
@@ -378,15 +417,15 @@ function Memory() {
                       </span>
                     ))}
                     <span className={META}>
-                      Version {version.version}
+                      {STORE_NAME[version.store]}
                       {when ? `, ${when}` : ""}
                     </span>
                   </div>
                   {version.undoable ? (
                     <Button
-                      aria-label={`Undo version ${version.version}`}
+                      aria-label={`Undo this change to ${STORE_NAME[version.store].toLowerCase()}`}
                       disabled={busy !== null}
-                      onClick={() => void undo(version.version)}
+                      onClick={() => void undo(version.store, version.version)}
                       size="sm"
                       type="button"
                       variant="outline"
