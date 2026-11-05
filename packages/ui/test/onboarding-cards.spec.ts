@@ -241,7 +241,7 @@ test("the ready card sits at the end of the thread and never claims an approval 
   await expect(cards.nth(6)).toHaveText("Approved, publishing your website")
   // A step beside Publish, on the same row, for the web address and then Search Console.
   for (const [at, label] of [
-    [7, "Connect"],
+    [7, "Connect now"],
     [8, "Connect Search Console"],
   ] as const) {
     const publish = await cards

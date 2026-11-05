@@ -212,8 +212,8 @@ it("offers beside Publish what the update stack offers, and nothing before the j
       })
     )
   expect(at("unknown")).toEqual({
-    label: "Connect",
-    ask: "Help me connect my domain",
+    label: "Connect now",
+    ask: "Help me set up my domain",
     intent: "connect_address",
   })
   expect(at("live", "offerable")).toEqual({

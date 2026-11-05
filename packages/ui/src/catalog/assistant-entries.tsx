@@ -3250,7 +3250,10 @@ const assistantCatalog = [
           <SiteReady {...READY} preview="error" />
           <SiteReady {...READY} pictures={null} preview="loading" />
           <SiteReady {...READY} approved />
-          <SiteReady {...READY} connect={{ label: "Connect", onClick: noop }} />
+          <SiteReady
+            {...READY}
+            connect={{ label: "Connect now", onClick: noop }}
+          />
           <SiteReady
             {...READY}
             connect={{ label: "Connect Search Console", onClick: noop }}
