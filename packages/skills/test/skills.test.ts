@@ -141,6 +141,31 @@ describe("skills", () => {
     ])
   })
 
+  it("asks whether they have a domain before anything else, and never guesses one", () => {
+    const skill = procedure("cos", "web-address")
+    const part = (name: string) =>
+      skill?.parts.find((p) => p.name === name)?.body ?? ""
+    const [first] = skill?.body.split("## Procedure\n")[1]?.split("\n") ?? []
+    expect(first).toMatch(/^1\. Ask first\. /)
+    expect(first).toMatch(/one short question: do they already have a domain/)
+    expect(first).toContain("NEVER assume they own one, NEVER guess")
+    expect(first).toContain("do not read connect-own until they say")
+    expect(skill?.body).toContain("never a name made from theirs")
+    expect(part("buy-new")).toMatch(
+      /"I'll skip the domain for now"\), call put_off with kind address, then reply once, in one line/
+    )
+    expect(part("buy-new")).toContain("Never quote dollars.")
+    expect(part("bought-elsewhere")).toMatch(
+      /registry doesn't show it yet, your reply says so/
+    )
+    expect(part("bought-elsewhere")).toMatch(
+      /"I haven't bought <name> yet"\), reply in two sentences at most/
+    )
+    expect(part("bought-elsewhere")).toContain(
+      "Do not infer that silence means it's bought."
+    )
+  })
+
   it("finds a procedure only in its own scope", () => {
     expect(procedure("cos", "review-reply")?.name).toBe("review-reply")
     expect(procedure("developer", "review-reply")).toBeNull()

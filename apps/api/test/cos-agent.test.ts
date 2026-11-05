@@ -408,7 +408,7 @@ describe("the CoS's instructions", () => {
 
     it("leave when to bring the address up to the open items note, and give its benefit when it does", () => {
       expect(skill("web-address")).toMatch(
-        /open items note says where the address stands, its next step and when to bring it up[^\n]*never offer the address on your own/
+        /open items note says where the address stands, its next step and when to bring it up[^\n]*never offer the domain on your own/
       )
       expect(skill("web-address")).toMatch(
         /When you bring it up[^\n]*goes live on it the moment they publish/
@@ -435,7 +435,7 @@ describe("the CoS's instructions", () => {
         /Once their setting is in, the app offers Google itself, with a Connect Google button\. When that message is in the conversation, don't offer it again/
       )
       expect(skillPart("web-address", "buy-new")).toMatch(
-        /When the workspace's buying is false, the card shows where to buy each name, at Cloudflare or GoDaddy/
+        /When the workspace's buying is false, a chosen name shows Buy from Cloudflare and Buy from GoDaddy/
       )
       expect(skillPart("web-address", "buy-new")).toMatch(
         /While buying is false, never offer to buy a name here and never call buy_domain/
