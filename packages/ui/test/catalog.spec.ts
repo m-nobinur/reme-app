@@ -164,8 +164,22 @@ for (const theme of ["light", "dark"] as const) {
       !existsSync(BASELINES) && test.info().config.updateSnapshots === "none",
       "no baselines on this machine: pnpm --filter @workspace/ui test:update"
     )
-    // One screenshot per entry, and the catalog outgrew the default 30 s.
-    test.setTimeout(90_000)
+    // One screenshot per entry: about 270 a theme took 4 to 5 minutes on
+    // 2026-11-05, so 90 s stopped the run part way.
+    test.setTimeout(600_000)
+    // A fixed clock and no motion, so a countdown, a round's wait and the
+    // update deck read the same on every run, and entrances are settled
+    // when the shot is taken.
+    await page.clock.setFixedTime(new Date("2026-11-05T10:00:00Z"))
+    // Copy that varies its wording picks the same words on every run.
+    await page.addInitScript(() => {
+      let seed = 1
+      Math.random = () => {
+        seed = (seed * 16_807) % 2_147_483_647
+        return (seed - 1) / 2_147_483_646
+      }
+    })
+    await page.emulateMedia({ reducedMotion: "reduce" })
     await page.goto(`/?theme=${theme}`)
     // The variable font loads from node_modules through Vite; without this the
     // first snapshot of a run is taken mid-swap and every later one is not.
@@ -184,11 +198,23 @@ for (const theme of ["light", "dark"] as const) {
     ).toHaveCount(0)
 
     for (const name of await entryNames(page)) {
+      const entry = page.locator(`[data-entry="${name}"]`)
+      // An entry's pictures land at their own pace (a tray's designs among
+      // them); a shot taken before one has decoded moves everything under it.
+      // A lazy picture off screen never loads, so it is made eager first.
+      await entry.evaluate((root) =>
+        Promise.all(
+          [...root.querySelectorAll("img")].map((img) => {
+            img.loading = "eager"
+            return img.decode().catch(() => undefined)
+          })
+        )
+      )
       // Two pixels of slack: WorkspaceShell's panel inset rounds a sub-pixel
       // edge either way between runs (one pixel, 2026-10-01), and a real
       // change moves far more than two.
       await expect
-        .soft(page.locator(`[data-entry="${name}"]`))
+        .soft(entry)
         .toHaveScreenshot(`${name}-${theme}.png`, { maxDiffPixels: 2 })
     }
   })
