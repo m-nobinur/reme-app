@@ -1452,15 +1452,7 @@ export function built(
   return [
     { ...pending, state: "output-available", output },
     { type: "step-start" },
-    text(
-      begun
-        ? (said ??
-            started(
-              v,
-              uploadsOf(o.facts).some((a) => a.use !== "logo")
-            ))
-        : notStarted(v)
-    ),
+    text(begun ? (said ?? started(v)) : notStarted(v)),
     ...(begun && offer ? offerParts(offer) : []),
   ]
 }

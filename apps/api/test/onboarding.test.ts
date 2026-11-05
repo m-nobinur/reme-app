@@ -1682,7 +1682,7 @@ const lines = (v: Voice): [string, string][] => [
   }),
   ["default_quote_form", quoteForm(v)],
   ["quote_unchanged", quoteUnchanged(v)],
-  ["started", started(v, true)],
+  ["started", started(v)],
   ["manual_end", manualEnd(v)],
   ["chose", chose(v, "the Ocean colours")],
   ...(
@@ -1850,7 +1850,6 @@ describe("the onboarding copy", () => {
       "contact",
       "build_for_me",
       "quote_form",
-      "started",
       "business.audience",
       "business.proof",
     ]) {
@@ -1859,6 +1858,12 @@ describe("the onboarding copy", () => {
       )
       expect(seen.size, name).toBeGreaterThanOrEqual(2)
     }
+  })
+
+  it("says the build is under way in one short paragraph", () => {
+    expect(started(voice({ business: "Brightway Cleaning" }))).toBe(
+      "All set. The build for Brightway Cleaning is under way. Progress shows in the activity panel, and I'll let you know here as soon as there's a draft to look at."
+    )
   })
 
   it("reads the business back as labelled bullets, the owner's own asterisks kept as characters", () => {

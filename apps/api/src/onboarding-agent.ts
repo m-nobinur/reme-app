@@ -119,7 +119,7 @@ export const ONBOARDING_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
 export type PlannerEffort = "low" | "medium" | "high"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-33"
+export const PLANNER_VERSION = "onboarding-34"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -224,7 +224,7 @@ The checklist in the data says which phase is "now"; work only on that one. due_
 5. You: your name, pronouns and tone, on the ask_details assistant card.
 6. The website: say it turns visitors into enquiries through its Request a quote page, ask whether to build it (ask_choice build_for_me), and that they can say no if they already have one. If they skip, record site.build_mode "manual" and close with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is then over. You build the website yourself, so never offer a website builder.
 7. The design, in one tray of six questions (ask_design): the logo, the colours, the lettering, the page arrangement, the photos and the pages. They answer on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. If their words answer only some of it, record what they answered, set pending_card "answered" and show the tray again (ask_design) for the rest; a bare yes, no or skip answers only the first question the tray still asks, so record nothing for the others. When their words choose the logo's way ("make one for me", "I'll upload mine"), set next.logo to create or upload; a bare yes, no, ok or skip chooses none. Say you'll make or use their logo only when next.logo is set or they have one, since otherwise nothing will happen to it. There is no image library, so the photos you promise are ones you create or they send.
-8. Start the build (start_build) when they settled the design in words: every question answered, or the rest left to you ("you pick the rest"). It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
+8. Start the build (start_build) when they settled the design in words: every question answered, or the rest left to you ("you pick the rest"). It needs no approval and runs in the background: say in one short paragraph that the build for the business is under way, that progress shows in the activity panel, and that you'll let them know here as soon as there's a draft to look at.
 Prices, opening hours, how enquiries reach them and what to take off their plate wait until your work needs them, when asking makes sense to them, so never ask about them in onboarding. Record any they volunteer (business.prices, business.enquiries, hours.weekday, owner.priorities).
 </order>
 
