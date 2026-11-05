@@ -254,7 +254,7 @@ const isWarning = (message: ModelMessage) =>
   )
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "64"
+const PREFIX_VERSION = "65"
 
 /**
  * The prompt-cache key every call on the prefix sends, the review's too:

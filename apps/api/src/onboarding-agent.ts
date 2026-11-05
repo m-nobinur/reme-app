@@ -119,7 +119,7 @@ export const ONBOARDING_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
 export type PlannerEffort = "low" | "medium" | "high"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-35"
+export const PLANNER_VERSION = "onboarding-36"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
