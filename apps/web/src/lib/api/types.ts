@@ -148,6 +148,8 @@ export type Workspace = {
   reminderNotes: Reminder[]
   /** The business's zone, which reminders run on; absent or null before one is known. */
   timeZone?: string | null
+  /** The website journey the update stack reads; absent until the api sends it. */
+  journey?: WorkspaceStatus["journey"]
   /** `/workspace`'s tag, sent back on the next poll; null when nothing was read. */
   etag: string | null
 }

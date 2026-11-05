@@ -4,7 +4,7 @@ import {
   type ThreadSuggestion,
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
-import { CopyIcon } from "@phosphor-icons/react"
+import { CopyIcon, GlobeIcon, GoogleLogoIcon } from "@phosphor-icons/react"
 import {
   ADDRESS_ASK,
   type AskChoiceInput,
@@ -59,7 +59,10 @@ import {
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
 import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
 import {
+  DockedUpdates,
+  type Update,
   UpdateDeck,
+  UpdateIcon,
   UpdateKindIcon,
   UpdateRow,
 } from "@workspace/ui/components/assistant/update-deck"
@@ -2814,6 +2817,97 @@ const READY = {
   onMakeChanges: noop,
 }
 
+/** The journey's row in the update stack, as the app draws it. */
+const journeyRow = (title: string, label: string, google = false) => ({
+  id: google ? "google" : "address",
+  content: (
+    <UpdateRow
+      action={
+        <Button size="sm" variant="outline">
+          {label}
+        </Button>
+      }
+      icon={<UpdateIcon icon={google ? GoogleLogoIcon : GlobeIcon} />}
+      title={title}
+    />
+  ),
+})
+
+/**
+ * A conversation's update stack above the composer, in one journey state:
+ * the ready card docked as one of its items (`site`), the journey's rows
+ * before it (`lead`) or after it (`tail`).
+ */
+function StackedReady({
+  lead = [],
+  tail = [],
+  site = true,
+}: {
+  lead?: Update[]
+  tail?: Update[]
+  site?: boolean
+}) {
+  const [spot, setSpot] = useState<HTMLElement | null>(null)
+  const card = {
+    id: "site",
+    content: <div className="flex min-w-0 flex-1" ref={setSpot} />,
+  }
+  return (
+    <>
+      {site ? <SiteReady {...READY} docked spot={spot} /> : null}
+      <DockedUpdates updates={[...lead, ...(site ? [card] : []), ...tail]} />
+    </>
+  )
+}
+
+/** Each state of the stack in a conversation, from the journey (`journeyItem` in apps/web). */
+const STACK_STATES: [string, ReactNode, ThreadMessageLike[]?][] = [
+  [
+    "never-answered",
+    <StackedReady
+      key="never-answered"
+      tail={[journeyRow("Choose your web address", "Connect")]}
+    />,
+  ],
+  [
+    "skipped",
+    <StackedReady
+      key="skipped"
+      tail={[journeyRow("Connect your domain", "Connect")]}
+    />,
+  ],
+  [
+    "buying-elsewhere",
+    <StackedReady
+      key="buying-elsewhere"
+      lead={[journeyRow("Finished buying sparkleclean.co.uk?", "Connect it")]}
+    />,
+  ],
+  [
+    "bought",
+    <StackedReady
+      key="bought"
+      lead={[journeyRow("sparkleclean.co.uk is ready to connect", "Connect")]}
+    />,
+  ],
+  [
+    "google",
+    <StackedReady
+      key="google"
+      tail={[journeyRow("Get found on Google", "Connect Search Console", true)]}
+    />,
+  ],
+  ["google-done", <StackedReady key="google-done" />],
+  [
+    "question-open",
+    <StackedReady
+      key="question-open"
+      tail={[journeyRow("Choose your web address", "Connect")]}
+    />,
+    ASK_FACT_OPEN.slice(0, 1),
+  ],
+]
+
 /** The payment dialog behind its button, with test values. */
 function PayDialogSample() {
   const [open, setOpen] = useState(false)
@@ -3122,7 +3216,7 @@ const assistantCatalog = [
         <FixtureThread
           height="h-[34rem]"
           messages={[ask("Hi")]}
-          settings={{ after: <SiteReady {...READY} docked /> }}
+          settings={{ after: <StackedReady /> }}
         />
         <div className="flex max-w-xl flex-col gap-6">
           <SiteReady {...READY} pending />
@@ -3148,6 +3242,26 @@ const assistantCatalog = [
     render: () => (
       <div className="max-w-xl">
         <SiteReady {...READY} />
+      </div>
+    ),
+  })),
+  // A conversation's update stack above the composer, one thread per
+  // journey state; with a question open, the question takes the slot.
+  ...(["DockedUpdates", "UpdateIcon"] as const).map((name) => ({
+    name,
+    render: () => (
+      <div className="flex flex-col gap-6">
+        {STACK_STATES.map(([state, stack, messages]) => (
+          <div data-state={state} key={state}>
+            <FixtureThread
+              height={messages ? "h-[34rem]" : "h-[22rem]"}
+              // An open question docks as it does in the app.
+              isDisabled={!messages}
+              messages={messages ?? [ask("Hi")]}
+              settings={{ after: stack }}
+            />
+          </div>
+        ))}
       </div>
     ),
   })),

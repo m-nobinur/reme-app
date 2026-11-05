@@ -1,4 +1,5 @@
-import { CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react"
+import { CaretLeftIcon, CaretRightIcon, type Icon } from "@phosphor-icons/react"
+import { Docked } from "@workspace/ui/components/assistant/question-tray"
 import {
   type AttentionKind,
   attentionKind,
@@ -9,8 +10,8 @@ import { type ReactNode, useEffect, useRef, useState } from "react"
 
 export type Update = { id: string; content: ReactNode }
 
-/** How long an update stays in front before the next one comes round. */
-const DWELL_MS = 7000
+/** How long an update stays in front, drawn afresh each time so the stack never ticks like a clock. */
+export const DWELL_MS = { min: 3000, max: 6000 }
 
 /** The edge each card under the front one shows, in rem, nearest first. */
 const EDGE = 0.375
@@ -19,33 +20,48 @@ const EDGE = 0.375
 const LAYERS = ["inset-x-6 opacity-50", "inset-x-3 opacity-80"]
 
 /**
- * What waits on the owner, under a new chat's composer: the three that
- * matter most as a deck, one in front and the next two as edges under it.
- * The front one moves on by itself, slowly, and holds while the pointer is
- * on the deck or focus is in it; the arrows step through it. Every update stays
- * mounted, so one mid-publish keeps its state while another is in front.
+ * What waits on the owner, as a stack: the three that matter most, one in
+ * front and the next two as edges under it. The front one moves on by
+ * itself after a few seconds, the next rising out of the stack as it sinks
+ * back in. It holds while the pointer is on the stack or focus is in it,
+ * stops for that view once the owner uses an arrow, and never moves by
+ * itself under reduced motion. Every update stays mounted, so one
+ * mid-publish keeps its state while another is in front.
  */
 export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
   const deck = updates.slice(0, 3)
   const root = useRef<HTMLElement>(null)
   const [at, setAt] = useState(0)
   const [hovered, setHovered] = useState(false)
+  const [stepped, setStepped] = useState(false)
   const count = deck.length
   const front = count ? at % count : 0
   useEffect(() => {
-    if (hovered || count < 2) return
+    if (hovered || stepped || count < 2) return
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
-    const timer = setInterval(() => {
-      // Read at each turn, not from focus events: a focused card never goes
-      // inert, and a focused button that unmounts holds nothing.
-      if (!root.current?.contains(document.activeElement)) {
-        setAt((was) => was + 1)
-      }
-    }, DWELL_MS)
-    return () => clearInterval(timer)
-  }, [hovered, count])
+    const { min, max } = DWELL_MS
+    let timer: ReturnType<typeof setTimeout>
+    const dwell = () => {
+      timer = setTimeout(
+        () => {
+          // Read when it fires, not from focus events: a focused card never
+          // goes inert, and a focused button that unmounts holds nothing.
+          if (!root.current?.contains(document.activeElement)) {
+            setAt((was) => was + 1)
+          }
+          dwell()
+        },
+        min + Math.random() * (max - min)
+      )
+    }
+    dwell()
+    return () => clearTimeout(timer)
+  }, [hovered, stepped, count])
   if (!count) return null
-  const step = (by: number) => setAt(front + by + count)
+  const step = (by: number) => {
+    setStepped(true)
+    setAt(front + by + count)
+  }
   return (
     <section
       aria-label="Updates"
@@ -67,16 +83,19 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
           style={{ bottom: `${depth * EDGE}rem` }}
         />
       ))}
-      <div className="relative flex items-center gap-1 rounded-2xl border border-border bg-card pe-2">
-        {/* One cell for every update, so the deck is as tall as the tallest. */}
+      <div className="relative flex items-start gap-1 overflow-hidden rounded-2xl border border-border bg-card pe-2">
+        {/* One cell for every update, so the stack is as tall as the tallest. */}
         <div className="grid min-w-0 flex-1 *:[grid-area:1/1]">
           {deck.map((update, index) => (
             <div
               aria-hidden={index !== front}
               className={cn(
-                "flex min-w-0 items-center transition-opacity duration-slow motion-reduce:transition-none",
-                index === front ? "opacity-100" : "invisible opacity-0"
+                "flex min-w-0 items-center transition-[opacity,translate,visibility] duration-enter ease-standard motion-reduce:transition-none",
+                index === front
+                  ? "opacity-100"
+                  : "invisible translate-y-2 opacity-0"
               )}
+              data-front={index === front || undefined}
               inert={index !== front}
               key={update.id}
             >
@@ -85,7 +104,8 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
           ))}
         </div>
         {count > 1 ? (
-          <div className="flex shrink-0 items-center">
+          // A row's height, so the arrows stay level with it when a card opens.
+          <div className="flex h-15 shrink-0 items-center">
             <Button
               aria-label="Previous update"
               onClick={() => step(-1)}
@@ -112,6 +132,18 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
   )
 }
 
+/**
+ * The stack above a conversation's composer, as one item of its tray: a
+ * question card that docks takes the slot, and the stack waits behind it.
+ */
+export function DockedUpdates({ updates }: { updates: readonly Update[] }) {
+  return updates.length ? (
+    <Docked name="update-stack" settled standing>
+      <UpdateDeck updates={updates} />
+    </Docked>
+  ) : null
+}
+
 /** One update: what it is about, what it says, and the one thing to do. */
 export function UpdateRow({
   icon,
@@ -136,15 +168,19 @@ export function UpdateRow({
   )
 }
 
-/** An update's kind, in the same square as the site's icon. */
-export function UpdateKindIcon({ kind }: { kind: AttentionKind }) {
-  const { icon: Icon } = attentionKind[kind]
+/** An update's icon, in the same square as the site's. */
+export function UpdateIcon({ icon: Glyph }: { icon: Icon }) {
   return (
     <span
       aria-hidden
       className="grid size-9 shrink-0 place-items-center rounded-[25%] bg-muted text-muted-foreground"
     >
-      <Icon className="size-5" />
+      <Glyph className="size-5" />
     </span>
   )
 }
+
+/** An update's kind, as its icon. */
+export const UpdateKindIcon = ({ kind }: { kind: AttentionKind }) => (
+  <UpdateIcon icon={attentionKind[kind].icon} />
+)

@@ -1,16 +1,16 @@
-import { useAuiState } from "@assistant-ui/react"
 import { getRouteApi } from "@tanstack/react-router"
 import { revisionPictures } from "@workspace/contracts"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
-import { useRef, useState } from "react"
+import {
+  DockedUpdates,
+  type Update,
+} from "@workspace/ui/components/assistant/update-deck"
+import { type ReactNode, useState } from "react"
 import { decideApproval } from "@/lib/api/server"
-import type { Workspace } from "@/lib/api/types"
 import { DECISION_REFUSED } from "@/lib/decision"
 import {
   type Approved,
-  awaitsReadyLine,
   draftReview,
-  type ReadyReview,
   readyCard,
   readySlot,
   versionMeta,
@@ -28,40 +28,43 @@ const FAILED = "That did not go through. Try again."
 
 const frame = getRouteApi("/app")
 
-/** The draft the card shows, kept while an update build replaces it. */
-function useDraft(workspace: Workspace | null) {
-  const last = useRef<ReadyReview | null>(null)
-  const draft = draftReview(workspace, last.current)
-  if (draft || workspace) last.current = draft
-  return draft
-}
-
 /**
  * The ready card, wired: the review comes from the polled workspace, Publish
  * is the panel's own decision bound to the revision, and Request changes is
  * the panel's, which puts the composer in website change mode. Drawn in the
- * chat and on the Website page. `sentAt` is when the owner last wrote in the
- * chat; once that is after the review went up, the card docks above the
- * composer. `row` draws only its first row, for the new chat's updates.
+ * chat and on the Website page. `row` draws only its first row, for the new
+ * chat's updates.
+ *
+ * In a conversation (`stack` given) it also draws the update stack above
+ * the composer, with the journey's items around it. `sentAt` is when the
+ * owner last wrote there; once that is after the review went up, the card
+ * docks into the stack. `hidden` keeps a new review's card back while its
+ * ready line is on its way.
  */
 export function SiteReadyCard({
   className,
   sentAt = null,
   saidAt,
   row = false,
+  stack,
+  hidden = false,
 }: {
   className?: string
   sentAt?: string | null
   /** In a chat, when the assistant last wrote: its live message ends the publishing line. */
   saidAt?: string | null | undefined
   row?: boolean
+  /** The stack's items around the docked card, given it (empty when it is not docked). */
+  stack?: (site: Update[]) => Update[]
+  hidden?: boolean
 }) {
   const live = useLiveWorkspace()
   const { active } = frame.useLoaderData()
   const zone = useBrowserZone()
   const requestChanges = useRequestChanges()
   const askInChat = useAskInChat()
-  const slot = readySlot(live.workspace)
+  // Off the chat only: there the stack carries the step.
+  const slot = stack ? null : readySlot(live.workspace)
   const connect = slot && {
     label: slot.label,
     onClick: () => askInChat(slot.ask, slot.intent),
@@ -69,25 +72,44 @@ export function SiteReadyCard({
   const [approved, setApproved] = useState<Approved | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const card = readyCard(
-    useDraft(live.workspace),
-    approved,
-    live.workspace?.live ?? null,
-    saidAt
-  )
+  const [spot, setSpot] = useState<HTMLElement | null>(null)
+  const draft = draftReview(live.workspace)
+  const card = hidden
+    ? null
+    : readyCard(draft, approved, live.workspace?.live ?? null, saidAt)
   const review = card?.kind === "review" ? card.review : null
   const [preview, retryPreview] = usePreview(review?.assignmentId ?? null)
-  if (!card) return null
   const title = versionTitle(active?.name)
   const at = review?.at ?? approved?.review.at
   const docked = !!sentAt && !!at && Date.parse(sentAt) > Date.parse(at)
+  const updates = stack?.(
+    card && docked
+      ? [
+          {
+            id: "site",
+            content: <div className="flex min-w-0 flex-1" ref={setSpot} />,
+          },
+        ]
+      : []
+  )
+  const placed = stack ? { spot, docked } : { docked }
+  const drawn = (site: ReactNode) =>
+    updates ? (
+      <>
+        {site}
+        <DockedUpdates updates={updates} />
+      </>
+    ) : (
+      site
+    )
+  if (!card) return drawn(null)
   if (!review) {
-    return (
+    return drawn(
       <SiteReady
         approved
         published={card.kind === "approved" && card.published}
         className={className}
-        docked={docked}
+        {...placed}
         row={row}
         meta=""
         onApprove={() => undefined}
@@ -99,13 +121,15 @@ export function SiteReadyCard({
     )
   }
 
+  const { approvalId } = review
   const approve = async () => {
+    if (!approvalId) return
     setPending(true)
     setError(null)
     try {
       const outcome = await decideApproval({
         data: {
-          approvalId: review.approvalId,
+          approvalId,
           revisionId: review.revisionId,
           decision: "approved",
         },
@@ -123,15 +147,16 @@ export function SiteReadyCard({
     }
   }
 
-  return (
+  return drawn(
     <SiteReady
       className={className}
-      docked={docked}
+      {...placed}
       row={row}
       connect={connect}
       error={error}
       // Each message the owner sends closes an opened card, so the chat shows.
       closeOn={sentAt}
+      held={!approvalId}
       meta={versionMeta(live.workspace?.live ?? null, review.at, zone)}
       onApprove={() => void approve()}
       onMakeChanges={requestChanges}
@@ -141,46 +166,5 @@ export function SiteReadyCard({
       preview={preview}
       title={title}
     />
-  )
-}
-
-/** When the newest message by `role` was written, or null. */
-const lastAt = (
-  messages: readonly {
-    role: string
-    metadata: { custom: Record<string, unknown> }
-  }[],
-  role: "user" | "assistant"
-) => {
-  const at = messages.filter((m) => m.role === role).at(-1)?.metadata
-    .custom.createdAt
-  return typeof at === "string" ? at : null
-}
-
-/**
- * The ready card in the open conversation, which knows when the owner last
- * wrote. A new review's card waits for the ready line, so the line lands
- * above it instead of pushing it down (224 px, 2026-10-25). The workspace
- * poll re-renders it, so no timer is needed.
- */
-export function ChatSiteReadyCard() {
-  // An empty chat has it in its updates instead.
-  const empty = useAuiState((s) => s.thread.messages.length === 0)
-  const sentAt = useAuiState((s) => lastAt(s.thread.messages, "user"))
-  const saidAt = useAuiState((s) => lastAt(s.thread.messages, "assistant"))
-  const review = useDraft(useLiveWorkspace().workspace)
-  // When this tab first saw each review: a ref, read and set in render, since
-  // it only ever records the first sight.
-  const seen = useRef(new Map<string, number>()).current
-  const now = Date.now()
-  if (review && !seen.has(review.approvalId)) seen.set(review.approvalId, now)
-  const waiting = awaitsReadyLine(
-    review?.at ?? null,
-    saidAt,
-    review ? (seen.get(review.approvalId) ?? now) : now,
-    now
-  )
-  return empty || waiting ? null : (
-    <SiteReadyCard className="mx-2 -mt-2" saidAt={saidAt} sentAt={sentAt} />
   )
 }

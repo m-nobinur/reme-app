@@ -1,7 +1,7 @@
-import { type AskIntent, pageAction } from "@workspace/ui/lib/activity-copy"
+import type { AskIntent } from "@workspace/ui/lib/activity-copy"
 import type { Workspace } from "./api/types"
 import { dueLine } from "./reminders"
-import { ownDomainClaimed } from "./website-checklist"
+import { journeyItem } from "./update-stack"
 
 /**
  * The chat's "your website is ready" card, from the polled workspace. It is
@@ -11,7 +11,8 @@ import { ownDomainClaimed } from "./website-checklist"
 
 /** A version waiting for the owner's review, bound to its revision. */
 export type ReadyReview = {
-  approvalId: string
+  /** Null while an update to it is being made: its review comes back with the update's. */
+  approvalId: string | null
   revisionId: string
   version: number
   /** The build that made it, whose preview the card opens. */
@@ -42,20 +43,28 @@ export function readyForReview(
 }
 
 /**
- * The draft the card shows: the newest review, else the last one seen while
- * an update build is at work on it. Asking for changes pauses the first build
- * and takes its approval away until the update lands with a new one, and the
- * draft card stays in the chat meanwhile. It goes once nothing is building,
- * or that version is live.
+ * The draft the card shows: the newest review, else the latest unpublished
+ * version an update is being made to. Asking for changes pauses the draft's
+ * build and takes its approval away until the update lands with a new one;
+ * the update's build names that draft (`held`), so the card stays in the
+ * chat meanwhile, through a reload too. It goes once the update ends or
+ * that version is live.
  */
-export function draftReview(
-  workspace: Workspace | null,
-  last: ReadyReview | null
-): ReadyReview | null {
+export function draftReview(workspace: Workspace | null): ReadyReview | null {
   const ready = readyForReview(workspace)
-  if (ready) return ready
-  return workspace?.open && last && (workspace.live ?? 0) < last.version
-    ? last
+  if (ready || !workspace) return ready
+  const update = workspace.builds.find(
+    (build) => (build.held?.version ?? 0) > (workspace.live ?? 0)
+  )
+  const held = update?.held
+  return update && held
+    ? {
+        approvalId: null,
+        revisionId: held.revision_id,
+        version: held.version,
+        assignmentId: held.assignment_id,
+        at: held.ready_at ?? update.created_at,
+      }
     : null
 }
 
@@ -136,27 +145,13 @@ export function readyCard(
 }
 
 /**
- * The ready card's one extra step beside Publish: setting up the web address
- * while the owner has none, then connecting Search Console once they do, and
- * nothing once Google is connected or while the api has not said.
+ * The ready card's one extra step beside Publish, off the chat (the chat's
+ * update stack carries it there): the journey's own item, so the Website
+ * page offers what the stack does, and nothing while the api has not said.
  */
 export function readySlot(
   workspace: Workspace | null
 ): { label: string; ask: string; intent: AskIntent } | null {
-  const standing = workspace?.activity?.standing
-  if (!standing) return null
-  if (!ownDomainClaimed(standing, workspace.host)) {
-    return {
-      label: "Connect",
-      ask: "Help me set up my web address",
-      intent: "connect_address",
-    }
-  }
-  return standing.some((s) => s.kind === "google" && s.state === "done")
-    ? null
-    : {
-        label: "Connect Search Console",
-        ask: pageAction("google").ask,
-        intent: "connect_google",
-      }
+  const item = journeyItem(workspace?.journey, true)
+  return item && { label: item.label, ask: item.ask, intent: item.intent }
 }
