@@ -159,7 +159,7 @@ export async function readTasks(db: OrgScopedDb): Promise<OwnerTask[]> {
         'note', s.note, 'blocked_on', s.blocked_on, 'deadline', s.deadline,
         'changed_at', s.changed_at) order by s.step), '[]'::json)
         from task_steps s where s.task_id = t.id) as steps
-    from owner_tasks t order by t.created_at desc limit 10`)
+    from owner_tasks t order by t.created_at desc, t.kind limit 10`)
   return rows.map(
     (t) =>
       ({
