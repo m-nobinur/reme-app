@@ -9,7 +9,10 @@
   "name": "reme-orchestrator",
   "compatibility_date": "2026-08-26",
   "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true },
+  // Traces carry Flue's agent, model-turn and tool spans for timing and
+  // shape only (`content: false` in src/app.ts): the events table holds the
+  // conversation.
+  "observability": { "enabled": true, "traces": { "enabled": true } },
   "placement": { "region": "aws:eu-central-1" },
   // Off while staging is invite-only: a preview alias is public and runs an
   // unreviewed branch on staging's secrets. The PR preview workflow is disabled.
@@ -152,8 +155,8 @@
   // a registry reference pinned by digest, so a deploy needs no Docker and a
   // PR that touches no image never builds one; a PR moves this pin. Under the
   // `durable_object` policy, which cannot be undone, `RemeSandbox` starts its
-  // own container: the §6.3 `standard-2` class and the pool of five
-  // (`SandboxPool`) are in src/container.ts. The `name` is new because the
+  // own container: its size (`SANDBOX_INSTANCE`, 1 vCPU and 3 GiB) is in
+  // src/sandbox.ts and the pool of five (`SandboxPool`) in src/container.ts. The `name` is new because the
   // 0.12 application keeps its generated one until it is deleted.
   "containers": [
     {

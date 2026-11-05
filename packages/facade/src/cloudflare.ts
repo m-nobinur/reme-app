@@ -7,6 +7,7 @@
 export {
   type CloudflareSandboxStub,
   cloudflareSandbox,
+  createCloudflareTracing,
   extend,
   getCloudflareContext,
   getDurableObjectIdentity,

@@ -47,7 +47,10 @@ import {
   useTool,
   withOutputCap,
 } from "@workspace/facade"
-import { cloudflareSandbox } from "@workspace/facade/cloudflare"
+import {
+  cloudflareSandbox,
+  createCloudflareTracing,
+} from "@workspace/facade/cloudflare"
 import { z } from "zod"
 import { type Brief, changeBriefSignal, retryContextSignal } from "../brief.ts"
 import { ownerUploads } from "../developer-rules.ts"
@@ -141,6 +144,11 @@ const OBSERVER = Symbol.for("reme.developer.observer")
 const held = globalThis as { [OBSERVER]?: () => void }
 held[OBSERVER]?.()
 held[OBSERVER] = observe(observed)
+
+// Ahead of the generated entry's default, which puts the conversation in
+// every span: the events table already holds it, so traces keep timing and
+// shape (#613). A second evaluation replaces it in dev, as the observer does.
+instrument(createCloudflareTracing({ content: false }))
 
 export function observed(...[observation, ctx]: Parameters<Observer>) {
   // A submission that throws outside any turn (its container not running
