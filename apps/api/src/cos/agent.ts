@@ -257,7 +257,7 @@ const isWarning = (message: ModelMessage) =>
   )
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "66"
+const PREFIX_VERSION = "67"
 
 /**
  * The prompt-cache key every call on the prefix sends, the review's too:
@@ -432,7 +432,7 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
     "Get the button that connects their Google account, so their website goes into their own Search Console; Google's screen is where they agree. Returns the button's link, the account already connected, or that Google is not available here.",
   // After hermes-agent tools/memory_tool.py MEMORY_SCHEMA, MIT.
   memory:
-    "Save durable facts to memory that lasts across conversations. It is in every turn's context: keep entries compact and high-signal.\nHOW: make ALL changes to one target in ONE call: add, patch (old_text, a span of one entry, becomes content) or remove (the entry holding old_text). The limit is checked only on the FINAL result, so one call can remove or patch stale entries AND add new ones.\nWHEN: only what holds beyond this conversation. Preferences and corrections for one kind of work go in that skill's notes, which load only when relevant.\nIF FULL: refused with the current entries. Reissue as ONE batch that removes or shortens stale entries and adds the new one.\nTARGETS: user = who they are and how they want you to talk to them, 1,500 chars; notes = how this business runs where the facts hold nothing, 2,200; skill:<name> = how they want that work done, 600 each.\nWrite facts in words they wrote here; a standing request is their whole sentence as typed: Asked: \"their sentence\".\nSKIP: what the facts or workspace hold, raw data, task progress, finished work, to-dos, anything stale within a week (search_conversations finds those), business facts (request_change), time zones (set_time_zone), promises (create_reminder). Procedures belong in skills.",
+    "Save durable facts to memory that lasts across conversations. It is in every turn's context: keep entries compact and high-signal.\nHOW: make ALL changes to one target in ONE call: add, patch (old_text, a span of one entry, becomes content) or remove (the entry holding old_text). The limit is checked only on the FINAL result, so one call can remove or patch stale entries AND add new ones.\nWHEN: save proactively, without asking, when they state a preference, correction or personal detail, or you learn a stable fact about how the business runs. Priority: their preferences and corrections > how the business runs > procedures. The best memory stops them repeating themselves. Only what holds beyond this conversation; preferences and corrections for one kind of work go in that skill's notes, which load only when relevant.\nIF FULL: refused with the current entries. Reissue as ONE batch that removes or shortens stale entries and adds the new one.\nTARGETS: user = who they are and how they want you to talk to them, 1,500 chars; notes = how this business runs where the facts hold nothing, 2,200; skill:<name> = how they want that work done, 600 each.\nWrite facts in words they wrote here; a standing request is their whole sentence as typed: Asked: \"their sentence\".\nSKIP: trivial or obvious things, what the facts or workspace hold, raw data, task progress, finished work, to-dos, anything stale within a week (search_conversations finds those), business facts (request_change), time zones (set_time_zone), promises (create_reminder). Procedures belong in skills.",
   search_conversations:
     "Search this business's earlier conversations, their words and yours, by words they used: short dated snippets, best and newest first.",
   // After hermes-agent tools/clarify_tool.py CLARIFY_SCHEMA, MIT.
@@ -1253,12 +1253,14 @@ export function lastStep(
  * review triggers, not walls: a feature that needs more raises the budget in
  * the same commit, with the measured cost (3-engineering.md, prompt growth).
  * offer_choices (2026-11-06) took the prefix to 36,952, about 375 more cached
- * tokens a call, so the prefix budget is 37,000.
+ * tokens a call, so the prefix budget is 37,000. The memory tool's Hermes
+ * WHEN and SKIP wording (2026-11-06) took it to 37,261, about 65 more cached
+ * tokens a call, so 37,500.
  */
 export const PROMPT_BUDGET = {
   core: 13_000,
   descriptions: 9_710,
-  prefix: 37_000,
+  prefix: 37_500,
 }
 
 /**
