@@ -188,6 +188,8 @@ function FixtureThread({
     isRunning,
     messages,
     onNew: noop,
+    // A card's answer goes nowhere in a fixture, which is not an error.
+    onAddToolResult: noop,
     suggestions,
     adapters: {
       ...(rates ? { feedback: { submit: noop } } : {}),
@@ -2697,6 +2699,7 @@ function SendingThread({ streamed }: { streamed: boolean }) {
     }),
     isRunning,
     messages,
+    onAddToolResult: noop,
     onNew: async (message) => {
       const sent = message.content.find((part) => part.type === "text")
       const turn = messages.length
