@@ -29,18 +29,21 @@ export type JourneyItem = {
  * (`offer`, the draft-ready line's own rule) or the owner skipped it, once
  * there is a site to put it on (`site`: a draft on screen, or one ready or
  * live). Google follows once the address is connecting or live, until it is
- * connected or turned down.
+ * connected or turned down. A name the owner went to buy asks "Finished
+ * buying?" only once they are `back` from it (`useBack`): until then the
+ * chat already holds the question.
  */
 export function journeyItem(
   journey: Journey | undefined,
-  site: boolean
+  site: boolean,
+  back = true
 ): JourneyItem | null {
   if (!journey) return null
   const { stage, name, offer } = journey.address
   const address = (title: string, label: string, lead = false) =>
     ({ id: "address", title, label, lead, ...CONNECT_ADDRESS }) as const
   if (stage === "buying_elsewhere" && name) {
-    return address(`Finished buying ${name}?`, "Connect it", true)
+    return back ? address(`Finished buying ${name}?`, "Connect it", true) : null
   }
   if (offer === "connect_bought" && name) {
     return address(`${name} is ready to connect`, "Connect", true)
