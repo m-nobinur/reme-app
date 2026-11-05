@@ -179,7 +179,7 @@ export const RETURN_LINE =
 
 /** Said once per draft while what it left out is untold. */
 export const leftOutLine = (items: readonly string[]) =>
-  `The draft left out: ${items.join(" ")} Mention it once, in one line, the next time the owner talks about the website, and offer to add them.`
+  `The draft left out: ${items.join(" ")} Mention it once, in one line, the next time the owner talks about the website, and offer to add them; if one of your replies already did, say nothing about it.`
 
 /** "3 hours", "40 minutes", "2 days". */
 function awayWords(ms: number): string {

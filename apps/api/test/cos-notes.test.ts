@@ -525,7 +525,7 @@ describe("the journey's lines", () => {
     ).not.toMatch(/last here/)
   })
 
-  it("says what the newest draft left out in its own line, once", () => {
+  it("says what the newest draft left out in its own line, on up to three turns", () => {
     const website = {
       live: false,
       building: false,
@@ -539,12 +539,13 @@ describe("the journey's lines", () => {
     }
     const first = turn({ website, visit: sitting })
     expect(first.lines.at(-1)).toBe(
-      "The draft left out: Are you insured? Do you offer a guarantee? Mention it once, in one line, the next time the owner talks about the website, and offer to add them."
+      "The draft left out: Are you insured? Do you offer a guarantee? Mention it once, in one line, the next time the owner talks about the website, and offer to add them; if one of your replies already did, say nothing about it."
     )
     expect(first.lines).toContain(leftOutLine(first.journey.left_out))
-    const latches = first.journey.record
-      .filter((k) => k.startsWith("told:left_out:"))
-      .map((key) => ({ key, at: ago(1) }))
+    const latches = [1, 2, 3].map((n) => ({
+      key: `told:left_out:r1:${n}`,
+      at: ago(1),
+    }))
     expect(
       turn({ website, visit: sitting, latches }).lines.join("\n")
     ).not.toContain("The draft left out")

@@ -3939,7 +3939,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await seed(kit, who).state(building, "cancelled")
   })
 
-  it("says what the newest draft left out once, without facts now known or ones asked later", async () => {
+  it("says what the newest draft left out on three typed turns, without facts now known or ones asked later", async () => {
     const who = await owner(kit, url as string, "cos-left-out")
     const s = seed(kit, who)
     const draft = await s.assignment("awaiting_review")
@@ -3968,7 +3968,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       })
     )
     const room = await conversation(who)
-    for (const text of ["Morning.", "And another thing."])
+    for (const text of ["Morning.", "And another thing.", "Also.", "One more."])
       await turn(who, typed(room, text), {
         model: scripted(said("Here you go.")).model,
       })
@@ -3976,14 +3976,21 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       .filter((e) => e.type === "cos.context")
       .map((e) => String(e.payload.text))
     const line = leftOutLine(["Are you insured?"])
-    expect(texts.map((t) => t.includes(line))).toEqual([true, false])
+    expect(texts.map((t) => t.includes(line))).toEqual([
+      true,
+      true,
+      true,
+      false,
+    ])
     const latches = await kit.withOrg({ orgId: who.orgId }, (db) =>
       db
         .select({ key: deliveries.key })
         .from(deliveries)
         .where(sql`${deliveries.key} like '%:told:left_out:%'`)
     )
-    expect(latches.map((l) => l.key.split(":").at(-1))).toEqual([approval])
+    expect(
+      latches.map((l) => l.key.split(":").slice(-2).join(":")).sort()
+    ).toEqual([1, 2, 3].map((n) => `${approval}:${n}`))
     await s.state(draft, "cancelled")
   })
 

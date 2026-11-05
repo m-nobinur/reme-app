@@ -188,6 +188,9 @@ function changesOf(
     .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
 }
 
+/** How many typed turns carry a draft's left-out line. */
+export const LEFT_OUT_TURNS = 3
+
 /**
  * The journey from the records: the website's stage, the address's stage and
  * the Connect it offers, Google's stage; and for a turn the owner typed, the
@@ -247,10 +250,16 @@ export function journeyOf(input: JourneyInput): JourneyState {
     (a, d) => (!a || d.at > a.at ? d : a),
     undefined
   )
+  // Said on up to three typed turns, so a first message about something else
+  // does not use it up; the model sees its own replies and says it once.
+  const leftOutKey = newest ? `told:left_out:${newest.id}` : ""
+  const leftOutTold = newest
+    ? latches.filter(
+        (l) => l.key === leftOutKey || l.key.startsWith(`${leftOutKey}:`)
+      ).length
+    : 0
   const left_out =
-    sitting &&
-    newest?.left_out?.length &&
-    !told.has(`told:left_out:${newest.id}`)
+    sitting && newest?.left_out?.length && leftOutTold < LEFT_OUT_TURNS
       ? [...newest.left_out]
       : []
   const bring_back = !due
@@ -276,7 +285,7 @@ export function journeyOf(input: JourneyInput): JourneyState {
     record: [
       ...(bring_back ? [`bring_back:${now.toISOString()}`] : []),
       ...changes.map((c) => `told:${c.key}`),
-      ...(left_out.length > 0 ? [`told:left_out:${newest?.id}`] : []),
+      ...(left_out.length > 0 ? [`${leftOutKey}:${leftOutTold + 1}`] : []),
     ],
   }
 }

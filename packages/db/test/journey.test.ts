@@ -401,7 +401,7 @@ describe("journeyOf: the sitting and what changed", () => {
     ])
   })
 
-  it("gives the newest draft's left-out items once, on a turn the owner typed", () => {
+  it("gives the newest draft's left-out items on up to three turns the owner typed", () => {
     const website = {
       live: false,
       building: false,
@@ -412,13 +412,17 @@ describe("journeyOf: the sitting and what changed", () => {
     }
     const typed = journey({ website, visit: sameSitting })
     expect(typed.left_out).toEqual(["Are you insured?"])
-    expect(typed.record).toContain("told:left_out:r2")
+    expect(typed.record).toContain("told:left_out:r2:1")
+    const told = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        key: `told:left_out:r2:${i + 1}`,
+        at: ago(2),
+      }))
+    const third = journey({ website, visit: sameSitting, latches: told(2) })
+    expect(third.left_out).toEqual(["Are you insured?"])
+    expect(third.record).toContain("told:left_out:r2:3")
     expect(
-      journey({
-        website,
-        visit: sameSitting,
-        latches: [{ key: "told:left_out:r2", at: ago(2) }],
-      }).left_out
+      journey({ website, visit: sameSitting, latches: told(3) }).left_out
     ).toEqual([])
     expect(journey({ website }).left_out).toEqual([])
     expect(
