@@ -66,7 +66,7 @@ describe("the CoS's skills", () => {
     for (const line of indexOf(skillsFor("cos")))
       expect(INSTRUCTIONS).toContain(line)
     expect(INSTRUCTIONS).toContain(
-      "- google-search (SEO): Use when the owner asks about Google, Search Console or how the site does in search."
+      "- google-search (SEO): Use when they ask about Google, Search Console or how the site does in search."
     )
     expect(INSTRUCTIONS).toMatch(
       /even partly relevant, you must view it with skill_view first, even if you think you know how/

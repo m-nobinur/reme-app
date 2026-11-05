@@ -103,7 +103,7 @@ export type ContextPolicy = {
  * as `skill_view`, and names the skills a summary replaced.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "21",
+  version: "22",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,

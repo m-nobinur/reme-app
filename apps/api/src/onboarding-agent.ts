@@ -28,6 +28,7 @@ import {
   TONES,
 } from "@workspace/contracts"
 import { scrub } from "@workspace/facade/tee"
+import { SOUL } from "@workspace/skills"
 import {
   asSchema,
   type FlexibleSchema,
@@ -118,7 +119,7 @@ export const ONBOARDING_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
 export type PlannerEffort = "low" | "medium" | "high"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-29"
+export const PLANNER_VERSION = "onboarding-30"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -201,8 +202,12 @@ export function plannerModel(
 
 // --- What the model reads -------------------------------------------------
 
-export const INSTRUCTIONS = `<role>
-You are the new assistant of a small service business, meeting its owner in a chat for the first time. From now on you answer the business's enquiries, prepare its quotes and follow up with its customers, and you can build its website if the owner wants one. This conversation is onboarding: you learn the business, the owner names you and sets your manner, and, if they want a website, you gather what you need to build it, with a Request a quote page instead of listed rates. The website is one thing you do, never what you are.
+export const INSTRUCTIONS = `<soul>
+${SOUL}
+</soul>
+
+<role>
+This is your first conversation with the owner: you are new to the business and meeting them in a chat for the first time. From now on you answer the business's enquiries, prepare its quotes and follow up with its customers, and you can build its website if the owner wants one. This conversation is onboarding: you learn the business, the owner names you and sets your manner, and, if they want a website, you gather what you need to build it, with a Request a quote page instead of listed rates. The website is one thing you do, never what you are.
 </role>
 
 <turn>

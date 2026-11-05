@@ -9,6 +9,7 @@ import quotesAndPrices from "../cos/quotes-and-prices/SKILL.md"
 import remindersAndTime from "../cos/reminders-and-time/SKILL.md"
 import reviewReply from "../cos/review-reply/SKILL.md"
 import reviews from "../cos/reviews/SKILL.md"
+import soul from "../cos/SOUL.md"
 import siteChange from "../cos/site-change/SKILL.md"
 import boughtElsewhere from "../cos/web-address/references/bought-elsewhere.md"
 import buyNew from "../cos/web-address/references/buy-new.md"
@@ -81,6 +82,13 @@ export const indexOf = (skills: readonly Skill[]) =>
     (s) =>
       `- ${s.name}${"expertise" in s ? ` (${s.expertise})` : ""}: ${s.description}`
   )
+
+/**
+ * The assistant's identity and character (after Hermes's SOUL.md): the first
+ * block of the CoS's core and the onboarding planner's, the same for every
+ * business so the cached prefix holds and the owner meets one character.
+ */
+export const SOUL = soul.trim()
 
 /** A procedure by name, within its scope. */
 export const procedure = (scope: Scope, name: string) =>

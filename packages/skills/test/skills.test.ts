@@ -6,6 +6,7 @@ import {
   PROCEDURES,
   procedure,
   readSkillFile,
+  SOUL,
   scheduledBy,
   skillsFor,
 } from "../src/index.ts"
@@ -22,7 +23,18 @@ const corrections = {
 }
 
 const ROOT = new URL("../cos/", import.meta.url)
-const dirs = readdirSync(ROOT)
+const dirs = readdirSync(ROOT, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+
+describe("the soul", () => {
+  it("is two short paragraphs, plain, with no examples and no dashes", () => {
+    expect(SOUL.split("\n\n")).toHaveLength(2)
+    expect(SOUL.length).toBeLessThan(1_200)
+    expect(SOUL).not.toMatch(/[\u2013\u2014]|such as|for example|"/)
+    expect(SOUL).toContain("they and them mean the owner")
+  })
+})
 
 describe("skill files", () => {
   it("bundles every skill directory, and only those", () => {
@@ -113,7 +125,7 @@ describe("skills", () => {
       "weekly-review",
     ])
     expect(indexOf(cos)[0]).toBe(
-      "- web-address (domains): Use when the owner talks about a domain or their web address."
+      "- web-address (domains): Use when they talk about a domain or their web address."
     )
     expect(indexOf(cos).join("\n")).not.toContain("stock photos")
   })
