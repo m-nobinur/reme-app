@@ -89,6 +89,10 @@ export function startPolling({
       current?.builds.some(
         (b) => b.state === "queued" || b.state === "preview_ready"
       ) ||
+      // A logo round drawing: its row must show, and clear, within seconds.
+      current?.activity?.journey.some(
+        (segment) => segment.logo?.status === "drawing"
+      ) ||
       // A review just opened: its ready line is posted a few seconds later.
       current?.attention.some(
         (item) =>

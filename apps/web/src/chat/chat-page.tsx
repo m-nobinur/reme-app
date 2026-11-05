@@ -97,6 +97,24 @@ export function ChatPage() {
   // turn ends would otherwise leave the line above the composer a version
   // behind the panel until a reload.
   const live = useLiveWorkspace()
+  // The panel's "Your logo" row follows a round the tray starts or settles
+  // at once, not on the next idle poll, which a 35 s round can slip between.
+  const services = useMemo(
+    () => ({
+      ...trayServices,
+      drawLogos: (request: Parameters<typeof trayServices.drawLogos>[0]) =>
+        trayServices.drawLogos(request).then((round) => {
+          void live.refresh()
+          return round
+        }),
+      keepLogo: (logo: string) =>
+        trayServices.keepLogo(logo).then((kept) => {
+          void live.refresh()
+          return kept
+        }),
+    }),
+    [live.refresh]
+  )
   const briefing = useMemo(
     () => briefingOf(active, live.workspace),
     [active, live.workspace]
@@ -253,7 +271,7 @@ export function ChatPage() {
             <AlwaysAllowProvider value={tapAlways}>
               <LiveCardsProvider value={shared.cards}>
                 <UploadPhotosProvider value={uploadPhotos}>
-                  <TrayServicesProvider value={trayServices}>
+                  <TrayServicesProvider value={services}>
                     <SaveDesignAnswerProvider value={saveDesignAnswer}>
                       <DomainPurchaseProvider value={domainPurchase}>
                         <AnswerBuildQuestionProvider
