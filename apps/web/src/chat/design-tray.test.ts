@@ -228,14 +228,15 @@ async function render(
   return { container, header, control, press, designs, onFinish }
 }
 
-it("asks whether they have a logo on its own page, then shows the designs with no logo row", async () => {
+it("asks whether they have a logo on its own page, draws only on No, then shows the designs with no logo row", async () => {
   const fake = fakes()
   const tray = await render(fake.services)
-  await vi.waitFor(() => expect(fake.drawn).toHaveLength(1))
   expect(tray.header()).toBe("Do you have a logo?")
   expect(tray.designs()).toBeNull()
+  expect(fake.drawn).toHaveLength(0)
 
   await tray.press("No, create one for me")
+  await vi.waitFor(() => expect(fake.drawn).toHaveLength(1))
   expect(tray.header()).toBe("Pick your logo")
   expect(tray.designs()).not.toBeNull()
   expect(tray.container.textContent).not.toContain("No, create one for me")
@@ -266,11 +267,12 @@ it("opens on the way the owner chose in words: the designs on create, the drop z
 it("going back to the designs draws them at once, with no yes or no first and nothing read", async () => {
   const fake = fakes()
   const tray = await render(fake.services)
-  await vi.waitFor(() => expect(fake.drawn).toHaveLength(1))
   await tray.press("No, create one for me")
+  await vi.waitFor(() => expect(fake.drawn).toHaveLength(1))
   await vi.waitFor(() =>
     expect(tray.designs()?.querySelector("input:checked")).not.toBeNull()
   )
+  await vi.waitFor(() => expect(tray.control("Next")).toBeDefined())
   await tray.press("Next")
   expect(tray.header()).toBe("Which lettering suits you?")
 
@@ -341,8 +343,8 @@ it("Pick for me leaves a logo page that holds a logo", async () => {
 it("Pick for me with nothing picked takes the first design drawn", async () => {
   const fake = fakes()
   const tray = await render(fake.services)
-  await vi.waitFor(() => expect(fake.drawn).toHaveLength(1))
   await tray.press("Pick for me")
+  await vi.waitFor(() => expect(fake.drawn).toHaveLength(1))
   await vi.waitFor(() => expect(tray.onFinish).toHaveBeenCalledOnce())
   expect(tray.onFinish.mock.calls[0]?.[0].answers.logo).toEqual({
     logo: logo(uuid(10)),
@@ -393,6 +395,7 @@ it("answers the logo question on one tap: nothing picked first, no Next", async 
 it("draws one design per suggested direction first, each named by its kind and none captioned", async () => {
   const fake = fakes()
   const tray = await render(fake.services, { input: SUGGESTED })
+  await tray.press("No, create one for me")
   await vi.waitFor(() => expect(fake.drawn).toHaveLength(1))
   expect(fake.drawn[0]?.directions).toEqual(DIRECTIONS)
   expect(fake.drawn[0]?.brief).toMatchObject({
@@ -400,7 +403,9 @@ it("draws one design per suggested direction first, each named by its kind and n
     type: "lockup",
     style: "hand_drawn",
   })
-  await tray.press("No, create one for me")
+  await vi.waitFor(() =>
+    expect(tray.designs()?.querySelectorAll("img")).toHaveLength(3)
+  )
   const names = [...(tray.designs()?.querySelectorAll("img") ?? [])].map(
     (each) => each.getAttribute("alt")
   )
@@ -504,7 +509,7 @@ it("Change the brief opens the brief on What should change?, with the field focu
   expect(field?.placeholder).toBe(
     "For example: bolder lettering, a leaf instead of a tree, darker green"
   )
-  expect(field?.getAttribute("rows")).toBe("4")
+  expect(field?.getAttribute("rows")).toBe("2")
   expect(
     tray.container.querySelector(`label[for="${field?.id}"]`)?.textContent
   ).toBe("What should change?")
@@ -549,10 +554,9 @@ it("shows four fitted letterings, none tagged, and all of them on More styles", 
   expect(tray.control("More styles")).toBeUndefined()
 })
 
-it("Pick for me after Yes keeps the upload and waits for the logo", async () => {
+it("Pick for me after Yes keeps the upload, draws nothing and waits for the logo", async () => {
   const fake = fakes()
   const tray = await render(fake.services)
-  await vi.waitFor(() => expect(fake.drawn).toHaveLength(1))
   await tray.press("Yes, I have my logo")
   await tray.press("Pick for me")
   expect(tray.header()).toBe("Your logo")
@@ -562,6 +566,7 @@ it("Pick for me after Yes keeps the upload and waits for the logo", async () => 
   )
   await act(async () => undefined)
   expect(fake.kept).toEqual([])
+  expect(fake.drawn).toHaveLength(0)
   expect(tray.onFinish).not.toHaveBeenCalled()
 })
 
