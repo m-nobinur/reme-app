@@ -393,6 +393,24 @@ describe("the ready line", () => {
     ).toContain("didn't come out as asked: The FAQ comes before the services")
   })
 
+  it("names every page a change touched, and counts them past two", () => {
+    const on = (pages: string[]) =>
+      changeLines([{ before: "Call us", after: "Ring us today", pages }])
+    expect(on(["/about/", "/"])).toEqual([
+      'Changed "Call us" to "Ring us today" on About and Home',
+    ])
+    expect(on(["/", "/services/deep-cleaning/"])).toEqual([
+      'Changed "Call us" to "Ring us today" on Home and the Deep cleaning page',
+    ])
+    expect(on(["/", "/about/", "/contact/"])).toEqual([
+      'Changed "Call us" to "Ring us today" on 3 pages',
+    ])
+    expect(on(["/", "/"])).toEqual([
+      'Changed "Call us" to "Ring us today" on Home',
+    ])
+    expect(on([])).toEqual(['Changed "Call us" to "Ring us today" on Home'])
+  })
+
   it("speaks to the owner about a missed check, with one full stop", () => {
     const line = readyText("site.revise", null, {
       label: "your About page story",
@@ -532,7 +550,7 @@ describe("the ready line", () => {
     ).toEqual([
       'Took off "Deep clean questions" on the Deep cleans page',
       'Changed "Weekly cleans." to "Weekly and fortnightly cleans." on Home',
-      'Changed "Call 01234" to "Call 05678" on Home',
+      'Changed "Call 01234" to "Call 05678" on Home and About',
     ])
   })
   it("names every line whole, drops a block with no words and keeps page and service apart, as round 2 of 2026-11-04 did not", () => {
@@ -582,7 +600,7 @@ describe("the ready line", () => {
     expect(lines).toEqual([
       'Changed "Send your request" to "Send a quote request" on Home',
       'Added "A checklist the letting agent can sign off" on the End of tenancy cleans for tenants and landlords page',
-      'Added "Trading since 2017" on About',
+      'Added "Trading since 2017" on About and Home',
     ])
     for (const line of lines) {
       expect(line).not.toContain('""')

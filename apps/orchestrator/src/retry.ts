@@ -176,12 +176,20 @@ const nameOf = (text: string) =>
     /^.+?[.!?](?=\s|$)/.exec(text)?.[0],
   ].find((t) => t && t.length <= NAME_MAX) ?? ""
 
-/** Where a change is: Home, a page by its name, or a service's page by the service. */
-const onPage = (pages: readonly string[]) => {
-  const parts = (pages[0] ?? "/").split("/").filter(Boolean)
+/** A page as the owner reads it: Home, a page by its name, or a service's page by the service. */
+const pageName = (page: string) => {
+  const parts = page.split("/").filter(Boolean)
   const last = (parts.at(-1) ?? "home").replace(/-/g, " ")
   const name = `${last.charAt(0).toUpperCase()}${last.slice(1)}`
-  return parts.length > 1 ? `on the ${name} page` : `on ${name}`
+  return parts.length > 1 ? `the ${name} page` : name
+}
+
+/** Where a change is: every page it touched, "on Home and About", or "on 3 pages" past two. */
+const onPage = (pages: readonly string[]) => {
+  const names = [...new Set((pages.length ? pages : ["/"]).map(pageName))]
+  return names.length > 2
+    ? `on ${names.length} pages`
+    : `on ${names.join(" and ")}`
 }
 
 type Pair = { before: string; after: string; pages: string[] }
