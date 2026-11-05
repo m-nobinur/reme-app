@@ -1231,7 +1231,9 @@ export function lastStep(
  * The prompt budgets, in characters, that `cos-prompt-surface.test.ts` holds
  * the prefix to. Trimmed 2026-11-05 to a 34,961 prefix (core 12,162,
  * descriptions 8,334): the prefix budget is that plus 1,500, rounded up;
- * the core and descriptions budgets did not bind, so they stay.
+ * the core and descriptions budgets did not bind, so they stay. They are
+ * review triggers, not walls: a feature that needs more raises the budget in
+ * the same commit, with the measured cost (3-engineering.md, prompt growth).
  */
 export const PROMPT_BUDGET = {
   core: 13_000,

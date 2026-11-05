@@ -6,6 +6,7 @@ import {
   PROCEDURES,
   procedure,
   readSkillFile,
+  SKILL_BUDGET,
   SOUL,
   scheduledBy,
   skillsFor,
@@ -86,6 +87,19 @@ describe("skill files", () => {
 })
 
 describe("skills", () => {
+  it("keeps the index in the core and every skill within its budget", () => {
+    expect(indexOf(PROCEDURES).join("\n").length).toBeLessThanOrEqual(
+      SKILL_BUDGET.index
+    )
+    for (const p of PROCEDURES) {
+      expect(p.body.length, p.name).toBeLessThanOrEqual(SKILL_BUDGET.core)
+      for (const part of p.parts)
+        expect(part.body.length, `${p.name}/${part.name}`).toBeLessThanOrEqual(
+          SKILL_BUDGET.part
+        )
+    }
+  })
+
   it.each(PROCEDURES)("$name fits skill_view's output", (p) => {
     expect(
       SkillViewOutput.safeParse({

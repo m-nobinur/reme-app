@@ -84,6 +84,14 @@ export const indexOf = (skills: readonly Skill[]) =>
   )
 
 /**
+ * Size budgets in characters, measured 2026-11-05 (index 1,136 for 11
+ * skills, largest core 4,392, largest part 2,851). They are review triggers,
+ * not limits (`SKILL_BODY_MAX` is the hard one): past one, split the skill
+ * into parts, or raise the budget in the same commit with the reason.
+ */
+export const SKILL_BUDGET = { core: 5_000, part: 4_000, index: 2_000 }
+
+/**
  * The assistant's identity and character (after Hermes's SOUL.md): the first
  * block of the CoS's core and the onboarding planner's, the same for every
  * business so the cached prefix holds and the owner meets one character.
