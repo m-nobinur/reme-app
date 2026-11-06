@@ -56,6 +56,7 @@ import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { drawLogos, keepLogo, readLogos } from "./logo.ts"
 import { pushRoute } from "./push.ts"
 import { reminderRoute } from "./reminders.ts"
+import { dictationTidy } from "./tidy.ts"
 import { setTimeZone } from "./time-zone.ts"
 import { logoPalettes, paletteFromImage, reviewPhotos } from "./vision.ts"
 import { readActivity, readFacts, unchanged } from "./workspace.ts"
@@ -75,7 +76,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review|corrections\/[^/]+))?|approval-grants|dictation\/ticket|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(check|checkout|registrant|elsewhere|bought|not-yet))?|google\/(connect|disconnect|result)|time-zone|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review|corrections\/[^/]+))?|approval-grants|dictation\/(ticket|tidy)|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(check|checkout|registrant|elsewhere|bought|not-yet))?|google\/(connect|disconnect|result)|time-zone|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -345,7 +346,12 @@ export async function ownerRoute(
   if (noun === "memory") return memoryRoute(request, kit, owner)
   if (noun === "approval-grants") return grantsRoute(request, kit, owner)
   if (noun === "push") return pushRoute(request, env, kit, owner)
-  if (noun === "dictation") return dictationTicket(request, env, owner)
+  if (noun === "dictation") {
+    return (
+      (await dictationTicket(request, env, owner)) ??
+      dictationTidy(request, env, owner)
+    )
+  }
   if (noun === "domains" && method === "DELETE" && !action) {
     return removeDomain(request, env, kit, owner, id)
   }

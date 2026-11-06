@@ -44,3 +44,48 @@ export type DictationEvent = z.infer<typeof DictationEvent>
 /** The one text frame a browser sends: finish and settle what was said. */
 export const DICTATION_STOP = JSON.stringify({ type: "stop" })
 export const DictationControl = z.strictObject({ type: z.literal("stop") })
+
+/**
+ * The tidy pass on stop: the dictated words go to `POST /dictation/tidy` and
+ * come back without fillers or false starts, or as `null` to say the live
+ * text stays (nothing to tidy, a pass that failed or ran past
+ * `DICTATION_TIDY_MS`). The browser and the api both ask `needsTidy` first, so
+ * a message that cannot gain from it costs no model call.
+ */
+export const DICTATION_TIDY_PATH = "/dictation/tidy"
+
+/** The longest a tidy pass may take, end to end, before the live text stays. */
+export const DICTATION_TIDY_MS = 1_500
+
+/** The most dictated text one pass takes: far above five minutes of speech. */
+export const DICTATION_TIDY_MAX_CHARS = 8_000
+
+export const DictationTidyRequest = z.strictObject({
+  text: z.string().min(1).max(DICTATION_TIDY_MAX_CHARS),
+})
+export type DictationTidyRequest = z.infer<typeof DictationTidyRequest>
+
+export const DictationTidyResult = z.strictObject({
+  text: z.string().min(1).nullable(),
+})
+export type DictationTidyResult = z.infer<typeof DictationTidyResult>
+
+/** Up to this many words, a message with nothing below in it is left as heard. */
+const SHORT_WORDS = 12
+
+const SAID_TWICE = /\b(\w+)[\s,]+\1\b/i
+const FILLER =
+  /\b(?:um+|uh+|er+m?|hmm+|you know|sort of|kind of|i mean)\b|\blike,|,\s*like\b/i
+const CORRECTION =
+  /\b(?:no,? wait|wait,? no|actually|scratch that|make that|or rather|sorry|hang on|i meant)\b/i
+
+/** Whether dictated words are worth a tidy pass: long, or holding a filler, a correction or a stutter. */
+export function needsTidy(text: string): boolean {
+  const words = text.trim().split(/\s+/).filter(Boolean).length
+  return (
+    words > SHORT_WORDS ||
+    FILLER.test(text) ||
+    CORRECTION.test(text) ||
+    SAID_TWICE.test(text)
+  )
+}

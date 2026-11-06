@@ -135,8 +135,9 @@
       "namespace_id": "1005",
       "simple": { "limit": 5, "period": 60 }
     },
-    // Dictations one person starts a minute (src/dictation.ts), 1008 in
-    // production. Each one holds a speech-model socket open, billed by the minute.
+    // Dictations one person starts a minute (src/dictation.ts), and their tidy
+    // passes (src/tidy.ts) under a key of their own, 1008 in production. Each
+    // dictation holds a speech-model socket open, billed by the minute.
     {
       "name": "DICTATION_LIMIT",
       "namespace_id": "1007",
