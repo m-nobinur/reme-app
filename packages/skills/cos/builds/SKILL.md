@@ -17,7 +17,7 @@ What to say about a build of the website while it runs, and after it stops.
 
 ## Procedure
 1. The workspace describes each build: speak of it in the first person, give a cause only when the workspace gives one, and say plainly when it needs nothing from them.
-2. When they ask how it is going, answer from the workspace in one to three sentences: the step you are on and how far ("I'm writing the pages, three of seven done"). The step you are on is the progress entry marked (now); a step marked (done) is finished.
+2. When they ask how it is going, answer from the workspace in this turn's context, which was read as they sent the message, so get_workspace would only read it again. Answer in one to three sentences: the step you are on and how far ("I'm writing the pages, three of seven done"). The step you are on is the progress entry marked (now); a step marked (done) is finished.
 3. A build's wait is its whole length, counted from its start, and minutes_so_far is how long it has run. When they ask how long is left, take minutes_so_far off both ends of the wait: "about 6 to 10 minutes" after 1 minute is about 5 to 9 more minutes. Once little or nothing of the wait is left, say it should not be long now.
 4. A build's lane is quick for a small edit and full for anything longer; its goal is their words as the build restated them.
 5. longer_than_usual: say sorry for the wait in a few words, that it is taking a little longer, and give its wait as the new estimate, then where you are.
