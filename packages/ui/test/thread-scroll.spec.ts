@@ -144,3 +144,48 @@ test("a tray growing leaves a reader who scrolled up where they are", async ({
   await page.waitForTimeout(800)
   expect(await viewport.evaluate((box) => box.scrollTop)).toBe(top)
 })
+
+// With the list on screen and the reply below it, the button sat over the
+// sixth row's price line until the reader scrolled on.
+for (const theme of ["light", "dark"]) {
+  for (const width of [1024, 390]) {
+    test(`Scroll to bottom keeps clear of a picker row's text, ${theme} at ${width} px`, async ({
+      page,
+    }) => {
+      const entry = "FindDomain"
+      await open(page, entry, width, theme)
+      const root = page.locator(`[data-entry="${entry}"]`).first()
+      await root
+        .locator(".aui-thread-root")
+        .first()
+        .evaluate((thread) => {
+          ;(thread as HTMLElement).style.height = "24rem"
+        })
+      const viewport = root.locator('[data-slot="aui_thread-viewport"]').first()
+      const subs = root.locator('[data-slot="domain-picker"] [id$="-sub"]')
+      const count = await subs.count()
+      expect(count).toBeGreaterThan(1)
+      const button = root.locator(".aui-thread-scroll-to-bottom:visible")
+      const text = new Set<string>()
+      // Each row in turn parked just above the composer, where the button floats.
+      for (let at = 0; at < count; at++) {
+        await subs.nth(at).scrollIntoViewIfNeeded()
+        await viewport.evaluate((box) => {
+          box.scrollTop -= 40
+        })
+        await expect(button).toBeVisible()
+        const shown = await button.boundingBox()
+        const line = await subs.nth(at).boundingBox()
+        expect(shown && line).toBeTruthy()
+        if (shown && line) {
+          expect(
+            shown.x >= line.x + line.width || shown.x + shown.width <= line.x,
+            `row ${at}: the button at x ${shown.x} to ${shown.x + shown.width} over text at ${line.x} to ${line.x + line.width}`
+          ).toBe(true)
+        }
+        text.add(await subs.nth(at).innerText())
+      }
+      expect(text.size).toBeGreaterThan(1)
+    })
+  }
+}

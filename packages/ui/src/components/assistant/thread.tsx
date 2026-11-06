@@ -1054,13 +1054,14 @@ const localDay = (at: string | null): number | null => {
 // bottom for the moment it takes to glide the sent message up, and without
 // the delay the button blinked on every send. Something that landed while the
 // owner read further up makes it a "New message" pill. Nothing below the
-// composer but held space hides it too.
+// composer but held space hides it too. It sits at the end, clear of the
+// text a card puts at its start (a picker row's name and price).
 const ThreadScrollToBottom: FC<{ unseen: boolean; below: boolean }> = ({
   unseen,
   below,
 }) => {
   const className = cn(
-    "aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full transition-[opacity,visibility] delay-500 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none",
+    "aui-thread-scroll-to-bottom absolute -top-12 z-10 self-end rounded-full transition-[opacity,visibility] delay-500 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none",
     !below && "invisible opacity-0 delay-0"
   )
   return (
