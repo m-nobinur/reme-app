@@ -3,8 +3,8 @@ import {
   renderGenerativeUI,
 } from "@assistant-ui/generative-ui/react"
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
-import { CheckCircleIcon, CircleIcon } from "@phosphor-icons/react"
 import { PRESENT_COMPONENTS } from "@workspace/contracts"
+import { StateIcon } from "@workspace/ui/components/status-line"
 import {
   Table,
   TableBody,
@@ -92,18 +92,10 @@ const LIBRARY = {
       {items.map(({ label, done }, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: two lines may read the same
         <li className="flex items-start gap-2" key={i}>
-          {done ? (
-            <CheckCircleIcon
-              aria-hidden
-              className="mt-px size-4.5 shrink-0 text-foreground"
-              weight="fill"
-            />
-          ) : (
-            <CircleIcon
-              aria-hidden
-              className="mt-px size-4.5 shrink-0 text-muted-foreground"
-            />
-          )}
+          <StateIcon
+            className="mt-0.5 shrink-0"
+            state={done ? "done" : "next"}
+          />
           <span className={done ? "text-muted-foreground" : undefined}>
             {label}
             <span className="sr-only">{done ? ", done" : ", to do"}</span>
