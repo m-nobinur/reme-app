@@ -141,7 +141,8 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
  * The stack above a conversation's composer, as one item of its tray: a
  * question card that docks takes the slot, and the stack waits behind it.
  * Quick replies matter most, so while a row of them is up the stack slides
- * down and away, and rises back once they are answered or gone.
+ * down and away, and rises back once they are answered or gone (the
+ * collapse after hermes-agent apps/desktop/src/components/assistant-ui/tool/fallback.tsx, MIT).
  */
 export function DockedUpdates({ updates }: { updates: readonly Update[] }) {
   const away = usePillsShown()
