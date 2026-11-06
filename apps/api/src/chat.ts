@@ -100,7 +100,9 @@ import { skillNotesText, takeChip } from "./cos/memory.ts"
 import { type Ask, openrouterAsk } from "./cos/narrator.ts"
 import {
   type AddressCard,
+  type Channel,
   cardState,
+  channelNote,
   handoverNote,
   openItems,
   sessionNote,
@@ -745,6 +747,8 @@ export type ChatDeps = {
    * step: left out, Jev on OpenRouter when the api holds a key. Tests pass one.
    */
   topic?: ((said: string) => Promise<string | null>) | null
+  /** Where the owner is writing from, when not the web: the turn's context says so. */
+  channel?: Channel
 }
 
 /** What a turn is, read before its lock: whether onboarding runs, and the card it waits on. */
@@ -1218,7 +1222,7 @@ export async function chat(
         null,
         granted,
         await offerable(db, granted),
-        notes.lines
+        [...notes.lines, ...channelNote(deps.channel)]
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
