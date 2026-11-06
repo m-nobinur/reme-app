@@ -230,13 +230,15 @@ async function stateOffer(
   })
 }
 
-/** The one line Skip for now on the address card gets (owner, 2026-11-05). */
+/**
+ * The one line Skip for now on the address card gets (owner, 2026-11-05),
+ * naming no button: the stack holds Google, not the domain, until Google is settled.
+ */
 export const ADDRESS_SKIPPED =
-  "No problem. Your site can go live on its free address, and you can add your own any time from the Connect now button."
+  "No problem. Your site can go live on its free address, and you can add your own domain whenever you like."
 
-/** Skip for now while Google can still be offered: the next step instead, as the stack then holds Google (owner, 2026-11-06). */
-export const ADDRESS_SKIPPED_GOOGLE =
-  "No problem. Your site can go live on its free address, and you can add your own domain whenever you like. Next, I can connect Google Search Console, so people nearby searching for what you do can find you."
+/** Skip for now while Google can still be offered: the next step too (owner, 2026-11-06). */
+export const ADDRESS_SKIPPED_GOOGLE = `${ADDRESS_SKIPPED} Next, I can connect Google Search Console, so people nearby searching for what you do can find you.`
 
 /** How long a Not now holds the address question back. */
 const ADDRESS_LATER_DAYS = 7
