@@ -443,7 +443,7 @@ function DropTile({
     <label
       className={cn(
         "flex cursor-pointer items-center gap-3 rounded-xl border border-border border-dashed bg-card px-4 py-3 transition-colors duration-150",
-        "hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
+        "hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring",
         over && "border-primary bg-primary/5",
         className
       )}

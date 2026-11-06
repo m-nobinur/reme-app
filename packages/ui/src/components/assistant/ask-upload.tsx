@@ -160,7 +160,7 @@ const AskUpload: ToolCallMessagePartComponent = (props) => {
         <label
           className={cn(
             "flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-border border-dashed bg-card px-4 py-6 text-center transition-colors duration-150",
-            "hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
+            "hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring",
             over && "border-primary bg-primary/5",
             sending && "pointer-events-none opacity-60"
           )}
