@@ -2229,6 +2229,8 @@ export const carded = (
   risk === "always_ask" ||
   (risk === "grantable" && !(kind && granted.includes(kind)))
 
+const MARKER = { openrouter: { cacheControl: { type: "ephemeral" } } }
+
 /**
  * The instructions with a cache marker. Gemini, which serves the chat when
  * GPT has no provider, reads no cache without one; GPT and Claude read the
@@ -2237,7 +2239,50 @@ export const carded = (
 export const CACHED_INSTRUCTIONS: SystemModelMessage = {
   role: "system",
   content: INSTRUCTIONS,
-  providerOptions: { openrouter: { cacheControl: { type: "ephemeral" } } },
+  providerOptions: MARKER,
+}
+
+/**
+ * `messages` with a cache marker on the last user message before the turn's
+ * context note, so the next turn, which drops this note, reads the history
+ * from cache up to there: the rolling breakpoint of hermes-agent
+ * agent/prompt_caching.py (MIT). A user message, because the provider sends
+ * its marker inside the text part; on an assistant or tool message it sends
+ * it on the message, which OpenRouter ignores (measured 2026-11-06,
+ * `cos-cache-live.test.ts`) or hangs on. Request-local: the log and its hash
+ * never hold it.
+ */
+export function withHistoryMarker(
+  messages: ModelMessage[],
+  note: string | undefined
+): ModelMessage[] {
+  const at = messages
+    .map(
+      (m) =>
+        m.role === "user" &&
+        typeof m.content !== "string" &&
+        m.content.length === 1 &&
+        m.content[0]?.type === "text" &&
+        m.content[0].text === note
+    )
+    .lastIndexOf(true)
+  const marked = messages
+    .slice(0, Math.max(at, 0))
+    .map((m) => m.role === "user")
+    .lastIndexOf(true)
+  return messages
+    .map(unmarked)
+    .map((m, i) => (i === marked ? { ...m, providerOptions: MARKER } : m))
+}
+
+/**
+ * `message` without `withHistoryMarker`'s marker. A user message holds no
+ * other options of its own: `convertToModelMessages` puts them on parts.
+ */
+function unmarked(message: ModelMessage): ModelMessage {
+  if (message.role !== "user" || !message.providerOptions) return message
+  const { providerOptions: _, ...bare } = message
+  return bare
 }
 
 /**
@@ -2326,7 +2371,9 @@ export function cosAgent(
     // The check and the step's `cos.call` share one transaction. Both sides
     // are hashed redacted, and the model is sent the redacted messages, so
     // the hash covers what it saw (ADR-042).
-    prepareStep: async ({ messages: held, stepNumber, steps }) => {
+    prepareStep: async ({ messages: carried, stepNumber, steps }) => {
+      // The SDK carries the last step's messages, marker included, forward.
+      const held = carried.map(unmarked)
       // The warning is code's, made from the step number, so it is checked
       // and logged without it and a replay derives it the same way.
       const messages = redacted(held.filter((m) => !isWarning(m)))
@@ -2390,19 +2437,28 @@ export function cosAgent(
       if (stepNumber === 0) logLayers(run, messages, await cosPrefix())
       // Once three quarters of the steps are used, one line says so; it
       // stays where it was put, so the calls after it keep their prefix.
-      const sending = held.some(isWarning)
-        ? redacted(held)
-        : stepNumber >= WARN_AT
-          ? [
-              ...messages,
-              {
-                role: "user" as const,
-                content: [
-                  { type: "text" as const, text: budgetLine(stepNumber) },
-                ],
-              },
-            ]
-          : messages
+      const sending = withHistoryMarker(
+        held.some(isWarning)
+          ? redacted(held)
+          : stepNumber >= WARN_AT
+            ? [
+                ...messages,
+                {
+                  role: "user" as const,
+                  content: [
+                    { type: "text" as const, text: budgetLine(stepNumber) },
+                  ],
+                },
+              ]
+            : messages,
+        redacted(
+          (
+            run.log.filter((e) => e.type === "cos.context").at(-1)?.payload as
+              | { text?: string }
+              | undefined
+          )?.text
+        )
+      )
       // toolChoice, not activeTools, so the cached tool list stays the same.
       // After a repeated call, and on the last step the turn's steps or its
       // reservation allow, the model may only write, so the turn never ends

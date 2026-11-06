@@ -1,10 +1,15 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
-import { generateText } from "ai"
+import { generateText, type ModelMessage } from "ai"
 import { expect, it } from "vitest"
-import { CACHED_INSTRUCTIONS, INSTRUCTIONS } from "../src/cos/agent.ts"
+import {
+  CACHED_INSTRUCTIONS,
+  INSTRUCTIONS,
+  withHistoryMarker,
+} from "../src/cos/agent.ts"
 
-it("sends the instructions as one system message carrying the cache marker", async () => {
-  let body: { messages: { role: string; content: unknown }[] } | undefined
+/** An OpenRouter model whose requests land in `sent`. */
+function recorded() {
+  const sent: { messages: { role: string; content: unknown }[] }[] = []
   const reply = {
     id: "gen-1",
     object: "chat.completion",
@@ -22,12 +27,17 @@ it("sends the instructions as one system message carrying the cache marker", asy
   const model = createOpenRouter({
     apiKey: "test",
     fetch: async (_url, init) => {
-      body = JSON.parse(String(init?.body))
+      sent.push(JSON.parse(String(init?.body)))
       return new Response(JSON.stringify(reply), {
         headers: { "content-type": "application/json" },
       })
     },
   }).chat("x/y")
+  return { model, sent }
+}
+
+it("sends the instructions as one system message carrying the cache marker", async () => {
+  const { model, sent } = recorded()
 
   await generateText({
     model,
@@ -35,9 +45,47 @@ it("sends the instructions as one system message carrying the cache marker", asy
     prompt: "hello",
   })
 
-  const system = body?.messages.filter((m) => m.role === "system")
+  const system = sent[0]?.messages.filter((m) => m.role === "system")
   expect(system).toHaveLength(1)
   expect(system?.[0]?.content).toEqual([
     { type: "text", text: INSTRUCTIONS, cache_control: { type: "ephemeral" } },
   ])
+})
+
+it("marks the last user message before the context note, inside its text part", async () => {
+  const { model, sent } = recorded()
+  const text = (t: string) => [{ type: "text" as const, text: t }]
+  const messages: ModelMessage[] = [
+    { role: "user", content: text("first") },
+    { role: "assistant", content: text("reply one") },
+    { role: "user", content: text("second") },
+    { role: "assistant", content: text("reply two") },
+    { role: "user", content: text("Mode: ask.") },
+    { role: "user", content: text("third") },
+  ]
+  // A step is handed the last step's messages, marker included: marking
+  // again moves it, never adds a second.
+  const once = withHistoryMarker(messages, "Mode: ask.")
+  const carried = withHistoryMarker(
+    [
+      { ...once[0], providerOptions: once[2]?.providerOptions } as ModelMessage,
+      ...once.slice(1),
+    ],
+    "Mode: ask."
+  )
+
+  await generateText({
+    model,
+    instructions: CACHED_INSTRUCTIONS,
+    messages: carried,
+  })
+
+  const marked = sent[0]?.messages.flatMap((m, i) =>
+    JSON.stringify(m).includes("cache_control") ? [i] : []
+  )
+  expect(marked).toEqual([0, 3])
+  expect(sent[0]?.messages[3]?.content).toEqual([
+    { type: "text", text: "second", cache_control: { type: "ephemeral" } },
+  ])
+  expect(withHistoryMarker(messages, "not sent")).toEqual(messages)
 })
