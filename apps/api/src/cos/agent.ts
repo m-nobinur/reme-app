@@ -82,7 +82,13 @@ import {
 } from "./history.ts"
 import { workspaceLabels } from "./labels.ts"
 import { blockOf, type Layer, layerOf, memory } from "./memory.ts"
-import { type Check, claimsGate, gated, promiseGate } from "./promise.ts"
+import {
+  type Check,
+  claimsGate,
+  gated,
+  promiseGate,
+  savedIn,
+} from "./promise.ts"
 import { searchConversations } from "./recall.ts"
 import { failureMessage } from "./retry.ts"
 import { getIndexing, getSearchPerformance } from "./search-tools.ts"
@@ -2136,16 +2142,30 @@ const WAITING_DOMAIN: readonly string[] = [
 ]
 
 /**
- * Whether something is running that will tell the owner when it changes, so
- * "I'll let you know" is true. Google is known here only from this turn's
+ * Whether the workspace shows something running that will tell the owner
+ * when it changes, so "I'll let you know" is true: a build, a domain waiting
+ * on payment, DNS or verifying, or an address the owner is buying elsewhere,
+ * whose hold watches the registry.
+ */
+export const keeps = ({ builds, domains, tasks }: CosWorkspace) =>
+  builds.length > 0 ||
+  (domains ?? []).some((d) => WAITING_DOMAIN.includes(d.state)) ||
+  (tasks ?? []).some(
+    (t) =>
+      t.kind === "address" &&
+      (t.state === "active" || t.state === "later") &&
+      t.detail.origin === "buying_elsewhere" &&
+      t.steps.some((s) => s.step === "purchase" && s.state !== "done")
+  )
+
+/**
+ * `keeps`, or a review running. Google is known here only from this turn's
  * connect_google, since the workspace holds no Google state.
  */
 async function watching(run: AgentTurn): Promise<boolean> {
-  if (run.state.tools.includes("connect_google")) return true
-  const { builds, domains } = await getWorkspace(run.tools, {})
   return (
-    builds.length > 0 ||
-    (domains ?? []).some((d) => WAITING_DOMAIN.includes(d.state)) ||
+    run.state.tools.includes("connect_google") ||
+    keeps(await getWorkspace(run.tools, {})) ||
     (await getReview(run.tools, {})).outcome === "running"
   )
 }
@@ -2308,10 +2328,16 @@ export function cosAgent(
     // code is sure of runs again. The key is read per reply, so building the
     // agent reads no environment.
     model: gated(model, [
-      promiseGate(async (said) => {
+      promiseGate(async (said, prompt) => {
         const jevKey = run.tools.env.OPENROUTER_API_KEY
         if (!jevKey) return false
-        const rerun = await jevPromise(jevKey, said, () => watching(run))
+        // A promise this turn's own save keeps, or one what runs keeps.
+        const rerun = await jevPromise(
+          jevKey,
+          said,
+          async (promise) =>
+            (promise === "act" && savedIn(prompt)) || watching(run)
+        )
         if (rerun) gateLine("cos.promise_gate", run)
         return rerun
       }),

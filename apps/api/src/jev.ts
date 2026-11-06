@@ -394,14 +394,14 @@ export function promiseOf(body: JevResponse): "act" | "tell" | null {
 /**
  * Whether the assistant's `said`, the text a step ended on with no tool
  * call, promises work it has not done ("I'll set that up now"), or promises
- * to tell the owner later when `watched` says nothing is running that would.
- * `watched` is asked only for that second case. False when unsure, on an
- * error, a non-200 or the time limit. One log line per call.
+ * to tell the owner later, when `backed` says nothing in hand keeps that
+ * promise. `backed` is asked only once Jev is sure of a promise. False when
+ * unsure, on an error, a non-200 or the time limit. One log line per call.
  */
 export async function jevPromise(
   apiKey: string,
   said: string,
-  watched: () => Promise<boolean>,
+  backed: (promise: "act" | "tell") => Promise<boolean>,
   fetchImpl: typeof fetch = fetch
 ): Promise<boolean> {
   const began = Date.now()
@@ -434,7 +434,7 @@ export async function jevPromise(
     JEV.promiseMs
   )
   const read = body ? promiseOf(body) : null
-  const rerun = read === "act" || (read === "tell" && !(await watched()))
+  const rerun = read !== null && !(await backed(read))
   console.log(
     JSON.stringify({
       code: "promise.jev",
