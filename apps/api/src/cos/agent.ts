@@ -943,9 +943,9 @@ export const SITE_CHANGE_LINE =
 export const GOOGLE_FIRST_LINE =
   "The owner is asking to get on Google, but their website has no domain of its own yet. Don't call connect_google. In a sentence or two, in your own words, say Google comes once they have their own address, so Google learns the address customers will keep, and offer to sort the address now."
 
-/** Added when Jev read the owner asking for Google with a domain of their own, live or connecting. */
+/** Added when Jev read the owner asking for Google with a domain of their own, live or connecting, or the domain put off for the free address. */
 export const GOOGLE_NOW_LINE =
-  "The owner is asking to get on Google, and their website has a domain of its own, live or being connected. Call connect_google now, with one line of why it helps."
+  "The owner is asking to get on Google, and Google can be connected now: their website has a domain of its own, live or being connected, or they chose the free address for now. Call connect_google now, with one line of why it helps."
 
 /** An owner message that may set a standing request: a correction or a rule about how to work. */
 export const SETS_RULE =

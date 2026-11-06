@@ -4,6 +4,7 @@ import {
   type BuildQuestions,
   boughtReply,
   type CosWorkspace,
+  SKIP_DOMAIN,
   type SkillTrigger,
 } from "@workspace/contracts"
 import { type JourneyChange, type JourneyState, journeyOf } from "@workspace/db"
@@ -123,11 +124,14 @@ function addressState(
   return `Web address: not settled. ${UNKNOWN}`
 }
 
-const GOOGLE_NEXT = " Next: view google-search, connect."
+/** Said once when the owner is back in a new sitting and Google can be connected; at most every few days and a few times in all (`journeyOf`). */
+export const GOOGLE_BACK_LINE =
+  "Google Search Console is still not connected and the owner is back after a break: answer their message first, then suggest it once, in one line with one benefit in their terms, and call connect_google. If they asked not to be reminded about Google, say nothing about it. Next: view google-search, connect."
 
 function googleLine(
   workspace: CosWorkspace,
-  { google }: JourneyState,
+  { google, google_offered, address }: JourneyState,
+  now: Date,
   zone: string | null
 ) {
   const task = workspace.tasks?.find((t) => t.kind === "google")
@@ -141,15 +145,20 @@ function googleLine(
       return `Google: being set up${waits?.note ? `; waiting on the owner (${waits.note})` : ""}.`
     }
     case "put_off":
-      return `Google: put off by the owner until ${day(task?.later_until as string, zone)}.`
+      return `Google: put off by the owner until ${day(task?.later_until as string, zone)}; Connect Search Console stays on the stack under the chat.`
+    case "waiting_for_domain":
+      return "Google: not connected; it comes once the website has its own domain, or once the owner puts the domain off and keeps the free address."
   }
-  if (task?.state === "later")
-    return google === "offerable"
-      ? `Google: put off by the owner; that date has passed, so it can be offered once.${GOOGLE_NEXT}`
-      : "Google: put off by the owner; that date has passed."
-  return google === "offerable"
-    ? `Google: not connected; it can be offered now the website has its own address.${GOOGLE_NEXT}`
-    : "Google: not connected; it waits for a domain of the website's own."
+  const free = address.stage === "put_off" || address.stage === "declined"
+  return [
+    `Google: not connected; it can go on ${free ? "the free address, and moves to their own domain once one is connected" : "their own domain"}. Connect Search Console waits on the stack under the chat.`,
+    google_offered
+      ? `You last suggested it ${whenWords(google_offered, now, zone)}.`
+      : null,
+    "Suggest it only when this note brings it back or they ask.",
+  ]
+    .filter(Boolean)
+    .join(" ")
 }
 
 function websiteLine(workspace: CosWorkspace): string {
@@ -358,7 +367,7 @@ export function openItems(
     OPEN_ITEMS_HEADER,
     `- ${websiteLine(workspace)}`,
     `- ${addressLine(workspace, journey, card, now, zone)}`,
-    `- ${googleLine(workspace, journey, zone)}`,
+    `- ${googleLine(workspace, journey, now, zone)}`,
     ...(questions > 0
       ? [
           `- The Developer has ${questions} open question${questions === 1 ? "" : "s"} for the owner.`,
@@ -367,6 +376,7 @@ export function openItems(
     `- ${cardLine(journey)}`,
     ...(journey.bring_back === "aside" ? [ASIDE_LINE] : []),
     ...(journey.bring_back === "return" ? [RETURN_LINE] : []),
+    ...(journey.bring_back === "google" ? [GOOGLE_BACK_LINE] : []),
     ...(gap ? [gap] : []),
     ...(journey.left_out.length > 0 ? [leftOutLine(journey.left_out)] : []),
   ]
@@ -388,15 +398,21 @@ export const TRIGGER_LINES: Record<
   address_yes: "Getting your own address connected",
   address_no: "Drawing on my domain expertise to find a name",
   bought_elsewhere: "Checking on your domain",
+  address_skipped: "Lining up your next step",
   connect_google: "Using my SEO skills to connect Google Search",
 }
+
+/** The owner put the domain off in words: the picker's Skip, or the free address after Not yet. */
+export const skipsDomain = (said: string | null) =>
+  said?.startsWith(SKIP_DOMAIN) ?? false
 
 /**
  * The skills code loads this turn (plan §3): on an explicit trigger, matched
  * by what the owner pressed (the CoS's first turn after onboarding, a
  * Connect button (`intent`), an answer on the address card as its stored
  * answer and its reply both say, I bought it or Not yet for a domain bought
- * elsewhere, a scheduled run); failing those, the one
+ * elsewhere, the domain put off in words with Google's connect next while it
+ * can be, a scheduled run); failing those, the one
  * skill Jev is sure a typed message is plainly about (`topic`), which saves
  * the model a step. Everything else the model views itself.
  */
@@ -407,6 +423,7 @@ export function skillsDue({
   said = null,
   scheduled = null,
   topic = null,
+  google = false,
 }: {
   handover?: boolean
   intent?: "connect_address" | "connect_google" | null
@@ -415,6 +432,8 @@ export function skillsDue({
   said?: string | null
   scheduled?: string | null
   topic?: string | null
+  /** Google is neither connected, being set up, put off nor turned down. */
+  google?: boolean
 }): SkillLoad[] {
   if (scheduled) return [{ name: scheduled, trigger: "schedule" }]
   if (intent === "connect_google")
@@ -444,6 +463,21 @@ export function skillsDue({
         part: "bought-elsewhere",
         trigger: "bought_elsewhere",
       },
+    ]
+  }
+  if (skipsDomain(said)) {
+    return [
+      { name: "web-address", trigger: "address_skipped" },
+      ...(google
+        ? [
+            { name: "google-search", trigger: "address_skipped" as const },
+            {
+              name: "google-search",
+              part: "connect",
+              trigger: "address_skipped" as const,
+            },
+          ]
+        : []),
     ]
   }
   if (intent === "connect_address")

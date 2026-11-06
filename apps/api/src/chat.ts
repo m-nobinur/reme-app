@@ -29,6 +29,7 @@ import {
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import {
+  addressStage,
   chiefStaffId,
   conversationMessages,
   conversations,
@@ -36,6 +37,7 @@ import {
   eq,
   events,
   journeyOf,
+  latchKey,
   lowerNextDue,
   newUlid,
   type OrgScopedDb,
@@ -44,6 +46,7 @@ import {
   orgs,
   putOff,
   readTasks,
+  recordLatches,
   setStep,
   sql,
   type Tenancy,
@@ -101,6 +104,7 @@ import {
   openItems,
   sessionNote,
   skillsDue,
+  skipsDomain,
   TRIGGER_LINES,
   websiteFrom,
 } from "./cos/notes.ts"
@@ -978,9 +982,13 @@ export async function chat(
             jevAsksGoogle(env.OPENROUTER_API_KEY as string, said)
         : null
   const domainLive =
-    loaded?.workspace.domains?.some((d) =>
+    (loaded?.workspace.domains?.some((d) =>
       ["awaiting_dns", "verifying", "active"].includes(d.state)
-    ) ?? false
+    ) ??
+      false) ||
+    ["put_off", "declined"].includes(
+      addressStage(loaded?.workspace.tasks ?? []).stage
+    )
   const google: Promise<"first" | "now" | null> =
     turn.kind === "message" && googleFirstOf && loaded
       ? googleFirstOf(turn.text).then(
@@ -2026,10 +2034,6 @@ async function addressCardOf(
     : null
 }
 
-/** A journey latch's ledger key: a `deliveries` row that sends nothing, as the heartbeat's are. */
-const latchKey = (key: string) =>
-  sql`'journey:' || current_setting('app.org_id') || ':' || ${key}`
-
 /**
  * What `journeyOf` reads beyond the workspace for a turn the owner typed:
  * the drafts waiting with when each opened, the owner's earlier messages for
@@ -2156,20 +2160,17 @@ export async function turnNotes(
     now,
   })
   const lines = openItems(workspace, card, now, zone, journey)
-  if (journey.record.length > 0) {
-    await db
-      .insert(deliveries)
-      .values(
-        journey.record.map((key) => ({
-          orgId: sql`current_setting('app.org_id')::uuid`,
-          key: sql`${latchKey(key)}`,
-          channel: "in_app" as const,
-          state: "sent" as const,
-          sentAt: now,
-        }))
-      )
-      .onConflictDoNothing()
-  }
+  const google =
+    journey.google === "waiting_for_domain" || journey.google === "offerable"
+  const skipped = skipsDomain(said) && google
+  await recordLatches(
+    db,
+    [
+      ...journey.record,
+      ...(skipped ? [`google_offer:${now.toISOString()}`] : []),
+    ],
+    now
+  )
   const [kind] = fresh
     ? await db
         .select({ kind: conversations.kind })
@@ -2186,6 +2187,7 @@ export async function turnNotes(
     said,
     scheduled,
     topic,
+    google,
   }).filter(({ name, part }) => !loaded.includes(`${name}/${part ?? ""}`))
   const skills: CosSkill[] = []
   for (const { name, part, trigger } of due) {

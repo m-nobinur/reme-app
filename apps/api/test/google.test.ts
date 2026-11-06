@@ -1,15 +1,17 @@
-import { ErrorEnvelope } from "@workspace/contracts"
+import { ErrorEnvelope, SKIP_DOMAIN } from "@workspace/contracts"
 import {
   conversationMessages,
   conversations,
   domains,
   memberships,
+  openTask,
   searchConnections,
   sql,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { turnNotes } from "../src/chat.ts"
 import { connectGoogle } from "../src/google.ts"
 import {
   type Owner,
@@ -154,6 +156,21 @@ describe.skipIf(!url)("connecting Google through the api", () => {
       outcome: "refused",
       error: { code: "search.needs_domain" },
     })
+    // Or the free address, once the owner put the domain off or said no.
+    for (const state of ["later", "declined"]) {
+      await kit.withOrg({ orgId: me.orgId }, async (db) => {
+        await openTask(db, me.orgId, "address")
+        await db.execute(
+          sql`update owner_tasks set state = ${state}::task_state, later_until = ${state === "later" ? sql`now() + interval '7 days'` : null} where kind = 'address'`
+        )
+      })
+      expect(await connectGoogle({ env, kit, owner: as(me) }, {})).toEqual({
+        url: `${WEB}/api/google/start`,
+      })
+    }
+    await kit.withOrg({ orgId: me.orgId }, (db) =>
+      db.execute(sql`delete from owner_tasks where kind = 'address'`)
+    )
     const name = `g${crypto.randomUUID().slice(0, 8)}.co.uk`
     await kit.withOrg({ orgId: me.orgId }, (db) =>
       db.insert(domains).values({
@@ -222,5 +239,40 @@ describe.skipIf(!url)("connecting Google through the api", () => {
       "You're connected to Google. The moment your website goes live, I'll add it"
     )
     expect(texts).not.toContain("didn't connect")
+  })
+
+  it("after the domain is put off in words, loads Google's connect as the next step and remembers it was suggested", async () => {
+    const next = await owner(kit, url as string, "google-next")
+    const conversation = crypto.randomUUID()
+    const workspace = {
+      site: { host: null, live_version: null },
+      builds: [],
+      questions: [],
+      approvals: [{ version: 1, expires_at: new Date().toISOString() }],
+      missing_facts: [],
+      tasks: [],
+    }
+    const notes = (said: string) =>
+      kit.withOrg({ orgId: next.orgId }, (db) =>
+        turnNotes(db, conversation, workspace, null, false, said)
+      )
+    const skipped = await notes(`${SKIP_DOMAIN} and use the free address`)
+    expect(skipped.skills.map((s) => `${s.name}/${s.part ?? ""}`)).toEqual([
+      "web-address/",
+      "google-search/",
+      "google-search/connect",
+    ])
+    expect(skipped.skillLine).toBe("Lining up your next step")
+    const offers = () =>
+      kit.withOrg({ orgId: next.orgId }, (db) =>
+        db.execute<{ n: number }>(
+          sql`select count(*)::int as n from deliveries where key like 'journey:%:google_offer:%'`
+        )
+      )
+    expect((await offers())[0]?.n).toBe(1)
+    // The next message in the sitting brings nothing back.
+    const after = await notes("Thanks")
+    expect(after.lines.join("\n")).not.toMatch(/still not connected/)
+    expect((await offers())[0]?.n).toBe(1)
   })
 })
