@@ -123,7 +123,7 @@ const framesOf = (dir: "logo-types" | "logo-styles", name: string) =>
  * to read on light and dark alike, so they sit on the tile itself.
  */
 const PICK_TILE = cn(
-  "group flex cursor-pointer rounded-xl border border-border bg-card transition-all duration-150 hover:border-foreground/25 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
+  "group flex cursor-pointer rounded-xl border border-border bg-card transition-all duration-150 hover:border-foreground/25 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring",
   PICKED_LINE
 )
 const PICK_LABEL =

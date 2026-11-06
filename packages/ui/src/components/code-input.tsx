@@ -47,7 +47,7 @@ function CodeInput({
           aria-hidden
           className={cn(
             "flex h-12 min-w-0 flex-1 items-center justify-center rounded-2xl border border-transparent bg-input/50 font-medium text-xl transition-[box-shadow,border-color]",
-            focused && index === active && "border-ring ring-3 ring-ring",
+            focused && index === active && "border-ring ring-1 ring-ring",
             props["aria-invalid"] &&
               "border-destructive ring-3 ring-destructive"
           )}

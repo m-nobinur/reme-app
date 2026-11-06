@@ -428,13 +428,13 @@ test("a focused tile takes the shared ring and a picked one keeps its one line",
   await expect(tile).toBeChecked()
   const focused = await line()
   expect(focused.outline).toMatch(/^1px solid /)
-  expect(focused.ring).toContain("0px 0px 0px 3px")
+  expect(focused.ring).toContain("0px 0px 0px 1px")
   await tile.evaluate((input) => (input as HTMLElement).blur())
-  const resting = await line()
-  expect(resting.ring).toBe("none")
-  expect(focused.outline.split(" ").slice(2)).toEqual(
-    resting.outline.split(" ").slice(2)
-  )
+  expect((await line()).ring).toBe("none")
+  // The tile's colours ease for 150 ms after blur, so wait the change out.
+  await expect
+    .poll(async () => (await line()).outline.split(" ").slice(2))
+    .toEqual(focused.outline.split(" ").slice(2))
 })
 
 test("a focused field turns its border and draws no ring, as the shared Input does", async ({

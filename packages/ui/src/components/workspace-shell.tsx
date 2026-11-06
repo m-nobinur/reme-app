@@ -332,7 +332,7 @@ function WorkspaceShell({
       data-slot="workspace-shell"
     >
       <a
-        className="sr-only z-10 rounded-lg bg-background px-3 py-2 font-medium text-sm ring-3 ring-ring focus:not-sr-only focus:absolute focus:m-2"
+        className="sr-only z-10 rounded-lg bg-background px-3 py-2 font-medium text-sm ring-1 ring-ring focus:not-sr-only focus:absolute focus:m-2"
         href="#main"
       >
         Skip to content

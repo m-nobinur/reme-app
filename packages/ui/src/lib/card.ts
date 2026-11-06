@@ -9,7 +9,7 @@ export const CARD_SURFACE =
 
 /** A pill or tile the owner picks inside a card or the tray, as a native radio or checkbox under it. */
 export const OPTION =
-  "relative flex cursor-pointer border border-border bg-card text-card-foreground transition-colors duration-150 hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+  "relative flex cursor-pointer border border-border bg-card text-card-foreground transition-colors duration-150 hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring has-[:checked]:border-primary has-[:checked]:bg-primary/5"
 
 /**
  * Picked is one 2px line in the text colour: the border and a line just
