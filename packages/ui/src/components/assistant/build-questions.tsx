@@ -1,4 +1,4 @@
-import { makeAssistantDataUI, useAui, useAuiState } from "@assistant-ui/react"
+import { makeAssistantDataUI, useAuiState } from "@assistant-ui/react"
 import {
   ADDRESS_ASK,
   addressReply,
@@ -21,6 +21,7 @@ import {
 } from "@workspace/ui/components/assistant/reply-pill"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
+import { useReply } from "@workspace/ui/hooks/use-thread-reply"
 import { answerValue } from "@workspace/ui/lib/answer"
 import { FIELD_ERROR } from "@workspace/ui/lib/card"
 import { useChatService } from "@workspace/ui/lib/chat-services"
@@ -133,7 +134,7 @@ export function nextOpen(
 
 function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
   const send = useChatService("answerBuildQuestion")
-  const aui = useAui()
+  const reply = useReply()
   const messageId = useAuiState((s) => s.message.id)
   const conversationId = useAuiState((s) => s.threadListItem.remoteId)
   const id = useId()
@@ -204,7 +205,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
     if (next === undefined) {
       const said =
         data.kind === "address" ? addressSaid(questions, settledNow) : null
-      if (said) aui.thread().append(said)
+      if (said) reply(said)
       setPhase("closing")
       // The buttons go with the fold, so the keyboard goes to the composer.
       setTimeout(() => {

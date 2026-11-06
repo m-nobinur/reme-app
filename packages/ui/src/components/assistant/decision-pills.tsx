@@ -1,9 +1,10 @@
-import { useAui, useAuiState } from "@assistant-ui/react"
+import { useAuiState } from "@assistant-ui/react"
 import { Choices, OfferChoicesInput } from "@workspace/contracts"
 import {
   ReplyPill,
   ReplyPills,
 } from "@workspace/ui/components/assistant/reply-pill"
+import { useReply } from "@workspace/ui/hooks/use-thread-reply"
 import { useEffect, useMemo, useState } from "react"
 
 /** How long the row fades once its message is no longer the newest. */
@@ -41,7 +42,7 @@ export function choicesOf(parts: readonly object[] | undefined) {
  * typing is the other answer.
  */
 export function DecisionPills() {
-  const aui = useAui()
+  const reply = useReply()
   const last = useAuiState((s) =>
     s.thread.isRunning ? null : (s.thread.messages.at(-1) ?? null)
   )
@@ -68,7 +69,7 @@ export function DecisionPills() {
             }
             data-recommended={recommended || undefined}
             key={choice.label}
-            onClick={() => aui.thread().append(choice.send)}
+            onClick={() => reply(choice.send)}
           >
             {choice.label}
             {recommended ? (

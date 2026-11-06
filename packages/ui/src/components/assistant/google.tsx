@@ -1,6 +1,5 @@
 import {
   type ToolCallMessagePartComponent,
-  useAui,
   useAuiState,
 } from "@assistant-ui/react"
 import { ConnectGoogleOutput } from "@workspace/contracts"
@@ -8,6 +7,7 @@ import { Problem } from "@workspace/ui/components/assistant/decision"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConnectRow } from "@workspace/ui/components/connect-row"
 import { DoneIcon, ToolStatus } from "@workspace/ui/components/status-line"
+import { useReply } from "@workspace/ui/hooks/use-thread-reply"
 import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import { useLiveCards } from "@workspace/ui/lib/live-cards"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -60,7 +60,7 @@ export function ConnectGoogleRow({
  * card is a plain link in the same tab, never an approval.
  */
 export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
-  const aui = useAui()
+  const reply = useReply()
   const running = useAuiState((s) => s.message.status?.type === "running")
   const view = readView(props, ConnectGoogleOutput)
   const connected = useConnected()
@@ -101,7 +101,7 @@ export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
             {/* Sent as the owner's words, so Reme puts the offer off. */}
             <Button
               disabled={running}
-              onClick={() => aui.thread().append("Not now")}
+              onClick={() => reply("Not now")}
               size="sm"
               type="button"
               variant="outline"
