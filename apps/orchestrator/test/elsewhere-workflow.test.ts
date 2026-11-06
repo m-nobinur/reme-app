@@ -110,6 +110,16 @@ describe("the buy-it-elsewhere Workflow", () => {
     expect(script.calls).toEqual([])
   })
 
+  it("ends quietly once a fresh list of names drops the name", async () => {
+    const { names, result } = await drive([
+      look(0),
+      look(DAY, { dropped: true }),
+    ])
+    expect(names).toEqual(steps.ElsewhereWorkflow.dropped)
+    expect(result).toEqual({ outcome: "dropped" })
+    expect(script.calls).toEqual([])
+  })
+
   it("follows up once after three days and stops after a month", async () => {
     const { names, result } = await drive([
       look(0),
