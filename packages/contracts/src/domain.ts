@@ -173,6 +173,14 @@ export function addressReply(choice: string, name?: string): string | null {
   return choice === ADDRESS_ASK.no ? ADDRESS_ASK.no : null
 }
 
+/**
+ * The owner's words from I bought it and Not yet, for a domain they are
+ * buying themselves: one place for the buttons and the turn that reads them.
+ */
+export function boughtReply(name: string, bought: boolean): string {
+  return bought ? `I've bought ${name}` : `I haven't bought ${name} yet`
+}
+
 /** The endings Reme sells. */
 export const DomainTld = z.enum(["co.uk", "uk", "com", "net"])
 
