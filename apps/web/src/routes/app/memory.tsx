@@ -123,8 +123,8 @@ function Memory() {
       await setGrant({ data: change })
       setStatus(
         change.on
-          ? "Done. Reme won't ask first for this."
-          : "Reme will ask you first again."
+          ? `Done. ${leading(assistant)} won't ask first for this.`
+          : `${leading(assistant)} will ask you first again.`
       )
       await router.invalidate()
     } catch {
@@ -213,8 +213,8 @@ function Memory() {
               void answer(
                 { action: "ask_first", value: event.currentTarget.checked },
                 event.currentTarget.checked
-                  ? "Reme will ask before saving what it learns from chat."
-                  : "Reme will save what it learns from chat and tell you.",
+                  ? `${leading(assistant)} will ask before saving what it learns from chat.`
+                  : `${leading(assistant)} will save what it learns from chat and tell you.`,
                 "ask_first"
               )
             }
@@ -282,8 +282,9 @@ function Memory() {
           Done without asking
         </h2>
         <p className={`mt-1 ${META}`}>
-          Reme asks on a card before these until you tap Always allow on one, or
-          switch it on here. Paying and a new phone number or email always ask.
+          {leading(assistant)} asks on a card before these until you tap Always
+          allow on one, or switch it on here. Paying and a new phone number or
+          email always ask.
         </p>
         <ul className="mt-2 flex flex-col">
           {view.grants.map((grant) => (
