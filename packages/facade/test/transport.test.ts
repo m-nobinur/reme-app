@@ -123,7 +123,7 @@ describe("transport selection", () => {
  * `cost` the usage chunk carries what OpenRouter billed. The body arrives in
  * reads cut mid-line, so the tap has to join them.
  */
-function openrouterStream(cost?: number) {
+function openrouterStream(cost?: number, upstream?: number | null) {
   const chunk = (body: object) =>
     `data: ${JSON.stringify({ id: "gen-1", model: "deepseek/deepseek-v4.1-flash", ...body })}\n\n`
   const text = [
@@ -136,6 +136,9 @@ function openrouterStream(cost?: number) {
         prompt_tokens: 1_000,
         completion_tokens: 100,
         ...(cost === undefined ? {} : { cost }),
+        ...(upstream === undefined
+          ? {}
+          : { cost_details: { upstream_inference_cost: upstream } }),
       },
     }),
     "data: [DONE]\n\n",
@@ -161,6 +164,7 @@ async function call(
   extra: {
     caps?: Record<string, number>
     reasoning?: "low" | "medium" | "high"
+    upstream?: number | null
   } = {}
 ) {
   const models = createModels()
@@ -184,7 +188,7 @@ async function call(
     fetch: async (_input, init) => {
       sent.push(JSON.parse(String(init?.body)))
       headers.push(new Headers(init?.headers))
-      return new Response(openrouterStream(cost), {
+      return new Response(openrouterStream(cost, extra.upstream), {
         headers: { "content-type": "text/event-stream" },
       })
     },
@@ -203,6 +207,24 @@ describe("the logged cost of an OpenRouter call", () => {
     expect(reply.usage.cost.total).toBeLessThan(listed)
     const { input, output, cacheRead, cacheWrite } = reply.usage.cost
     expect(input + output + cacheRead + cacheWrite).toBeCloseTo(0.0000321, 15)
+  })
+
+  it("adds the provider's own charge on a key we bring, where OpenRouter bills 0", async () => {
+    const { reply } = await call(0, undefined, undefined, { upstream: 0.0123 })
+    expect(reply.usage.cost.total).toBe(0.0123)
+    const { input, output, cacheRead, cacheWrite } = reply.usage.cost
+    expect(input + output + cacheRead + cacheWrite).toBeCloseTo(0.0123, 12)
+    const fee = await call(0.001, undefined, undefined, { upstream: 0.0123 })
+    expect(fee.reply.usage.cost.total).toBeCloseTo(0.0133, 12)
+  })
+
+  it("ignores an upstream charge that is null, zero or missing", async () => {
+    for (const upstream of [null, 0]) {
+      const { reply } = await call(0.0000321, undefined, undefined, {
+        upstream,
+      })
+      expect(reply.usage.cost.total).toBe(0.0000321)
+    }
   })
 
   it("is the table's capped price when OpenRouter reports no cost", async () => {
