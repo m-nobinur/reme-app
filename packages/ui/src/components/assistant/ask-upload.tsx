@@ -8,6 +8,7 @@ import {
 import type { UploadedAssets } from "@workspace/contracts"
 import {
   Docked,
+  skipOf,
   TrayFrame,
   TrayNote,
 } from "@workspace/ui/components/assistant/question-tray"
@@ -63,15 +64,8 @@ const AskUpload: ToolCallMessagePartComponent = (props) => {
     }
   }, [])
 
-  if (view.state === "answered" || view.state === "skipped") return null
-  if (view.state !== "pending") {
-    return (
-      <TrayNote
-        error={view.state === "error" ? view.message : null}
-        name="ask-upload"
-      />
-    )
-  }
+  if (view.state !== "pending")
+    return <TrayNote name="ask-upload" view={view} />
 
   const { input } = view
 
@@ -140,15 +134,7 @@ const AskUpload: ToolCallMessagePartComponent = (props) => {
         collapsed={collapsed}
         onCollapsedChange={setCollapsed}
         question="Add some photos of your work"
-        skip={
-          input.skippable
-            ? {
-                label: "Skip",
-                onSkip: () => props.addResult({ answer: "skipped" }),
-                disabled: sending,
-              }
-            : undefined
-        }
+        skip={skipOf(input.skippable, props.addResult, sending)}
         status={
           sending
             ? `Uploading ${picked.length === 1 ? "1 photo" : `${picked.length} photos`}`

@@ -360,17 +360,38 @@ function useTabDraft<T>(id: string | null, empty: T) {
 }
 
 /**
- * Why an ask broke, where it stood in the thread. One a typed message
- * overtook leaves nothing: the owner's own message is right after it.
+ * What an ask that no longer waits leaves where it stood in the thread: why
+ * it broke, or nothing. Answered, skipped, or overtaken by a typed message,
+ * the owner's own message right after it says what happened.
  */
-function TrayNote({ name, error }: { name: string; error?: string | null }) {
-  if (!error) return null
+function TrayNote({
+  name,
+  view,
+}: {
+  name: string
+  view: { state: string; message?: string }
+}) {
+  if (view.state !== "error" || !view.message) return null
   return (
     <p className="my-3 text-destructive text-sm" data-slot={name}>
-      {error}
+      {view.message}
     </p>
   )
 }
+
+/** Skip on an ask's tray, when the call lets the owner skip it. */
+const skipOf = (
+  skippable: boolean,
+  addResult: (result: { answer: "skipped" }) => void,
+  disabled = false
+): TrayFrameProps["skip"] =>
+  skippable
+    ? {
+        label: "Skip",
+        onSkip: () => addResult({ answer: "skipped" }),
+        disabled,
+      }
+    : undefined
 
 /** An option tile in the tray, a label over a native radio or checkbox. */
 const TRAY_TILE = cn(
@@ -2004,6 +2025,7 @@ export {
   Summary,
   Swatches,
   sentence,
+  skipOf,
   TRAY_FIELD,
   TRAY_TILE,
   TrayFrame,

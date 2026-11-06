@@ -584,17 +584,8 @@ function DetailsTray({
 
 const AskDetails: ToolCallMessagePartComponent = (props) => {
   const view = askDetailsView(props)
-  if (view.state === "answered" || view.state === "skipped") {
-    return null
-  }
-  if (view.state !== "pending") {
-    return (
-      <TrayNote
-        error={view.state === "error" ? view.message : null}
-        name="ask-details"
-      />
-    )
-  }
+  if (view.state !== "pending")
+    return <TrayNote name="ask-details" view={view} />
   return (
     <Docked name="ask-details">
       <DetailsTray

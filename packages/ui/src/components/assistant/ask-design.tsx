@@ -43,15 +43,8 @@ const AskDesign: ToolCallMessagePartComponent = (props) => {
   const sent = useRef<AskDesignOutput | null>(null)
   const sending = useRef<boolean>(false)
 
-  if (view.state === "answered" || view.state === "skipped") return null
-  if (view.state !== "pending") {
-    return (
-      <TrayNote
-        error={view.state === "error" ? view.message : null}
-        name="ask-design"
-      />
-    )
-  }
+  if (view.state !== "pending")
+    return <TrayNote name="ask-design" view={view} />
   return (
     <Docked name="ask-design">
       <QuestionTray

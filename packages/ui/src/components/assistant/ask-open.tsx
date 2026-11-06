@@ -15,13 +15,7 @@ import {
  */
 const AskOpen: ToolCallMessagePartComponent = (props) => {
   const view = askOpenView(props)
-  if (view.state !== "error" && view.state !== "cancelled") return null
-  return (
-    <TrayNote
-      error={view.state === "error" ? view.message : null}
-      name="ask-open"
-    />
-  )
+  return <TrayNote name="ask-open" view={view} />
 }
 AskOpen.displayName = "AskOpen"
 

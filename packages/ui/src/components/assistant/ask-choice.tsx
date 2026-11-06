@@ -3,6 +3,7 @@ import { EyedropperIcon, ShuffleIcon } from "@phosphor-icons/react"
 import type { AskChoiceInput } from "@workspace/contracts"
 import {
   Docked,
+  skipOf,
   TrayFrame,
   TrayNote,
   useTabDraft,
@@ -647,17 +648,8 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
   const id = useId()
   const [collapsed, setCollapsed] = useState(false)
 
-  if (view.state === "answered" || view.state === "skipped") {
-    return null
-  }
-  if (view.state !== "pending") {
-    return (
-      <TrayNote
-        error={view.state === "error" ? view.message : null}
-        name="ask-choice"
-      />
-    )
-  }
+  if (view.state !== "pending")
+    return <TrayNote name="ask-choice" view={view} />
   const { input } = view
 
   if (quickOf(input)) {
@@ -690,14 +682,7 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
         hint={input.multiple ? "Pick any that fit" : null}
         onCollapsedChange={setCollapsed}
         question={STEP_ASK[input.step]}
-        skip={
-          input.skippable
-            ? {
-                label: "Skip",
-                onSkip: () => props.addResult({ answer: "skipped" }),
-              }
-            : undefined
-        }
+        skip={skipOf(input.skippable, props.addResult)}
         submit={oneTapOf(input) ? undefined : { form: `${id}-form` }}
       >
         <ChoiceForm

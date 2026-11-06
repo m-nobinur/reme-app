@@ -238,14 +238,7 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
     }
   }, [pending, toolCallId, draft])
 
-  if (!pending) {
-    return (
-      <TrayNote
-        error={view.state === "error" ? view.message : null}
-        name="review-quote-form"
-      />
-    )
-  }
+  if (!pending) return <TrayNote name="review-quote-form" view={view} />
   // Never mid-stream: the pills show once the message is whole.
   if (running) return null
 
