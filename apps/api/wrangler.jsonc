@@ -134,8 +134,18 @@
       "name": "QUOTE_LIMIT",
       "namespace_id": "1005",
       "simple": { "limit": 5, "period": 60 }
+    },
+    // Dictations one person starts a minute (src/dictation.ts), 1008 in
+    // production. Each one holds a speech-model socket open, billed by the minute.
+    {
+      "name": "DICTATION_LIMIT",
+      "namespace_id": "1007",
+      "simple": { "limit": 10, "period": 60 }
     }
   ],
+  // Workers AI, for dictation (`@cf/deepgram/nova-3` over a WebSocket, so no
+  // provider key exists to leak). It is the account's own, with no key to set.
+  "ai": { "binding": "AI" },
   // Closed turns, for the work that follows one (compaction, reflection). A
   // message holds ids only, so a consumer never carries a conversation's text.
   // The first attempt and three retries, then the dead-letter queue, where a
@@ -226,8 +236,14 @@
           "name": "QUOTE_LIMIT",
           "namespace_id": "1006",
           "simple": { "limit": 5, "period": 60 }
+        },
+        {
+          "name": "DICTATION_LIMIT",
+          "namespace_id": "1008",
+          "simple": { "limit": 10, "period": 60 }
         }
       ],
+      "ai": { "binding": "AI" },
       "queues": {
         "producers": [
           { "binding": "AFTER_TURN", "queue": "reme-after-turn-production" },
