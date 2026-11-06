@@ -93,6 +93,7 @@ import {
   sha256,
 } from "./cos/history.ts"
 import { skillNotesText, takeChip } from "./cos/memory.ts"
+import { type Ask, openrouterAsk } from "./cos/narrator.ts"
 import {
   type AddressCard,
   cardState,
@@ -714,6 +715,8 @@ export type ChatDeps = {
    * the planner's model at medium effort when the api holds a key.
    */
   prepare?: LanguageModel | null
+  /** The status narrator's model: left out, OpenRouter's when the api holds a key. Tests pass one. */
+  narrate?: Ask | null
   /**
    * The gate on a typed reply to one open reminder or change card that no
    * exact phrase read: left out, Jev on OpenRouter when the api holds a
@@ -1300,6 +1303,12 @@ export async function chat(
     waitUntil,
     how,
     reading,
+    narrate:
+      deps.narrate !== undefined
+        ? deps.narrate
+        : env.OPENROUTER_API_KEY
+          ? openrouterAsk(env.OPENROUTER_API_KEY)
+          : null,
   })
 }
 
@@ -1772,6 +1781,7 @@ type Answering = {
   /** What paces a reply the script writes in the model's place. */
   how: Pace
   reading: Promise<MessageReading | null> | null
+  narrate: Ask | null
 }
 
 /**
@@ -1856,6 +1866,8 @@ async function startModel(
     skillLine: a.opened.skillLine,
     reading: a.reading,
     rows,
+    narrate: a.narrate,
+    since: a.how.since,
     // The stream's reader ends after `closeRun`, so the turn is closed here.
     waitUntil: (reading) =>
       a.waitUntil(reading.then(() => enqueueAfterTurn(a.env, run.turn))),

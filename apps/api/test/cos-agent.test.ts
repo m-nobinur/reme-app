@@ -112,6 +112,7 @@ import {
   WAKE_LINE,
 } from "../src/cos/agent.ts"
 import { sha256 } from "../src/cos/history.ts"
+import type { Ask, NarratorBody } from "../src/cos/narrator.ts"
 import { leftOutLine, RETURN_LINE } from "../src/cos/notes.ts"
 import { retrying } from "../src/cos/retry.ts"
 import { knownZone, wallToUtc } from "../src/cos/time.ts"
@@ -500,6 +501,9 @@ describe("a tool's schema", () => {
     "inspect_domain",
     "get_search_performance",
     "get_indexing",
+    "ask_developer",
+    "read_site",
+    "domain_bought",
   ]
 
   it("asks the slow reads for a step line, at most 60 characters, and every skill view for one of 50", async () => {
@@ -2093,6 +2097,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
               text: "Using my customer care experience on a reply",
             },
             facts: [],
+            ms: expect.any(Number),
           },
         })
       )
@@ -3912,6 +3917,112 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(statuses(writing.chunks)).toEqual([])
   })
 
+  it("narrates a silent think ahead of its heading, and keeps a finished tool's step line", async () => {
+    const id = await conversation(me)
+    const asked: NarratorBody[] = []
+    const narrate: Ask = async (body) => {
+      asked.push(body)
+      return {
+        text: "Checking last week's Google clicks",
+        provider: "Relace",
+        promptTokens: 900,
+        cachedTokens: 0,
+        costUsd: 0.00002,
+      }
+    }
+    // Reasoning starts, then nothing comes for 1.6 s: the narrator's line
+    // must reach the owner without waiting for the model's next chunk.
+    const [start, ...rest] = reasoned(
+      "**Weighing The Clicks**\nRead the numbers.",
+      calls({
+        id: "call_gsp",
+        tool: "get_search_performance",
+        input: { days: 7, by: "none", step: "Reading last week's clicks" },
+      })
+    )
+    const [opened, ...after] = rest
+    const silent = new MockLanguageModelV4({
+      modelId: DEFAULT_MODEL,
+      doStream: async () => ({
+        stream: new ReadableStream({
+          async start(controller) {
+            controller.enqueue(start)
+            controller.enqueue(opened)
+            await new Promise((resolve) => setTimeout(resolve, 1_600))
+            for (const part of after) controller.enqueue(part)
+            controller.close()
+          },
+        }) as never,
+      }),
+    })
+    let step = 0
+    const { response, running } = await send(
+      me,
+      typed(id, "How did my Google clicks do last week?", "ask"),
+      {
+        model: new MockLanguageModelV4({
+          modelId: DEFAULT_MODEL,
+          doStream: async (options) =>
+            step++ === 0
+              ? silent.doStream(options)
+              : {
+                  stream: convertArrayToReadableStream(
+                    said("Google is not connected yet.")
+                  ) as never,
+                },
+        }),
+        narrate,
+      }
+    )
+    expect(response.status).toBe(200)
+    // When each part reached the owner, as it streamed.
+    const began = Date.now()
+    const arrived = new Map<string, number>()
+    let text = ""
+    const reader = (response.body as ReadableStream<Uint8Array>)
+      .pipeThrough(new TextDecoderStream())
+      .getReader()
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      text += value
+      for (const type of [ONBOARDING_STATUS, "tool-input-available"])
+        if (!arrived.has(type) && text.includes(`"type":"${type}"`))
+          arrived.set(type, Date.now() - began)
+    }
+    await Promise.all(running)
+    const done = { text, chunks: chunksOf(text) }
+    // The line came while the model was silent, not with its next chunk.
+    expect(
+      (arrived.get("tool-input-available") ?? 0) -
+        (arrived.get(ONBOARDING_STATUS) ?? Number.POSITIVE_INFINITY)
+    ).toBeGreaterThan(200)
+    const statuses = done.chunks.flatMap((c) =>
+      c.type === ONBOARDING_STATUS ? [c.data as OnboardingStatus] : []
+    )
+    expect(statuses.map(({ on, past }) => ({ on, past }))).toEqual([
+      {
+        on: { kind: "doing", text: "Checking last week's Google clicks" },
+        past: undefined,
+      },
+      {
+        on: { kind: "doing", text: "Reading last week's clicks" },
+        past: true,
+      },
+    ])
+    const [line] = statuses
+    expect(line?.ms).toBeGreaterThanOrEqual(1_200)
+    // The heading came after the narrator's line, and gave way to it.
+    expect(asked[0]?.messages[1]?.content).toBe(
+      "Owner: How did my Google clicks do last week?"
+    )
+    // Its cost is the turn's.
+    const [ran] = await turnsOf(id)
+    expect(ran && "cost_usd" in ran ? ran.cost_usd : 0).toBeGreaterThanOrEqual(
+      0.00002
+    )
+  })
+
   it("runs a read sent with a step copied from an older call, the step dropped", async () => {
     const id = await conversation(me)
     const done = await turn(me, typed(id, "How is my site?", "ask"), {
@@ -3957,6 +4068,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         data: {
           on: { kind: "thinking", text: "Prioritising the Saturday slot" },
           facts: [],
+          ms: expect.any(Number),
         },
         transient: true,
       },
