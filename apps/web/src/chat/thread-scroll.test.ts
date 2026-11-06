@@ -56,6 +56,8 @@ const isWrapper = (el: Element): el is Element & { parentElement: Element } =>
   el.querySelector('[data-slot="aui_message-group"]') !== null
 const isReserve = (el: Element) =>
   el.hasAttribute("data-aui-top-anchor-reserve")
+const isSpacer = (el: Element) =>
+  el.getAttribute("data-slot") === "aui_thread-spacer"
 const isFooter = (el: Element) =>
   el.classList.contains("aui-thread-viewport-footer")
 
@@ -97,7 +99,7 @@ const heightOf = (el: Element): number => {
         : REPLY_ROW)
     )
   }
-  if (isReserve(el))
+  if (isReserve(el) || isSpacer(el))
     return Number.parseFloat((el as HTMLElement).style.height) || 0
   if (isSlot(el)) return layout.slot
   if (isFooter(el)) return footerHeight()
@@ -133,14 +135,17 @@ const stacked = (box: Element) => {
   ]
 }
 
+/** The transcript, then the spacer under it, as tall as they stack. */
+const transcriptHeight = (scope: Element) => {
+  const box = scope.querySelector('[data-slot="aui_message-group"]')
+  const spacer = scope.querySelector('[data-slot="aui_thread-spacer"]')
+  return (box ? heightOf(box) : 0) + (spacer ? heightOf(spacer) : 0)
+}
+
 /** Where an element starts in the scroll content. */
 const offsetOf = (el: Element): number => {
-  if (isFooter(el)) {
-    const box = el.parentElement?.querySelector(
-      '[data-slot="aui_message-group"]'
-    )
-    return box ? heightOf(box) : 0
-  }
+  if (isFooter(el))
+    return el.parentElement ? transcriptHeight(el.parentElement) : 0
   const box = group(el)
   if (!box) return 0
   const row =
@@ -153,10 +158,8 @@ const offsetOf = (el: Element): number => {
   return top
 }
 
-const contentHeight = (viewport: Element) => {
-  const box = viewport.querySelector('[data-slot="aui_message-group"]')
-  return (box ? heightOf(box) : 0) + footerHeight()
-}
+const contentHeight = (viewport: Element) =>
+  transcriptHeight(viewport) + footerHeight()
 const maxScroll = (viewport: Element) =>
   Math.max(0, contentHeight(viewport) - layout.clientHeight)
 

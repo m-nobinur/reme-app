@@ -449,7 +449,7 @@ const useNewSince = (
  * Keeps the turn the viewport pins at the top when the reply's id changes as
  * the run ends. While it waits the runtime shows a placeholder reply, and a
  * reply that arrives in one piece replaces it in the same update that ends
- * the run. assistant-ui (still in 0.15.31) then drops the turn as stale and
+ * the run. assistant-ui (still in 0.15.32) then drops the turn as stale and
  * takes away the space it held below the reply, so the view scrolled back up
  * over the previous reply. The turn moves to the reply that replaced the
  * placeholder.
@@ -485,12 +485,11 @@ const KeepTurnAnchor: FC = () => {
  * next send, and the end of the thread in view. assistant-ui follows the
  * bottom by itself only when the viewport is not anchored to a turn.
  *
- * - The space assistant-ui holds below a pinned reply is measured here as
- *   well, the moment anything under the owner's message resizes. The footer
- *   sits in the scroll content, so a tray leaving, or the viewport growing,
- *   left the content short and the browser clamped the scroll before
- *   assistant-ui measured again a frame later: the owner's message dropped by
- *   the tray's height, and the drop stayed.
+ * - The spacer under the transcript holds the space below a pinned reply,
+ *   sized the moment anything under the owner's message resizes. The footer sits in the scroll content, so a tray leaving, or the
+ *   viewport growing, left the content short and the browser clamped the
+ *   scroll before assistant-ui measured again a frame later: the owner's
+ *   message dropped by the tray's height, and the drop stayed.
  * - A footer that appears or grows (the tray) under a reply that already
  *   fills the view covers its last lines: a reader at its end stays there,
  *   and one still at the start of the reply stays there too.
@@ -505,9 +504,10 @@ const KeepTurnAnchor: FC = () => {
 const FollowBottom: FC<{
   footer: HTMLElement | null
   after: HTMLElement | null
+  spacer: HTMLElement | null
   onUnseen: (unseen: boolean) => void
   onBelow: (below: boolean) => void
-}> = ({ footer, after, onUnseen, onBelow }) => {
+}> = ({ footer, after, spacer, onUnseen, onBelow }) => {
   const store = useThreadViewportStore()
   const aui = useAui()
   const follow = useRef<() => void>(() => undefined)
@@ -540,7 +540,7 @@ const FollowBottom: FC<{
     const viewport = footer?.closest<HTMLElement>(
       '[data-slot="aui_thread-viewport"]'
     )
-    if (!footer || !after || !viewport) return
+    if (!footer || !after || !spacer || !viewport) return
     const idle = () => !aui.thread().getState().isRunning
     // The end of the scroll content, the footer in it. assistant-ui's
     // `isViewportAtBottom` takes the footer's height as slack since 0.15.31,
@@ -599,37 +599,34 @@ const FollowBottom: FC<{
         )
       })
     }
-    // Where the owner's message sits at the top: assistant-ui's own sum
-    // (`computeTopAnchorReserve`).
+    // The scroll that pins the owner's message at the top, from its clamp
+    // config: a tall message keeps only its last lines in view. The viewport
+    // is `relative`, so the message's offset is from the top of its content,
+    // read without the scroll, which a shrunk content may have clamped.
     const anchorTop = () => {
       const { element, targetConfig: clamp } = store.getState()
       const { anchor } = element
-      if (!anchor || !clamp) return null
-      let top = 0
-      for (
-        let at: Element | null = anchor;
-        at instanceof HTMLElement && at !== viewport;
-        at = at.offsetParent
-      ) {
-        top += at.offsetTop
-      }
-      // A tall message is pinned with only its last lines in view.
-      if (anchor.offsetHeight > clamp.tallerThan) {
-        top += Math.max(0, anchor.offsetHeight - clamp.visibleHeight)
-      }
-      return top
+      if (anchor?.offsetParent !== viewport || !clamp) return null
+      return anchor.offsetHeight > clamp.tallerThan
+        ? anchor.offsetTop + anchor.offsetHeight - clamp.visibleHeight
+        : anchor.offsetTop
     }
-    // That sum run before the frame paints instead of after it, so the two
-    // always agree. Gives the space that was held before.
+    // Sized before the frame paints, so the content never comes up short of
+    // that scroll. It holds all the space the turn needs: assistant-ui's own
+    // space, read here only, follows the reply alone, so a card in the slot
+    // left it too tall. Seeing the spacer, assistant-ui sizes its own to
+    // nothing a frame later. Gives the space that was held before.
     const hold = () => {
+      const reserve =
+        viewport.querySelector<HTMLElement>("[data-aui-top-anchor-reserve]")
+          ?.offsetHeight ?? 0
+      const held = spacer.offsetHeight + reserve
       const top = anchorTop()
-      const reserve = viewport.querySelector<HTMLElement>(
-        "[data-aui-top-anchor-reserve]"
-      )
-      if (top === null || !reserve) return 0
-      const held = reserve.offsetHeight
-      const space = top + viewport.clientHeight - (viewport.scrollHeight - held)
-      reserve.style.height = `${Math.max(0, space)}px`
+      const space =
+        top === null
+          ? 0
+          : top + viewport.clientHeight - (viewport.scrollHeight - held)
+      spacer.style.height = `${Math.max(0, space)}px`
       return held
     }
     // A key typed in the composer, which sits in the scroll content, makes
@@ -683,12 +680,8 @@ const FollowBottom: FC<{
       if (grew && !held && pinned && wasAtEnd) {
         viewport.scrollTo({ top: viewport.scrollHeight, behavior: "instant" })
       }
-      // assistant-ui reads `isAtBottom` on a scroll, or on a resize that
-      // changes the whole-pixel scrollHeight. A scroll to where it already
-      // was fires no event, and a sub-pixel change of the tray skips its
-      // resize, so Scroll to bottom stayed up 0.5 px from the bottom. Its
-      // scroll handler reads the geometry as it is now.
-      viewport.dispatchEvent(new Event("scroll"))
+      // A scroll to where it already was fires no event.
+      onScroll()
     })
     observer.observe(footer)
     observer.observe(viewport)
@@ -731,7 +724,7 @@ const FollowBottom: FC<{
       follow.current = () => undefined
       replied.current = () => undefined
     }
-  }, [footer, after, store, aui, onUnseen, onBelow])
+  }, [footer, after, spacer, store, aui, onUnseen, onBelow])
   return null
 }
 
@@ -748,6 +741,7 @@ const ThreadRoot: FC<{
   const [tray, setTray] = useState<HTMLElement | null>(null)
   const [footer, setFooter] = useState<HTMLElement | null>(null)
   const [slot, setSlot] = useState<HTMLElement | null>(null)
+  const [spacer, setSpacer] = useState<HTMLElement | null>(null)
   const [unseen, setUnseen] = useState(false)
   const [below, setBelow] = useState(false)
   const [rows, setRows] = useState(0)
@@ -782,6 +776,7 @@ const ThreadRoot: FC<{
             <FollowBottom
               after={slot}
               footer={footer}
+              spacer={spacer}
               onBelow={setBelow}
               onUnseen={setUnseen}
             />
@@ -825,6 +820,12 @@ const ThreadRoot: FC<{
                     {after}
                   </div>
                 </div>
+                <div
+                  aria-hidden
+                  className="pointer-events-none shrink-0"
+                  data-slot="aui_thread-spacer"
+                  ref={setSpacer}
+                />
 
                 <ThreadPrimitive.ViewportFooter
                   ref={setFooter}
