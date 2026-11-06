@@ -1,8 +1,11 @@
 import { appendEvent, eq, events, siteRevisions, sql } from "@workspace/db"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import {
+  ANSWER_SCHEMA,
   answerPrompt,
   askDeveloper,
+  jsonOf,
+  REVIEW_SCHEMA,
   REVIEW_STARTED,
   REVIEWED,
   reportOf,
@@ -10,6 +13,7 @@ import {
   reviewPrompt,
   runReview,
   type SiteRecord,
+  shapeOf,
   startReview,
   tellReview,
 } from "../src/consult.ts"
@@ -141,24 +145,74 @@ describe("the report", () => {
   })
 })
 
+describe("reading the model's JSON", () => {
+  const body = { answer: "Yes.", sure: true, sources: [] }
+
+  it.each([
+    ["bare", JSON.stringify(body)],
+    ["fenced", `\`\`\`json\n${JSON.stringify(body)}\n\`\`\``],
+    ["led in", `Here is the answer:\n${JSON.stringify(body)}`],
+    [
+      "led in and fenced",
+      `Sure.\n\`\`\`\n${JSON.stringify(body)}\n\`\`\`\nDone.`,
+    ],
+  ])("finds the object in a %s reply", (_n, text) => {
+    expect(jsonOf(text)).toEqual(body)
+  })
+
+  it("throws on a reply with no object", () => {
+    expect(() => jsonOf("I could not tell.")).toThrow()
+  })
+
+  it("asks for the shape the answer is read in", () => {
+    expect(ANSWER_SCHEMA.schema.required).toEqual(["answer", "sure", "sources"])
+    expect(REVIEW_SCHEMA.schema.required).toEqual([
+      "verdict",
+      "strengths",
+      "findings",
+    ])
+  })
+
+  it("logs a reply's size and both ends", () => {
+    expect(shapeOf("short")).toEqual({ length: 5, head: "short", tail: "" })
+    const long = `${"a".repeat(80)}${"m".repeat(500)}${"z".repeat(80)}`
+    expect(shapeOf(long)).toEqual({
+      length: 660,
+      head: "a".repeat(80),
+      tail: "z".repeat(80),
+    })
+  })
+})
+
 const live = describe.skipIf(!url)
 
 const env = (store: { SITES: unknown }, reviews: unknown = {}) =>
   ({ SITES: store.SITES, REVIEWS: reviews }) as unknown as Env
 
-const reply = (body: object) =>
-  vi.fn(async (_env: unknown, _call: { system: string; user: string }) => ({
-    text: JSON.stringify(body),
-    model: "anthropic/claude-sonnet-5.5",
-    usage: {
-      input: 900,
-      output: 60,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 960,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.004 },
-    },
-  }))
+const reply = (body: object | string) =>
+  vi.fn(
+    async (
+      _env: unknown,
+      _call: { system: string; user: string; schema?: { name: string } }
+    ) => ({
+      text: typeof body === "string" ? body : JSON.stringify(body),
+      model: "anthropic/claude-sonnet-5.5",
+      usage: {
+        input: 900,
+        output: 60,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 960,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0.004,
+        },
+      },
+    })
+  )
 
 const startedOf = (orgId: string) =>
   kit.withOrg({ orgId }, (db) =>
@@ -230,6 +284,36 @@ live("asking about a draft", () => {
     expect(call?.user).toContain('"this_version":true')
     expect(call?.user).not.toContain("First try.")
     expect(call?.system).not.toContain("Weekday cleaning")
+    expect(call?.schema?.name).toBe("site_answer")
+  })
+
+  it("reads an answer the model led in and fenced, and logs one it cannot read", async () => {
+    const site = await previewed()
+    await advance(kit, site.ids, "awaiting_review")
+    const ask = (complete: ReturnType<typeof reply>) =>
+      askDeveloper(
+        env(site.store),
+        kit,
+        site.orgId,
+        { mode: "answer", question: "Why no prices?" },
+        complete as never
+      )
+    const wrapped = `Here you go:\n\`\`\`json\n${JSON.stringify({ answer: "Quotes vary.", sure: true, sources: [] })}\n\`\`\``
+    expect(await ask(reply(wrapped))).toMatchObject({
+      outcome: "answered",
+      answer: "Quotes vary.",
+    })
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined)
+    await expect(ask(reply("I cannot tell from the record."))).rejects.toThrow()
+    expect(JSON.parse(String(logged.mock.calls[0]?.[0]))).toMatchObject({
+      type: "consult.unparsed",
+      job: "ask_developer",
+      length: 30,
+      head: "I cannot tell from the record.",
+    })
+    logged.mockRestore()
   })
 
   it("has no site to ask about before a draft or a publish", async () => {
