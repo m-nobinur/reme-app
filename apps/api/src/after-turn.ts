@@ -6,6 +6,11 @@ import {
   sql,
   tenancy,
 } from "@workspace/db"
+import {
+  type ChannelJob,
+  channelTurn,
+  isChannelJob,
+} from "./channels/whatsapp/turn.ts"
 import { cosModel } from "./chat.ts"
 import { type ContinueJob, continueTurn, isContinueJob } from "./continue.ts"
 import { LIMITS } from "./cos/agent.ts"
@@ -100,7 +105,7 @@ export async function onboardingWords(
  * queue.
  */
 export async function afterTurnBatch(
-  batch: MessageBatch<AfterTurn | LogoJob | ContinueJob | WakeJob>,
+  batch: MessageBatch<AfterTurn | LogoJob | ContinueJob | WakeJob | ChannelJob>,
   env: Env
 ): Promise<void> {
   const kit = tenancy(env.HYPERDRIVE.connectionString)
@@ -136,6 +141,15 @@ export async function afterTurnBatch(
               continued,
             })
           )
+        } else if (isChannelJob(body)) {
+          const turned = await channelTurn(env, kit, body)
+          console.log(
+            JSON.stringify({
+              type: "whatsapp.turn",
+              link_id: body.linkId,
+              turned,
+            })
+          )
         } else if (isWakeJob(body)) {
           const woke = await wakeTurn(env, kit, body)
           console.log(
@@ -156,7 +170,9 @@ export async function afterTurnBatch(
             code: "after_turn.failed",
             ...(isContinueJob(body) || isWakeJob(body)
               ? { job_id: body.jobId }
-              : { turn_id: body.turnId }),
+              : isChannelJob(body)
+                ? { link_id: body.linkId }
+                : { turn_id: body.turnId }),
             attempts: message.attempts,
             error: error instanceof Error ? error.name : "unknown",
           })

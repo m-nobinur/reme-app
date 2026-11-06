@@ -233,14 +233,16 @@ export async function continueTurn(
 }
 
 /**
- * The org's first active owner, as the caller of a turn a job runs, and its
- * zone. `sessionId` names the job, since there is no browser session: the
- * bridge records the job as the caller's.
+ * The org's first active owner, or `userId` when they are one, as the
+ * caller of a turn a job runs, and its zone. `sessionId` names the job,
+ * since there is no browser session: the bridge records the job as the
+ * caller's.
  */
 export async function ownerOf(
   db: OrgScopedDb,
   orgId: string,
-  sessionId: string
+  sessionId: string,
+  userId?: string
 ): Promise<{ owner: Owner; zone: string | null } | null> {
   const [person] = await db
     .select({
@@ -251,7 +253,8 @@ export async function ownerOf(
     .from(memberships)
     .innerJoin(users, eq(users.id, memberships.userId))
     .where(
-      sql`${memberships.role} = 'owner' and ${memberships.status} = 'active'`
+      sql`${memberships.role} = 'owner' and ${memberships.status} = 'active'
+        ${userId ? sql`and ${memberships.userId} = ${userId}` : sql``}`
     )
     .orderBy(memberships.createdAt)
     .limit(1)
