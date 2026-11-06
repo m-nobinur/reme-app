@@ -269,6 +269,26 @@ test("with no notice the composer has no gap for one", async ({ page }) => {
   await expect(page.locator('[data-slot="aui_dictation-notice"]')).toBeHidden()
 })
 
+test("the new chat greets with the assistant's own face, Reme's without a pick", async ({
+  page,
+}) => {
+  const welcome = page.locator(".aui-thread-welcome-root")
+  await open(page, "ThreadEmptyAvatar")
+  const picked = welcome.locator('[data-slot="assistant-avatar"]')
+  await expect(picked).toBeVisible()
+  await expect(picked).toHaveAttribute("aria-hidden", "true")
+  expect((await picked.boundingBox())?.width).toBe(56)
+  await expect(welcome.getByRole("heading")).toHaveText(
+    "What should we do today?"
+  )
+  await open(page, "ThreadEmpty")
+  await expect(welcome.locator('[data-slot="assistant-avatar"]')).toHaveCount(0)
+  const reme = welcome.locator("span.rounded-full").first()
+  await expect(reme).toBeVisible()
+  expect((await reme.boundingBox())?.width).toBe(56)
+  await expect(welcome.locator("svg")).toHaveCount(0)
+})
+
 test("with nothing read, the empty state has no line", async ({ page }) => {
   await open(page, "ThreadEmptyUnread")
   await expect(page.locator('[data-slot="aui_thread-briefing"]')).toHaveCount(0)

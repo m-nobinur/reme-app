@@ -7,6 +7,7 @@ import {
   useAuiState,
 } from "@assistant-ui/react"
 import { PaintBrushIcon } from "@phosphor-icons/react"
+import type { AvatarId } from "@workspace/contracts"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
 import { PillsShownProvider } from "@workspace/ui/components/assistant/reply-pill"
 import {
@@ -36,7 +37,7 @@ import {
   KeepTurnAnchor,
   ThreadScrollToBottom,
 } from "@workspace/ui/components/assistant/thread-scroll"
-import { LogoMark } from "@workspace/ui/components/logo"
+import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import { cn } from "@workspace/ui/lib/utils"
 import {
@@ -146,6 +147,8 @@ export type ThreadProps = {
   onRetry?: (() => void) | undefined
   /** In a few words, why dictation did not start or stopped, under the composer's field. */
   dictationNotice?: string | null | undefined
+  /** The face the owner picked for their assistant, over the welcome; Reme's own without one. */
+  avatar?: AvatarId | null | undefined
 }
 
 export type ThreadReveal = {
@@ -211,6 +214,7 @@ export const Thread: FC<ThreadProps> = ({
   assistant,
   onRetry,
   dictationNotice,
+  avatar,
   after,
   updates,
   reveal,
@@ -242,6 +246,7 @@ export const Thread: FC<ThreadProps> = ({
       assistant,
       onRetry,
       dictationNotice,
+      avatar,
     }),
     [
       stored,
@@ -253,6 +258,7 @@ export const Thread: FC<ThreadProps> = ({
       assistant,
       onRetry,
       dictationNotice,
+      avatar,
     ]
   )
   // Held by its parts, so a caller's inline object does not redraw every
@@ -517,10 +523,10 @@ const ThreadMessages: FC = () => {
 
 // No entrance motion: the page loads into the task, not into a show.
 const ThreadWelcome: FC = () => {
-  const { briefing } = useContext(ThreadSettingsContext)
+  const { briefing, avatar } = useContext(ThreadSettingsContext)
   return (
     <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
-      <LogoMark className="mb-4 size-8 text-muted-foreground" />
+      <AssistantAvatar className="mb-4 size-14" id={avatar ?? null} />
       <h1 className="aui-thread-welcome-message-inner font-semibold text-[1.75rem] leading-tight tracking-tight">
         What should we do today?
       </h1>

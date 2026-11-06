@@ -3917,6 +3917,18 @@ const assistantCatalog = [
     ),
   },
   {
+    // The new chat greets with the face the owner picked for their assistant.
+    name: "ThreadEmptyAvatar",
+    render: () => (
+      <OwnerThread
+        height="h-[32rem]"
+        isDisabled={false}
+        messages={[]}
+        settings={{ assistant: "Sam", avatar: "she_1" }}
+      />
+    ),
+  },
+  {
     name: "ThreadLongMessage",
     render: () => <OwnerThread height="h-[60rem]" messages={LONG_MESSAGES} />,
   },
