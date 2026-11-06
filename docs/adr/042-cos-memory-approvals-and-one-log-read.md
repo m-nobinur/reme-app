@@ -326,3 +326,35 @@ abandon-on-turn-start and turn-waits-for-summary paths (our turns never wait, an
 kept for the next turn). Hermes's first pass at summary time, `_prune_old_tool_results`, and
 `_SUMMARY_INPUT_MAX_CHARS`: the summary reads the history as the turn sent it, so its prefix stays
 the cached one, and the history is never over the 128,000 cap.
+
+## Amendment, 2026-11-07: a view-only memory page and a frozen snapshot
+
+**The page is for viewing (owner, 2026-11-07).** `/app/memory` shows what the assistant remembers
+and changes none of it. The owner changes memory by telling the assistant, which writes through
+the `memory` tool and its checks. The page keeps "Ask me before saving", with Save and Dismiss on
+each proposal, and "Done without asking", the grants. Undo on a version, editing or removing a
+line and removing a website correction are gone, along with their routes: `POST /memory/undo`,
+`POST /memory/lines` and `DELETE /memory/corrections/{id}`. The api now answers only
+`GET /memory` and `POST /memory/review`. This replaces the undo in **The owner profile** and
+**Reflection** above; reflection's changes are still one version each.
+
+**Limits.** The profile holds 1,600 characters, the working notes 3,500 and each skill's notes 800
+(they were 1,500, 2,200 and 600). The `memory` tool's description takes its numbers from the
+constants. A store over its limit, after a limit is lowered, still reads line by line. A write
+that removes or shortens goes through on it, so the assistant can always get it back under.
+One that grows it is refused with the current lines. A remove or patch that matches no line
+names up to three lines that share the most words with it.
+
+**Memory is a frozen snapshot per conversation**, after Hermes's `_system_prompt_snapshot`. The
+profile and notes no longer ride in each turn's context. The turn that takes a snapshot logs it
+as `memory` on its `cos.context`, and every call of the conversation sends that text unchanged
+as a system block of its own after the instructions, with its own cache marker. Writes land on
+the live rows straight away, and the model sees its own saves as its `memory` calls in the
+history. A replay rebuilds the same request from the log. A new snapshot is taken when the
+conversation has none, after a `cos.compaction`, or once the last call is older than the prompt
+cache life of the model that served it (the `model` on the newest `cos.step`). OpenAI keeps a
+cache at least 30 minutes, Anthropic and Gemini 5. DeepSeek documents no life for the hosts we
+route it to, so it gets 5, as does any model not in the table (`CACHE_LIVES` in
+`cos/agent.ts`). On Terra a turn 5 to 30 minutes after the last one keeps the snapshot and reads
+memory and the history from cache. A new conversation always starts with the latest memory.
+`CONTEXT_POLICY` is 27.
