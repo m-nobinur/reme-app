@@ -5,25 +5,29 @@ import { useEffect, useState } from "react"
  * Whether the owner is back from what they left the chat for, while
  * `waiting` holds: the tab shown again after it was hidden, or a new
  * sitting (`SITTING_GAP_MS`, the journey's own, since their last message
- * `lastSaidAt`). Forgotten once nothing waits.
+ * `lastSaidAt`). A return counts only until they write again, so saying
+ * "I bought it" while still on the page does not bring the question back.
+ * Forgotten once nothing waits.
  */
 export function useBack(waiting: boolean, lastSaidAt: string | null) {
-  const [returned, setReturned] = useState(false)
+  const [returnedAfter, setReturnedAfter] = useState<{
+    at: string | null
+  } | null>(null)
   useEffect(() => {
     if (!waiting) {
-      setReturned(false)
+      setReturnedAfter(null)
       return
     }
     let left = document.visibilityState === "hidden"
     const onChange = () => {
       if (document.visibilityState === "hidden") left = true
-      else if (left) setReturned(true)
+      else if (left) setReturnedAfter({ at: lastSaidAt })
     }
     document.addEventListener("visibilitychange", onChange)
     return () => document.removeEventListener("visibilitychange", onChange)
-  }, [waiting])
+  }, [waiting, lastSaidAt])
   return (
-    returned ||
+    (returnedAfter !== null && returnedAfter.at === lastSaidAt) ||
     (waiting &&
       lastSaidAt !== null &&
       Date.now() - Date.parse(lastSaidAt) >= SITTING_GAP_MS)
