@@ -21287,7 +21287,7 @@
               "url": {
                 "type": "string",
                 "maxLength": 2048,
-                "pattern": "^https:\\/\\/\\S+$"
+                "pattern": "^(?:https:\\/\\/\\S+|http:\\/\\/(?:[a-z0-9-]+\\.)*localhost(?::\\d{1,5})?(?:[/?#]\\S*)?)$"
               }
             },
             "required": [
@@ -31965,7 +31965,7 @@
                       "url": {
                         "type": "string",
                         "maxLength": 2048,
-                        "pattern": "^https:\\/\\/\\S+$"
+                        "pattern": "^(?:https:\\/\\/\\S+|http:\\/\\/(?:[a-z0-9-]+\\.)*localhost(?::\\d{1,5})?(?:[/?#]\\S*)?)$"
                       }
                     },
                     "required": [

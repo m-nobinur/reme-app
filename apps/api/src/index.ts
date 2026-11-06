@@ -293,7 +293,7 @@ async function route(
 
   // Meta's, signed with the app secret: no session, no write limit.
   if (pathname === WEBHOOK_PATH) {
-    const answered = await whatsAppWebhook(request, env, kit)
+    const answered = await whatsAppWebhook(request, env, kit, waitUntil)
     if (answered) return answered
   }
 

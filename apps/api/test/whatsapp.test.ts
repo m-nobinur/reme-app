@@ -442,6 +442,38 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
     expect(prompts).toHaveLength(1)
   })
 
+  it("marks an owner's message read and shows typing as it lands, before the turn", async () => {
+    const from = sender()
+    await link(a, from)
+    graph.length = 0
+    const id = wamid()
+    const raw = delivery(a.phone, from, id, "What's on today?")
+    const pending: Promise<unknown>[] = []
+    const collecting = {
+      waitUntil: (p: Promise<unknown>) => pending.push(p),
+    } as unknown as ExecutionContext
+    const response = await worker.fetch(
+      new Request(PATH, {
+        method: "POST",
+        body: raw,
+        headers: { "x-hub-signature-256": await signature(raw) },
+      }),
+      bindings(),
+      collecting
+    )
+    expect(response.status).toBe(200)
+    await Promise.all(pending)
+    expect(graph.map((g) => g.body)).toEqual([
+      {
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: id,
+        typing_indicator: { type: "text" },
+      },
+    ])
+    expect(jobs).toHaveLength(1)
+  })
+
   it("makes one turn of three quick messages", async () => {
     const from = sender()
     await link(a, from)

@@ -11,7 +11,7 @@ import { holdsNul } from "../../conversations.ts"
 import { boundedBody } from "../../http.ts"
 import { same } from "../../stripe.ts"
 import { hashCode } from "../token.ts"
-import { GraphFailed, graphOf, sendText } from "./graph.ts"
+import { GraphFailed, graphOf, markRead, sendText } from "./graph.ts"
 import type { ChannelJob } from "./turn.ts"
 
 export const WEBHOOK_PATH = "/channels/whatsapp/webhook"
@@ -88,7 +88,8 @@ const masked = (waId: string) =>
 export async function whatsAppWebhook(
   request: Request,
   env: Env,
-  kit: Tenancy
+  kit: Tenancy,
+  waitUntil: (promise: Promise<unknown>) => void
 ): Promise<Response | null> {
   if (!whatsAppEnabled(env)) return null
   if (request.method === "GET") return verify(new URL(request.url), env)
@@ -119,7 +120,14 @@ export async function whatsAppWebhook(
       for (const each of value.messages) {
         const message = Message.safeParse(each)
         if (message.success && !holdsNul(each)) {
-          await receive(env, kit, account.accountId, message.data, each)
+          await receive(
+            env,
+            kit,
+            account.accountId,
+            message.data,
+            each,
+            waitUntil
+          )
         }
       }
     }
@@ -142,7 +150,8 @@ async function receive(
   kit: Tenancy,
   accountId: string,
   message: Message,
-  raw: Record<string, unknown>
+  raw: Record<string, unknown>,
+  waitUntil: (promise: Promise<unknown>) => void
 ): Promise<void> {
   const allowed = await env.CHANNEL_LIMIT?.limit({
     key: `whatsapp:${message.from}`,
@@ -153,8 +162,8 @@ async function receive(
   const link = await channelLinkOf(kit, accountId, message.from)
   // shortcut: anyone else is a customer, dropped until the customer story.
   if (!link) return
-  await kit.withOrg({ orgId: link.orgId }, (db) =>
-    db
+  const graph = await kit.withOrg({ orgId: link.orgId }, async (db) => {
+    await db
       .insert(channelInbound)
       .values({
         orgId: link.orgId,
@@ -164,7 +173,20 @@ async function receive(
         body: raw,
       })
       .onConflictDoNothing()
-  )
+    return graphOf(env, db, link.orgId)
+  })
+  // Ticks and typing as it lands; the turn waits out the gathering first.
+  if (graph)
+    waitUntil(
+      markRead(graph, message.id).catch((error: unknown) =>
+        console.warn(
+          JSON.stringify({
+            code: "whatsapp.typing_failed",
+            graph: error instanceof Error ? error.message : "unknown",
+          })
+        )
+      )
+    )
   // Sent for a redelivery too: the turn takes only rows still waiting.
   const job: ChannelJob = {
     kind: "channel",
