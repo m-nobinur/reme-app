@@ -156,11 +156,12 @@ export const FALLBACK_MODEL = "openai/gpt-6.1-sol"
 
 /**
  * The model OpenRouter tries when the owner turn's model has no provider up
- * (its `models` list). At or under the default's price cap, so the
- * reservation holds, and another lab, so one lab's outage does not take
+ * (its `models` list): DeepSeek V4.1 Flash, the owner's call of 2026-11-07,
+ * which onboarding already runs on. At or under the default's price cap, so
+ * the reservation holds, and another lab, so one lab's outage does not take
  * both. A test keeps it in the facade's list.
  */
-export const OUTAGE_MODEL = "google/gemini-3.8-flash"
+export const OUTAGE_MODEL = "deepseek/deepseek-v4.1-flash-1017"
 
 /**
  * Which model, effort and path serves each kind of CoS work (CM1). Every
@@ -2309,9 +2310,9 @@ export const carded = (
 const MARKER = { openrouter: { cacheControl: { type: "ephemeral" } } }
 
 /**
- * The instructions with a cache marker. Gemini, which serves the chat when
- * GPT has no provider, reads no cache without one; GPT and Claude read the
- * same with it (measured 2026-11-06).
+ * The instructions with a cache marker. Gemini reads no cache without one;
+ * GPT and Claude read the same with it (measured 2026-11-06), and DeepSeek,
+ * which serves the chat when GPT has no provider, caches on its own.
  */
 export const CACHED_INSTRUCTIONS: SystemModelMessage = {
   role: "system",

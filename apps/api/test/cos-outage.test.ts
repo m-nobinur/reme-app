@@ -13,7 +13,9 @@ import {
 afterEach(() => vi.unstubAllGlobals())
 
 describe("the outage fallback", () => {
-  it("names a tool-capable model the price table knows, under the default's cap", () => {
+  it("names DeepSeek V4.1 Flash, a reasoning model the price table knows, under the default's cap", () => {
+    expect(OUTAGE_MODEL).toBe("deepseek/deepseek-v4.1-flash-1017")
+    expect(models.find((m) => m.id === OUTAGE_MODEL)?.reasoning).toBe(true)
     const fallback = priceOf(OUTAGE_MODEL)
     const primary = priceOf(DEFAULT_MODEL)
     expect(fallback).not.toBeNull()
