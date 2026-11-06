@@ -117,7 +117,7 @@ function PanelSection({
             <button
               aria-controls={`${id}-body`}
               aria-expanded={open}
-              className="-mx-1 flex min-h-6 items-center gap-1 rounded-md px-1 outline-none transition-colors hover:text-foreground/80 focus-visible:ring-3 focus-visible:ring-ring"
+              className="-mx-1 flex min-h-6 items-center gap-1 rounded-md px-1 outline-none transition-colors hover:text-foreground/80 focus-visible:ring-1 focus-visible:ring-ring"
               onClick={() => setOpen((was) => !was)}
               type="button"
             >
@@ -608,7 +608,7 @@ function PanelSegment({
             aria-controls={`${id}-steps`}
             aria-expanded={open}
             aria-label={open ? "Hide the steps" : "Show the steps"}
-            className="-m-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
+            className="-m-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
             onClick={() => setOpen((was) => !was)}
             type="button"
           >
@@ -1432,7 +1432,7 @@ function ShotStack({
               <button
                 aria-label={slide.alt}
                 aria-pressed={at === front}
-                className="group/dot grid h-4 w-5 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group/dot grid h-4 w-5 place-items-center rounded-full outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 key={slide.picture}
                 onClick={() => setFront(at)}
                 type="button"

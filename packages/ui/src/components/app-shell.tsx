@@ -8,7 +8,7 @@ import type { ComponentProps, ReactNode } from "react"
  * avatar) takes less padding.
  */
 const railItemClass = cn(
-  "relative flex h-11 w-full min-w-0 shrink-0 items-center gap-3 rounded-xl px-2.5 text-rail-foreground text-sm outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring has-data-[slot=mark]:px-1 aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary motion-reduce:transition-none [&_svg]:size-6 [&_svg]:shrink-0 [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground aria-[current=page]:[&_svg]:text-primary"
+  "relative flex h-11 w-full min-w-0 shrink-0 items-center gap-3 rounded-xl px-2.5 text-rail-foreground text-sm outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-ring has-data-[slot=mark]:px-1 aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary motion-reduce:transition-none [&_svg]:size-6 [&_svg]:shrink-0 [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground aria-[current=page]:[&_svg]:text-primary"
 )
 
 /** A count as it is drawn: past 99, "99+". */

@@ -41,7 +41,7 @@ function SettingsTrigger(props: DialogPrimitive.Trigger.Props) {
 }
 
 const ROW =
-  "flex h-11 w-full items-center gap-3 rounded-xl px-3 text-start text-[0.9375rem] outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none [&_svg]:size-5 [&_svg]:shrink-0"
+  "flex h-11 w-full items-center gap-3 rounded-xl px-3 text-start text-[0.9375rem] outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none [&_svg]:size-5 [&_svg]:shrink-0"
 
 /** Below Tailwind's `md`, where one half of the modal shows at a time. */
 const narrow = () => !window.matchMedia("(min-width: 48rem)").matches

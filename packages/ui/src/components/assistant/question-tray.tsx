@@ -123,7 +123,7 @@ export function ShowFoldedQuestion({ className }: { className?: string }) {
   return (
     <button
       className={cn(
-        "rounded-sm text-foreground underline decoration-muted-foreground/60 underline-offset-3 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring",
+        "rounded-sm text-foreground underline decoration-muted-foreground/60 underline-offset-3 outline-none hover:decoration-foreground focus-visible:ring-1 focus-visible:ring-ring",
         className
       )}
       onClick={folded.open}
@@ -405,7 +405,7 @@ const TRAY_TILE = cn(
 const QUICK_TILE = cn(
   OPTION,
   OPTION_TILE,
-  "rounded-xl text-left outline-hidden focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring",
+  "rounded-xl text-left outline-hidden focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring",
   "aria-pressed:border-foreground aria-pressed:outline-1 aria-pressed:outline-foreground aria-pressed:outline-solid aria-pressed:-outline-offset-2 aria-pressed:focus-visible:border-foreground"
 )
 
@@ -570,7 +570,7 @@ function Summary({
 }) {
   return (
     <button
-      className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring"
+      className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
       onClick={onOpen}
       type="button"
     >
@@ -1328,7 +1328,7 @@ function TrayFrame({
       {collapsed ? (
         <button
           aria-expanded={false}
-          className="flex w-full items-center gap-3 rounded-[var(--composer-radius,var(--radius-4xl))] px-5 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring"
+          className="flex w-full items-center gap-3 rounded-[var(--composer-radius,var(--radius-4xl))] px-5 py-3 text-left outline-none focus-visible:ring-1 focus-visible:ring-ring"
           onClick={() => onCollapsedChange(false)}
           type="button"
         >
@@ -1958,7 +1958,7 @@ function QuestionTray({
       !allPairs &&
       shown.length < question.card.options.length ? (
         <button
-          className="self-start rounded-sm text-muted-foreground text-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
+          className="self-start rounded-sm text-muted-foreground text-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
           onClick={() => setAllPairs(true)}
           type="button"
         >

@@ -121,7 +121,7 @@ function RailToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
         aria-controls="workspace-rail"
         aria-expanded={open}
         aria-label={label}
-        className="group/toggle relative flex size-10 shrink-0 items-center justify-center rounded-xl text-foreground outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
+        className="group/toggle relative flex size-10 shrink-0 items-center justify-center rounded-xl text-foreground outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none"
         onClick={onClick}
         type="button"
       >
@@ -445,7 +445,7 @@ function WorkspaceShell({
               aria-controls={panelId}
               aria-expanded={expanded}
               className={cn(
-                "flex min-h-10 w-full min-w-0 shrink-0 items-center gap-2.5 px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset motion-reduce:transition-none",
+                "flex min-h-10 w-full min-w-0 shrink-0 items-center gap-2.5 px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none",
                 floating
                   ? "rounded-b-[inherit] group-data-[state=closed]/panel:rounded-t-[inherit]"
                   : "rounded-t-[inherit] group-data-[state=closed]/panel:rounded-b-[inherit]"

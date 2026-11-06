@@ -154,7 +154,7 @@ const TABS = [
 ] as const
 
 const ROW =
-  "flex w-full items-start gap-3 rounded-xl px-3 py-3 text-start text-sm outline-none transition-colors duration-150 hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
+  "flex w-full items-start gap-3 rounded-xl px-3 py-3 text-start text-sm outline-none transition-colors duration-150 hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none"
 
 /**
  * The bell in the rail and the popover it opens beside it: the newest few

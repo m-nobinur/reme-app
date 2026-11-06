@@ -109,7 +109,7 @@ function OrderSummary({
       <button
         aria-controls={id}
         aria-expanded={open}
-        className="-m-2 flex items-center justify-between gap-3 rounded-lg p-2 text-start outline-none focus-visible:ring-2 focus-visible:ring-primary md:hidden"
+        className="-m-2 flex items-center justify-between gap-3 rounded-lg p-2 text-start outline-none focus-visible:ring-1 focus-visible:ring-ring md:hidden"
         onClick={() => setOpen(!open)}
         type="button"
       >

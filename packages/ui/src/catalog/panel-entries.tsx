@@ -426,7 +426,7 @@ const reminderNote = (props: Note, extra = {}) => (
 /** A panel item a reminder can point at, as `apps/web` wraps them. */
 const target = (id: string, item: ReactNode) => (
   <div
-    className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
+    className="rounded-md outline-none focus-visible:ring-1 focus-visible:ring-ring"
     id={id}
     tabIndex={-1}
   >

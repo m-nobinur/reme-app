@@ -331,7 +331,7 @@ function ColourField({
       <div className="flex items-center gap-2">
         <input
           aria-label="Pick a colour"
-          className="size-9 shrink-0 cursor-pointer rounded-full border border-border bg-transparent p-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0"
+          className="size-9 shrink-0 cursor-pointer rounded-full border border-border bg-transparent p-0.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0"
           onChange={(event) => onChange(event.currentTarget.value)}
           type="color"
           value={hex ?? fallback}
@@ -548,7 +548,7 @@ function ChoiceForm({
           aria-pressed={checked}
           className={cn(
             shape,
-            "text-left outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring",
+            "text-left outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring",
             checked && "border-primary bg-primary/5"
           )}
           key={value}

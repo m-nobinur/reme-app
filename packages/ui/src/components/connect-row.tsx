@@ -33,7 +33,7 @@ export function ConnectRow({
   return (
     <a
       className={cn(
-        "group/connect flex items-center gap-3 rounded-2xl border border-border bg-card p-2 pe-4 text-card-foreground outline-none transition-colors duration-fast hover:border-foreground/25 hover:bg-foreground/5 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring forced-colors:focus-visible:outline-2 forced-colors:focus-visible:outline-solid",
+        "group/connect flex items-center gap-3 rounded-2xl border border-border bg-card p-2 pe-4 text-card-foreground outline-none transition-colors duration-fast hover:border-foreground/25 hover:bg-foreground/5 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring forced-colors:focus-visible:outline-2 forced-colors:focus-visible:outline-solid",
         className
       )}
       data-slot="connect-row"

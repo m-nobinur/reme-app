@@ -229,7 +229,7 @@ export function SiteReady({
           // Docked it is one row, which opens and closes the whole card in place.
           <button
             aria-expanded={open}
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-primary"
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg outline-none focus-visible:ring-1 focus-visible:ring-ring"
             onClick={() => setOpen(!open)}
             type="button"
           >

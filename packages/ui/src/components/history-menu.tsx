@@ -30,7 +30,7 @@ type HistoryEntry = {
 const PAGE = 12
 
 const ROW =
-  "flex min-h-10 w-full min-w-0 items-center gap-3 rounded-lg px-2.5 py-1.5 text-sm outline-none transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:bg-primary/10 aria-[current=page]:font-medium motion-reduce:transition-none"
+  "flex min-h-10 w-full min-w-0 items-center gap-3 rounded-lg px-2.5 py-1.5 text-sm outline-none transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-1 focus-visible:ring-ring aria-[current=page]:bg-primary/10 aria-[current=page]:font-medium motion-reduce:transition-none"
 
 const POPUP =
   "flex max-h-[min(32rem,var(--available-height))] w-[min(22rem,calc(100vw-1.5rem))] origin-(--transform-origin) flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-md outline-none transition-[opacity,scale] duration-150 data-ending-style:scale-95 data-starting-style:scale-95 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none"

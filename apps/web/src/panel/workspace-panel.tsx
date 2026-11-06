@@ -91,7 +91,7 @@ const SHOWN = { now: 3, upcoming: 4, done: 5 } as const
 
 /** Where a reminder can point: focusable by script, ringed from the keyboard. */
 const TARGET =
-  "rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
+  "rounded-md outline-none focus-visible:ring-1 focus-visible:ring-ring"
 
 const frame = getRouteApi("/app")
 
@@ -794,7 +794,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const row = (each: SegmentView) => (
     <div
       className={cn(
-        "grid transition-[grid-template-rows,opacity] duration-enter ease-standard motion-reduce:transition-none",
+        "-mx-2 grid transition-[grid-template-rows,opacity] duration-enter ease-standard motion-reduce:transition-none",
         leaving(each)
           ? "grid-rows-[0fr] opacity-0"
           : "grid-rows-[1fr] opacity-100"
@@ -803,7 +803,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       key={each.id}
     >
       <div className="min-h-0 overflow-hidden">
-        <div className="py-3">{segment(each)}</div>
+        <div className="px-2 py-3">{segment(each)}</div>
       </div>
     </div>
   )
@@ -1013,7 +1013,7 @@ export function IdleAssistant({
   return (
     <Hint label={`Chat with ${name}`} side="left">
       <Link
-        className="flex size-11 items-center justify-center rounded-full border border-border bg-popover shadow-lg outline-none transition-transform duration-150 hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
+        className="flex size-11 items-center justify-center rounded-full border border-border bg-popover shadow-lg outline-none transition-transform duration-150 hover:scale-105 focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none"
         params={{ id }}
         to="/app/c/$id"
       >

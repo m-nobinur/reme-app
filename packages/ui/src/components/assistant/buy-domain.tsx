@@ -192,7 +192,7 @@ const offersOf = (row: DomainStemOffer | undefined): Offer[] =>
 function Out({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a
-      className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+      className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
       href={href}
       rel="noopener noreferrer"
       target="_blank"
@@ -357,7 +357,7 @@ function PickerRow({
           aria-describedby={
             cn(sub && `${id}-sub`, offer.why && `${id}-why`) || undefined
           }
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start outline-none transition-colors duration-fast hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start outline-none transition-colors duration-fast hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-ring"
           onClick={onChoose}
           type="button"
         >
@@ -928,7 +928,7 @@ function DetailsPage({
                 ? "We have everything we need to register it in your business's name."
                 : "We filled in what we know. Add the rest to register it in your business's name."}{" "}
               <button
-                className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+                className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
                 onClick={() => setAll(true)}
                 type="button"
               >

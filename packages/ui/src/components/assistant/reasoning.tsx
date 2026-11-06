@@ -168,7 +168,7 @@ function ReasoningTrigger({
       data-slot="reasoning-trigger"
       className={cn(
         "aui-reasoning-trigger group/trigger flex max-w-[75%] items-center gap-2 px-1 py-1.5 text-chat-step text-muted-foreground transition-colors hover:text-foreground active:translate-y-px",
-        "rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring",
+        "rounded-lg outline-none focus-visible:ring-1 focus-visible:ring-ring",
         className
       )}
       {...props}

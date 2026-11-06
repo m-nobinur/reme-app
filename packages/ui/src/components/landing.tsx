@@ -68,7 +68,7 @@ function SiteHeader({
             {nav.map((link) => (
               <li key={link.href}>
                 <a
-                  className="rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
+                  className="rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
                   href={link.href}
                 >
                   {link.label}
@@ -644,7 +644,7 @@ function Faq() {
         <div className="reveal divide-y divide-border border-border border-y">
           {QUESTIONS.map((item) => (
             <details className="group py-5" key={item.q}>
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-sm font-medium outline-none focus-visible:ring-1 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                 {item.q}
                 <CaretDownIcon
                   aria-hidden

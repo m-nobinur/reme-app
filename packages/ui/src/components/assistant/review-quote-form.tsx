@@ -121,7 +121,7 @@ function Choices({
     <Popover>
       <PopoverTrigger
         aria-label={`${field.label}, ${several ? "several choices" : "one choice"}: show the options`}
-        className="-ms-1 flex min-w-0 items-center gap-1.5 rounded-full ps-1 pe-1 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+        className="-ms-1 flex min-w-0 items-center gap-1.5 rounded-full ps-1 pe-1 outline-none hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring"
       >
         <TypeIcon
           aria-hidden
@@ -191,7 +191,7 @@ function Pill({
         <button
           // Names the state it shows, "optional" or the asterisk, as its text.
           aria-label={`${field.label}, ${field.required ? "required" : "optional"}`}
-          className="-ms-1 flex h-6 min-w-6 items-center justify-center rounded-full px-1 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+          className="-ms-1 flex h-6 min-w-6 items-center justify-center rounded-full px-1 outline-none hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring"
           onClick={() =>
             onChange(setRequired(draft, field.key, !field.required))
           }
@@ -205,7 +205,7 @@ function Pill({
         <button
           aria-disabled={locked || undefined}
           aria-label={`Remove ${field.label}`}
-          className="-ms-1.5 flex size-5 items-center justify-center rounded-full text-muted-foreground pointer-fine:opacity-0 outline-none hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring pointer-fine:group-focus-within:opacity-100 pointer-fine:group-hover:opacity-100 aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent"
+          className="-ms-1.5 flex size-5 items-center justify-center rounded-full text-muted-foreground pointer-fine:opacity-0 outline-none hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring pointer-fine:group-focus-within:opacity-100 pointer-fine:group-hover:opacity-100 aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent"
           onClick={() => {
             if (!locked) onChange(dropField(draft, field.key))
           }}
