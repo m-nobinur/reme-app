@@ -1665,6 +1665,26 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       return { ...done, sent: saving.sent }
     }
 
+    it("logs a refused call as no tool used, so no gate takes it as work that keeps a promise", async () => {
+      const id = await conversation(me)
+      const refused = scripted(
+        calls({ id: "call_google", tool: "connect_google", input: {} }),
+        said("Google needs your own web address first.")
+      )
+      const { chunks } = await turn(
+        me,
+        typed(id, "Connect Google", "ask"),
+        { model: refused.model },
+        undefined,
+        { GOOGLE_CLIENT_ID: "client" }
+      )
+      expect(JSON.stringify(chunks)).toContain("search.needs_domain")
+      expect((await turnsOf(id)).at(-1)).toMatchObject({
+        outcome: "answered",
+        tools: [],
+      })
+    })
+
     it("ends the turn on a reply written beside a save that went through, and goes on after a refusal", async () => {
       const id = await conversation(me)
       const replied = (text: string, input: unknown): Step => [
