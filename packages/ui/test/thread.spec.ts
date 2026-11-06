@@ -117,23 +117,57 @@ test("the empty state opens on the briefing and what to ask", async ({
     "What do you need from me?",
     "What is on my website now?",
   ])
-  // One row each, under the composer, in a single column.
+  // One row of chips on a single line, above the composer.
   const composer = await page
     .locator('[data-slot="aui_composer-shell"]')
     .boundingBox()
-  const rows = await page
+  const chips = await page
     .locator(".aui-thread-welcome-suggestion")
     .evaluateAll((nodes) =>
       nodes.map((node) => {
         const box = node.getBoundingClientRect()
-        return { x: box.x, y: box.y }
+        return { x: box.x, y: box.y, bottom: box.bottom }
       })
     )
-  expect(rows[0]?.y).toBeGreaterThan(composer?.y ?? 0)
-  for (const [index, row] of rows.entries()) {
-    expect(row.x).toBe(rows[0]?.x)
-    if (index > 0) expect(row.y).toBeGreaterThan(rows[index - 1]?.y ?? 0)
+  expect(chips[0]?.bottom).toBeLessThan(composer?.y ?? 0)
+  for (const [index, chip] of chips.entries()) {
+    expect(chip.y).toBe(chips[0]?.y)
+    if (index > 0) expect(chip.x).toBeGreaterThan(chips[index - 1]?.x ?? 0)
   }
+})
+
+test("on a phone the suggestions scroll sideways and fade at the edge", async ({
+  page,
+}) => {
+  await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+  const row = page.locator('[data-slot="chip-row"]')
+  const last = page.getByRole("button", {
+    name: "Summarise this week's enquiries",
+  })
+  await expect(row).toHaveAttribute("data-fade-end", "true")
+  await expect(row).not.toHaveAttribute("data-fade-start")
+  // The row scrolls; the thread around it never does.
+  expect(
+    await row.evaluate((node) => node.scrollWidth > node.clientWidth)
+  ).toBe(true)
+  expect(
+    await page
+      .locator('[data-slot="aui_thread-viewport"]')
+      .evaluate((node) => node.scrollWidth <= node.clientWidth)
+  ).toBe(true)
+  // Tab walks the row: the last chip takes the focus and scrolls into view.
+  await page
+    .getByRole("button", { name: "Draft three onboarding prompts" })
+    .focus()
+  for (let press = 0; press < 3; press++) await page.keyboard.press("Tab")
+  await expect(last).toBeFocused()
+  await expect(row).toHaveAttribute("data-fade-start", "true")
+  await expect(row).not.toHaveAttribute("data-fade-end")
+  const chip = await last.boundingBox()
+  const edge = await row.boundingBox()
+  expect((chip?.x ?? 0) + (chip?.width ?? 0)).toBeLessThanOrEqual(
+    (edge?.x ?? 0) + (edge?.width ?? 0)
+  )
 })
 
 test("with nothing read, the empty state has no line", async ({ page }) => {

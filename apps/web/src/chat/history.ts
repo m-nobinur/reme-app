@@ -217,26 +217,3 @@ export function askedSend<I>(
   sent.add(fresh)
   return { text: ask, ...(intent !== undefined && { intent }) }
 }
-
-/**
- * Conversations the owner opened by address and cannot have: another
- * account's, or an id that was never stored. The chat shows an empty state
- * for them rather than a thread nobody asked for.
- */
-export const missingConversations = (() => {
-  const ids = new Set<string>()
-  const listeners = new Set<() => void>()
-  return {
-    has: (id: string) => ids.has(id),
-    add(id: string) {
-      ids.add(id)
-      for (const listener of listeners) listener()
-    },
-    subscribe(listener: () => void) {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-  }
-})()

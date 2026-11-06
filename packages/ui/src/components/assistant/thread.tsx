@@ -19,7 +19,6 @@ import {
   useThreadViewportStore,
 } from "@assistant-ui/react"
 import {
-  ArrowBendDownRightIcon,
   ArrowDownIcon,
   ArrowUpIcon,
   PaintBrushIcon,
@@ -42,6 +41,7 @@ import {
   waitsOnRecap,
   waitsToSkip,
 } from "@workspace/ui/components/assistant/ask-open"
+import { ChipRow } from "@workspace/ui/components/assistant/chip-row"
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
 import { DecisionPills } from "@workspace/ui/components/assistant/decision-pills"
 import { DesignReply } from "@workspace/ui/components/assistant/design-reply"
@@ -842,6 +842,9 @@ const ThreadRoot: FC<{
                     <SkipThisOne />
                     <RecapReplies />
                     <LatestChoices />
+                    <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
+                      <ThreadSuggestions />
+                    </AuiIf>
                     {/* A stack that slid away leaves no gap behind it. */}
                     <div
                       className="empty:hidden has-[>[data-slot=update-stack][data-away]]:-mb-2 motion-safe:transition-[margin] motion-safe:duration-enter motion-safe:ease-standard"
@@ -851,9 +854,6 @@ const ThreadRoot: FC<{
                     {/* The same gap as the tray above the composer. */}
                     {isEmpty ? updates : null}
                   </div>
-                  <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
-                    <ThreadSuggestions />
-                  </AuiIf>
                 </ThreadPrimitive.ViewportFooter>
               </div>
             </div>
@@ -1172,39 +1172,30 @@ const RecapReplies: FC = () => {
 /** The newest decision's quick replies, once this conversation's history is in. */
 const LatestChoices: FC = () => (useSendable() ? <DecisionPills /> : null)
 
-/** One row per suggestion under the composer; a press sends it. */
-const ThreadSuggestions: FC = () => {
-  return (
-    <ul
+/** What to ask, as one row of chips above the composer; a press sends it. */
+const ThreadSuggestions: FC = () => (
+  <AuiIf condition={(s) => s.thread.suggestions.length > 0}>
+    <ChipRow
       aria-label="Suggestions"
-      className="aui-thread-welcome-suggestions flex w-full flex-col empty:hidden"
+      className="aui-thread-welcome-suggestions"
+      role="group"
     >
       <ThreadPrimitive.Suggestions>
         {() => <ThreadSuggestionItem />}
       </ThreadPrimitive.Suggestions>
-    </ul>
-  )
-}
+    </ChipRow>
+  </AuiIf>
+)
 
-const ThreadSuggestionItem: FC = () => {
-  return (
-    <li className="aui-thread-welcome-suggestion-display">
-      <SuggestionPrimitive.Trigger
-        send
-        render={
-          <Button
-            variant="ghost"
-            className="aui-thread-welcome-suggestion h-auto min-h-10 w-full justify-start gap-3 whitespace-normal rounded-lg py-2 text-start font-normal text-muted-foreground"
-          />
-        }
-      >
-        <ArrowBendDownRightIcon aria-hidden />
-        <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />
-        <SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 empty:hidden" />
-      </SuggestionPrimitive.Trigger>
-    </li>
-  )
-}
+const ThreadSuggestionItem: FC = () => (
+  <SuggestionPrimitive.Trigger
+    send
+    render={<ReplyPill className="aui-thread-welcome-suggestion" />}
+  >
+    <SuggestionPrimitive.Title />
+    <SuggestionPrimitive.Description className="ms-1 empty:hidden" />
+  </SuggestionPrimitive.Trigger>
+)
 
 /**
  * The composer. `expanded` is the new chat's: the field above, and the plus and

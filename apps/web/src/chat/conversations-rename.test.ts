@@ -11,9 +11,8 @@ vi.mock("@/lib/api/server", () => ({
   updateConversation: updates,
 }))
 
-const { conversationList, readMessages, seedOpening } = await import(
-  "./conversations"
-)
+const { conversationList, MissingConversation, readMessages, seedOpening } =
+  await import("./conversations")
 const ID = "7d1c2a4e-2f0b-4c8e-9a51-3b6f0e2d9c10"
 
 it("renames through the thread list by the same rule as the top bar", async () => {
@@ -25,6 +24,15 @@ it("renames through the thread list by the same rule as the top bar", async () =
     "A title needs words."
   )
   expect(updates).toHaveBeenCalledTimes(1)
+})
+
+it("reports a conversation that is not the owner's as a missing one", async () => {
+  await expect(conversationList.fetch(ID)).rejects.toBeInstanceOf(
+    MissingConversation
+  )
+  expect(conversationList.unstable_Provider).toBeUndefined()
+  expect(conversationList.unstable_useAdapters).toBeTypeOf("function")
+  fetched.mockClear()
 })
 
 it("serves the loader's conversation and rows once, then reads them again", async () => {

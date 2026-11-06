@@ -1,4 +1,5 @@
 import { useAuiState } from "@assistant-ui/react"
+import { ChipRow } from "@workspace/ui/components/assistant/chip-row"
 import { Button } from "@workspace/ui/components/button"
 import { composerIdle } from "@workspace/ui/hooks/use-reveal-waiting"
 import { cn } from "@workspace/ui/lib/utils"
@@ -194,12 +195,12 @@ function Pills({ label, children, takesFocus = true }: Row) {
   }, [words, takesFocus])
   return (
     <fieldset
-      className={cn("flex min-w-0 flex-wrap gap-2", pillsIn(words))}
+      className={cn("min-w-0", pillsIn(words))}
       data-slot="reply-pills"
       ref={ref}
     >
       <legend className="sr-only">{label}</legend>
-      {children}
+      <ChipRow>{children}</ChipRow>
     </fieldset>
   )
 }

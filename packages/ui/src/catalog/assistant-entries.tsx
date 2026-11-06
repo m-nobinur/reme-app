@@ -37,6 +37,7 @@ import {
   SKIP_DOMAIN,
 } from "@workspace/ui/components/assistant/buy-domain"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
+import { ChipRow } from "@workspace/ui/components/assistant/chip-row"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { AlwaysAllowProvider } from "@workspace/ui/components/assistant/decision"
 import { makeEnquiryCardUI } from "@workspace/ui/components/assistant/enquiry-card"
@@ -46,6 +47,7 @@ import { PayDialog } from "@workspace/ui/components/assistant/pay-dialog"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
 import { QuoteFormPreview } from "@workspace/ui/components/assistant/quote-form-preview"
+import { ReplyPill } from "@workspace/ui/components/assistant/reply-pill"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
@@ -85,7 +87,7 @@ import {
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
 import { BROKEN, designText } from "@workspace/ui/lib/tool-state"
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
 import { ICON } from "./panel-entries"
 import {
   INPUT as ASK_DESIGN_INPUT,
@@ -281,6 +283,33 @@ const SUGGESTIONS: ThreadSuggestion[] = [
   { prompt: "What do you need from me?" },
   { prompt: "What is on my website now?" },
 ]
+
+/** More than a phone's width holds, as the owner's follow-ups can be. */
+const LONG_SUGGESTIONS: ThreadSuggestion[] = [
+  { prompt: "Draft three onboarding prompts" },
+  { prompt: "Turn this into a checklist" },
+  { prompt: "Write copy for the welcome screen" },
+  { prompt: "Summarise this week's enquiries" },
+]
+
+/** A row of chips on a phone, scrolled in from both edges so both fades show. */
+function ScrolledChips() {
+  const box = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    box.current
+      ?.querySelector('[data-slot="chip-row"]')
+      ?.scrollTo({ left: 120 })
+  }, [])
+  return (
+    <div className="w-[390px] px-4" ref={box}>
+      <ChipRow aria-label="Suggestions" role="group">
+        {LONG_SUGGESTIONS.map(({ prompt }) => (
+          <ReplyPill key={prompt}>{prompt}</ReplyPill>
+        ))}
+      </ChipRow>
+    </div>
+  )
+}
 
 /** A thread as the app mounts it for the owner: its composer settings, and thumbs on every reply with words. */
 function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
@@ -3706,6 +3735,21 @@ const assistantCatalog = [
   {
     name: "Thread",
     render: () => <OwnerThread height="h-[56rem]" messages={CONVERSATION} />,
+  },
+  { name: "ChipRow", render: () => <ScrolledChips /> },
+  {
+    // The new chat's suggestions on a phone: one row, fading at its right edge.
+    name: "ThreadEmptyPhone",
+    render: () => (
+      <div className="w-[390px]">
+        <OwnerThread
+          height="h-[32rem]"
+          isDisabled={false}
+          messages={[]}
+          suggestions={LONG_SUGGESTIONS}
+        />
+      </div>
+    ),
   },
   {
     name: "ThreadLongMessage",
