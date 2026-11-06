@@ -3390,25 +3390,28 @@ const assistantCatalog = [
     ),
   })),
   // A conversation's update stack above the composer, one thread per
-  // journey state; with a question open, the question takes the slot.
-  ...(["DockedUpdates", "UpdateIcon"] as const).map((name) => ({
-    name,
-    render: () => (
-      <div className="flex flex-col gap-6">
-        {STACK_STATES.map(([state, stack, messages]) => (
-          <div data-state={state} key={state}>
-            <FixtureThread
-              height={messages ? "h-[34rem]" : "h-[22rem]"}
-              // An open question docks as it does in the app.
-              isDisabled={!messages}
-              messages={messages ?? [ask("Hi")]}
-              settings={{ after: stack }}
-            />
-          </div>
-        ))}
-      </div>
-    ),
-  })),
+  // journey state; with a question open, the question takes the slot. The
+  // thread tells the stack when quick replies show.
+  ...(["DockedUpdates", "UpdateIcon", "PillsShownProvider"] as const).map(
+    (name) => ({
+      name,
+      render: () => (
+        <div className="flex flex-col gap-6">
+          {STACK_STATES.map(([state, stack, messages]) => (
+            <div data-state={state} key={state}>
+              <FixtureThread
+                height={messages ? "h-[34rem]" : "h-[22rem]"}
+                // An open question docks as it does in the app.
+                isDisabled={!messages}
+                messages={messages ?? [ask("Hi")]}
+                settings={{ after: stack }}
+              />
+            </div>
+          ))}
+        </div>
+      ),
+    })
+  ),
   // A new chat's updates: the site to publish, a question and a reminder,
   // one in front with the other two as edges under it, each a row of its own.
   ...(["UpdateDeck", "UpdateRow", "UpdateKindIcon"] as const).map((name) => ({
