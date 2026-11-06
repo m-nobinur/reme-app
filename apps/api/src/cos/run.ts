@@ -40,6 +40,7 @@ import {
   type SessionEvent,
 } from "./history.ts"
 import { contentWords } from "./memory.ts"
+import { type Ask, narrator } from "./narrator.ts"
 import { failureMessage } from "./retry.ts"
 import { ToolFailed } from "./tools.ts"
 import { abandonTurn, type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
@@ -148,6 +149,10 @@ type StreamTurn = {
   reading: Promise<MessageReading | null> | null
   rows: Rows
   waitUntil: (promise: Promise<unknown>) => void
+  /** The narrator's model, for a turn the owner watches; none, and no narrator. */
+  narrate?: Ask | null
+  /** When the owner's message arrived, in ms: each status carries the time since, for the row's clock. */
+  since?: number
   /**
    * For a turn the owner did not start, which only reads: its reply's text
    * goes here in the closing transaction instead of being stored as the
@@ -156,12 +161,40 @@ type StreamTurn = {
   post?: (db: OrgScopedDb, text: string) => Promise<void>
 }
 
-/** A transient status chunk: the waiting line, never stored. */
-const status = (on: OnboardingStatus["on"]): UIMessageChunk => ({
+/**
+ * A transient status chunk: the waiting line, never stored, with how long
+ * the turn has run. A `past` one is a finished tool's step line, kept only
+ * for the turn's list of lines.
+ */
+const status = (
+  on: OnboardingStatus["on"],
+  ms: number,
+  past = false
+): UIMessageChunk => ({
   type: ONBOARDING_STATUS,
-  data: { on, facts: [] } satisfies OnboardingStatus,
+  data: {
+    on,
+    facts: [],
+    ms: Math.max(0, Math.round(ms)),
+    ...(past && { past: true as const }),
+  } satisfies OnboardingStatus,
   transient: true,
 })
+
+/** The text of the owner's latest message, for the narrator. */
+const ownerText = (messages: UIMessage[]) =>
+  (messages.filter((m) => m.role === "user").at(-1)?.parts ?? [])
+    .flatMap((p) => (p.type === "text" ? [p.text] : []))
+    .join("\n")
+
+/** Where a tool's call ends for the narrator: a result, a refusal, or a wait on the owner. */
+const TOOL_ENDS = new Set<string>([
+  "tool-output-available",
+  "tool-output-error",
+  "tool-output-denied",
+  "tool-input-error",
+  "tool-approval-request",
+])
 
 /** The turn fell back before any content: nothing was streamed. */
 export type FellBack = { fallback: true; state: RunState }
@@ -201,6 +234,50 @@ export async function streamTurn(
 ): Promise<Response | FellBack> {
   const { run } = input
   const started = Date.now()
+  const since = input.since ?? started
+  const elapsed = () => Date.now() - since
+  // Sent out of band: the body wakes for a line while the model is silent.
+  const out: UIMessageChunk[] = []
+  let wake: () => void = () => undefined
+  const narration =
+    input.narrate && !input.post
+      ? narrator({
+          turnId: run.turn.turnId,
+          message: ownerText(input.uiMessages),
+          ask: input.narrate,
+          send: (text) => {
+            out.push(status({ kind: "doing", text }, elapsed()))
+            wake()
+          },
+          spend: (usd) => {
+            run.state.costUsd += usd
+          },
+        })
+      : null
+  /** A running tool's step line, by its call, sent once it has finished. */
+  const steps = new Map<string, string>()
+  const feed = (chunk: UIMessageChunk) => {
+    if (chunk.type === "reasoning-delta") narration?.reasoning(chunk.delta)
+    else if (chunk.type === "text-delta") narration?.words()
+    else if (chunk.type === "tool-input-start")
+      narration?.toolStarted(chunk.toolCallId)
+    else if (chunk.type === "tool-input-available") {
+      narration?.toolInput(chunk.toolCallId, chunk.toolName, chunk.input)
+      const { step } = (chunk.input ?? {}) as { step?: unknown }
+      // A view's line is sent as its result comes.
+      if (
+        chunk.toolName !== "skill_view" &&
+        typeof step === "string" &&
+        step.trim()
+      )
+        steps.set(chunk.toolCallId, step.trim())
+    } else if (TOOL_ENDS.has(chunk.type) && "toolCallId" in chunk) {
+      narration?.toolEnded(chunk.toolCallId)
+      const step = steps.get(chunk.toolCallId)
+      if (step && chunk.type === "tool-output-available")
+        out.push(status({ kind: "doing", text: step }, elapsed(), true))
+    }
+  }
   // Taken only if it lands before the first content: it never holds the turn.
   let reading = null as MessageReading | null
   void input.reading?.then((about) => {
@@ -272,6 +349,7 @@ export async function streamTurn(
       head.push(value)
       break
     }
+    feed(value)
     head.push(value)
     if (isContent(value)) {
       content = true
@@ -279,6 +357,7 @@ export async function streamTurn(
     }
   }
   if (!content) {
+    narration?.stop()
     while (!(await read()).done) {
       // Drained, so the run has ended before the fallback writes.
     }
@@ -377,9 +456,9 @@ export async function streamTurn(
   // heading comes, that line is the real one.
   const thinking = head.at(-1)?.type.startsWith("reasoning-")
   const general = input.skillLine
-    ? [status({ kind: "doing", text: input.skillLine })]
+    ? [status({ kind: "doing", text: input.skillLine }, elapsed())]
     : reading && thinking
-      ? [status({ kind: "reading", about: reading })]
+      ? [status({ kind: "reading", about: reading }, elapsed())]
       : []
   queued =
     start?.type === "start"
@@ -393,20 +472,35 @@ export async function streamTurn(
   let errored = queued.some((c) => c.type === "error")
   // Reasoning counts as content above and stays in the log, but the owner
   // never sees it, as a chunk or as a provider's data on one: only each
-  // thought's heading, as a transient status.
-  const think = thoughtHeadings((text) =>
-    queued.push(status({ kind: "thinking", text }))
-  )
+  // thought's heading, as a transient status, until the narrator speaks.
+  const think = thoughtHeadings((text) => {
+    if (!narration?.spoke)
+      queued.push(status({ kind: "thinking", text }, elapsed()))
+  })
+  // One read at a time, kept across a wake so no chunk is lost.
+  let pending: ReturnType<typeof read> | null = null
+  const next = async () => {
+    pending ??= read()
+    const woke = new Promise<null>((resolve) => {
+      wake = () => resolve(null)
+    })
+    const result = await Promise.race([pending, woke])
+    if (result) pending = null
+    return result
+  }
   // The owner's first word, apart from `first_chunk_ms`, which a skill view now often is.
   let worded = false
   const body = new ReadableStream<UIMessageChunk>({
     async pull(controller) {
       for (;;) {
+        queued.push(...out.splice(0))
         let chunk = queued.shift()
         if (!chunk) {
-          const { done, value } = await read()
-          if (done) break
-          chunk = value
+          const result = await next()
+          if (!result) continue
+          if (result.done) break
+          chunk = result.value
+          feed(chunk)
         }
         if (chunk.type === "finish") finish = chunk
         else if (chunk.type === "reasoning-delta") think(chunk.delta)
@@ -429,11 +523,14 @@ export async function streamTurn(
               ? SkillViewOutput.safeParse(chunk.output).data
               : undefined
           if (viewed?.outcome === "skill") {
-            queued.push(status({ kind: "doing", text: viewed.status }))
+            queued.push(
+              status({ kind: "doing", text: viewed.status }, elapsed())
+            )
           }
           return
         }
       }
+      narration?.stop()
       try {
         if ((await closeRun()) && finish) {
           if (fresh) controller.enqueue(writtenAt())

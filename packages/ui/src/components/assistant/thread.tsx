@@ -71,12 +71,16 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
 import {
+  ReplyStatus,
   StateIcon,
   StatusIcon,
   StatusLine,
 } from "@workspace/ui/components/status-line"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
-import { useOnboardingWait } from "@workspace/ui/hooks/use-onboarding-status"
+import {
+  useOnboardingWait,
+  useStatusTurn,
+} from "@workspace/ui/hooks/use-onboarding-status"
 import {
   type StatusKind,
   waitingLine,
@@ -84,7 +88,6 @@ import {
 } from "@workspace/ui/lib/activity-copy"
 import { formatTime } from "@workspace/ui/lib/format"
 import type { StateName } from "@workspace/ui/lib/status-icons"
-import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
   designText,
   SESSION_ENDED,
@@ -1513,6 +1516,7 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
     (s) => !immediate && showsProgress(s.message.parts, COS_QUIET)
   )
   const { status, seconds } = useOnboardingWait()
+  const turn = useStatusTurn()
   const toolsRan = useAuiState((s) =>
     s.message.parts.some((part) => part.type === "tool-call")
   )
@@ -1536,7 +1540,15 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
       : waitingLine(status, seconds, ctx)
   return (
     <span data-slot="aui_assistant-message-indicator">
-      <StatusLine delay={immediate ? 0 : SHOW_DELAY_MS} label={label} />
+      {immediate ? (
+        <StatusLine delay={0} label={label} />
+      ) : (
+        <ReplyStatus
+          label={label}
+          lines={turn.lines}
+          since={turn.since ?? undefined}
+        />
+      )}
     </span>
   )
 }

@@ -730,6 +730,9 @@ export const STEPPED: ReadonlySet<string> = new Set([
   "inspect_domain",
   "get_search_performance",
   "get_indexing",
+  "ask_developer",
+  "read_site",
+  "domain_bought",
 ])
 
 /** The line the model wrote for a call of `tool`, cleaned like any argument, or null. */

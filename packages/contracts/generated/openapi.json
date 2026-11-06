@@ -7623,6 +7623,10 @@
               "minLength": 1,
               "maxLength": 120
             }
+          },
+          "step": {
+            "type": "string",
+            "maxLength": 60
           }
         },
         "required": [
@@ -46359,6 +46363,10 @@
             "type": "string",
             "maxLength": 253,
             "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+          },
+          "step": {
+            "type": "string",
+            "maxLength": 60
           }
         },
         "required": [
@@ -53619,6 +53627,15 @@
                 "site.pages"
               ]
             }
+          },
+          "ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "past": {
+            "type": "boolean",
+            "const": true
           }
         },
         "required": [

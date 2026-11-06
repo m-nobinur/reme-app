@@ -2201,6 +2201,7 @@ export interface components {
       mode: "answer" | "review"
       question: string
       pages?: string[]
+      step?: string
     }
     AskDeveloperOutput:
       | {
@@ -12845,6 +12846,7 @@ export interface components {
     }
     DomainBoughtInput: {
       name: string
+      step?: string
     }
     DomainCheck:
       | {
@@ -14811,6 +14813,9 @@ export interface components {
         | "site.direction"
         | "site.pages"
       )[]
+      ms?: number
+      /** @constant */
+      past?: true
     }
     Org: {
       /** Format: uuid */

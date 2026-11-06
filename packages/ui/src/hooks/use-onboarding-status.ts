@@ -26,6 +26,23 @@ export const GAP_MS = 1_000
 let shownAt = Number.NEGATIVE_INFINITY
 let held: ReturnType<typeof setTimeout> | undefined
 
+/**
+ * The turn in flight: when it started, from the api's own count, and the
+ * lines it has shown, the narrator's and finished tools' steps among them.
+ */
+export type StatusTurn = { since: number | null; lines: readonly string[] }
+const NO_TURN: StatusTurn = { since: null, lines: [] }
+let turn = NO_TURN
+
+const notify = () => {
+  for (const listener of listeners) listener()
+}
+
+const keep = (line: string) => {
+  if (turn.lines.at(-1) !== line)
+    turn = { ...turn, lines: [...turn.lines, line] }
+}
+
 /** A status that comes within `GAP_MS` of the last waits, and only the newest shows. */
 const set = (on: OnboardingStatus["on"] | null) => {
   clearTimeout(held)
@@ -36,7 +53,9 @@ const set = (on: OnboardingStatus["on"] | null) => {
   }
   latest = on
   shownAt = on === null ? Number.NEGATIVE_INFINITY : Date.now()
-  for (const listener of listeners) listener()
+  if (on === null) turn = NO_TURN
+  else if (on.kind === "doing") keep(on.text)
+  notify()
 }
 
 /** The turn has ended: the next one starts with no status. */
@@ -55,13 +74,27 @@ export function readOnboardingStatus(
   if (part.type !== ONBOARDING_STATUS) return false
   const status = OnboardingStatus.safeParse(part.data)
   if (!status.success) return true
-  set(status.data.on)
+  const { on, ms, past } = status.data
+  if (ms !== undefined && turn.since === null)
+    turn = { ...turn, since: Date.now() - ms }
+  if (past && on.kind === "doing") {
+    keep(on.text)
+    notify()
+  } else set(on)
   if (status.data.facts.length > 0) refresh()
   return true
 }
 
 /** The latest status of the turn in flight, or null, read outside React. */
 export const onboardingStatusNow = () => latest
+
+/** The turn in flight's start and lines, for the reply row's clock and list. */
+export const useStatusTurn = () =>
+  useSyncExternalStore(
+    subscribe,
+    () => turn,
+    () => NO_TURN
+  )
 
 /** The latest status of the turn in flight, or null. */
 export const useOnboardingStatus = () =>

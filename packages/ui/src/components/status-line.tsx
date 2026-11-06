@@ -1,3 +1,9 @@
+import { CaretRightIcon } from "@phosphor-icons/react"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@workspace/ui/components/collapsible"
 import {
   type CopyContext,
   type Phase,
@@ -19,6 +25,7 @@ import {
   CLOCK_AFTER_MS,
   FADE_MS,
   holdFor,
+  REPLY_CLOCK_AFTER_MS,
   SHOW_DELAY_MS,
   type StatusState,
 } from "@workspace/ui/lib/status-line"
@@ -271,7 +278,9 @@ function StatusLine({
       </span>
       {count > 1 ? <span className="tabular-nums">×{count}</span> : null}
       {clock !== null && clockAfter !== null && clock >= clockAfter ? (
-        <span className="text-xs tabular-nums">{duration(clock)}</span>
+        <span className="shrink-0 whitespace-nowrap text-xs tabular-nums">
+          {duration(clock)}
+        </span>
       ) : null}
     </span>
   )
@@ -320,5 +329,58 @@ function ToolStatus({
   )
 }
 
+/**
+ * The reply's row before its words, like Claude's: the line, a clock from
+ * the turn's start once it passes `REPLY_CLOCK_AFTER_MS`, and a chevron that
+ * opens the turn's earlier lines, quiet and muted, closed by default. The
+ * line showing now is never listed under itself.
+ */
+function ReplyStatus({
+  label,
+  lines = [],
+  defaultOpen = false,
+  ...props
+}: Omit<ComponentProps<typeof StatusLine>, "clockAfter"> & {
+  /** The lines this turn has shown, oldest first. */
+  lines?: readonly string[]
+  defaultOpen?: boolean
+}) {
+  const earlier = lines.filter((line) => line !== label)
+  const status = (
+    <StatusLine clockAfter={REPLY_CLOCK_AFTER_MS} label={label} {...props} />
+  )
+  if (earlier.length === 0) return status
+  return (
+    <Collapsible
+      className="flex flex-col"
+      data-slot="reply-status"
+      defaultOpen={defaultOpen}
+    >
+      <span className="inline-flex items-center gap-1.5">
+        {status}
+        <CollapsibleTrigger
+          aria-label="Earlier steps"
+          className="group/trigger inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+          data-slot="reply-status-trigger"
+        >
+          <CaretRightIcon
+            aria-hidden
+            className="size-3 transition-transform duration-fast ease-standard group-data-panel-open/trigger:rotate-90 motion-reduce:transition-none"
+            weight="fill"
+          />
+        </CollapsibleTrigger>
+      </span>
+      <CollapsibleContent data-slot="reply-status-lines">
+        <ul className="mt-1 flex flex-col gap-1 ps-6 text-muted-foreground text-xs">
+          {earlier.map((line, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a line can come back, and the list only grows
+            <li key={i}>{line}</li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
 export type { StatusKind }
-export { StatusLine, ToolStatus }
+export { ReplyStatus, StatusLine, ToolStatus }
