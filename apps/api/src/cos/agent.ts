@@ -899,10 +899,11 @@ function resultTaint(result: CosToolResult): TaintLabel[] {
       // The reminder's title, in the owner's words.
       return result.output.outcome === "refused" ? [] : ["untrusted_input"]
     case "memory":
-      // A full store, or the entries closest to a no-match, sent back to
-      // the model in the owner's words.
+      // A full store, the entries closest to a no-match, or a patched
+      // entry, sent back to the model in the owner's words.
       return result.output.outcome === "full" ||
-        "closest_entries" in result.output
+        "closest_entries" in result.output ||
+        "patched" in result.output
         ? ["untrusted_input"]
         : []
     case "search_conversations":

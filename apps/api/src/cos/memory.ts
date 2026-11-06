@@ -448,6 +448,28 @@ const unskilled = (line: ProfileLine): ProfileLine => {
 /** A fact or a line of another layer a new line would repeat: where it lives, and its text. */
 export type Elsewhere = { where: string; text: string }
 
+/** An entry a patch changed. */
+export type Patched = { before: string; after: string }
+
+/**
+ * What a saved batch tells the model, after hermes-agent
+ * tools/memory_tool_store.py `_success_response` (MIT): the entry count, and
+ * each patched entry before and after, so a patch that took more than meant
+ * shows.
+ */
+export const savedOf = (
+  target: string,
+  done: { lines: readonly ProfileLine[]; patched: Patched[] },
+  max: number
+) => ({
+  outcome: "saved" as const,
+  target,
+  note: "Write saved. This update is complete; do not repeat it.",
+  fullness: fullness(done.lines, max),
+  entry_count: done.lines.length,
+  ...(done.patched.length > 0 && { patched: done.patched }),
+})
+
 /** What a batch that would not fit says, and the entries to consolidate (Hermes's IF FULL). */
 export type Full = { lines: ProfileLine[]; note: string }
 
@@ -471,10 +493,11 @@ export function applyOperations(
   max: number = PROFILE_MAX_CHARS,
   elsewhere: readonly Elsewhere[] = []
 ):
-  | { ok: true; lines: ProfileLine[] }
+  | { ok: true; lines: ProfileLine[]; patched: Patched[] }
   | { ok: false; refusal: Refusal }
   | { ok: false; full: Full } {
   let held = [...lines]
+  const changed: Patched[] = []
   for (const [i, op] of ops.entries()) {
     const pos = `Operation ${i + 1} (${op.action})`
     if (
@@ -537,6 +560,7 @@ export function applyOperations(
       ...elsewhere,
     ])
     if (checked) return { ok: false, refusal: checked }
+    if (hit) changed.push({ before: hit.text, after: text })
     held =
       op.action === "add"
         ? [...held, { id: newId(), text, source, at }]
@@ -586,7 +610,7 @@ export function applyOperations(
       },
     }
   }
-  return { ok: true, lines: held }
+  return { ok: true, lines: held, patched: changed }
 }
 
 /** Why `text` may not be written, or null. */
@@ -891,12 +915,7 @@ export async function writeBatch(
   }
   await saveLayer(db, orgId, layer, result.lines, all, provenance)
   return {
-    output: {
-      outcome: "saved",
-      target: layer.target,
-      note: "Write saved. This update is complete; do not repeat it.",
-      fullness: fullness(result.lines, layer.store.max),
-    },
+    output: savedOf(layer.target, result, layer.store.max),
     before: lines,
     after: result.lines,
   }

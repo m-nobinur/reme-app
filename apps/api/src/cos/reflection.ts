@@ -46,8 +46,10 @@ import {
   layerOf,
   linesMatching,
   lockProfile,
+  type Patched,
   readLayer,
   readReview,
+  savedOf,
   saveLayer,
   writeReview,
 } from "./memory.ts"
@@ -364,7 +366,7 @@ export function reviewBatch(
   max: number,
   elsewhere: readonly Elsewhere[] = []
 ):
-  | { ok: true; lines: ProfileLine[] }
+  | { ok: true; lines: ProfileLine[]; patched: Patched[] }
   | { ok: false; refusal: Guarded }
   | { ok: false; full: Full } {
   const why = guardOps(lines, ops, left)
@@ -385,7 +387,7 @@ export function reviewBatch(
   }
   const was = new Map(lines.map((l) => [l.id, l.source]))
   return {
-    ok: true,
+    ...done,
     lines: done.lines.map((l) =>
       was.get(l.id) === "owner_confirmed"
         ? { ...l, source: "owner_confirmed" }
@@ -491,12 +493,7 @@ function reviewToolsFor(
           })
           done.changes += input.operations.length
         }
-        return {
-          outcome: "saved",
-          target: layer.target,
-          note: "Write saved. This update is complete; do not repeat it.",
-          fullness: fullness(result.lines, layer.store.max),
-        }
+        return savedOf(layer.target, result, layer.store.max)
       })
     },
     save_correction: async (raw: unknown) => {

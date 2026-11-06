@@ -246,6 +246,18 @@ export const MemoryOutput = z.discriminatedUnion("outcome", [
     target: MemoryTarget,
     note: Text(200),
     fullness: Text(60),
+    entry_count: z.int().nonnegative(),
+    /** Each entry a patch changed, before and after. */
+    patched: z
+      .array(
+        z.strictObject({
+          before: Text(PROFILE_LINE_MAX),
+          after: Text(PROFILE_LINE_MAX),
+        })
+      )
+      .min(1)
+      .max(8)
+      .optional(),
   }),
   z.strictObject({
     outcome: z.literal("full"),

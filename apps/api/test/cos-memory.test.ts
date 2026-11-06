@@ -256,6 +256,9 @@ describe("applying operations", () => {
       "Prefers calls after 5pm",
       "Has a spaniel called Biscuit",
     ])
+    expect(done.ok && done.patched).toEqual([
+      { before: "Prefers calls after 4pm", after: "Prefers calls after 5pm" },
+    ])
   })
 
   it("refuses an exact duplicate, whatever its case or spacing", () => {
@@ -556,6 +559,7 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
       target: "user",
       note: "Write saved. This update is complete; do not repeat it.",
       fullness: "1%, 23/1,600 chars",
+      entry_count: 1,
     })
     expect(await lines()).toEqual(["Prefers calls after 4pm"])
     const row = await kit.withOrg({ orgId: me.orgId }, (db) =>
@@ -760,7 +764,11 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
       })
       expect(
         await said(turn, { action: "remove", old_text: words("h") })
-      ).toMatchObject({ outcome: "saved", fullness: "91%, 1,449/1,600 chars" })
+      ).toMatchObject({
+        outcome: "saved",
+        fullness: "91%, 1,449/1,600 chars",
+        entry_count: 5,
+      })
       expect(await lines()).toHaveLength(5)
       expect(
         await said(turn, { action: "remove", old_text: "i i x" })
@@ -797,9 +805,9 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
       expect(logged).toHaveBeenCalledWith(
         expect.stringContaining("memory.profile_unreadable")
       )
-      expect(await said(turn, add("Likes short replies"))).toMatchObject({
-        outcome: "saved",
-      })
+      const saved = await said(turn, add("Likes short replies"))
+      expect(saved).toMatchObject({ outcome: "saved", entry_count: 3 })
+      expect(saved).not.toHaveProperty("patched")
       expect(await lines()).toEqual([
         "Prefers calls after 4pm",
         "Has a van",

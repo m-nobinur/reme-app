@@ -9199,6 +9199,11 @@ export interface components {
                 target: string
                 note: string
                 fullness: string
+                entry_count: number
+                patched?: {
+                  before: string
+                  after: string
+                }[]
               }
             | {
                 /** @constant */
@@ -14471,6 +14476,11 @@ export interface components {
           target: string
           note: string
           fullness: string
+          entry_count: number
+          patched?: {
+            before: string
+            after: string
+          }[]
         }
       | {
           /** @constant */

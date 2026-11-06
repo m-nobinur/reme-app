@@ -32367,13 +32367,46 @@
                         "minLength": 1,
                         "maxLength": 60,
                         "pattern": "\\S"
+                      },
+                      "entry_count": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "patched": {
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "before": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "pattern": "\\S"
+                            },
+                            "after": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "before",
+                            "after"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
                       "outcome",
                       "target",
                       "note",
-                      "fullness"
+                      "fullness",
+                      "entry_count"
                     ],
                     "additionalProperties": false
                   },
@@ -52461,13 +52494,46 @@
                 "minLength": 1,
                 "maxLength": 60,
                 "pattern": "\\S"
+              },
+              "entry_count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "patched": {
+                "minItems": 1,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "before": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "pattern": "\\S"
+                    },
+                    "after": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "before",
+                    "after"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [
               "outcome",
               "target",
               "note",
-              "fullness"
+              "fullness",
+              "entry_count"
             ],
             "additionalProperties": false
           },
