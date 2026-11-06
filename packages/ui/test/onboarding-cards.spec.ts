@@ -304,6 +304,31 @@ test("a docked ready card is one row above the composer that opens in place", as
   ).toBeEnabled()
 })
 
+test("a conversation's updates are a deck of three that steps with its arrows", async ({
+  page,
+}) => {
+  await open(page, "DockedUpdates")
+  const deck = page
+    .locator('[data-state="skipped"]')
+    .getByRole("region", { name: "Updates" })
+  await expect(deck.getByText("1/3")).toBeVisible()
+  await expect(
+    deck.getByRole("button", { name: "Publish", exact: true })
+  ).toBeVisible()
+  // Only the front one is there to read or press.
+  await expect(deck.getByText("Add your domain")).toBeHidden()
+  await deck.getByRole("button", { name: "Next update" }).click()
+  await expect(deck.getByText("2/3")).toBeVisible()
+  await expect(deck.getByText("Add your domain")).toBeVisible()
+  await expect(
+    deck.getByRole("button", { name: "Publish", exact: true })
+  ).toBeHidden()
+  await deck.getByRole("button", { name: "Previous update" }).click()
+  await deck.getByRole("button", { name: "Previous update" }).click()
+  await expect(deck.getByText("3/3")).toBeVisible()
+  await expect(deck.getByText("Get found on Google")).toBeVisible()
+})
+
 test("a choice pill opens its options and hint, and a cut label shows whole on hover", async ({
   page,
 }) => {

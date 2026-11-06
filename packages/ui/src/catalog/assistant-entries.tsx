@@ -2831,7 +2831,7 @@ const KINDS: ThreadMessageLike[] = [
   posted(
     "29T13:04:02.000",
     "srv_reply",
-    "No problem. Your site can go live on its free address, and you can add your own any time from the Connect now button.",
+    "No problem. Your site can go live on its free address, and you can add your own domain whenever you like. Next, I can connect Google Search Console, so people nearby searching for what you do can find you.",
     "reply"
   ),
   posted(
@@ -3161,7 +3161,10 @@ const STACK_STATES: [string, ReactNode, ThreadMessageLike[]?][] = [
     "skipped",
     <StackedReady
       key="skipped"
-      tail={[journeyRow("Add your domain", "Connect now")]}
+      tail={[
+        journeyRow("Add your domain", "Connect now"),
+        journeyRow("Get found on Google", "Connect Search Console", true),
+      ]}
     />,
   ],
   [
@@ -3543,29 +3546,35 @@ const assistantCatalog = [
       </div>
     ),
   })),
-  // A conversation's update stack above the composer, one thread per
-  // journey state; with a question open, the question takes the slot. The
-  // thread tells the stack when quick replies show.
-  ...(["DockedUpdates", "UpdateIcon", "PillsShownProvider"] as const).map(
-    (name) => ({
-      name,
-      render: () => (
-        <div className="flex flex-col gap-6">
-          {STACK_STATES.map(([state, stack, messages]) => (
-            <div data-state={state} key={state}>
-              <FixtureThread
-                height={messages ? "h-[40rem]" : "h-[22rem]"}
-                // An open question docks as it does in the app.
-                isDisabled={!messages}
-                messages={messages ?? [ask("Hi")]}
-                settings={{ after: stack }}
-              />
-            </div>
-          ))}
-        </div>
-      ),
-    })
-  ),
+  // A conversation's update stack above the composer, the front card with
+  // its pager, one thread per journey state; with a question open, the
+  // question takes the slot. The thread tells the stack when quick replies
+  // show.
+  ...(
+    [
+      "DockedUpdates",
+      "UpdatePager",
+      "UpdateIcon",
+      "PillsShownProvider",
+    ] as const
+  ).map((name) => ({
+    name,
+    render: () => (
+      <div className="flex flex-col gap-6">
+        {STACK_STATES.map(([state, stack, messages]) => (
+          <div data-state={state} key={state}>
+            <FixtureThread
+              height={messages ? "h-[40rem]" : "h-[22rem]"}
+              // An open question docks as it does in the app.
+              isDisabled={!messages}
+              messages={messages ?? [ask("Hi")]}
+              settings={{ after: stack }}
+            />
+          </div>
+        ))}
+      </div>
+    ),
+  })),
   // A new chat's updates, under the composer: the site to publish in front,
   // questions and reminders behind it as edges.
   ...(["UpdateDeck", "UpdateRow", "UpdateKindIcon"] as const).map((name) => ({

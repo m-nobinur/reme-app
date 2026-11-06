@@ -13,7 +13,11 @@ const ENTRY = "DockedUpdates"
 
 const STATES = [
   ["never-answered", "Brightclean website", ["Publish", "Connect now"]],
-  ["skipped", "Brightclean website", ["Publish", "Connect now"]],
+  [
+    "skipped",
+    "Brightclean website",
+    ["Publish", "Connect now", "Connect Search Console"],
+  ],
   [
     "buying-elsewhere",
     "Finished buying sparkleclean.co.uk?",
@@ -35,20 +39,24 @@ for (const theme of ["light", "dark"]) {
           .locator(`[data-state="${state}"]`)
           .getByRole("region", { name: "Updates" })
         await expect(stack.locator("[data-front]")).toContainText(first)
-        // No pager: the front one's action in front, the rest's behind it.
-        await expect(stack.getByText(/^\d+\/\d+$/)).toHaveCount(0)
-        const [lead, ...others] = actions
-        await expect(
-          stack
-            .locator("[data-front]")
-            .getByRole("button", { name: lead, exact: true })
-        ).toBeVisible()
-        for (const action of others) {
+        // Each item in turn, by its own action, and only the front one's.
+        await expect(stack.getByText(`1/${actions.length}`)).toHaveCount(
+          actions.length > 1 ? 1 : 0
+        )
+        for (const action of actions) {
           await expect(
             stack
-              .locator('[data-slot="update-deck-rest"]')
+              .locator("[data-front]")
               .getByRole("button", { name: action, exact: true })
-          ).toHaveCount(1)
+          ).toBeVisible()
+          for (const other of actions.filter((each) => each !== action)) {
+            await expect(
+              stack.getByRole("button", { name: other, exact: true })
+            ).toBeHidden()
+          }
+          if (actions.length > 1) {
+            await stack.getByRole("button", { name: "Next update" }).click()
+          }
         }
       }
       // A question that docks takes the slot; the stack waits behind it.
@@ -243,25 +251,6 @@ for (const reducedMotion of ["reduce", "no-preference"] as const) {
     )
   })
 }
-
-test("above the composer the stack spreads upwards", async ({ page }) => {
-  await open(page, ENTRY, 390)
-  const stack = page
-    .locator('[data-state="buying-elsewhere"]')
-    .getByRole("region", { name: "Updates" })
-  await stack.locator("[data-front]").hover()
-  await expect(stack).toHaveAttribute("data-open", "true")
-  const front = await stack.locator("[data-front]").boundingBox()
-  const spread = await stack
-    .locator('[data-slot="update-deck-rest"]')
-    .boundingBox()
-  expect((spread?.y ?? 0) + (spread?.height ?? 0)).toBeLessThanOrEqual(
-    front?.y ?? 0
-  )
-  await expect(
-    stack.getByRole("button", { name: "Publish", exact: true })
-  ).toBeInViewport()
-})
 
 for (const theme of ["light", "dark"]) {
   for (const entry of ["UpdateDeck", "UpdateDeck open"]) {
