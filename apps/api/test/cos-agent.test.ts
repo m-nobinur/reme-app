@@ -289,7 +289,9 @@ const calls = (
 ]
 
 /** A model that answers each call with the next step, recording what it was sent. */
-function scripted(...steps: (Step | (() => Promise<Step>) | Error)[]) {
+function scripted(
+  ...steps: (Step | ((options: CallOptions) => Promise<Step>) | Error)[]
+) {
   const sent: CallOptions[] = []
   const model = new MockLanguageModelV4({
     modelId: DEFAULT_MODEL,
@@ -297,7 +299,7 @@ function scripted(...steps: (Step | (() => Promise<Step>) | Error)[]) {
       sent.push(options)
       const step = steps.shift() ?? said("Done.")
       if (step instanceof Error) throw step
-      const parts = typeof step === "function" ? await step() : step
+      const parts = typeof step === "function" ? await step(options) : step
       return {
         stream: convertArrayToReadableStream(parts) as never,
       }
@@ -4376,22 +4378,42 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
 
   it("stops a turn before a step could take its spend past the reservation", async () => {
     const id = await conversation(me)
-    const heavy = (callId: string): Step => [
-      { type: "stream-start", warnings: [] },
-      {
-        type: "tool-call",
-        toolCallId: callId,
-        toolName: "get_facts",
-        input: "{}",
-      },
-      {
-        type: "finish",
-        finishReason: { unified: "tool-calls", raw: "tool_calls" },
-        usage: usage(200_000, 50),
-      },
-    ]
+    // A real model honours a tool choice of none, and the SDK refuses a
+    // call made under it. Each call asks for a different change, so no
+    // repeat ends the turn first.
+    const heavy =
+      (callId: string, i: number) =>
+      async (options: CallOptions): Promise<Step> =>
+        options.toolChoice?.type === "none"
+          ? [
+              { type: "stream-start", warnings: [] },
+              { type: "text-start", id: "t" },
+              { type: "text-delta", id: "t", delta: "Here is what I found." },
+              { type: "text-end", id: "t" },
+              {
+                type: "finish",
+                finishReason: { unified: "stop", raw: "stop" },
+                usage: usage(200_000, 50),
+              },
+            ]
+          : [
+              { type: "stream-start", warnings: [] },
+              {
+                type: "tool-call",
+                toolCallId: callId,
+                toolName: "get_change",
+                input: JSON.stringify({
+                  ref: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+                }),
+              },
+              {
+                type: "finish",
+                finishReason: { unified: "tool-calls", raw: "tool_calls" },
+                usage: usage(200_000, 50),
+              },
+            ]
     const { model, sent } = scripted(
-      ...Array.from({ length: LIMITS.steps }, (_, i) => heavy(`c${i}`))
+      ...Array.from({ length: LIMITS.steps }, (_, i) => heavy(`c${i}`, i))
     )
     const done = await turn(me, typed(id, "Read everything.", "ask"), { model })
     expect(done.response.status, done.text).toBe(200)
@@ -4404,7 +4426,6 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const fits = Math.floor(reserved / step)
     expect(fits).toBeLessThan(LIMITS.steps)
     expect(sent).toHaveLength(fits)
-    // The stand-in calls tools whatever it is told; a real model would end here.
     expect(sent.at(-1)?.toolChoice).toEqual({ type: "none" })
     expect(sent[0]?.toolChoice).not.toEqual({ type: "none" })
     const [ended] = await turnsOf(id)

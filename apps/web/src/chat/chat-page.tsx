@@ -160,7 +160,7 @@ export function ChatPage() {
       onFinish: () => {
         void router.invalidate()
       },
-      // The option, not `adapters.suggestion`: in @assistant-ui/ai-sdk 0.0.15
+      // The option, not `adapters.suggestion`: in @assistant-ui/ai-sdk 0.0.16
       // the adapter runs only after an assistant turn ends and then replaces
       // these, and the empty thread is the only place suggestions show.
       // A stored conversation shows them only when it is empty, and the thread

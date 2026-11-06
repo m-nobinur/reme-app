@@ -14,9 +14,9 @@
     "check:secrets": "node scripts/secret-scan.mjs"
   },
   "dependencies": {
-    "@ai-sdk/react": "4.0.147",
+    "@ai-sdk/react": "4.0.167",
     "@assistant-ui/react": "0.15.32",
-    "@assistant-ui/ai-sdk": "0.0.15",
+    "@assistant-ui/ai-sdk": "0.0.16",
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-router": "1.170.45",
@@ -27,7 +27,7 @@
     "@workos/authkit-tanstack-react-start": "0.11.1",
     "@workspace/contracts": "workspace:*",
     "@workspace/ui": "workspace:*",
-    "ai": "7.0.143",
+    "ai": "7.0.163",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tailwindcss": "^4.3.3",

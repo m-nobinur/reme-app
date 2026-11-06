@@ -22,7 +22,7 @@
     "@workspace/skills": "workspace:*",
     "@workspace/starter-site": "workspace:*",
     "@workspace/ui": "workspace:*",
-    "ai": "7.0.143",
+    "ai": "7.0.163",
     "postal-mime": "4.0.11"
   },
   "devDependencies": {
