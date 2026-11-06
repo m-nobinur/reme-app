@@ -12,7 +12,7 @@ const ENTRIES = [
   "StatusLine changing words",
   "StatusLine ended",
   "ToolStatus",
-  "ReplyStatus closed",
+  "ReplyStatus",
   "ReplyStatus open",
 ] as const
 const FRAMES = process.env.STATUS_FRAMES

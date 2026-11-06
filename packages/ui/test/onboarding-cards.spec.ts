@@ -500,11 +500,14 @@ test("the quote form preview keeps focus inside, rises from the bottom on a phon
   await page.getByRole("button", { name: "Preview form" }).click()
   const modal = page.getByRole("dialog", { name: "Form preview" })
   await expect(modal).toBeVisible()
+  // The rise starts a frame after the open, after `settled` may have looked.
+  await expect
+    .poll(async () => {
+      const box = await modal.boundingBox()
+      return [box?.x, box?.width, (box?.y ?? 0) + (box?.height ?? 0)]
+    })
+    .toEqual([0, 390, 900])
   await settled(page)
-  const box = await modal.boundingBox()
-  expect(box?.x).toBe(0)
-  expect(box?.width).toBe(390)
-  expect((box?.y ?? 0) + (box?.height ?? 0)).toBe(900)
   for (let i = 0; i < 40; i++) {
     await page.keyboard.press("Tab")
     // Base UI's guards sit at both ends and hand focus back in a tick later.

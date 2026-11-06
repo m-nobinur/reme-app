@@ -3554,7 +3554,7 @@ const assistantCatalog = [
           {STACK_STATES.map(([state, stack, messages]) => (
             <div data-state={state} key={state}>
               <FixtureThread
-                height={messages ? "h-[34rem]" : "h-[22rem]"}
+                height={messages ? "h-[40rem]" : "h-[22rem]"}
                 // An open question docks as it does in the app.
                 isDisabled={!messages}
                 messages={messages ?? [ask("Hi")]}

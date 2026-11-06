@@ -271,7 +271,7 @@ const statusLineCatalog: Entry[] = [
     ),
   },
   {
-    name: "ReplyStatus closed",
+    name: "ReplyStatus",
     render: () => <ReplyRow />,
   },
   {
