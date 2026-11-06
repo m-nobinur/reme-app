@@ -57,26 +57,28 @@ export function useRevealWaiting(waiting: boolean, hold = false): boolean {
 
 /**
  * Gives an open card the focus once no turn is running, so the answer goes
- * straight in and Enter cannot send the composer's text over it. Only from
- * nowhere or an empty composer, never from something the owner is typing.
- * Deferred a task, because the composer refocuses itself when a run ends.
+ * straight in and Enter cannot send the composer's text over it: its first
+ * `target`, a field unless said. Only from nowhere or an empty composer,
+ * never from something the owner is typing. Deferred a task, because the
+ * composer refocuses itself when a run ends.
  */
 export function useFocusWhenIdle(
   waiting: boolean,
   running: boolean,
-  card: RefObject<HTMLElement | null>
+  card: RefObject<HTMLElement | null>,
+  target = "input"
 ): void {
   useEffect(() => {
     if (running || !waiting) return
     const timer = setTimeout(() => {
       if (composerIdle()) {
         card.current
-          ?.querySelector<HTMLElement>("input")
+          ?.querySelector<HTMLElement>(target)
           ?.focus({ preventScroll: true })
       }
     })
     return () => clearTimeout(timer)
-  }, [running, waiting, card])
+  }, [running, waiting, card, target])
 }
 
 /** Focus is nowhere, or in an empty composer: the owner is not typing. */

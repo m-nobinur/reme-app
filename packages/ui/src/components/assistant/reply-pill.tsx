@@ -1,7 +1,7 @@
 import { useAuiState } from "@assistant-ui/react"
 import { ChipRow } from "@workspace/ui/components/assistant/chip-row"
 import { Button } from "@workspace/ui/components/button"
-import { composerIdle } from "@workspace/ui/hooks/use-reveal-waiting"
+import { useFocusWhenIdle } from "@workspace/ui/hooks/use-reveal-waiting"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
@@ -182,17 +182,7 @@ function ComposerPills({ gone = false, ...row }: Row) {
 function Pills({ label, children, takesFocus = true }: Row) {
   const ref = useRef<HTMLFieldSetElement>(null)
   const words = useWordsIn(ref)
-  useEffect(() => {
-    if (!words || !takesFocus) return
-    // A task on: the composer refocuses itself as a run ends.
-    const timer = setTimeout(() => {
-      if (!composerIdle()) return
-      ref.current
-        ?.querySelector<HTMLElement>("button:not(:disabled)")
-        ?.focus({ preventScroll: true })
-    })
-    return () => clearTimeout(timer)
-  }, [words, takesFocus])
+  useFocusWhenIdle(!!words && takesFocus, false, ref, "button:not(:disabled)")
   return (
     <fieldset
       className={cn("min-w-0", pillsIn(words))}
