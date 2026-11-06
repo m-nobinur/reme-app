@@ -10,7 +10,6 @@ import {
   MessagePartPrimitive,
   MessagePrimitive,
   type PartState,
-  SuggestionPrimitive,
   TextMessagePartProvider,
   ThreadPrimitive,
   type ToolCallMessagePartComponent,
@@ -42,7 +41,6 @@ import {
   waitsOnRecap,
   waitsToSkip,
 } from "@workspace/ui/components/assistant/ask-open"
-import { ChipRow } from "@workspace/ui/components/assistant/chip-row"
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
 import { DecisionPills } from "@workspace/ui/components/assistant/decision-pills"
 import { DesignReply } from "@workspace/ui/components/assistant/design-reply"
@@ -171,8 +169,8 @@ export type ThreadProps = {
   components?: ThreadComponents | undefined
   /**
    * The id of a stored conversation, at its own address. It is never a new
-   * chat: while its history loads it shows a skeleton, never the welcome or
-   * suggestions, and nothing sends until the thread is that conversation.
+   * chat: while its history loads it shows a skeleton, never the welcome,
+   * and nothing sends until the thread is that conversation.
    * Once loaded and still empty it shows the welcome, like a new chat.
    */
   stored?: string | undefined
@@ -336,7 +334,7 @@ export const Thread: FC<ThreadProps> = ({
   lastShown,
 }) => {
   // A stored conversation with nothing in it is as empty as a new chat, once
-  // its history is in: the same welcome and suggestions, with the composer in
+  // its history is in: the same welcome, with the composer in
   // the middle. Until then it is loading, and the held flag keeps the render
   // in between from showing the welcome.
   const loadingStored = useAuiState((s) =>
@@ -850,9 +848,6 @@ const ThreadRoot: FC<{
                     <SkipThisOne />
                     <RecapReplies />
                     <LatestChoices />
-                    <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
-                      <ThreadSuggestions />
-                    </AuiIf>
                     {/* A stack that slid away leaves no gap behind it. */}
                     <div
                       className="empty:hidden has-[>[data-slot=update-stack][data-away]]:-mb-2 motion-safe:transition-[margin] motion-safe:duration-enter motion-safe:ease-standard"
@@ -1181,30 +1176,6 @@ const RecapReplies: FC = () => {
 const LatestChoices: FC = () => (useSendable() ? <DecisionPills /> : null)
 
 /** What to ask, as one row of chips above the composer; a press sends it. */
-const ThreadSuggestions: FC = () => (
-  <AuiIf condition={(s) => s.thread.suggestions.length > 0}>
-    <ChipRow
-      aria-label="Suggestions"
-      className="aui-thread-welcome-suggestions"
-      role="group"
-    >
-      <ThreadPrimitive.Suggestions>
-        {() => <ThreadSuggestionItem />}
-      </ThreadPrimitive.Suggestions>
-    </ChipRow>
-  </AuiIf>
-)
-
-const ThreadSuggestionItem: FC = () => (
-  <SuggestionPrimitive.Trigger
-    send
-    render={<ReplyPill className="aui-thread-welcome-suggestion" />}
-  >
-    <SuggestionPrimitive.Title />
-    <SuggestionPrimitive.Description className="ms-1 empty:hidden" />
-  </SuggestionPrimitive.Trigger>
-)
-
 /**
  * The composer. `expanded` is the new chat's: the field above, and the plus and
  * send under it. Once there is a conversation it is one compact row.

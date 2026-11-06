@@ -101,7 +101,7 @@ test.describe("with reduced motion", () => {
   }
 })
 
-test("the empty state opens on the briefing and what to ask", async ({
+test("the empty state opens on the briefing, with no chips above the composer", async ({
   page,
 }) => {
   await open(page, "ThreadEmpty")
@@ -112,48 +112,22 @@ test("the empty state opens on the briefing and what to ask", async ({
     "Your website is live. Your latest changes are ready to publish."
   )
   await expect(input(page)).toHaveAttribute("placeholder", "Ask Reme anything…")
-  await expect(page.locator(".aui-thread-welcome-suggestion")).toHaveText([
-    "What changed in the new version?",
-    "What do you need from me?",
-    "What is on my website now?",
-  ])
-  // One row of chips on a single line, above the composer.
-  const composer = await page
-    .locator('[data-slot="aui_composer-shell"]')
-    .boundingBox()
-  const chips = await page
-    .locator(".aui-thread-welcome-suggestion")
-    .evaluateAll((nodes) =>
-      nodes.map((node) => {
-        const box = node.getBoundingClientRect()
-        return { x: box.x, y: box.y, bottom: box.bottom }
-      })
-    )
-  expect(chips[0]?.bottom).toBeLessThan(composer?.y ?? 0)
-  for (const [index, chip] of chips.entries()) {
-    expect(chip.y).toBe(chips[0]?.y)
-    if (index > 0) expect(chip.x).toBeGreaterThan(chips[index - 1]?.x ?? 0)
-  }
+  await expect(page.locator('[data-slot="chip-row"]')).toHaveCount(0)
 })
 
-test("on a phone the suggestions scroll sideways and fade at the edge", async ({
+test("on a phone a row of chips scrolls sideways and fades at the edge", async ({
   page,
 }) => {
-  await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+  await open(page, "ChipRow", WIDTHS.phone)
   const row = page.locator('[data-slot="chip-row"]')
+  await row.evaluate((node) => node.scrollTo({ left: 0 }))
   const last = page.getByRole("button", {
     name: "Summarise this week's enquiries",
   })
   await expect(row).toHaveAttribute("data-fade-end", "true")
   await expect(row).not.toHaveAttribute("data-fade-start")
-  // The row scrolls; the thread around it never does.
   expect(
     await row.evaluate((node) => node.scrollWidth > node.clientWidth)
-  ).toBe(true)
-  expect(
-    await page
-      .locator('[data-slot="aui_thread-viewport"]')
-      .evaluate((node) => node.scrollWidth <= node.clientWidth)
   ).toBe(true)
   // Tab walks the row: the last chip takes the focus and scrolls into view.
   await page
@@ -216,7 +190,6 @@ test("with no notice the composer has no gap for one", async ({ page }) => {
 test("with nothing read, the empty state has no line", async ({ page }) => {
   await open(page, "ThreadEmptyUnread")
   await expect(page.locator('[data-slot="aui_thread-briefing"]')).toHaveCount(0)
-  await expect(page.locator(".aui-thread-welcome-suggestion")).toHaveCount(0)
 })
 
 test("a quick action puts its sentence in the composer, focused", async ({

@@ -230,9 +230,6 @@ const useThreadRuntime = () =>
     onFinish: () => undefined,
     retry,
     intent,
-    // On offer, as the page offers them on a new chat; a stored
-    // conversation must never show one.
-    suggestions: [{ prompt: "Build my website" }],
   })
 
 /** The chat page re-renders on every workspace poll and builds its runtime hook inline. */
@@ -248,7 +245,6 @@ function Chat() {
   const useInline = () =>
     useConversationRuntime({
       onFinish: () => undefined,
-      suggestions: [{ prompt: "Build my website" }],
     })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,
@@ -610,7 +606,7 @@ it("every message keeps the time it was sent, as a reload shows it", async () =>
   }
 })
 
-it("a stored conversation loading shows a skeleton, never the welcome or a suggestion", async () => {
+it("a stored conversation loading shows a skeleton, never the welcome", async () => {
   const release: { open?: () => void } = {}
   hold = new Promise<void>((resolve) => {
     release.open = resolve
@@ -627,7 +623,6 @@ it("a stored conversation loading shows a skeleton, never the welcome or a sugge
     ).not.toBeNull()
   )
   expect(container.textContent).not.toContain("What should we do today?")
-  expect(container.textContent).not.toContain("Build my website")
   hold = null
   await act(async () => release.open?.())
   await vi.waitFor(() =>

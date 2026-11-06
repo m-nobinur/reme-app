@@ -15,64 +15,16 @@ const workspace = (over: Partial<Workspace> = {}): Workspace => ({
   ...over,
 })
 
-const prompts = (value: ReturnType<typeof briefingOf>) =>
-  value.suggestions.map((suggestion) => suggestion.prompt)
-
 it("says nothing without an organisation or a workspace to read", () => {
-  const nothing = { line: null, suggestions: [] }
+  const nothing = { line: null }
   expect(briefingOf(null, workspace())).toEqual(nothing)
   expect(briefingOf(ORG, null)).toEqual(nothing)
 })
 
-it("offers the first build to an owner with no site", () => {
-  const briefing = briefingOf(ORG, workspace())
-  expect(briefing.line).toBe("You don't have a website yet.")
-  expect(prompts(briefing)).toEqual([
-    "Build my website",
-    "Let me tell you about my business",
-  ])
-})
-
-it("asks a new business for the facts the assistant still needs, after the build", () => {
-  const briefing = briefingOf(
-    ORG,
-    workspace({
-      derivedReminders: [
-        {
-          rule: "facts_missing",
-          keys: ["business.phone", "hours.weekday"],
-        },
-      ],
-    })
+it("tells an owner with no site there is none yet", () => {
+  expect(briefingOf(ORG, workspace()).line).toBe(
+    "You don't have a website yet."
   )
-  expect(prompts(briefing)).toEqual([
-    "Build my website",
-    "Add my phone number and weekday hours",
-    "Let me tell you about my business",
-  ])
-})
-
-it("does not list every missing fact in one suggestion", () => {
-  const briefing = briefingOf(
-    ORG,
-    workspace({
-      derivedReminders: [
-        {
-          rule: "facts_missing",
-          keys: ["business.phone", "business.email", "hours.weekday"],
-        },
-      ],
-    })
-  )
-  expect(prompts(briefing)).toContain("Add my business details")
-})
-
-it("offers a live site's owner a look, a change and a reminder", () => {
-  expect(prompts(briefingOf(ORG, workspace({ live: 3 })))).toEqual([
-    "What's on my website now?",
-    "I want to change something on my website",
-    "Set a reminder for me",
-  ])
 })
 
 it("words a question without naming who on the staff asked", () => {
@@ -93,12 +45,6 @@ it("words a question without naming who on the staff asked", () => {
       })
     ).line
   ).toBe("Your website is live. One question needs your answer.")
-  expect(prompts(briefing)).toEqual([
-    "What do you need from me?",
-    "What's on my website now?",
-    "I want to change something on my website",
-    "Set a reminder for me",
-  ])
 })
 
 it("counts questions when there is more than one", () => {
@@ -111,7 +57,7 @@ it("counts questions when there is more than one", () => {
   )
 })
 
-it("puts an approval before a question, and keeps to four suggestions", () => {
+it("puts an approval before a question", () => {
   const briefing = briefingOf(
     ORG,
     workspace({
@@ -124,12 +70,6 @@ it("puts an approval before a question, and keeps to four suggestions", () => {
   expect(briefing.line).toBe(
     "Your website is live. Your latest changes are ready to publish."
   )
-  expect(prompts(briefing)).toEqual([
-    "What did you change?",
-    "What do you need from me?",
-    "How are my changes coming along?",
-    "What's on my website now?",
-  ])
 })
 
 it("calls a first site with versions waiting ready to go live", () => {
@@ -138,13 +78,11 @@ it("calls a first site with versions waiting ready to go live", () => {
     workspace({ open: true, attention: [approval(1), approval(2)] })
   )
   expect(briefing.line).toBe("Your website is ready to go live.")
-  expect(prompts(briefing)).toEqual(["What's on my new website?"])
 })
 
 it("says a first build is the website, and a later one is changes", () => {
   const first = briefingOf(ORG, workspace({ building: true, open: true }))
   expect(first.line).toBe("Your assistant is building your website.")
-  expect(prompts(first)).toEqual(["How's my website coming along?"])
 
   const later = briefingOf(
     ORG,
@@ -155,12 +93,10 @@ it("says a first build is the website, and a later one is changes", () => {
   )
 })
 
-it("never offers a build while a first one is open but not working", () => {
-  // Paused, waiting on an answer or ready for review: a build exists, so the
-  // owner has a site on the way, and "Build my website" would start another.
-  const briefing = briefingOf(ORG, workspace({ open: true }))
-  expect(briefing.line).toBe("Your website is in progress.")
-  expect(prompts(briefing)).not.toContain("Build my website")
+it("calls a first build that is open but not working in progress", () => {
+  expect(briefingOf(ORG, workspace({ open: true })).line).toBe(
+    "Your website is in progress."
+  )
 })
 
 /* Derived reminders ---------------------------------------------------- */
@@ -266,7 +202,6 @@ it("says a finished version was never published", () => {
   expect(briefing.line).toBe(
     "Your website is live. Your latest changes aren't published yet."
   )
-  expect(prompts(briefing)[0]).toBe("Why aren't my changes live yet?")
 })
 
 it("puts an unpublished version after reviews and questions", () => {
