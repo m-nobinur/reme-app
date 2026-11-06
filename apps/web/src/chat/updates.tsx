@@ -72,24 +72,20 @@ function JourneyRow({ item }: { item: JourneyItem }) {
   )
 }
 
-const journeyUpdate = (
+const journeyUpdates = (
   workspace: Workspace | null,
   site: boolean,
   back = true
-): { lead: boolean; value: Update } | null => {
-  const item = journeyItem(workspace?.journey, site, back)
-  return (
-    item && {
-      lead: item.lead,
-      value: { id: item.id, content: <JourneyRow item={item} /> },
-    }
-  )
-}
+): { lead: boolean; value: Update }[] =>
+  journeyItem(workspace?.journey, site, back).map((item) => ({
+    lead: item.lead,
+    value: { id: item.id, content: <JourneyRow item={item} /> },
+  }))
 
 /**
  * A new chat's stack, most pressing first: a name the owner went to buy,
  * the new version of the site, then questions, other approvals and
- * reminders, then the web address or Google. The site's own approval is the
+ * reminders, then the web address and Google. The site's own approval is the
  * ready card's row, so Publish works from here.
  */
 export function updatesOf(workspace: Workspace | null): Update[] {
@@ -105,7 +101,7 @@ export function updatesOf(workspace: Workspace | null): Update[] {
         )
     )
   return stackOrder(
-    journeyUpdate(workspace, !!site),
+    journeyUpdates(workspace, !!site),
     site ? [{ id: "site", content: <SiteReadyCard row /> }] : [],
     rest.map((item) => ({
       id: item.id,
@@ -180,14 +176,14 @@ export function ConversationUpdates() {
     sentAt
   )
   if (empty) return null
-  const item = journeyUpdate(workspace, !!review, back && !buyingLatest)
+  const items = journeyUpdates(workspace, !!review, back && !buyingLatest)
   return (
     <SiteReadyCard
       className="mx-2 -mt-2"
       hidden={waiting}
       saidAt={saidAt}
       sentAt={sentAt}
-      stack={(site) => stackOrder(item, site)}
+      stack={(site) => stackOrder(items, site)}
     />
   )
 }

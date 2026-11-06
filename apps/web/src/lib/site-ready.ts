@@ -146,12 +146,12 @@ export function readyCard(
 
 /**
  * The ready card's one extra step beside Publish, off the chat (the chat's
- * update stack carries it there): the journey's own item, so the Website
+ * update stack carries it there): the journey's first item, so the Website
  * page offers what the stack does, and nothing while the api has not said.
  */
 export function readySlot(
   workspace: Workspace | null
 ): { label: string; ask: string; intent: AskIntent } | null {
-  const item = journeyItem(workspace?.journey, true)
-  return item && { label: item.label, ask: item.ask, intent: item.intent }
+  const [item] = journeyItem(workspace?.journey, true)
+  return item ? { label: item.label, ask: item.ask, intent: item.intent } : null
 }

@@ -11,7 +11,7 @@ export const CONNECT_GOOGLE = {
   intent: "connect_google",
 } as const
 
-/** The update stack's own item for the website journey: the address, or Google once there is one. */
+/** One of the update stack's own items for the website journey: the address, or Google. */
 export type JourneyItem = {
   id: "address" | "google"
   title: string
@@ -22,70 +22,71 @@ export type JourneyItem = {
   lead: boolean
 }
 
+const GOOGLE: JourneyItem = {
+  id: "google",
+  title: "Get found on Google",
+  label: "Connect Search Console",
+  lead: false,
+  ...CONNECT_GOOGLE,
+}
+
 /**
- * The journey's item in the update stack, read only from the journey the
+ * The journey's items in the update stack, read only from the journey the
  * workspace sends, so the stack, the draft-ready line and the assistant
  * agree. The address item stands wherever the journey offers a Connect
  * (`offer`, the draft-ready line's own rule) or the owner skipped it, once
  * there is a site to put it on (`site`: a draft on screen, or one ready or
  * live). Google follows once the address is connecting or live, or on the
  * site's free address once the owner skipped the address or turned it down,
- * until it is connected or turned down; only then does a skipped address
- * come back as Add your domain. A name the owner went to buy asks "Finished
- * buying?" only once they are `back` from its registrar link (`useBack`):
- * until then the chat already holds the question.
+ * until it is connected or turned down. A skipped address stays as Add your
+ * domain ahead of Google, the bigger win. A name the owner went to buy asks
+ * "Finished buying?" only once they are `back` from its registrar link
+ * (`useBack`): until then the chat already holds the question.
  */
 export function journeyItem(
   journey: Journey | undefined,
   site: boolean,
   back = true
-): JourneyItem | null {
-  if (!journey) return null
+): JourneyItem[] {
+  if (!journey) return []
   const { stage, name, offer } = journey.address
   const address = (title: string, label: string, lead = false) =>
     ({ id: "address", title, label, lead, ...CONNECT_ADDRESS }) as const
   if (stage === "buying_elsewhere" && name) {
-    return back ? address(`Finished buying ${name}?`, "Connect it", true) : null
+    return back ? [address(`Finished buying ${name}?`, "Connect it", true)] : []
   }
   if (offer === "connect_bought" && name) {
-    return address(`${name} is ready to connect`, "Connect", true)
+    return [address(`${name} is ready to connect`, "Connect", true)]
   }
   const drawn =
     site || journey.website === "draft_ready" || journey.website === "published"
-  if (drawn && offer) return address("Choose your domain", "Connect now")
+  if (drawn && offer) return [address("Choose your domain", "Connect now")]
   const free = drawn && (stage === "put_off" || stage === "declined")
-  if (
+  const google =
     (stage === "connecting" || stage === "live" || free) &&
     journey.google !== "connected" &&
     journey.google !== "declined" &&
     journey.google !== "waiting_for_domain"
-  ) {
-    return {
-      id: "google",
-      title: "Get found on Google",
-      label: "Connect Search Console",
-      lead: false,
-      ...CONNECT_GOOGLE,
-    }
-  }
-  if (drawn && stage === "put_off") {
-    return address("Add your domain", "Connect now")
-  }
-  return null
+  return [
+    ...(drawn && stage === "put_off"
+      ? [address("Add your domain", "Connect now")]
+      : []),
+    ...(google ? [GOOGLE] : []),
+  ]
 }
 
 /**
- * The stack's order: a lead item first, then the site card, then what
- * waits in between (a new chat's questions, approvals and reminders), then
- * the journey's other item.
+ * The stack's order: lead items first, then the site card, then what waits
+ * in between (a new chat's questions, approvals and reminders), then the
+ * journey's other items.
  */
 export const stackOrder = <T>(
-  item: { lead: boolean; value: T } | null,
+  items: readonly { lead: boolean; value: T }[],
   site: readonly T[],
   rest: readonly T[] = []
 ): T[] => [
-  ...(item?.lead ? [item.value] : []),
+  ...items.filter((item) => item.lead).map((item) => item.value),
   ...site,
   ...rest,
-  ...(item && !item.lead ? [item.value] : []),
+  ...items.filter((item) => !item.lead).map((item) => item.value),
 ]

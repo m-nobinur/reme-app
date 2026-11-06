@@ -222,4 +222,5 @@ it("offers beside Publish what the update stack offers, and nothing before the j
     intent: "connect_google",
   })
   expect(at("live", "connected")).toBeNull()
+  expect(at("put_off", "offerable")?.label).toBe("Connect now")
 })
