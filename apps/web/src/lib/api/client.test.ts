@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import type { QuestionReply } from "@workspace/contracts"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { EMPTY_WORKSPACE } from "../attention"
+import { LINK, STARTED, stateOf } from "../channels-samples"
 import { apiSource, treeOf } from "./client"
 import { SessionEnded, type StaffMember } from "./types"
 
@@ -983,6 +984,45 @@ it("takes a push subscription off by its id", async () => {
   expect(calls.at(-1)?.init?.method).toBe("DELETE")
   answers[`DELETE /push/subscriptions/${NOTE}`] = refusal(404, "push.not_found")
   expect(await apiSource.unsubscribePush(NOTE)).toMatchObject({ done: false })
+})
+
+it("reads the channels, and none where the gate is off", async () => {
+  answers["GET /channels"] = stateOf()
+  expect(await apiSource.channels()).toEqual(stateOf())
+  answers["GET /channels"] = refusal(404, "not_found")
+  expect(await apiSource.channels()).toBeNull()
+  answers["GET /channels"] = refusal(403, "org.unresolved")
+  expect(await apiSource.channels()).toBeNull()
+  answers["GET /channels"] = refusal(500, "internal")
+  await expect(apiSource.channels()).rejects.toThrow("500")
+})
+
+it("starts a WhatsApp link, and treats a refusal as none", async () => {
+  answers["POST /channels/whatsapp/link"] = STARTED
+  expect(await apiSource.startWhatsAppLink("k-7")).toEqual(STARTED)
+  expect(headerOf(calls.at(-1), "idempotency-key")).toBe("k-7")
+  answers["POST /channels/whatsapp/link"] = refusal(403, "channels.not_owner")
+  expect(await apiSource.startWhatsAppLink("k-8")).toBeNull()
+  answers["POST /channels/whatsapp/link"] = refusal(503, "unavailable")
+  await expect(apiSource.startWhatsAppLink("k-9")).rejects.toThrow("503")
+})
+
+it("switches updates on a linked chat and disconnects it", async () => {
+  const path = `/channels/links/${LINK.id}`
+  answers[`PATCH ${path}`] = {}
+  expect(
+    await apiSource.updateChannelLink(LINK.id, { updates: false }, "k-10")
+  ).toEqual({ done: true })
+  expect(JSON.parse(String(calls.at(-1)?.init?.body))).toEqual({
+    updates: false,
+  })
+  answers[`DELETE ${path}`] = {}
+  expect(await apiSource.disconnectChannelLink(LINK.id)).toEqual({ done: true })
+  expect(calls.at(-1)?.init?.method).toBe("DELETE")
+  answers[`DELETE ${path}`] = refusal(404, "channels.not_found")
+  expect(await apiSource.disconnectChannelLink(LINK.id)).toMatchObject({
+    done: false,
+  })
 })
 
 const DETAILS = {

@@ -5,6 +5,9 @@ import {
   ApprovalGrantSwitch,
   type ApprovalGrants,
   ChangeKind,
+  ChannelLinkPatch,
+  type ChannelLinkStarted,
+  type ChannelsState,
   DictationTidyRequest,
   DomainName,
   type DomainPurchaseStatus,
@@ -447,6 +450,41 @@ export const removePushSubscription = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<WriteOutcome> => {
     return await source.unsubscribePush(data.id)
   })
+
+/** The owner's messaging channels; null where the api serves none. */
+export const getChannels = createServerFn({ method: "GET" }).handler(
+  async (): Promise<ChannelsState | null> => await source.channels()
+)
+
+/** A WhatsApp link with a new one-time code; null when the api refused. */
+export const startWhatsAppLink = createServerFn({ method: "POST" }).handler(
+  async (): Promise<ChannelLinkStarted | null> =>
+    await source.startWhatsAppLink(crypto.randomUUID())
+)
+
+export const setChannelUpdates = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const data = record(input)
+    return {
+      id: id(data.id),
+      ...ChannelLinkPatch.parse({ updates: data.updates }),
+    }
+  })
+  .handler(
+    async ({ data }): Promise<WriteOutcome> =>
+      await source.updateChannelLink(
+        data.id,
+        { updates: data.updates },
+        crypto.randomUUID()
+      )
+  )
+
+export const disconnectChannel = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ id: id(record(input).id) }))
+  .handler(
+    async ({ data }): Promise<WriteOutcome> =>
+      await source.disconnectChannelLink(data.id)
+  )
 
 /** The zone this browser keeps, for the org's check-ins, quiet hours and reminders. */
 export const syncTimeZone = createServerFn({ method: "POST" })
