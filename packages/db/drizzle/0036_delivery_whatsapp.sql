@@ -1,0 +1,1 @@
+ALTER TYPE "public"."delivery_channel" ADD VALUE 'whatsapp';
