@@ -10,13 +10,13 @@ import remindersAndTime from "../cos/reminders-and-time/SKILL.md"
 import reviewReply from "../cos/review-reply/SKILL.md"
 import reviews from "../cos/reviews/SKILL.md"
 import soul from "../cos/SOUL.md"
+import questions from "../cos/site-change/references/questions.md"
 import siteChange from "../cos/site-change/SKILL.md"
 import boughtElsewhere from "../cos/web-address/references/bought-elsewhere.md"
 import buyNew from "../cos/web-address/references/buy-new.md"
 import connectOwn from "../cos/web-address/references/connect-own.md"
 import tips from "../cos/web-address/references/tips.md"
 import webAddress from "../cos/web-address/SKILL.md"
-import websiteChanges from "../cos/website-changes/SKILL.md"
 import weeklyReview from "../cos/weekly-review/SKILL.md"
 import {
   correctionsFor,
@@ -56,8 +56,7 @@ export const PROCEDURES: readonly Procedure[] = [
     tips,
   }),
   cos(googleSearch, { connect: googleConnect, performance: googlePerformance }),
-  cos(websiteChanges),
-  cos(siteChange),
+  cos(siteChange, { questions }),
   cos(builds),
   cos(reviews),
   cos(remindersAndTime),

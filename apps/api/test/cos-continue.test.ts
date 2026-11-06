@@ -1,5 +1,10 @@
 import { CosMessage, CosTurn } from "@workspace/contracts"
-import { type Tenancy, tenancy } from "@workspace/db"
+import {
+  appendSessionEvent,
+  newUlid,
+  type Tenancy,
+  tenancy,
+} from "@workspace/db"
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
 import postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
@@ -11,6 +16,7 @@ import {
   unknownAfter,
 } from "../src/continue.ts"
 import { CONTINUE_LINE, DEFAULT_MODEL, UNKNOWN_LINE } from "../src/cos/agent.ts"
+import { CONTEXT_POLICY } from "../src/cos/history.ts"
 import { type Owner, owner, SUFFIX, stubOrchestrator } from "./owner-fixture.ts"
 import { env, stubJwksFetch } from "./sealed-session.ts"
 
@@ -342,6 +348,72 @@ describe.skipIf(!url)("a turn cut off, and its continuation", () => {
     const before = (await logOf(id)).length
     expect(await run(job?.id as string, scripted().model)).toBe("superseded")
     expect(await logOf(id)).toHaveLength(before)
+  }, 30_000)
+
+  it("cancels a card the cut-off turn left open, in its row and in the model's history", async () => {
+    const id = await conversation()
+    const turnId = newUlid()
+    const call = `call_${turnId}`
+    const message = {
+      id: `asst_${turnId}`,
+      role: "assistant",
+      partial: true,
+      stopped: true,
+      parts: [
+        { type: "step-start" },
+        {
+          type: "tool-request_change",
+          toolCallId: call,
+          state: "approval-requested",
+          input: { text: "Use the new phone number" },
+          approval: { id: `appr_${turnId}` },
+        },
+      ],
+    }
+    await admin`
+      insert into conversation_messages (conversation_id, id, org_id, format, content)
+      values (${id}, ${message.id}, ${me.orgId}, 'ai-sdk/v6', ${admin.json(message)})`
+    const logged = (type: string, payload: object) =>
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        appendSessionEvent(db, {
+          orgId: me.orgId,
+          staffId: null,
+          assignmentId: null,
+          sessionId: id,
+          type,
+          payload: { turn_id: turnId, ...payload },
+          taint: [],
+        })
+      )
+    await logged("cos.message", {
+      message: {
+        id: `u_${turnId}`,
+        role: "user",
+        parts: [{ type: "text", text: "Use my new number" }],
+      },
+    })
+    await logged("cos.context", {
+      prefix_sha256: "a".repeat(64),
+      context_policy_version: CONTEXT_POLICY.version,
+      mode: "act",
+      active_tools: [],
+      text: "Mode: act.",
+      reserved_usd: 0.05,
+    })
+    await logged("cos.message", { message })
+    await logged("cos.turn", { outcome: "stopped" })
+    const [queued] = await admin<{ id: string }[]>`
+      insert into scheduled_jobs (org_id, kind, ref_id, payload, next_run_at)
+      values (${me.orgId}, 'cos_continue', ${id},
+        ${admin.json({ turn_id: turnId, attempt: 1 })}, now())
+      returning id`
+    const jobId = queued?.id as string
+    const next = scripted(said("Which number shall I use?"))
+    expect(await run(jobId, next.model)).toBe("ran")
+    const [row] = await admin<{ content: { parts: { state?: string }[] } }[]>`
+      select content from conversation_messages where id = ${message.id}`
+    expect(row?.content.parts[1]?.state).toBe("output-error")
+    expect(JSON.stringify(next.sent[0]?.prompt)).toContain(call)
   }, 30_000)
 
   it("stops after the second continuation, however the second ends", async () => {

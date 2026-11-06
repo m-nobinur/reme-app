@@ -30,8 +30,8 @@ export type JourneyItem = {
  * there is a site to put it on (`site`: a draft on screen, or one ready or
  * live). Google follows once the address is connecting or live, until it is
  * connected or turned down. A name the owner went to buy asks "Finished
- * buying?" only once they are `back` from it (`useBack`): until then the
- * chat already holds the question.
+ * buying?" only once they are `back` from its registrar link (`useBack`):
+ * until then the chat already holds the question.
  */
 export function journeyItem(
   journey: Journey | undefined,

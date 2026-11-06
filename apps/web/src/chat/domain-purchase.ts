@@ -5,6 +5,7 @@ import {
   getDomainRegistrant,
   startDomainCheckout,
 } from "@/lib/api/server"
+import { followRegistrar } from "@/lib/use-back"
 
 /**
  * The buy tray's calls to the api. Every Pay opens its own Checkout; the
@@ -16,6 +17,7 @@ export const domainPurchase: DomainPurchase = {
     startDomainCheckout({ data: { name, details, key: crypto.randomUUID() } }),
   status: (name) => getDomainPurchase({ data: { name } }),
   elsewhere: async (name) => {
+    followRegistrar()
     await buyDomainElsewhere({ data: { name, key: crypto.randomUUID() } })
   },
 }

@@ -269,7 +269,7 @@ const isWarning = (message: ModelMessage) =>
   )
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "69"
+const PREFIX_VERSION = "70"
 
 /**
  * The prompt-cache key every call on the prefix sends, the review's too:
@@ -1732,7 +1732,9 @@ export async function runTool(
     }
     throw error
   }
-  run.state.tools.push(name)
+  // A refused call did nothing, so the gates that read this list never count it.
+  if ((output as { outcome?: unknown } | null)?.outcome !== "refused")
+    run.state.tools.push(name)
   // The zone the owner just set is the one the rest of the turn reads.
   if (name === "set_time_zone") {
     const set = output as { outcome: string; time_zone?: string }

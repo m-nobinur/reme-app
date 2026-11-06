@@ -492,14 +492,33 @@ async function read(
     .from(conversations)
     .where(eq(conversations.id, id))
   if (!conversation) return notFound()
-  const [turn] = await db.execute<{ locked: boolean }>(
-    sql`select pg_try_advisory_xact_lock(2, hashtext(${id}::text)) as locked`
-  )
-  if (!turn?.locked) return busy()
+  if (!(await tryTurnLock(db, id))) return busy()
   return {
     kind: conversation.kind,
     tail: await readTail(db, id),
     card: await readCard(db, id, named),
+  }
+}
+
+/** How long a turn waits out a writer that holds the lock for a few milliseconds. */
+const LOCK_TRIES = 4
+const LOCK_WAIT_MS = 50
+
+/**
+ * The turn lock, tried and then tried again a few times: a summary written
+ * beside the turn (`writeCompaction`) holds it for milliseconds, which is no
+ * reason to tell the owner the last message is still being worked on. A
+ * holder that stays (a yes running) still answers `chat.busy` within
+ * `LOCK_TRIES * LOCK_WAIT_MS`.
+ */
+async function tryTurnLock(db: OrgScopedDb, id: string): Promise<boolean> {
+  for (let tried = 1; ; tried++) {
+    const [turn] = await db.execute<{ locked: boolean }>(
+      sql`select pg_try_advisory_xact_lock(2, hashtext(${id}::text)) as locked`
+    )
+    if (turn?.locked) return true
+    if (tried === LOCK_TRIES) return false
+    await new Promise((resolve) => setTimeout(resolve, LOCK_WAIT_MS))
   }
 }
 
