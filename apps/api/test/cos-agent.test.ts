@@ -449,7 +449,7 @@ describe("the CoS's instructions", () => {
         /When you bring it up[^\n]*goes live on it the moment they publish/
       )
       expect(skill("google-search")).toMatch(
-        /offer it only when the open items note says it can be offered/
+        /Suggest it only right after they put the domain off, when the open items note brings it back, or when they ask/
       )
     })
 
@@ -467,7 +467,7 @@ describe("the CoS's instructions", () => {
 
     it("leave Google to the offer once the setting is in, and never offer a purchase while buying is off", () => {
       expect(skill("google-search")).toMatch(
-        /Once their setting is in, the app offers Google itself, with a Connect Google button\. When that message is in the conversation, don't offer it again/
+        /Once their setting is in, or they skip the address card, the app offers Google itself, with a Connect Google button\. When that message is in the conversation, don't offer it again/
       )
       expect(skillPart("web-address", "buy-new")).toMatch(
         /When the workspace's buying is false, a chosen name shows Buy from Cloudflare and Buy from GoDaddy/

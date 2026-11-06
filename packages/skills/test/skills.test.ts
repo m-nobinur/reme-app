@@ -154,6 +154,15 @@ describe("skills", () => {
     ])
   })
 
+  it("offers Google once after the domain is put off, keeps Not now on the stack and obeys don't remind me", () => {
+    const body = procedure("cos", "google-search")?.body ?? ""
+    expect(body).toContain(
+      "or on the free address once they put the domain off"
+    )
+    expect(body).toContain("call put_off with kind google and never true")
+    expect(body).toContain("Never suggest Google twice in a sitting")
+  })
+
   it("asks whether they have a domain before anything else, and never guesses one", () => {
     const skill = procedure("cos", "web-address")
     const part = (name: string) =>
@@ -164,8 +173,15 @@ describe("skills", () => {
     expect(first).toContain("NEVER assume they own one, NEVER guess")
     expect(first).toContain("do not read connect-own until they say")
     expect(skill?.body).toContain("never a name made from theirs")
-    expect(part("buy-new")).toMatch(
-      /"I'll skip the domain for now"\), call put_off with kind address, then reply once, in one line/
+    expect(skill?.body).toMatch(
+      /"I'll skip the domain for now", with or without "and use the free address"\), call put_off with kind address first/
+    )
+    expect(skill?.body).toContain(
+      "suggest connecting Google Search Console with one benefit in their terms and call connect_google"
+    )
+    expect(part("buy-new")).toContain("step for putting the domain off")
+    expect(part("bought-elsewhere")).toContain(
+      "step for putting the domain off"
     )
     expect(part("buy-new")).toContain("Never quote dollars.")
     expect(part("bought-elsewhere")).toMatch(

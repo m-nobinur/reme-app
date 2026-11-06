@@ -10,7 +10,7 @@
    - Ask, as a natural question, whether they'd like to see the domain names again.
    Then offer_choices: Show me the names again ("Show me the domain names again"), I'll use the free address ("I'll skip the domain for now and use the free address") and I'll tell you when I have ("I'll tell you when I've bought <name>"). Don't list those choices in your words; the buttons show them. Ask it once and never press. If they asked not to be reminded about the domain, say only no problem and the free address, with no recommendation and no choices.
    Example: "No problem, Don. Your website can go live on its free address for now. However, I recommend having your own domain: customers trust and remember it more easily. Would you like to see the domain names again?"
-5. On their pick: names again is find_domain (read buy-new); the free address for now is put_off with kind address and one line; buying it later needs no call, the task waits for them.
+5. On their pick: names again is find_domain (read buy-new); the free address for now is the main procedure's step for putting the domain off; buying it later needs no call, the task waits for them.
 
 ## Pitfalls
 - Call domain_bought only once they say it's bought, never for a plan, and take their word for it.
