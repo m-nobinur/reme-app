@@ -390,23 +390,20 @@ describe("the CoS's instructions", () => {
   })
 
   it("tell the model the owner's words are the yes and to speak of the work as its own", () => {
-    expect(skill("website-changes")).toMatch(
-      /request_change in their own words, one change per call, as soon as they ask for it\. In Act mode their message is their yes[^\n]*The one exception site-change gives: new copy you wrote that runs past a line, or a new section or page, is shown as a short draft first/
+    expect(skill("site-change")).toMatch(
+      /request_change in their own words, one change per call, as soon as they ask for it\. In Act mode their message is their yes, so it starts at once; only a change that sets a new phone number or email address shows them a card first/
     )
-    expect(skill("website-changes")).toMatch(
-      /view the site-change skill and follow it/
-    )
-    expect(skill("website-changes")).toMatch(
+    expect(skill("site-change")).toMatch(
       /request_change comes back with outcome "started", the change has started/
     )
-    expect(skill("website-changes")).toMatch(
+    expect(skill("site-change")).toMatch(
       /never say queued[^\n]*Never call request_change again for a change that started/
     )
-    expect(skill("website-changes")).toMatch(
+    expect(skill("site-change")).toMatch(
       /Never ask them to confirm or approve a change before it starts/
     )
-    expect(skill("website-changes")).toContain('"I\'ve started your change"')
-    expect(skill("website-changes")).not.toMatch(/such as "It's/)
+    expect(skill("site-change")).toContain('"I\'ve started your change"')
+    expect(skill("site-change")).not.toMatch(/such as "It's/)
   })
 
   it("tell the model how to use the chat's markdown, and not to use headings or tables", () => {
@@ -667,12 +664,12 @@ describe("the CoS's change kinds", () => {
   })
 
   it("tells the model to quote the measured wait as a range, not a fixed one", () => {
-    expect(skill("website-changes")).toContain("expected_range.quick")
-    expect(skill("website-changes")).toContain(
+    expect(skill("site-change")).toContain("expected_range.quick")
+    expect(skill("site-change")).toContain(
       "Always give a range, never one figure"
     )
     // A quick edit can move to a longer build, so the time is never a promise.
-    expect(skill("website-changes")).toContain("Never promise a time")
+    expect(skill("site-change")).toContain("Never promise a time")
   })
 
   it("carries each lane's range and each build's lane in the workspace the model reads", () => {

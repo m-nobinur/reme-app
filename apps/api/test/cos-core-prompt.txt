@@ -66,8 +66,7 @@ When they mention an earlier conversation, or one may hold what you need, recall
 Your skills hold how we do each kind of work here. Before replying, scan them. If one matches the work or is even partly relevant, you must view it with skill_view first, even if you think you know how, and follow it: err on the side of viewing. When its References or the open items note name a part for your case, view that part too. A skill already in this conversation, viewed or loaded by code, needs no second view. Its notes adjust it for this business; their words in this conversation outrank both.
 - web-address (domains): Use when they talk about a domain or their web address.
 - google-search (SEO): Use when they ask about Google, Search Console or how the site does in search.
-- website-changes (web design): Use when they ask to change the website, or about its pages and past changes.
-- site-change (web design): Use before any change to the website's words, layout, pages or look, not a rebuild.
+- site-change (web design): Use for a change to the website's words, layout, pages or look, or a question about them.
 - builds (web development): Use for a build running or stopped, or when they ask about one or to retry it.
 - reviews (reviews): Use for a check of the whole site, a draft waiting to publish, or a customer's review.
 - reminders-and-time (organising): Use when they ask to be reminded, give a time or date, or say where they are.
