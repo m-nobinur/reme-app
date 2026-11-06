@@ -9,6 +9,18 @@ import {
 } from "./assignment.ts"
 import { AgentNote } from "./build-notes.ts"
 import {
+  ChannelLink,
+  ChannelLinkPatch,
+  ChannelLinkStarted,
+  ChannelsState,
+  NumberOffer,
+  NumberPurchase,
+  NumberPurchaseState,
+  NumberSearch,
+  WhatsAppAccount,
+  WhatsAppSignupComplete,
+} from "./channels.ts"
+import {
   AskChoiceInput,
   AskChoiceOutput,
   AskDesignInput,
@@ -220,6 +232,16 @@ import {
  * Schema, gets no OpenAPI component, and no test.
  */
 export const contracts = {
+  ChannelLink,
+  ChannelLinkPatch,
+  ChannelLinkStarted,
+  ChannelsState,
+  NumberOffer,
+  NumberPurchase,
+  NumberPurchaseState,
+  NumberSearch,
+  WhatsAppAccount,
+  WhatsAppSignupComplete,
   AgentNote,
   Activity,
   ActivityFeed,
