@@ -238,7 +238,7 @@ export async function streamTurn(
   const elapsed = () => Date.now() - since
   // Sent out of band: the body wakes for a line while the model is silent.
   const out: UIMessageChunk[] = []
-  let wake = () => undefined as void
+  let wake: () => void = () => undefined
   const narration =
     input.narrate && !input.post
       ? narrator({
