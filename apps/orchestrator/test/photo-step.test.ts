@@ -16,6 +16,8 @@ const { insertAssignment } = await import("../src/app.ts")
 const { fallbackBlueprint } = await import("../src/planner.ts")
 const { makePhotos } = await import("../src/photo-step.ts")
 
+const live = describe.skipIf(!process.env.DATABASE_URL)
+
 const PNG = btoa("not really a png")
 
 /** An OpenRouter that draws every image it is asked for, counting the draws. */
@@ -77,7 +79,7 @@ function bucket(keys: string[]) {
   }
 }
 
-describe("the photo step on a retry", () => {
+live("the photo step on a retry", () => {
   it("places the photos the failed build drew and draws only the slots it did not", async () => {
     const orgId = await freshOrg(kit)
     const base = fallbackBlueprint({ facts: [], recent: [] })
