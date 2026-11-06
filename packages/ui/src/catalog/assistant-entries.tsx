@@ -3833,10 +3833,31 @@ const assistantCatalog = [
       </div>
     ),
   },
-  {
-    name: "Thread",
+  // The thread and the parts its own files share between them.
+  ...(
+    [
+      "Thread",
+      "Composer",
+      "SkipThisOne",
+      "RecapReplies",
+      "LatestChoices",
+      "ThreadComponentsContext",
+      "ThreadSettingsContext",
+      "ThreadRevealContext",
+      "NewSinceContext",
+      "DateDivider",
+      "NewDivider",
+      "UpdateLabel",
+      "AssistantMessage",
+      "UserMessage",
+      "KeepTurnAnchor",
+      "FollowBottom",
+      "ThreadScrollToBottom",
+    ] as const
+  ).map((name) => ({
+    name,
     render: () => <OwnerThread height="h-[56rem]" messages={CONVERSATION} />,
-  },
+  })),
   { name: "ChipRow", render: () => <ScrolledChips /> },
   {
     // On a phone, mid-sentence: the words so far in the field, the mic now a stop.

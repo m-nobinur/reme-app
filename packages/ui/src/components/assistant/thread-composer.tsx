@@ -111,7 +111,6 @@ export const RecapReplies: FC = () => {
 export const LatestChoices: FC = () =>
   useSendable() ? <DecisionPills /> : null
 
-/** What to ask, as one row of chips above the composer; a press sends it. */
 /**
  * The composer. `expanded` is the new chat's: the field above, and the plus and
  * send under it. Once there is a conversation it is one compact row.
