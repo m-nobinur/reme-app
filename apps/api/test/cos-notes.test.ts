@@ -2,6 +2,7 @@ import {
   ADDRESS_ASK,
   AddressStageName,
   addressQuestions,
+  boughtReply,
   type CosWorkspace,
   type OwnerTask,
 } from "@workspace/contracts"
@@ -285,6 +286,24 @@ describe("the skills code loads", () => {
       []
     )
     expect(skillsDue({ card: yes, said: ADDRESS_ASK.no })).toEqual([])
+  })
+
+  it("loads bought-elsewhere for I bought it and Not yet, not for words of the owner's own", () => {
+    for (const bought of [true, false]) {
+      expect(
+        skillsDue({ said: boughtReply("sparkleclean.co.uk", bought) })
+      ).toEqual([
+        { name: "web-address", trigger: "bought_elsewhere" },
+        {
+          name: "web-address",
+          part: "bought-elsewhere",
+          trigger: "bought_elsewhere",
+        },
+      ])
+    }
+    expect(
+      skillsDue({ said: "I've bought sparkleclean.co.uk, what next?" })
+    ).toEqual([])
   })
 
   it("reads a loaded skill back after the owner's message, as a skill_view call and its result", () => {

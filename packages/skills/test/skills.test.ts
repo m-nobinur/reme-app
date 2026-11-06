@@ -175,10 +175,13 @@ describe("skills", () => {
       "do NOT call inspect_domain, check_domain or domain_bought again in this reply"
     )
     expect(part("bought-elsewhere")).toMatch(
-      /"I haven't bought <name> yet"\), reply in two or three short sentences/
+      /"I haven't bought <name> yet"\), reply in three short sentences/
     )
     expect(part("bought-elsewhere")).toContain(
-      "Name no options in your words; end with offer_choices"
+      'opening with "However, I recommend having your own domain"'
+    )
+    expect(part("bought-elsewhere")).toContain(
+      "whether they'd like to see the domain names again"
     )
     expect(part("bought-elsewhere")).toContain(
       "Do not infer that silence means it's bought."

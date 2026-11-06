@@ -2,6 +2,7 @@ import {
   ADDRESS_ASK,
   addressReply,
   type BuildQuestions,
+  boughtReply,
   type CosWorkspace,
   type SkillTrigger,
 } from "@workspace/contracts"
@@ -386,6 +387,7 @@ export const TRIGGER_LINES: Record<
   connect_address: "Using my domain expertise to set up your address",
   address_yes: "Getting your own address connected",
   address_no: "Drawing on my domain expertise to find a name",
+  bought_elsewhere: "Checking on your domain",
   connect_google: "Using my SEO skills to connect Google Search",
 }
 
@@ -393,7 +395,8 @@ export const TRIGGER_LINES: Record<
  * The skills code loads this turn (plan §3): on an explicit trigger, matched
  * by what the owner pressed (the CoS's first turn after onboarding, a
  * Connect button (`intent`), an answer on the address card as its stored
- * answer and its reply both say, a scheduled run); failing those, the one
+ * answer and its reply both say, I bought it or Not yet for a domain bought
+ * elsewhere, a scheduled run); failing those, the one
  * skill Jev is sure a typed message is plainly about (`topic`), which saves
  * the model a step. Everything else the model views itself.
  */
@@ -427,6 +430,20 @@ export function skillsDue({
     return [
       { name: "web-address", trigger: "address_yes" },
       { name: "web-address", part: "connect-own", trigger: "address_yes" },
+    ]
+  }
+  const buying = said?.match(/^I(?:'ve| haven't) bought (\S+)/)?.[1]
+  if (
+    buying &&
+    (said === boughtReply(buying, true) || said === boughtReply(buying, false))
+  ) {
+    return [
+      { name: "web-address", trigger: "bought_elsewhere" },
+      {
+        name: "web-address",
+        part: "bought-elsewhere",
+        trigger: "bought_elsewhere",
+      },
     ]
   }
   if (intent === "connect_address")

@@ -1,12 +1,13 @@
-import type {
-  Activity,
-  ActivitySegment,
-  ActivityStep,
-  CosToolName,
-  MessageReading,
-  OnboardingStatus,
-  OnboardingStep,
-  PlanFactKey,
+import {
+  type Activity,
+  type ActivitySegment,
+  type ActivityStep,
+  boughtReply,
+  type CosToolName,
+  type MessageReading,
+  type OnboardingStatus,
+  type OnboardingStep,
+  type PlanFactKey,
 } from "@workspace/contracts"
 import type { StatusState } from "@workspace/ui/lib/status-line"
 
@@ -2126,8 +2127,8 @@ export function pageAction(
     case "failed":
       return { label: "Ask what happened", ask: `What happened with ${what}?` }
     case "bought":
-      return { label: "I bought it", ask: `I've bought ${what}` }
+      return { label: "I bought it", ask: boughtReply(what, true) }
     case "not_bought":
-      return { label: "Not yet", ask: `I haven't bought ${what} yet` }
+      return { label: "Not yet", ask: boughtReply(what, false) }
   }
 }
