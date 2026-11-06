@@ -28,6 +28,7 @@ import {
   markRead,
   sendText,
 } from "./graph.ts"
+import { transcribe } from "./media.ts"
 
 /** The webhook's word that a linked owner wrote: ids only, never text. */
 export type ChannelJob = { kind: "channel"; orgId: string; linkId: string }
@@ -46,6 +47,14 @@ const textOf = ({ body }: Waiting) =>
   body.type === "text"
     ? ((body.text as { body?: unknown } | undefined)?.body as string)
     : undefined
+
+const audioOf = ({ body }: Waiting) =>
+  body.type === "audio"
+    ? ((body.audio as { id?: unknown } | undefined)?.id as string | undefined)
+    : undefined
+
+const UNHEARD =
+  "I couldn't make out that voice note. Could you send it again or type it?"
 
 /**
  * Every message the owner sent since the last turn, as one CoS turn in the
@@ -94,14 +103,30 @@ export async function channelTurn(
   const first = waiting[0]
   const last = waiting.at(-1)
   if (!first || !last) return "idle"
-  // shortcut: voice notes, photos and taps wait for their own stories; text only.
-  const text = waiting
-    .flatMap((w) => textOf(w) ?? [])
-    .join("\n\n")
-    .slice(0, GOAL_MAX)
+  // shortcut: photos and taps wait for their own stories; text and voice only.
   const typing = keepTyping(graph, last.id)
   let outcome: ChannelTurn = "idle"
   try {
+    const heard: string[] = []
+    const lines: string[] = []
+    let unheard = false
+    for (const w of waiting) {
+      const mediaId = audioOf(w)
+      if (mediaId) {
+        const words = await transcribe(env, graph, mediaId)
+        if (words) {
+          heard.push(words)
+          lines.push(words)
+        } else unheard = true
+      } else {
+        const typed = textOf(w)
+        if (typed) lines.push(typed)
+      }
+    }
+    const text = lines.join("\n\n").slice(0, GOAL_MAX)
+    if (unheard && !text.trim()) {
+      await send(graph, link.externalId, UNHEARD)
+    }
     if (text.trim()) {
       const conversationId =
         link.conversationId ??
@@ -128,7 +153,13 @@ export async function channelTurn(
       if (response.ok) {
         const reply = await replyOf(response)
         await Promise.all(closing)
-        await send(graph, link.externalId, reply)
+        await send(
+          graph,
+          link.externalId,
+          heard.length
+            ? `Heard: “${heard.join(" ").slice(0, 300)}”\n\n${reply}`
+            : reply
+        )
         outcome = "ran"
       } else {
         const refused = ErrorEnvelope.safeParse(await response.json())

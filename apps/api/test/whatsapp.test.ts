@@ -11,6 +11,9 @@ import {
 import { type ChannelJob, channelTurn } from "../src/channels/whatsapp/turn.ts"
 import { DEFAULT_MODEL } from "../src/cos/agent.ts"
 import worker from "../src/index.ts"
+import audioFixture from "./fixtures/whatsapp/audio-message.json" with {
+  type: "json",
+}
 import statusFixture from "./fixtures/whatsapp/status.json" with {
   type: "json",
 }
@@ -35,6 +38,15 @@ function delivery(phone: string, from: string, id: string, text: string) {
     .replaceAll("16505551234", from)
     .replace(message?.id as string, id)
     .replace(message?.text.body as string, JSON.stringify(text).slice(1, -1))
+}
+
+/** The recorded voice note with this number, sender and wamid. */
+function voiceDelivery(phone: string, from: string, id: string) {
+  const [message] = audioFixture.entry[0]?.changes[0]?.value.messages ?? []
+  return JSON.stringify(audioFixture)
+    .replace("106540352242922", phone)
+    .replaceAll("16505551234", from)
+    .replace(message?.id as string, id)
 }
 
 async function signature(raw: string, secret = SECRET) {
@@ -165,6 +177,14 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
   let a: Owner & { phone: string }
   let b: Owner & { phone: string }
   let run = 0
+  const speech: { model: string; contentType: string }[] = []
+  let recognise: (model: string) => unknown = () => ({
+    results: {
+      channels: [
+        { alternatives: [{ transcript: "Move Friday's clean to Monday." }] },
+      ],
+    },
+  })
 
   const bindings = () =>
     ({
@@ -172,6 +192,15 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
       WHATSAPP_ENABLED: "1",
       WHATSAPP_APP_SECRET: SECRET,
       CHANNEL_TOKEN_KEY: TOKEN_KEY,
+      AI: {
+        run: async (
+          model: string,
+          input: { audio: { contentType: string } }
+        ) => {
+          speech.push({ model, contentType: input.audio.contentType })
+          return recognise(model)
+        },
+      },
       ORCHESTRATOR: stubOrchestrator(),
       SITE_HOST_SUFFIX: SUFFIX,
       SCHEDULE: { get: async () => null, put: async () => undefined },
@@ -286,6 +315,14 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
       init?: RequestInit
     ) => {
       const target = String(input instanceof Request ? input.url : input)
+      if (target.startsWith("https://lookaside.fbsbx.com/"))
+        return new Response(new Uint8Array([79, 103, 103, 83]))
+      if (target.endsWith("/1003383421387256"))
+        return Response.json({
+          url: "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1003383421387256",
+          mime_type: "audio/ogg",
+          file_size: 4,
+        })
       if (!target.startsWith("https://graph.facebook.com/"))
         return realFetch(input, init)
       graph.push({
@@ -301,6 +338,7 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
   beforeEach(() => {
     jobs.length = 0
     graph.length = 0
+    speech.length = 0
   })
 
   afterAll(async () => {
@@ -472,5 +510,68 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
       await channelTurn(bindings(), kit, jobs[0] as ChannelJob, { model })
     ).toBe("gone")
     expect(prompts).toHaveLength(0)
+  })
+
+  it("answers a voice note from its transcript and says what it heard", async () => {
+    const from = sender()
+    await link(a, from)
+    graph.length = 0
+    expect((await post(voiceDelivery(a.phone, from, wamid()))).status).toBe(200)
+    const { model, prompts } = scripted("Moved it.")
+    expect(
+      await channelTurn(bindings(), kit, jobs[0] as ChannelJob, { model })
+    ).toBe("ran")
+    expect(speech).toEqual([
+      { model: "@cf/deepgram/nova-3", contentType: "audio/ogg" },
+    ])
+    expect(prompts[0]).toContain("Move Friday's clean to Monday.")
+    expect(sent().map((s) => (s.body.text as { body: string }).body)).toEqual([
+      "Heard: \u201cMove Friday's clean to Monday.\u201d\n\nMoved it.",
+    ])
+  })
+
+  it("falls back to Whisper when Nova-3 hears nothing", async () => {
+    const from = sender()
+    await link(a, from)
+    expect((await post(voiceDelivery(a.phone, from, wamid()))).status).toBe(200)
+    recognise = (m) =>
+      m === "@cf/deepgram/nova-3"
+        ? { results: { channels: [{ alternatives: [{ transcript: "" }] }] } }
+        : { text: " Cancel Tuesday. " }
+    const { model, prompts } = scripted("Cancelled.")
+    try {
+      expect(
+        await channelTurn(bindings(), kit, jobs[0] as ChannelJob, { model })
+      ).toBe("ran")
+    } finally {
+      recognise = () => ({})
+    }
+    expect(speech.map((s) => s.model)).toEqual([
+      "@cf/deepgram/nova-3",
+      "@cf/openai/whisper-large-v3-turbo",
+    ])
+    expect(prompts[0]).toContain("Cancel Tuesday.")
+  })
+
+  it("asks for a retype when no speech model can hear the note", async () => {
+    const from = sender()
+    await link(a, from)
+    graph.length = 0
+    expect((await post(voiceDelivery(a.phone, from, wamid()))).status).toBe(200)
+    recognise = () => {
+      throw new Error("model down")
+    }
+    const { model, prompts } = scripted()
+    expect(
+      await channelTurn(bindings(), kit, jobs[0] as ChannelJob, { model })
+    ).toBe("idle")
+    expect(prompts).toHaveLength(0)
+    expect(sent()).toHaveLength(1)
+    expect(sent()[0]?.body.text).toMatchObject({
+      body: expect.stringMatching(/couldn't make out that voice note/),
+    })
+    const [open] = await admin`
+      select count(*)::int as n from channel_inbound where link_id = ${jobs[0]?.linkId as string} and processed_at is null`
+    expect(open?.n).toBe(0)
   })
 })
