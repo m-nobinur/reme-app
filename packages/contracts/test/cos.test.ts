@@ -224,7 +224,7 @@ describe("a turn logged before memory replaced remember", () => {
       output: {
         outcome: "saved",
         note: "Saved. This update is complete; do not repeat it.",
-        fullness: "2%, 23/1,500 chars",
+        fullness: "1%, 23/1,600 chars",
       },
     }
     expect(CosToolResult.parse(logged)).toEqual(logged)

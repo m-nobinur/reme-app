@@ -48,12 +48,19 @@ export const PRIVATE_FACT_KEYS: readonly string[] = [
 ]
 
 /** The most the profile may hold, counted on its rendered text. */
-export const PROFILE_MAX_CHARS = 1_500
+export const PROFILE_MAX_CHARS = 1_600
 export const PROFILE_LINE_MAX = 300
 /** The most the working notes may hold, counted the same way. */
-export const NOTES_MAX_CHARS = 2_200
+export const NOTES_MAX_CHARS = 3_500
 /** The most one skill's notes may hold for one business, counted the same way. */
-export const SKILL_NOTES_MAX_CHARS = 600
+export const SKILL_NOTES_MAX_CHARS = 800
+
+/**
+ * The most lines `chars` characters can hold: one character each and the
+ * newline between them. A line cap set to it never binds before the
+ * character budget does.
+ */
+export const linesWithin = (chars: number) => Math.floor((chars + 1) / 2)
 
 /** How a line came to be there. Only `owner_said` is protected from reflection. */
 export const ProfileSource = z.enum([
@@ -75,14 +82,18 @@ export const profileText = (lines: readonly { text: string }[]) =>
 
 /** `owner.profile`'s value. */
 export const OwnerProfile = z
-  .strictObject({ lines: z.array(ProfileLine).max(40) })
+  .strictObject({
+    lines: z.array(ProfileLine).max(linesWithin(PROFILE_MAX_CHARS)),
+  })
   .refine((p) => profileText(p.lines).length <= PROFILE_MAX_CHARS, {
     message: `The profile holds at most ${PROFILE_MAX_CHARS} characters.`,
   })
 
 /** `assistant.working_notes`'s value: the profile's shape with its own budget. */
 export const WorkingNotes = z
-  .strictObject({ lines: z.array(ProfileLine).max(40) })
+  .strictObject({
+    lines: z.array(ProfileLine).max(linesWithin(NOTES_MAX_CHARS)),
+  })
   .refine((p) => profileText(p.lines).length <= NOTES_MAX_CHARS, {
     message: `The working notes hold at most ${NOTES_MAX_CHARS} characters.`,
   })
@@ -90,9 +101,13 @@ export const WorkingNotes = z
 /** One line of a skill's notes for this business. */
 export const SkillNoteLine = ProfileLine.extend({ skill: SkillName })
 
-/** `assistant.skill_notes`'s value: every skill's notes, each within its own budget. */
+/**
+ * `assistant.skill_notes`'s value: every skill's notes, each within its own
+ * budget. No line cap of its own: each skill's budget bounds its lines, and
+ * only a skill that exists can be written.
+ */
 export const SkillNotes = z
-  .strictObject({ lines: z.array(SkillNoteLine).max(120) })
+  .strictObject({ lines: z.array(SkillNoteLine) })
   .refine(
     (p) =>
       [...new Set(p.lines.map((l) => l.skill))].every(
@@ -229,7 +244,9 @@ export const MemoryOutput = z.discriminatedUnion("outcome", [
     target: MemoryTarget,
     note: Text(400),
     fullness: Text(60),
-    current_entries: z.array(Text(PROFILE_LINE_MAX)).max(40),
+    current_entries: z
+      .array(Text(PROFILE_LINE_MAX))
+      .max(linesWithin(NOTES_MAX_CHARS)),
   }),
   z.strictObject({ outcome: z.literal("stopped"), note: Text(200) }),
   Refused,
@@ -268,7 +285,9 @@ export const SkillNotesView = z.strictObject({
   name: SkillName,
   title: Text(80),
   max: z.int().positive(),
-  lines: z.array(ProfileLine.extend({ stale: z.boolean() })).max(40),
+  lines: z
+    .array(ProfileLine.extend({ stale: z.boolean() }))
+    .max(linesWithin(SKILL_NOTES_MAX_CHARS)),
 })
 
 /**

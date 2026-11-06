@@ -32399,7 +32399,7 @@
                         "pattern": "\\S"
                       },
                       "current_entries": {
-                        "maxItems": 40,
+                        "maxItems": 1750,
                         "type": "array",
                         "items": {
                           "type": "string",
@@ -52482,7 +52482,7 @@
                 "pattern": "\\S"
               },
               "current_entries": {
-                "maxItems": 40,
+                "maxItems": 1750,
                 "type": "array",
                 "items": {
                   "type": "string",
@@ -52956,7 +52956,7 @@
                       "maximum": 9007199254740991
                     },
                     "lines": {
-                      "maxItems": 40,
+                      "maxItems": 400,
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -53907,7 +53907,7 @@
         "type": "object",
         "properties": {
           "lines": {
-            "maxItems": 40,
+            "maxItems": 800,
             "type": "array",
             "items": {
               "type": "object",
@@ -61981,7 +61981,6 @@
         "type": "object",
         "properties": {
           "lines": {
-            "maxItems": 120,
             "type": "array",
             "items": {
               "type": "object",

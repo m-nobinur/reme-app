@@ -639,7 +639,7 @@ describe("skill views in the history", () => {
             output: {
               outcome: "saved",
               note: "Saved. This update is complete; do not repeat it.",
-              fullness: "2%, 23/1,500 chars",
+              fullness: "1%, 23/1,600 chars",
             },
           },
           { type: "text", text: "Noted.", state: "done" },

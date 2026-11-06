@@ -1296,7 +1296,7 @@ export const samples: Record<ContractName, unknown> = {
     outcome: "saved",
     target: "user",
     note: "Write saved. This update is complete; do not repeat it.",
-    fullness: "2% (23/1,500 chars)",
+    fullness: "1% (23/1,600 chars)",
   },
   SkillNotes: {
     lines: [
@@ -1354,7 +1354,7 @@ export const samples: Record<ContractName, unknown> = {
           at: NOW,
         },
       ],
-      max: 2200,
+      max: 3500,
       versions: [],
     },
     skills: {
@@ -1363,7 +1363,7 @@ export const samples: Record<ContractName, unknown> = {
         {
           name: "quote-reply",
           title: "Quote reply",
-          max: 600,
+          max: 800,
           lines: [
             {
               id: CONVERSATION,
@@ -1449,7 +1449,7 @@ export const samples: Record<ContractName, unknown> = {
   RememberOutput: {
     outcome: "saved",
     note: "Saved. This update is complete; do not repeat it.",
-    fullness: "2%, 23/1,500 chars",
+    fullness: "1%, 23/1,600 chars",
   },
   OnboardingStatus: {
     on: { kind: "fact", key: "business.phone" },

@@ -11,6 +11,7 @@ import {
   OWNER_PROFILE_KEY,
   OwnerMemoryReview,
   OwnerProfile,
+  PROFILE_LINE_MAX,
   PROFILE_MAX_CHARS,
   type ProfileLine,
   type ProfileVersion,
@@ -119,7 +120,7 @@ export function layerOf(target: string): Layer | null {
 
 /**
  * A store's fullness as Hermes's block header renders it, with a comma for
- * its dash: `62%, 930/1,500 chars`.
+ * its dash: `58%, 930/1,600 chars`.
  */
 export function fullness(
   lines: readonly { text: string }[],
@@ -511,11 +512,7 @@ export function applyOperations(
   const before = profileText(lines).length
   const after = profileText(held).length
   const current = `${before.toLocaleString("en-GB")}/${max.toLocaleString("en-GB")}`
-  if (
-    after > max ||
-    held.length > 40 ||
-    held.some((l) => l.text.length > 300)
-  ) {
+  if (after > max || held.some((l) => l.text.length > PROFILE_LINE_MAX)) {
     return {
       ok: false,
       full: {

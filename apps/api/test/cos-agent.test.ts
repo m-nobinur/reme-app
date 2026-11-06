@@ -1769,7 +1769,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         })
       }
       expect(profileIn((last as { sent: CallOptions[] }).sent)).toBe(
-        "OWNER PROFILE (who the owner is) [2%, 23/1,500 chars]\nPrefers calls after 4pm\n"
+        "OWNER PROFILE (who the owner is) [1%, 23/1,600 chars]\nPrefers calls after 4pm\n"
       )
       expect(
         (await turnsOf(first)).every((t) => t.outcome === "answered")
@@ -1779,7 +1779,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       const fresh = scripted(said("Hello."))
       await turn(me, typed(second, "Hi", "ask"), { model: fresh.model })
       expect(profileIn(fresh.sent)).toBe(
-        "OWNER PROFILE (who the owner is) [2%, 23/1,500 chars]\nPrefers calls after 4pm\n"
+        "OWNER PROFILE (who the owner is) [1%, 23/1,600 chars]\nPrefers calls after 4pm\n"
       )
 
       // A second line, then the owner takes it back through the assistant.
@@ -1802,7 +1802,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       const again = scripted(said("Fine."))
       await turn(me, typed(second, "And now?", "ask"), { model: again.model })
       expect(profileIn(again.sent)).toBe(
-        "OWNER PROFILE (who the owner is) [2%, 23/1,500 chars]\nPrefers calls after 4pm\n"
+        "OWNER PROFILE (who the owner is) [1%, 23/1,600 chars]\nPrefers calls after 4pm\n"
       )
     })
 

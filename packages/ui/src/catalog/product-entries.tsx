@@ -228,7 +228,7 @@ const productCatalog: Entry[] = [
               stale: true,
             },
           ]}
-          max={600}
+          max={800}
           title="Quote reply"
           used={89}
         />

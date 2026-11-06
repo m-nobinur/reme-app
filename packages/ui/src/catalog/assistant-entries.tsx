@@ -151,7 +151,7 @@ const REMEMBER_CALL: ThreadMessageLike[] = [
           outcome: "saved",
           target: "user",
           note: "Saved.",
-          fullness: "2%, 23/1,500 chars",
+          fullness: "1%, 23/1,600 chars",
         },
         toolCallId: "call_memory",
         toolName: "memory",

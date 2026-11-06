@@ -2,6 +2,7 @@ import {
   CosPrefix,
   type MemoryOperation,
   NOTES_MAX_CHARS,
+  PROFILE_MAX_CHARS,
   type ProfileLine,
   SKILL_NOTES_KEY,
 } from "@workspace/contracts"
@@ -141,12 +142,13 @@ describe("what no store accepts", () => {
 
 describe("consolidation", () => {
   const long = (c: string) => c.repeat(300)
-  const four = () => ["a", "b", "c", "d"].map((c) => line(long(c)))
+  const five = () => ["a", "b", "c", "d", "e"].map((c) => line(long(c)))
 
   it("refuses an add alone past four fifths, and takes one that merges or removes in the same batch", () => {
-    const held = four()
+    const held = five()
     const used = held.map((l) => l.text).join("\n").length
-    expect(used / 1_500).toBeGreaterThanOrEqual(CONSOLIDATE_AT)
+    expect(used).toBeLessThanOrEqual(PROFILE_MAX_CHARS)
+    expect(used / PROFILE_MAX_CHARS).toBeGreaterThanOrEqual(CONSOLIDATE_AT)
     const alone = applyOperations(
       held,
       [add("Walks dogs on Mondays")],
@@ -169,10 +171,10 @@ describe("consolidation", () => {
   })
 
   it("never truncates: a batch past the budget changes nothing and names what to free", () => {
-    const held = four().slice(0, 3)
+    const held = five().slice(0, 4)
     const over = applyOperations(
       held,
-      [add(long("e")), add(long("f"))],
+      [add(long("f")), add(long("g"))],
       "owner_said",
       AT
     )
@@ -266,7 +268,7 @@ describe("a skill's notes", () => {
     const skill = procedure("cos", "quote-reply")
     if (!skill) throw new Error("no quote-reply")
     const notes =
-      "Notes for this business: [5%, 28/600 chars]\nQuotes include parking costs"
+      "Notes for this business: [4%, 28/800 chars]\nQuotes include parking costs"
     expect(viewOf(skill, undefined, "Drafting", notes)).toMatchObject({ notes })
     const part = procedure("cos", "web-address")?.parts[0]?.name
     expect(
@@ -373,7 +375,7 @@ describe.skipIf(!url)("on a live connection", () => {
     expect(out).toMatchObject({
       outcome: "saved",
       target: "skill:quote-reply",
-      fullness: "7%, 40/600 chars",
+      fullness: "5%, 40/800 chars",
     })
     expect(
       await memory(
@@ -387,7 +389,7 @@ describe.skipIf(!url)("on a live connection", () => {
       skillNotesText(db, "quote-reply")
     )
     expect(text).toBe(
-      "Notes for this business: [7%, 40/600 chars]\nCity centre quotes add the parking costs"
+      "Notes for this business: [5%, 40/800 chars]\nCity centre quotes add the parking costs"
     )
     // The other business has none: the skill is shared, its notes are not.
     expect(

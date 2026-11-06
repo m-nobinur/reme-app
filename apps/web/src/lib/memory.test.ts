@@ -53,7 +53,7 @@ it("says what a saved memory call changed in its own turn", () => {
         outcome: "saved",
         target: "notes",
         note: "Write saved.",
-        fullness: "1%, 25/2,200 chars",
+        fullness: "1%, 25/3,500 chars",
       },
     })
   )

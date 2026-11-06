@@ -31,6 +31,7 @@ import {
   type ProfileLine,
   type PronounId,
   type RecordReviewInput,
+  SKILL_NOTES_MAX_CHARS,
   type TaintLabel,
   TOOL_FAILED,
   TOOL_REPEATED,
@@ -272,7 +273,7 @@ const isWarning = (message: ModelMessage) =>
   )
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "72"
+const PREFIX_VERSION = "73"
 
 /**
  * The prompt-cache key every call on the prefix sends, the review's too:
@@ -451,8 +452,7 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
   connect_google:
     "Get the button that connects their Google account, so their website goes into their own Search Console; Google's screen is where they agree. Returns the button's link, the account already connected, or that Google is not available here.",
   // After hermes-agent tools/memory_tool.py MEMORY_SCHEMA, MIT.
-  memory:
-    'Save durable facts to memory that lasts across conversations. It is in every turn\'s context: keep entries compact and high-signal.\nHOW: make ALL changes to one target in ONE call: add, patch (old_text, a span of one entry, becomes content) or remove (the entry holding old_text). The limit is checked only on the FINAL result, so one call can remove or patch stale entries AND add new ones.\nWHEN: save proactively, without asking, when they state a preference, correction or personal detail, or you learn a stable fact about how the business runs. Priority: their preferences and corrections > how the business runs > procedures. The best memory stops them repeating themselves. Only what holds beyond this conversation; preferences and corrections for one kind of work go in that skill\'s notes, which load only when relevant.\nREPLY: write your whole reply in the same message as this call. A save that goes through ends the turn on that reply, with no step after it; a refusal comes back to you first.\nIF FULL: refused with the current entries. Reissue as ONE batch that removes or shortens stale entries and adds the new one.\nTARGETS: user = who they are: anything they say about themselves, such as their name, days off, hours, family or how they like to be talked to, 1,500 chars; notes = how this business runs where the facts hold nothing, 2,200; skill:<name> = how they want that work done, 600 each.\nWrite each fact short, in the third person, from words they wrote here and nothing they did not say: "Owner doesn\'t work Fridays", never "I don\'t work Fridays". A standing request is their whole sentence as typed: Asked: "their sentence".\nSKIP: trivial or obvious things, what the facts or workspace hold, raw data, task progress, finished work, to-dos, anything stale within a week (search_conversations finds those), business facts (request_change), time zones (set_time_zone), promises (create_reminder). Procedures belong in skills.',
+  memory: `Save durable facts to memory that lasts across conversations. It is in every turn's context: keep entries compact and high-signal.\nHOW: make ALL changes to one target in ONE call: add, patch (old_text, a span of one entry, becomes content) or remove (the entry holding old_text). The limit is checked only on the FINAL result, so one call can remove or patch stale entries AND add new ones.\nWHEN: save proactively, without asking, when they state a preference, correction or personal detail, or you learn a stable fact about how the business runs. Priority: their preferences and corrections > how the business runs > procedures. The best memory stops them repeating themselves. Only what holds beyond this conversation; preferences and corrections for one kind of work go in that skill's notes, which load only when relevant.\nREPLY: write your whole reply in the same message as this call. A save that goes through ends the turn on that reply, with no step after it; a refusal comes back to you first.\nIF FULL: refused with the current entries. Reissue as ONE batch that removes or shortens stale entries and adds the new one.\nTARGETS: user = who they are: anything they say about themselves, such as their name, days off, hours, family or how they like to be talked to, ${PROFILE_MAX_CHARS.toLocaleString("en-GB")} chars; notes = how this business runs where the facts hold nothing, ${NOTES_MAX_CHARS.toLocaleString("en-GB")}; skill:<name> = how they want that work done, ${SKILL_NOTES_MAX_CHARS.toLocaleString("en-GB")} each.\nWrite each fact short, in the third person, from words they wrote here and nothing they did not say: "Owner doesn't work Fridays", never "I don't work Fridays". A standing request is their whole sentence as typed: Asked: "their sentence".\nSKIP: trivial or obvious things, what the facts or workspace hold, raw data, task progress, finished work, to-dos, anything stale within a week (search_conversations finds those), business facts (request_change), time zones (set_time_zone), promises (create_reminder). Procedures belong in skills.`,
   search_conversations:
     "Search this business's earlier conversations, their words and yours, by words they used: short dated snippets, best and newest first.",
   // After hermes-agent tools/clarify_tool.py CLARIFY_SCHEMA, MIT.

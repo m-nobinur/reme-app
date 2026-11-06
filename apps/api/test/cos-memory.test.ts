@@ -1,12 +1,15 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { join, relative } from "node:path"
 import {
+  linesWithin,
   type MemoryOperation,
+  NOTES_MAX_CHARS,
   OWNER_MEMORY_REVIEW_KEY,
   OWNER_PROFILE_KEY,
   OwnerProfile,
   PROFILE_MAX_CHARS,
   type ProfileLine,
+  WorkingNotes,
 } from "@workspace/contracts"
 import {
   appendSessionEvent,
@@ -328,16 +331,30 @@ describe("applying operations", () => {
     expect(merged).toMatchObject({ ok: true })
   })
 
+  it("lets short lines fill a store: no line cap binds before its characters do", () => {
+    const short = Array.from({ length: 60 }, (_, i) => line(`Note ${i}`))
+    expect(
+      applyOperations(short, [add("Owner likes plants")], "owner_said", AT)
+    ).toMatchObject({ ok: true })
+    const ones = (count: number) => ({
+      lines: Array.from({ length: count }, () => line("x")),
+    })
+    expect(OwnerProfile.safeParse(ones(800)).success).toBe(true)
+    expect(OwnerProfile.safeParse(ones(801)).success).toBe(false)
+    expect(WorkingNotes.safeParse(ones(1_750)).success).toBe(true)
+    expect(linesWithin(NOTES_MAX_CHARS)).toBe(1_750)
+  })
+
   it("writes the fullness the way a person reads it", () => {
-    expect(fullness([{ text: "x".repeat(930) }])).toBe("62%, 930/1,500 chars")
-    expect(fullness([])).toBe("0%, 0/1,500 chars")
+    expect(fullness([{ text: "x".repeat(930) }])).toBe("58%, 930/1,600 chars")
+    expect(fullness([])).toBe("0%, 0/1,600 chars")
   })
 })
 
 const profileChars = (lines: { text: string }[]) =>
   lines.map((l) => l.text).join("\n").length
 
-describe("undoing one change", () => {
+describe("describing one change", () => {
   const a = line("Prefers calls after 4pm")
   const b = line("Quotes go out on Fridays")
 
@@ -449,7 +466,7 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
       outcome: "saved",
       target: "user",
       note: "Write saved. This update is complete; do not repeat it.",
-      fullness: "2%, 23/1,500 chars",
+      fullness: "1%, 23/1,600 chars",
     })
     expect(await lines()).toEqual(["Prefers calls after 4pm"])
     const row = await kit.withOrg({ orgId: me.orgId }, (db) =>
@@ -472,7 +489,7 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     )
     expect(out).toMatchObject({
       outcome: "saved",
-      fullness: "1%, 24/2,200 chars",
+      fullness: "1%, 24/3,500 chars",
     })
     expect(await lines()).toEqual(before)
     const { notes } = await loadWorkspace(context())
@@ -486,7 +503,7 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
       personaOf([], [], notes)
     )
     expect(text).toMatch(
-      /<data source="working_notes" taint="untrusted_input">\nWORKING NOTES \(how this business runs\) \[1%, 24\/2,200 chars\]\nQuotes go out on Fridays/
+      /<data source="working_notes" taint="untrusted_input">\nWORKING NOTES \(how this business runs\) \[1%, 24\/3,500 chars\]\nQuotes go out on Fridays/
     )
   })
 
