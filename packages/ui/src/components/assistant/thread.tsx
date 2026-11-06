@@ -955,7 +955,7 @@ type Labelled = Exclude<ServerMessageKind, "reply">
 /** Each kind of posted message's label and mark; an update's mark may be its button's. */
 const MESSAGE_KINDS: Record<Labelled, { label: string; state: StateName }> = {
   update: { label: "Update", state: "notifications" },
-  note: { label: "Note", state: "waiting" },
+  note: { label: "Note", state: "note" },
   done: { label: "Done", state: "done" },
   reminder: { label: "Reminder", state: "reminder" },
 }

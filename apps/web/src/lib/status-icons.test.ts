@@ -56,3 +56,8 @@ it("draws every state icon from the icon list, never from phosphor", () => {
     )
   expect(strays).toEqual([])
 })
+
+it("gives a posted note its own mark, not the one for waiting on the owner", () => {
+  expect(STATE_MARKS.note.Icon).not.toBe(STATE_MARKS.waiting.Icon)
+  expect(STATE_MARKS.note.Icon.displayName).toBe("NoteIcon")
+})
