@@ -23,14 +23,9 @@ import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
 import { answerValue } from "@workspace/ui/lib/answer"
 import { FIELD_ERROR } from "@workspace/ui/lib/card"
+import { useChatService } from "@workspace/ui/lib/chat-services"
 import { factText } from "@workspace/ui/lib/facts"
-import {
-  createContext,
-  type FormEvent,
-  useContext,
-  useId,
-  useState,
-} from "react"
+import { type FormEvent, useId, useState } from "react"
 
 /**
  * What the assistant asks the owner for their website
@@ -99,11 +94,6 @@ export function addressSaid(
   return choice === undefined ? null : addressReply(choice, given("text"))
 }
 
-const AnswerContext = createContext<AnswerBuildQuestion | null>(null)
-
-/** Gives the card the app's way to send an answer. */
-export const AnswerBuildQuestionProvider = AnswerContext.Provider
-
 /** The pause after an answer's tick before the next question, or the fold. */
 export const ONWARD_MS = 600
 /** How long the folded row stays before it goes. */
@@ -142,7 +132,7 @@ export function nextOpen(
 }
 
 function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
-  const send = useContext(AnswerContext)
+  const send = useChatService("answerBuildQuestion")
   const aui = useAui()
   const messageId = useAuiState((s) => s.message.id)
   const conversationId = useAuiState((s) => s.threadListItem.remoteId)

@@ -37,15 +37,14 @@ import { Input } from "@workspace/ui/components/input"
 import { DoneIcon, ToolStatus } from "@workspace/ui/components/status-line"
 import { pageAction, type ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { FIELD_ERROR, OPTION, OPTION_PILL } from "@workspace/ui/lib/card"
+import { useChatService } from "@workspace/ui/lib/chat-services"
 import { useLiveCards } from "@workspace/ui/lib/live-cards"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { type Failure, readView, stepOf } from "@workspace/ui/lib/tool-state"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
-  createContext,
   type FormEvent,
   type ReactNode,
-  useContext,
   useEffect,
   useId,
   useRef,
@@ -150,11 +149,6 @@ export type DomainPurchase = {
   /** The owner buys it themselves, so the api watches the registry for it. */
   elsewhere: (name: string) => Promise<void>
 }
-
-const DomainPurchaseContext = createContext<DomainPurchase | null>(null)
-
-/** Gives the buy tray the app's purchase calls. */
-export const DomainPurchaseProvider = DomainPurchaseContext.Provider
 
 const AGREEMENT = "https://www.cloudflare.com/domain-registration-agreement"
 const ICANN = "https://www.icann.org/resources/pages/benefits-2013-09-16-en"
@@ -790,7 +784,7 @@ function DetailsPage({
   /** The name's purchase already went past paying: its line takes over. */
   onSettled: () => void
 }) {
-  const purchase = useContext(DomainPurchaseContext)
+  const purchase = useChatService("domainPurchase")
   const id = useId()
   const [prefill, setPrefill] = useState<
     DomainRegistrantPrefill | Refused | undefined
@@ -1056,7 +1050,7 @@ type Draft =
 
 /** A purchase's line in the thread, read from the api. */
 function BoughtLine({ name, paid }: { name: string; paid: boolean }) {
-  const purchase = useContext(DomainPurchaseContext)
+  const purchase = useChatService("domainPurchase")
   const status = usePurchaseStatus(purchase, name, paid, false)
   return status ? <StatusLine name={name} status={status} /> : null
 }
@@ -1101,7 +1095,7 @@ export function BuyTray({
   /** Your details for `name` as `buy_domain` prefilled them. */
   prefill?: DomainRegistrantPrefill | undefined
 }) {
-  const purchase = useContext(DomainPurchaseContext)
+  const purchase = useChatService("domainPurchase")
   const last = useAuiState((s) => {
     const at = s.thread.messages.findIndex((m) => m.id === s.message.id)
     return !s.thread.messages.slice(at + 1).some((m) => m.role === "user")

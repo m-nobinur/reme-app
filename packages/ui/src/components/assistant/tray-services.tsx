@@ -10,11 +10,11 @@ import type {
   ReviewedPhotos,
   UploadedAssets,
 } from "@workspace/contracts"
-import { createContext, useContext } from "react"
+import { useChatService } from "@workspace/ui/lib/chat-services"
 
 /**
  * What the design tray's logo, photos and palette pages call on the app.
- * The web gives them through `TrayServicesProvider`; the catalog gives
+ * The web gives them through `ChatServicesProvider`; the catalog gives
  * fakes. Each throws an `Error` whose message is a sentence for the owner.
  */
 export type TrayServices = {
@@ -47,13 +47,8 @@ export type TrayServices = {
   imageUrl: (id: string) => string
 }
 
-const ServicesContext = createContext<TrayServices | null>(null)
-
-/** Gives the tray's pages the app's services. */
-export const TrayServicesProvider = ServicesContext.Provider
-
 /** The app's services, or null where none were given: a page then says it cannot upload here. */
-export const useTrayServices = () => useContext(ServicesContext)
+export const useTrayServices = () => useChatService("tray")
 
 type Question = AskDesignInput["questions"][number]
 type Answer = AskDesignOutput["answers"][string]
