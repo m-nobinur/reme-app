@@ -201,7 +201,7 @@ function PasswordField({
             // the name is what a person navigating by control list hears; a bare
             // icon with a fixed label leaves one of the two wrong at all times.
             aria-pressed={visible}
-            className="absolute top-1/2 right-1.5 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
+            className="absolute top-1/2 right-1.5 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
             onClick={() => setVisible((shown) => !shown)}
             // Never a submit. Inside a form, a button with no type is one.
             type="button"

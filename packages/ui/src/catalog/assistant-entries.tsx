@@ -2910,7 +2910,7 @@ function CollapsibleSample() {
   const [open, setOpen] = useState(true)
   return (
     <Collapsible className="max-w-md" onOpenChange={setOpen} open={open}>
-      <CollapsibleTrigger className="rounded-lg px-1 py-1.5 text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring">
+      <CollapsibleTrigger className="rounded-lg px-1 py-1.5 text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring">
         What changed in this revision
       </CollapsibleTrigger>
       <CollapsibleContent className="px-1 pt-1 text-sm">

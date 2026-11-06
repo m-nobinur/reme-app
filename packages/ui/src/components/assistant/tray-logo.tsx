@@ -1155,7 +1155,7 @@ function TrayLogo({
                 {random ? (
                   <button
                     aria-label="Another random palette"
-                    className="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-foreground shadow-sm outline-none transition-colors hover:bg-card focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
+                    className="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-foreground shadow-sm outline-none transition-colors hover:bg-card focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none"
                     onClick={roll}
                     type="button"
                   >

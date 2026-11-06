@@ -379,7 +379,7 @@ const defaultComponents = memoizeMarkdownComponents({
     <div
       // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll region has to take focus to be scrolled from the keyboard.
       tabIndex={0}
-      className="aui-md-table-scroll my-4 overflow-x-auto rounded-sm text-[0.9375em] outline-none focus-visible:ring-3 focus-visible:ring-ring"
+      className="aui-md-table-scroll my-4 overflow-x-auto rounded-sm text-[0.9375em] outline-none focus-visible:ring-1 focus-visible:ring-ring"
     >
       <table
         className={cn(

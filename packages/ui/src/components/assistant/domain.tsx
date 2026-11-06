@@ -349,7 +349,7 @@ function Paused({ name, onResume }: { name: string; onResume: () => void }) {
     >
       {`Connecting ${name} · paused `}
       <button
-        className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+        className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
         onClick={onResume}
         type="button"
       >

@@ -45,7 +45,8 @@
   --input: oklch(0.922 0 0);
   /* The focus ring is the indicator, so WCAG 2.2 AA wants 3:1 against what it
      sits on. 0.708 measures 2.59:1 against the background. This measures
-     3.50:1. The dark value already measures 4.18:1 and does not move. */
+     3.50:1. The dark value already measures 4.18:1 and does not move. The
+     contrast lets it stay quiet: every focus ring is `ring-1 ring-ring`. */
   --ring: oklch(0.63 0 0);
   /* A text field in focus keeps its shape and takes a darker edge. The caret
      shows where the owner is typing, so this is not the only indicator, and it

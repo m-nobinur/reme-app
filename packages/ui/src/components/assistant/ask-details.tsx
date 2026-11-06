@@ -87,7 +87,7 @@ const HINT: Partial<Record<string, string>> = {
 }
 
 const CHIP =
-  "h-7 max-w-full truncate rounded-full border border-border bg-card px-3 text-xs transition-colors hover:border-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+  "h-7 max-w-full truncate rounded-full border border-border bg-card px-3 text-xs transition-colors hover:border-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 
 /** The names written for this business, or the house ones without them. */
 const nameIdeas = (written: readonly string[] | undefined) =>
