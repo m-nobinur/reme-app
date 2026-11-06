@@ -126,9 +126,9 @@ async function openUpstream(env: Pick<Env, "AI">): Promise<WebSocket | null> {
 }
 
 /**
- * What Deepgram's frame says, as the browser reads it: the phrase so far, or
- * the phrase settled. Its other frames (metadata, speech started) are not
- * the browser's business.
+ * What Deepgram's frame says, as the browser reads it: the phrase so far, the
+ * phrase settled, or an error. Its other frames (metadata, speech started) are
+ * not the browser's business.
  */
 export function eventOf(data: unknown): DictationEvent | null {
   if (typeof data !== "string") return null
@@ -142,6 +142,7 @@ export function eventOf(data: unknown): DictationEvent | null {
   } catch {
     return null
   }
+  if (frame.type === "Error") return { type: "error" }
   if (frame.type !== "Results") return null
   const text = frame.channel?.alternatives?.[0]?.transcript?.trim()
   if (!text) return null
@@ -149,7 +150,10 @@ export function eventOf(data: unknown): DictationEvent | null {
 }
 
 /** The part of a WebSocket the relay uses, so a test can stand in for either end. */
-export type Socket = Pick<WebSocket, "send" | "close" | "addEventListener">
+export type Socket = Pick<
+  WebSocket,
+  "send" | "close" | "addEventListener" | "binaryType"
+>
 
 /**
  * Joins the browser's socket to the model's. Audio goes up as it comes; the
@@ -165,6 +169,8 @@ export function relay(
     return () => clearTimeout(timer)
   }
 ) {
+  // A Worker's socket hands binary frames over as Blob since 2026-03-17, and `send` passes a Blob on as the text "[object Blob]".
+  browser.binaryType = "arraybuffer"
   let bytes = 0
   let stopped = false
   const stop = () => {
@@ -202,7 +208,17 @@ export function relay(
   browser.addEventListener("error", fail)
 
   upstream.addEventListener("message", (message) => {
-    const event = eventOf((message as MessageEvent).data)
+    const { data } = message as MessageEvent
+    const event = eventOf(data)
+    if (event?.type === "error") {
+      console.error(
+        JSON.stringify({
+          code: "dictation.upstream_error",
+          frame: String(data).slice(0, 300),
+        })
+      )
+      return fail()
+    }
     if (event) browser.send(JSON.stringify(event))
   })
   upstream.addEventListener("close", () => {
@@ -288,8 +304,8 @@ export async function dictate(
     })
   }
   const { 0: client, 1: server } = new WebSocketPair()
+  relay(server, upstream)
   server.accept()
   upstream.accept()
-  relay(server, upstream)
   return new Response(null, { status: 101, webSocket: client })
 }

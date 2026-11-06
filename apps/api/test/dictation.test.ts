@@ -254,12 +254,17 @@ describe("what Deepgram says, as the browser reads it", () => {
   })
 })
 
-/** A socket that records what it is sent and lets a test fire what it receives. */
+/**
+ * A socket that records what it is sent and lets a test fire what it receives.
+ * Binary frames arrive as a Blob unless `binaryType` asks otherwise, as in a
+ * Worker since `websocket_standard_binary_type`.
+ */
 function fake() {
-  const sent: (string | ArrayBuffer)[] = []
+  const sent: (string | ArrayBuffer | Blob)[] = []
   const closed: { code?: number }[] = []
   const handlers: Record<string, ((event: unknown) => void)[]> = {}
   const socket: Socket = {
+    binaryType: "blob",
     send: (data) => void sent.push(data as string | ArrayBuffer),
     close: (code) => void closed.push({ code }),
     addEventListener: ((type: string, handler: (event: unknown) => void) => {
@@ -271,7 +276,11 @@ function fake() {
     sent,
     closed,
     fire: (type: string, data?: unknown) => {
-      for (const handler of handlers[type] ?? []) handler({ data })
+      const delivered =
+        data instanceof ArrayBuffer && socket.binaryType === "blob"
+          ? new Blob([data])
+          : data
+      for (const handler of handlers[type] ?? []) handler({ data: delivered })
     },
   }
 }
@@ -290,11 +299,24 @@ describe("the relay", () => {
   }
   const audio = (bytes: number) => new ArrayBuffer(bytes)
 
-  it("sends the microphone's audio up as it comes", () => {
+  it("sends the microphone's audio up as it comes, as bytes", () => {
     const { browser, model } = setup()
     const chunk = audio(640)
     browser.fire("message", chunk)
     expect(model.sent).toEqual([chunk])
+    expect(model.sent[0]).toBeInstanceOf(ArrayBuffer)
+  })
+
+  it("ends the dictation when the model reports an error", () => {
+    const { browser, model } = setup()
+    model.fire(
+      "message",
+      JSON.stringify({ type: "Error", variant: "SchemaError" })
+    )
+    expect(browser.sent.map((frame) => JSON.parse(String(frame)))).toEqual([
+      { type: "error" },
+    ])
+    expect(browser.closed).toEqual([{ code: 1011 }])
   })
 
   it("sends the model's results down as phrases", () => {
