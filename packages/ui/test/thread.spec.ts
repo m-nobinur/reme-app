@@ -182,6 +182,88 @@ test("a dictation that could not start says so under the field", async ({
   ).toBeVisible()
 })
 
+/** Hold Space in the composer to dictate, with the mic's adapter in the fixture. */
+const HEARD = "Please book a clean for Friday morning"
+const dictate = (page: Page) =>
+  page.getByRole("button", { name: "Dictate", exact: true })
+const stopDictating = (page: Page) =>
+  page.getByRole("button", { name: "Stop dictating" })
+/** Longer than the hold that starts dictation, with room to spare. */
+const PAST_HOLD = 700
+
+test.describe("hold Space to dictate, the microphone allowed", () => {
+  test.use({ permissions: ["microphone"] })
+
+  test("holding Space starts dictation and letting go stops it", async ({
+    page,
+  }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).focus()
+    await page.keyboard.down("Space")
+    await expect(stopDictating(page)).toBeVisible()
+    await expect(input(page)).toHaveValue(HEARD)
+    await page.keyboard.up("Space")
+    await expect(dictate(page)).toBeVisible()
+    // The held key typed nothing of its own.
+    await expect(input(page)).toHaveValue(HEARD)
+  })
+
+  test("a short press types a space", async ({ page }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).focus()
+    await page.keyboard.press("Space")
+    await expect(input(page)).toHaveValue(" ")
+    await page.waitForTimeout(PAST_HOLD)
+    await expect(dictate(page)).toBeVisible()
+  })
+
+  test("Space held in the middle of a word types as before", async ({
+    page,
+  }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).fill("Hello")
+    await page.keyboard.down("Space")
+    await page.waitForTimeout(PAST_HOLD)
+    await page.keyboard.up("Space")
+    await expect(dictate(page)).toBeVisible()
+    await expect(input(page)).toHaveValue("Hello ")
+  })
+
+  test("Space held while an input method composes is left to it", async ({
+    page,
+  }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).focus()
+    await input(page).dispatchEvent("keydown", {
+      key: " ",
+      code: "Space",
+      isComposing: true,
+    })
+    await page.waitForTimeout(PAST_HOLD)
+    await expect(dictate(page)).toBeVisible()
+  })
+
+  test("the mic's tooltip names the shortcut", async ({ page }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await dictate(page).hover()
+    await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+      "Dictate, or hold Space to talk"
+    )
+  })
+})
+
+test("before the microphone is allowed, holding Space only types", async ({
+  page,
+}) => {
+  await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+  await input(page).focus()
+  await page.keyboard.down("Space")
+  await page.waitForTimeout(PAST_HOLD)
+  await page.keyboard.up("Space")
+  await expect(dictate(page)).toBeVisible()
+  await expect(input(page)).toHaveValue(" ")
+})
+
 test("with no notice the composer has no gap for one", async ({ page }) => {
   await open(page, "ThreadEmpty")
   await expect(page.locator('[data-slot="aui_dictation-notice"]')).toBeHidden()

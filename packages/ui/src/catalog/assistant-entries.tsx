@@ -3814,11 +3814,16 @@ const assistantCatalog = [
     ),
   },
   {
-    // The new chat on a phone.
+    // The new chat on a phone, its mic ready: tap it, or hold Space in the field.
     name: "ThreadEmptyPhone",
     render: () => (
       <div className="w-[390px]">
-        <OwnerThread height="h-[32rem]" isDisabled={false} messages={[]} />
+        <OwnerThread
+          dictation={LISTENING}
+          height="h-[32rem]"
+          isDisabled={false}
+          messages={[]}
+        />
       </div>
     ),
   },
