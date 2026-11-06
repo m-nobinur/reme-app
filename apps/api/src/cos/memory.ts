@@ -244,8 +244,12 @@ const plain = (text: string) =>
  */
 export const quotedFrom = (quote: string, said: readonly string[]) =>
   said
-    .flatMap((s) => s.split(/(?<=[.!?])\s+|\n+/))
+    .flatMap((s) => s.split(SENTENCES))
     .some((sentence) => plain(sentence) === plain(quote))
+
+const NEGATION = new Set(["not", "never", "no", "without", "cannot"])
+const SENTENCES = /(?<=[.!?])\s+|\n+/
+const CLAUSES = /(?<=[.!?;,])\s+|\s+(?:and|but)\s+|\n+/
 
 const STOP = new Set(
   "a an the and or of to in on at by for with from is are was were be been am has have had do does did it its he she they them their his her my me i we our as that this".split(
@@ -260,17 +264,29 @@ const STOP = new Set(
 const stem = (word: string) =>
   word.length > 4 && word.endsWith("ies")
     ? `${word.slice(0, -3)}y`
-    : word.length > 5 && word.endsWith("ing")
-      ? word.slice(0, -3)
-      : word.length > 4 && word.endsWith("ed")
-        ? word.slice(0, -2)
-        : word.length > 3 && word.endsWith("s") && !word.endsWith("ss")
-          ? word.slice(0, -1)
-          : word
+    : word.length > 4 && /(ch|sh|x|z|ss)es$/.test(word)
+      ? word.slice(0, -2)
+      : word.length > 5 && word.endsWith("ing")
+        ? word.slice(0, -3)
+        : word.length > 4 && word.endsWith("ed")
+          ? word.slice(0, -2)
+          : word.length > 3 && word.endsWith("s") && !word.endsWith("ss")
+            ? word.slice(0, -1)
+            : word
 
-/** The content words of `text`: letters and digits apart, lower case, stems, no stopwords. */
+/**
+ * The content words of `text`: letters and digits apart, lower case, stems,
+ * no stopwords. "n't" reads as "not" and "'s" is dropped, so "doesn't" meets
+ * "don't" and a third-person line meets the owner's first-person words.
+ */
 export const contentWords = (text: string) =>
-  (text.toLowerCase().match(/[\p{L}\p{M}]+|\p{N}+/gu) ?? [])
+  (
+    text
+      .toLowerCase()
+      .replace(/n['’]t\b/g, " not")
+      .replace(/['’]s\b/g, "")
+      .match(/[\p{L}\p{M}]+|\p{N}+/gu) ?? []
+  )
     .filter((w) => !STOP.has(w))
     .map(stem)
 
@@ -282,14 +298,15 @@ export const contentWords = (text: string) =>
  * reverse what was said.
  */
 const FRAMING = new Set(
-  "prefers likes wants goes by called is has".split(" ").map(stem)
+  "owner prefers likes wants goes by called is has".split(" ").map(stem)
 )
 
 /**
  * Whether every content word of `line` is one the owner wrote, or a framing word. This is what
  * keeps text from a review, an email or a page out of memory: a line
  * that says something the owner did not say has a word they did not write.
- * "Before" and "not" are content words, so a reversal fails too.
+ * "Before" and "not" are content words, so a reversal fails too, and so does
+ * a line that drops a "not" the owner's sentence held.
  */
 export function inOwnersWords(
   line: string,
@@ -297,9 +314,19 @@ export function inOwnersWords(
   framing = true
 ) {
   const held = new Set(said.flatMap(contentWords))
-  return contentWords(line).every(
-    (w) => held.has(w) || (framing && FRAMING.has(w))
-  )
+  const words = contentWords(line)
+  const stated = words.filter((w) => !FRAMING.has(w))
+  if (!words.every((w) => held.has(w) || (framing && FRAMING.has(w))))
+    return false
+  if (!framing || words.some((w) => NEGATION.has(w))) return true
+  return !said
+    .flatMap((s) => s.split(CLAUSES))
+    .some((s) => {
+      const own = contentWords(s)
+      return (
+        own.some((w) => NEGATION.has(w)) && stated.every((w) => own.includes(w))
+      )
+    })
 }
 
 /**
@@ -352,7 +379,7 @@ const BUSINESS_TEXT =
   "Prices, phone numbers, email addresses and the business's other facts live in the facts, so they are not saved here: change them with request_change."
 
 const OWN_WORDS =
-  "Use the owner's own words: every word of a saved line must come from what the owner wrote in this conversation. Say it again with their words."
+  "Say only what the owner said: every word of a saved line must come from what they wrote in this conversation, or be 'owner' or their name. Write it again as a short third-person fact built from their words."
 
 const QUOTED = `A standing request quotes one whole sentence the owner typed in this conversation, exactly, ${ASKED_MAX} characters at most: Asked: "their sentence".`
 
@@ -842,13 +869,10 @@ export async function memory(
         note: "Memory failed to consolidate three times this turn. Stop retrying memory and continue your reply; it can be saved in a later turn.",
       }
     }
-    const { output } = await writeBatch(
-      db,
-      owner.orgId,
-      input,
-      "owner_said",
-      await ownerWords(db, turn.sessionId)
-    )
+    const { output } = await writeBatch(db, owner.orgId, input, "owner_said", [
+      ...(await ownerWords(db, turn.sessionId)),
+      ...(owner.session.name ? [owner.session.name] : []),
+    ])
     return output
   })
 }
