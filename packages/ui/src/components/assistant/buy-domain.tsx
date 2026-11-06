@@ -1,6 +1,5 @@
 import {
   type ToolCallMessagePartComponent,
-  useAui,
   useAuiState,
 } from "@assistant-ui/react"
 import { ArrowSquareOutIcon } from "@phosphor-icons/react"
@@ -35,6 +34,7 @@ import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { DoneIcon, ToolStatus } from "@workspace/ui/components/status-line"
+import { useLater, useReply } from "@workspace/ui/hooks/use-thread-reply"
 import { pageAction, type ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { FIELD_ERROR, OPTION, OPTION_PILL } from "@workspace/ui/lib/card"
 import { useChatService } from "@workspace/ui/lib/chat-services"
@@ -442,13 +442,13 @@ function DomainPicker({
   onFollow: (name: string) => void
   onBuyHere: (name: string) => void
 }) {
-  const aui = useAui()
+  const reply = useReply()
   const busy = useAuiState((s) => s.thread.isRunning)
   const published = useLiveCards()?.published === true
   const [sent, setSent] = useState(false)
   const say = (text: string) => {
     setSent(true)
-    aui.thread().append(text)
+    reply(text)
   }
   const id = useId()
   return (
@@ -1057,16 +1057,13 @@ function BoughtLine({ name, paid }: { name: string; paid: boolean }) {
 
 /** Whether the owner pressed this list's Skip for now in a later message. */
 function useSkipped(): boolean {
-  return useAuiState((s) => {
-    const at = s.thread.messages.findIndex((m) => m.id === s.message.id)
-    return s.thread.messages
-      .slice(at + 1)
-      .some(
-        (m) =>
-          m.role === "user" &&
-          m.content.some((p) => p.type === "text" && p.text === SKIP_DOMAIN)
-      )
-  })
+  return useLater((later) =>
+    later.some(
+      (m) =>
+        m.role === "user" &&
+        m.content.some((p) => p.type === "text" && p.text === SKIP_DOMAIN)
+    )
+  )
 }
 
 /**
@@ -1096,10 +1093,7 @@ export function BuyTray({
   prefill?: DomainRegistrantPrefill | undefined
 }) {
   const purchase = useChatService("domainPurchase")
-  const last = useAuiState((s) => {
-    const at = s.thread.messages.findIndex((m) => m.id === s.message.id)
-    return !s.thread.messages.slice(at + 1).some((m) => m.role === "user")
-  })
+  const last = useLater((after) => !after.some((m) => m.role === "user"))
   const later = useLaterDomainCard()
   const skipped = useSkipped()
   const start: Draft = rows

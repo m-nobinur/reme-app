@@ -1,9 +1,10 @@
-import { makeAssistantDataUI, useAui, useAuiState } from "@assistant-ui/react"
+import { makeAssistantDataUI, useAuiState } from "@assistant-ui/react"
 import { ArrowSquareOutIcon } from "@phosphor-icons/react"
 import type { ServerButton } from "@workspace/contracts"
 import { BuyTray } from "@workspace/ui/components/assistant/buy-domain"
 import { ConnectGoogleRow } from "@workspace/ui/components/assistant/google"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
+import { useReply } from "@workspace/ui/hooks/use-thread-reply"
 import { useState } from "react"
 
 /**
@@ -14,7 +15,7 @@ import { useState } from "react"
  * `connect` is the service's row, which starts its sign-in.
  */
 function ServerButtonPart({ data }: { data: ServerButton }) {
-  const aui = useAui()
+  const reply = useReply()
   const running = useAuiState((s) => s.thread.isRunning)
   const messageId = useAuiState((s) => s.message.id)
   const [paying, setPaying] = useState(false)
@@ -59,7 +60,7 @@ function ServerButtonPart({ data }: { data: ServerButton }) {
     <Button
       className="mt-2"
       disabled={running}
-      onClick={() => aui.thread().append(action.text)}
+      onClick={() => reply(action.text)}
       size="sm"
       type="button"
       variant="outline"

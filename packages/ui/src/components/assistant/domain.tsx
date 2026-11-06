@@ -1,6 +1,5 @@
 import {
   type ToolCallMessagePartComponent,
-  useAui,
   useAuiState,
 } from "@assistant-ui/react"
 import { ArrowSquareOutIcon, CloudIcon, CopyIcon } from "@phosphor-icons/react"
@@ -32,6 +31,7 @@ import {
   ToolStatus,
 } from "@workspace/ui/components/status-line"
 import { useCopyToClipboard } from "@workspace/ui/hooks/use-copy-to-clipboard"
+import { useLater, useReply } from "@workspace/ui/hooks/use-thread-reply"
 import { useLiveCards } from "@workspace/ui/lib/live-cards"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { decisionView, readView } from "@workspace/ui/lib/tool-state"
@@ -93,7 +93,7 @@ const forwardText = (name: string) =>
  * Drawn as the quick replies above the composer are.
  */
 function AddedPill() {
-  const aui = useAui()
+  const reply = useReply()
   const [sent, setSent] = useState(false)
   const last = useAuiState((s) => s.message.isLast && !s.thread.isRunning)
   if (!last) return null
@@ -103,7 +103,7 @@ function AddedPill() {
       disabled={sent}
       onClick={() => {
         setSent(true)
-        aui.thread().append(DONE_WAITING)
+        reply(DONE_WAITING)
       }}
     >
       {DONE_WAITING}
@@ -322,9 +322,8 @@ const DOMAIN_CARDS = new Set([
  * message: the owner changed course, so this one gives way. Null when none.
  */
 export function useLaterDomainCard(): string | null {
-  return useAuiState((s) => {
-    const at = s.thread.messages.findIndex((m) => m.id === s.message.id)
-    for (const m of s.thread.messages.slice(at + 1)) {
+  return useLater((later) => {
+    for (const m of later) {
       for (const p of m.content) {
         if (p.type === "tool-call" && DOMAIN_CARDS.has(p.toolName))
           return p.toolName
