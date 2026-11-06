@@ -609,9 +609,9 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
   },
   ask_developer: {
     kind: "checking",
-    working: ["Looking over your website", "Going over your website"],
-    done: ["Looked over your website"],
-    fail: ["look over your website"],
+    working: ["Checking your website's details", "Going over your website"],
+    done: ["Checked your website's details"],
+    fail: ["check your website's details"],
   },
   get_review: {
     kind: "checking",
@@ -622,7 +622,7 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
   read_site: {
     kind: "checking",
     working: ["Reading your website's pages"],
-    done: ["Looked over your website's pages"],
+    done: ["Reviewed your website's pages"],
     fail: ["read your website's pages"],
   },
 }

@@ -77,6 +77,20 @@ it("is back in a new sitting, after the gap since their last message", async () 
   expect(latest()).toBe(false)
 })
 
+it("is not back again after the owner writes while still on the page", async () => {
+  const at = (minutes: number) =>
+    new Date(Date.now() - minutes * 60_000).toISOString()
+  await show(true, at(5))
+  await visibility("hidden")
+  await visibility("visible")
+  expect(latest()).toBe(true)
+  await show(true, at(0))
+  expect(latest()).toBe(false)
+  await visibility("hidden")
+  await visibility("visible")
+  expect(latest()).toBe(true)
+})
+
 it("listens only while something waits", async () => {
   const add = vi.spyOn(document, "addEventListener")
   await show(false)

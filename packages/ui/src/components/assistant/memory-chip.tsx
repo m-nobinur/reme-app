@@ -25,13 +25,25 @@ type Change = Pick<MemoryChip["changes"][number], "kind" | "text"> &
 export const memoryChangeText = (change: Change) =>
   WORDS[change.kind](change.text)
 
-/** What a chip says: each change in a few words. */
+/** What a chip says: what was saved, then what was removed, each in a few words. */
 export const memoryChipText = ({
   changes,
 }: {
   changes: readonly Change[]
   version?: number
-}) => `Saved to memory: ${changes.map(memoryChangeText).join("; ")}`
+}) =>
+  (
+    [
+      ["Saved to memory", changes.filter((c) => c.kind !== "removed")],
+      ["Removed from memory", changes.filter((c) => c.kind === "removed")],
+    ] as const
+  )
+    .filter(([, own]) => own.length)
+    .map(
+      ([lead, own]) =>
+        `${lead}: ${own.map((c) => (c.kind === "removed" ? `"${c.text}"` : memoryChangeText(c))).join("; ")}`
+    )
+    .join(". ")
 
 /**
  * What a saved `memory` call changed, or a `remember` call from before it,

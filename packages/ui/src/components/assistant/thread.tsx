@@ -52,6 +52,7 @@ import {
   Reasoning,
 } from "@workspace/ui/components/assistant/reasoning"
 import {
+  PillsShownProvider,
   ReplyPill,
   ReplyPills,
 } from "@workspace/ui/components/assistant/reply-pill"
@@ -749,106 +750,114 @@ const ThreadRoot: FC<{
   const [slot, setSlot] = useState<HTMLElement | null>(null)
   const [unseen, setUnseen] = useState(false)
   const [below, setBelow] = useState(false)
+  const [rows, setRows] = useState(0)
+  const pills = useMemo(() => ({ rows, set: setRows }), [rows])
 
   return (
-    <TraySlotProvider value={tray}>
-      <ThreadPrimitive.Root
-        className="aui-root aui-thread-root @container flex h-full flex-col bg-background"
-        style={{
-          ["--thread-max-width" as string]: "44rem",
-          ["--composer-bg" as string]: "var(--color-card)",
-          ["--composer-radius" as string]: "var(--radius-2xl)",
-          ["--composer-padding" as string]: "8px",
-        }}
-      >
-        <ThreadPrimitive.Viewport
-          // A message of eight lines, and a longer one folded to six, show
-          // whole at the top: the library's 10em would keep only the last
-          // lines of either. The visible height stays its default.
-          topAnchorMessageClamp={{ tallerThan: "20rem" }}
-          turnAnchor="top"
-          data-slot="aui_thread-viewport"
-          // Clear of the workspace's floating panel, where there is one; the
-          // padding sits inside the scroller, so its bar stays at the edge.
-          // No scroll-smooth: it turned the jump to the end of a reopened
-          // chat into a glide from the top. Scrolls that glide ask for it.
-          className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll pe-(--panel-inset)"
+    <PillsShownProvider value={pills}>
+      <TraySlotProvider value={tray}>
+        <ThreadPrimitive.Root
+          className="aui-root aui-thread-root @container flex h-full flex-col bg-background"
+          style={{
+            ["--thread-max-width" as string]: "44rem",
+            ["--composer-bg" as string]: "var(--color-card)",
+            ["--composer-radius" as string]: "var(--radius-2xl)",
+            ["--composer-padding" as string]: "8px",
+          }}
         >
-          <KeepTurnAnchor />
-          <FollowBottom
-            after={slot}
-            footer={footer}
-            onBelow={setBelow}
-            onUnseen={setUnseen}
-          />
-          {/* assistant-ui watches the viewport's children. Holding the space
+          <ThreadPrimitive.Viewport
+            // A message of eight lines, and a longer one folded to six, show
+            // whole at the top: the library's 10em would keep only the last
+            // lines of either. The visible height stays its default.
+            topAnchorMessageClamp={{ tallerThan: "20rem" }}
+            turnAnchor="top"
+            data-slot="aui_thread-viewport"
+            // Clear of the workspace's floating panel, where there is one; the
+            // padding sits inside the scroller, so its bar stays at the edge.
+            // No scroll-smooth: it turned the jump to the end of a reopened
+            // chat into a glide from the top. Scrolls that glide ask for it.
+            className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll pe-(--panel-inset)"
+          >
+            <KeepTurnAnchor />
+            <FollowBottom
+              after={slot}
+              footer={footer}
+              onBelow={setBelow}
+              onUnseen={setUnseen}
+            />
+            {/* assistant-ui watches the viewport's children. Holding the space
               under a reply (FollowBottom) resizes the box that holds the
               whole transcript, inside that observer's round, and the browser
               logs a ResizeObserver loop. A box with no layout never changes
               size, so the one that does is not watched. */}
-          <div className="contents">
-            <div
-              className={cn(
-                "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
-                isEmpty && "justify-center"
-              )}
-            >
-              {isEmpty ? (
-                <Welcome />
-              ) : (
-                // The welcome carries the page's heading; a conversation has
-                // its title in the top bar, and this names the page for a
-                // screen reader.
-                <h1 className="sr-only">Conversation</h1>
-              )}
-              <HistoryLoading stored={stored} />
+            <div className="contents">
+              <div
+                className={cn(
+                  "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
+                  isEmpty && "justify-center"
+                )}
+              >
+                {isEmpty ? (
+                  <Welcome />
+                ) : (
+                  // The welcome carries the page's heading; a conversation has
+                  // its title in the top bar, and this names the page for a
+                  // screen reader.
+                  <h1 className="sr-only">Conversation</h1>
+                )}
+                <HistoryLoading stored={stored} />
 
-              {/* The space assistant-ui holds below a pinned reply goes last,
+                {/* The space assistant-ui holds below a pinned reply goes last,
                 after the slot. An empty slot's margin takes back its gap. A
                 conversation keeps room under its last row for the Scroll to
                 bottom button, which floats over the thread above the
                 composer. */}
-              <div
-                data-slot="aui_message-group"
-                className={cn(
-                  "flex flex-col gap-y-6 has-[>:not(:empty)]:mb-14 [&>[data-aui-top-anchor-reserve]]:order-last",
-                  !isEmpty && "mb-14"
-                )}
-              >
-                <ThreadMessages />
-                {/* Always in the page, so a card that appears in it is read out. */}
-                <div aria-live="polite" className="empty:-mt-6" ref={setSlot}>
-                  {after}
+                <div
+                  data-slot="aui_message-group"
+                  className={cn(
+                    "flex flex-col gap-y-6 has-[>:not(:empty)]:mb-14 [&>[data-aui-top-anchor-reserve]]:order-last",
+                    !isEmpty && "mb-14"
+                  )}
+                >
+                  <ThreadMessages />
+                  {/* Always in the page, so a card that appears in it is read out. */}
+                  <div aria-live="polite" className="empty:-mt-6" ref={setSlot}>
+                    {after}
+                  </div>
                 </div>
-              </div>
 
-              <ThreadPrimitive.ViewportFooter
-                ref={setFooter}
-                className={cn(
-                  "aui-thread-viewport-footer flex flex-col gap-4 overflow-visible bg-background pb-4 md:pb-6",
-                  !isEmpty &&
-                    "sticky bottom-0 mt-auto rounded-t-(--composer-radius)"
-                )}
-              >
-                <ThreadScrollToBottom below={below} unseen={unseen} />
-                <div className="flex flex-col gap-2">
-                  <SkipThisOne />
-                  <RecapReplies />
-                  <LatestChoices />
-                  <div className="empty:hidden" ref={setTray} />
-                  <Composer autoFocus={autoFocus} expanded={isEmpty} />
-                  {/* The same gap as the tray above the composer. */}
-                  {isEmpty ? updates : null}
-                </div>
-                <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
-                  <ThreadSuggestions />
-                </AuiIf>
-              </ThreadPrimitive.ViewportFooter>
+                <ThreadPrimitive.ViewportFooter
+                  ref={setFooter}
+                  className={cn(
+                    "aui-thread-viewport-footer flex flex-col gap-4 overflow-visible bg-background pb-4 md:pb-6",
+                    !isEmpty &&
+                      "sticky bottom-0 mt-auto rounded-t-(--composer-radius)"
+                  )}
+                >
+                  <ThreadScrollToBottom below={below} unseen={unseen} />
+                  <div className="flex flex-col gap-2">
+                    <SkipThisOne />
+                    <RecapReplies />
+                    <LatestChoices />
+                    {/* A stack that slid away leaves no gap behind it. */}
+                    <div
+                      className="empty:hidden has-[>[data-slot=update-stack][data-away]]:-mb-2 motion-safe:transition-[margin] motion-safe:duration-enter motion-safe:ease-standard"
+                      ref={setTray}
+                    />
+                    <Composer autoFocus={autoFocus} expanded={isEmpty} />
+                    {/* The same gap as the tray above the composer. */}
+                    {isEmpty ? updates : null}
+                  </div>
+                  <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
+                    <ThreadSuggestions />
+                  </AuiIf>
+                </ThreadPrimitive.ViewportFooter>
+              </div>
             </div>
-          </div>
-        </ThreadPrimitive.Viewport>
-      </ThreadPrimitive.Root>
-    </TraySlotProvider>
+          </ThreadPrimitive.Viewport>
+        </ThreadPrimitive.Root>
+      </TraySlotProvider>
+    </PillsShownProvider>
   )
 }
 
@@ -955,7 +964,7 @@ type Labelled = Exclude<ServerMessageKind, "reply">
 /** Each kind of posted message's label and mark; an update's mark may be its button's. */
 const MESSAGE_KINDS: Record<Labelled, { label: string; state: StateName }> = {
   update: { label: "Update", state: "notifications" },
-  note: { label: "Note", state: "waiting" },
+  note: { label: "Note", state: "note" },
   done: { label: "Done", state: "done" },
   reminder: { label: "Reminder", state: "reminder" },
 }
@@ -1045,13 +1054,14 @@ const localDay = (at: string | null): number | null => {
 // bottom for the moment it takes to glide the sent message up, and without
 // the delay the button blinked on every send. Something that landed while the
 // owner read further up makes it a "New message" pill. Nothing below the
-// composer but held space hides it too.
+// composer but held space hides it too. It sits at the end, clear of the
+// text a card puts at its start (a picker row's name and price).
 const ThreadScrollToBottom: FC<{ unseen: boolean; below: boolean }> = ({
   unseen,
   below,
 }) => {
   const className = cn(
-    "aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full transition-[opacity,visibility] delay-500 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none",
+    "aui-thread-scroll-to-bottom absolute -top-12 z-10 self-end rounded-full transition-[opacity,visibility] delay-500 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none",
     !below && "invisible opacity-0 delay-0"
   )
   return (
