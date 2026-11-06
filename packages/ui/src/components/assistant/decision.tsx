@@ -10,6 +10,7 @@ import {
   StatusLine,
   ToolStatus,
 } from "@workspace/ui/components/status-line"
+import { useChatService } from "@workspace/ui/lib/chat-services"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
   BROKEN,
@@ -22,13 +23,7 @@ import {
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
 import { cn, META } from "@workspace/ui/lib/utils"
-import {
-  createContext,
-  type ReactNode,
-  useContext,
-  useId,
-  useState,
-} from "react"
+import { type ReactNode, useId, useState } from "react"
 
 /**
  * The card every tool that waits for the owner's yes is drawn with, so an
@@ -40,15 +35,6 @@ import {
  * No yes is offered on a target the owner cannot read or check, and a call
  * the stream left unfinished never shimmers on after it ends.
  */
-
-/**
- * Marks a card's yes, by its approval id, as the owner's tap that saves a
- * grant (the chat sends it as `always`). Without a provider no card offers it.
- */
-const AlwaysAllowContext = createContext<((approvalId: string) => void) | null>(
-  null
-)
-export const AlwaysAllowProvider = AlwaysAllowContext.Provider
 
 const CANNOT_APPROVE =
   "This did not come through whole, so it cannot be approved. Say not now to carry on."
@@ -97,7 +83,7 @@ export function Decision<I, O>({
   always,
 }: DecisionProps<I, O>) {
   const id = useId()
-  const allow = useContext(AlwaysAllowContext)
+  const allow = useChatService("alwaysAllow")
   const held = useAuiState((s) => isHeld(s.message.parts, props.toolCallId))
   const running = useAuiState((s) => s.message.status?.type === "running")
   const replaced = useAuiState((s) =>

@@ -37,7 +37,6 @@ import {
   type ServerMessageKind,
   SKIP_REPLY,
 } from "@workspace/contracts"
-import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
 import {
   waitsOnRecap,
   waitsToSkip,
@@ -232,17 +231,15 @@ const groupByType = groupPartByType({
 
 /**
  * Where each part sits in the transcript. Everything follows the registry's
- * grouping except a tool call that carries an approval or has a card of its
- * own, which stays ungrouped for the whole of its life: an approval folded
- * into a collapsed disclosure is one the owner has to go looking for, and the
- * answer has to stay as visible as the question was.
+ * grouping, where a toolkit card is standalone, except a tool call that
+ * carries an approval or waits on the owner, which stays ungrouped for the
+ * whole of its life: an approval folded into a collapsed disclosure is one
+ * the owner has to go looking for, and the answer has to stay as visible as
+ * the question was.
  */
 const groupThreadParts = (part: PartState, context?: GroupByContext) =>
   part.type === "tool-call" &&
-  (part.approval != null ||
-    part.status?.type === "requires-action" ||
-    Object.hasOwn(OWNER_CARDS, part.toolName) ||
-    Object.hasOwn(COS_QUIET, part.toolName))
+  (part.approval != null || part.status?.type === "requires-action")
     ? UNGROUPED
     : groupByType(part, context)
 
