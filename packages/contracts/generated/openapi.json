@@ -32480,6 +32480,17 @@
                           "message"
                         ],
                         "additionalProperties": false
+                      },
+                      "closest_entries": {
+                        "minItems": 1,
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
                       }
                     },
                     "required": [
@@ -52563,6 +52574,17 @@
                   "message"
                 ],
                 "additionalProperties": false
+              },
+              "closest_entries": {
+                "minItems": 1,
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "pattern": "\\S"
+                }
               }
             },
             "required": [

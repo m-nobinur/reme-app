@@ -121,6 +121,14 @@ export const SkillNotes = z
   )
 
 /**
+ * A store's value read line by line without its budget, so a store over a
+ * limit since lowered still reads and a write can take lines out of it.
+ */
+export const StoreLines = z.strictObject({
+  lines: z.array(z.union([SkillNoteLine, ProfileLine])),
+})
+
+/**
  * Where a `memory` write goes: `user`, the owner profile; `notes`, the
  * working notes; `skill:<name>`, that skill's notes for this business.
  */
@@ -249,7 +257,10 @@ export const MemoryOutput = z.discriminatedUnion("outcome", [
       .max(linesWithin(NOTES_MAX_CHARS)),
   }),
   z.strictObject({ outcome: z.literal("stopped"), note: Text(200) }),
-  Refused,
+  Refused.extend({
+    /** On a no-match, the entries sharing the most words with old_text. */
+    closest_entries: z.array(Text(PROFILE_LINE_MAX)).min(1).max(3).optional(),
+  }),
 ])
 
 /** One profile version, as the owner's page lists it. */

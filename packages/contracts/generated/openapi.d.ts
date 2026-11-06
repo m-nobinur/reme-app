@@ -9231,6 +9231,7 @@ export interface components {
                   code: string
                   message: string
                 }
+                closest_entries?: string[]
               }
         }
       | {
@@ -14502,6 +14503,7 @@ export interface components {
             code: string
             message: string
           }
+          closest_entries?: string[]
         }
     MemoryProposal: {
       /** Format: uuid */

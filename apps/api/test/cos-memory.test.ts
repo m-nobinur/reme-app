@@ -331,6 +331,69 @@ describe("applying operations", () => {
     expect(merged).toMatchObject({ ok: true })
   })
 
+  it("lets a write that removes or shortens through on a store over its budget, never one that grows it", () => {
+    const over = ["a", "b", "c", "d", "e", "f"].map((c) => line(c.repeat(290)))
+    expect(profileChars(over)).toBeGreaterThan(PROFILE_MAX_CHARS)
+    const run = (...ops: MemoryOperation[]) =>
+      applyOperations(over, ops, "owner_said", AT)
+    expect(run({ action: "remove", old_text: "aaa" })).toMatchObject({
+      ok: true,
+    })
+    expect(
+      run({ action: "patch", old_text: "b".repeat(290), content: "Owner b" })
+    ).toMatchObject({ ok: true })
+    expect(
+      run({ action: "remove", old_text: "ccc" }, add("Owner likes plants"))
+    ).toMatchObject({ ok: true })
+    expect(run(add("Owner likes plants"))).toMatchObject({
+      full: { lines: over },
+    })
+    expect(
+      run({
+        action: "patch",
+        old_text: "d".repeat(290),
+        content: "d".repeat(291),
+      })
+    ).toMatchObject({ full: { lines: over } })
+  })
+
+  it("names the closest entries on a no-match, at most three, and none when nothing is close", () => {
+    const many = [
+      line("Prefers calls after 4pm"),
+      line("Quotes go out on Fridays"),
+      line("Prefers calls on Mondays"),
+      line("Prefers email after calls"),
+      line("Calls after lunch are fine"),
+    ]
+    const done = applyOperations(
+      many,
+      [{ action: "remove", old_text: "prefers calls after 5pm" }],
+      "owner_said",
+      AT
+    )
+    expect(done).toMatchObject({
+      refusal: {
+        code: "memory.no_match",
+        message: expect.stringContaining("closest_entries below"),
+        closest: [
+          "Prefers calls after 4pm",
+          "Prefers email after calls",
+          "Prefers calls on Mondays",
+        ],
+      },
+    })
+    const far = applyOperations(
+      many,
+      [{ action: "patch", old_text: "spaniel Biscuit", content: "x" }],
+      "owner_said",
+      AT
+    )
+    expect(far).toMatchObject({ refusal: { code: "memory.no_match" } })
+    expect(!far.ok && "refusal" in far && far.refusal).not.toHaveProperty(
+      "closest"
+    )
+  })
+
   it("lets short lines fill a store: no line cap binds before its characters do", () => {
     const short = Array.from({ length: 60 }, (_, i) => line(`Note ${i}`))
     expect(
@@ -646,6 +709,43 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     expect(loaded.profile.map((l) => l.text)).toContain(
       "Prefers calls after 4pm"
     )
+  })
+
+  it("reads a profile over its budget line by line, so a removal takes it back under, and names the closest entries on a no-match", async () => {
+    const turn = await turnOf()
+    const store = (value: { lines: ProfileLine[] }) =>
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        supersedePrivateFact(db, {
+          orgId: me.orgId,
+          key: OWNER_PROFILE_KEY,
+          factType: "owner",
+          value,
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      )
+    const kept = await kit.withOrg({ orgId: me.orgId }, (db) => readProfile(db))
+    const words = (c: string) => `${c} `.repeat(145).trim()
+    const over = ["h", "i", "j", "k", "l", "m"].map((c) => line(words(c)))
+    await store({ lines: over })
+    try {
+      expect(await lines()).toEqual(over.map((l) => l.text))
+      expect(await said(turn, add("Likes short replies"))).toMatchObject({
+        outcome: "full",
+      })
+      expect(
+        await said(turn, { action: "remove", old_text: words("h") })
+      ).toMatchObject({ outcome: "saved", fullness: "91%, 1,449/1,600 chars" })
+      expect(await lines()).toHaveLength(5)
+      expect(
+        await said(turn, { action: "remove", old_text: "i i x" })
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "memory.no_match" },
+        closest_entries: [words("i")],
+      })
+    } finally {
+      await store({ lines: kept.lines })
+    }
   })
 })
 

@@ -21,6 +21,7 @@ import {
   type SkillNoteLine,
   SkillNotes,
   type SkillNotesView,
+  StoreLines,
   WORKING_NOTES_KEY,
   WorkingNotes,
 } from "@workspace/contracts"
@@ -350,6 +351,7 @@ export type Refusal = {
     | "memory.business_fact"
     | "memory.no_skill"
   message: string
+  closest?: string[]
 }
 
 const refusal = (code: Refusal["code"], message: string): Refusal => ({
@@ -383,6 +385,32 @@ export const linesMatching = <L extends { text: string }>(
   return whole.length > 0
     ? whole
     : lines.filter((l) => fold(l.text).includes(wanted))
+}
+
+const wordsOf = (text: string) =>
+  new Set(text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [])
+
+/**
+ * The few lines sharing the most words with `match`, best first, for a
+ * no-match to name: after hermes-agent tools/memory_tool_store.py
+ * `_no_match_error` (MIT), at most three, each sharing 30% of its words.
+ */
+export const closestTo = (
+  lines: readonly { text: string }[],
+  match: string
+) => {
+  const wanted = wordsOf(match)
+  if (wanted.size === 0) return []
+  return lines
+    .map((l, i) => {
+      const words = wordsOf(l.text)
+      const shared = [...wanted].filter((w) => words.has(w)).length
+      return { text: l.text, score: shared / wanted.size, i }
+    })
+    .filter((c) => c.score >= 0.3)
+    .sort((a, b) => b.score - a.score || a.i - b.i)
+    .slice(0, 3)
+    .map((c) => c.text)
 }
 
 /** After hermes-agent tools/memory_tool_store.py `_normalize_for_match` (MIT): quotes, dashes and spacing folded, lower case. */
@@ -464,14 +492,18 @@ export function applyOperations(
     if (op.action !== "add") {
       const hits = linesMatching(held, op.old_text as string)
       if (hits.length !== 1) {
+        const closest = closestTo(held, op.old_text as string)
         return {
           ok: false,
           refusal:
             hits.length === 0
-              ? refusal(
-                  "memory.no_match",
-                  `${pos}: no entry holds that. Copy old_text from one entry. Nothing was written.`
-                )
+              ? {
+                  ...refusal(
+                    "memory.no_match",
+                    `${pos}: no entry holds that. Copy old_text verbatim from one entry${closest.length > 0 ? " (closest_entries below)" : ""}. Nothing was written.`
+                  ),
+                  ...(closest.length > 0 && { closest }),
+                }
               : refusal(
                   "memory.ambiguous_match",
                   `${pos}: more than one entry holds that. Use a longer piece of one. Nothing was written.`
@@ -512,7 +544,12 @@ export function applyOperations(
   const before = profileText(lines).length
   const after = profileText(held).length
   const current = `${before.toLocaleString("en-GB")}/${max.toLocaleString("en-GB")}`
-  if (after > max || held.some((l) => l.text.length > PROFILE_LINE_MAX)) {
+  // A batch that removes or shortens goes through on a store over its
+  // budget, so the store can always get back under it.
+  if (
+    (after > max && after > before) ||
+    held.some((l) => l.text.length > PROFILE_LINE_MAX)
+  ) {
     return {
       ok: false,
       full: {
@@ -578,9 +615,15 @@ function check(
   return null
 }
 
-/** A store's lines from one stored value; a value the contract refuses reads as empty. */
+/**
+ * A store's lines from one stored value. One over its budget (a limit since
+ * lowered) still reads line by line; a value with a malformed line reads as
+ * empty.
+ */
 const linesOf = (value: unknown, store: Store = STORES.profile) =>
-  (store.schema.safeParse(value).data?.lines ?? []) as ProfileLine[]
+  (store.schema.safeParse(value).data?.lines ??
+    StoreLines.safeParse(value).data?.lines ??
+    []) as ProfileLine[]
 
 /** The current profile, or another whole store, and its version; none yet is version 0. */
 export async function readProfile(
@@ -590,17 +633,21 @@ export async function readProfile(
   const row = await currentFact(db, store.key)
   if (!row) return { version: 0, lines: [] }
   const parsed = store.schema.safeParse(row.value)
-  if (!parsed.success) {
-    console.error(
-      JSON.stringify({
-        code: "memory.profile_unreadable",
-        key: store.key,
-        version: row.version,
-      })
-    )
-    return { version: row.version, lines: [] }
+  if (parsed.success) {
+    return { version: row.version, lines: parsed.data.lines as ProfileLine[] }
   }
-  return { version: row.version, lines: parsed.data.lines as ProfileLine[] }
+  const over = StoreLines.safeParse(row.value)
+  console.error(
+    JSON.stringify({
+      code: over.success ? "memory.over_budget" : "memory.profile_unreadable",
+      key: store.key,
+      version: row.version,
+    })
+  )
+  return {
+    version: row.version,
+    lines: (over.data?.lines ?? []) as ProfileLine[],
+  }
 }
 
 /** A layer's lines, and every line of its store, which a skill's write keeps beside its own. */
@@ -798,8 +845,12 @@ export async function writeBatch(
     await elsewhereOf(db, layer)
   )
   if ("refusal" in result) {
+    const { code, message, closest } = result.refusal
     return {
-      output: refused(result.refusal.code, result.refusal.message),
+      output: {
+        ...refused(code, message),
+        ...(closest && { closest_entries: closest }),
+      },
       before: lines,
       after: null,
     }
