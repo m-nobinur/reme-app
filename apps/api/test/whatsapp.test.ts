@@ -329,7 +329,7 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
         body: `You're connected to ${a.name}. Message me here any time.`,
       },
     })
-    expect(sent()[0]?.path).toBe(`/v24.0/${a.phone}/messages`)
+    expect(sent()[0]?.path).toBe(`/v25.0/${a.phone}/messages`)
 
     graph.length = 0
     expect(
