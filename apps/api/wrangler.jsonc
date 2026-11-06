@@ -142,6 +142,13 @@
       "name": "DICTATION_LIMIT",
       "namespace_id": "1007",
       "simple": { "limit": 10, "period": 60 }
+    },
+    // WhatsApp messages one sender's number may send a minute
+    // (src/channels/whatsapp/webhook.ts), 1010 in production.
+    {
+      "name": "CHANNEL_LIMIT",
+      "namespace_id": "1009",
+      "simple": { "limit": 20, "period": 60 }
     }
   ],
   // Workers AI, for dictation (`@cf/deepgram/nova-3` over a WebSocket, so no
@@ -242,6 +249,11 @@
           "name": "DICTATION_LIMIT",
           "namespace_id": "1008",
           "simple": { "limit": 10, "period": 60 }
+        },
+        {
+          "name": "CHANNEL_LIMIT",
+          "namespace_id": "1010",
+          "simple": { "limit": 20, "period": 60 }
         }
       ],
       "ai": { "binding": "AI" },

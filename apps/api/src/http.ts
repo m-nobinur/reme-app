@@ -51,13 +51,14 @@ export async function readBody(request: Request): Promise<unknown> {
 }
 
 /**
- * The body, read no further than `BODY_MAX`, or null when it is longer. The
+ * The body, read no further than `max`, or null when it is longer. The
  * declared length refuses early; the count refuses a body that declared none.
  */
 export async function boundedBody(
-  request: Request
+  request: Request,
+  max = BODY_MAX
 ): Promise<Uint8Array | null> {
-  if (Number(request.headers.get("content-length")) > BODY_MAX) return null
+  if (Number(request.headers.get("content-length")) > max) return null
   if (!request.body) return new Uint8Array()
   const reader = request.body.getReader()
   const chunks: Uint8Array[] = []
@@ -66,7 +67,7 @@ export async function boundedBody(
     const { done, value } = await reader.read()
     if (done) break
     size += value.byteLength
-    if (size > BODY_MAX) {
+    if (size > max) {
       await reader.cancel()
       return null
     }
