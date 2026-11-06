@@ -66,6 +66,7 @@ import {
   offerChoices,
   ownersAnswer,
   paceOf,
+  present,
   putOff,
   readSite,
   recordReview,
@@ -3230,6 +3231,10 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     expect(kept("offer_choices", await offerChoices())).toEqual({
       outcome: "offered",
     })
+  })
+
+  it("present only closes its call: the chat draws the tree from it", async () => {
+    expect(kept("present", await present())).toEqual({ outcome: "presented" })
   })
 
   describe("put_off", () => {

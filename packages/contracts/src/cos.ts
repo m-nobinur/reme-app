@@ -855,6 +855,57 @@ export const OfferChoicesOutput = z.strictObject({
   outcome: z.literal("offered"),
 })
 
+const Line = z.string()
+
+/**
+ * What `present` may draw (#741): a closed vocabulary, props only. The api
+ * builds the tool's schema from it, the chat draws it with house components,
+ * and any other `_type` is dropped. No maps, raw HTML, images or forms.
+ */
+export const PRESENT_COMPONENTS = {
+  Card: {
+    description: "A titled group for the other components.",
+    properties: z.object({ title: Line.optional() }),
+  },
+  Fact: {
+    description: "One label and its value.",
+    properties: z.object({ label: Line, value: Line }),
+  },
+  Table: {
+    description: "A comparison: up to 4 columns, 8 rows of cells.",
+    properties: z.object({
+      columns: z.array(Line).max(4),
+      rows: z.array(z.array(Line).max(4)).max(8),
+    }),
+  },
+  Steps: {
+    description: "Steps in order.",
+    properties: z.object({ steps: z.array(Line).max(8) }),
+  },
+  Checklist: {
+    description: "Items to tick off; done is true for one already done.",
+    properties: z.object({
+      items: z
+        .array(z.object({ label: Line, done: z.boolean().optional() }))
+        .max(10),
+    }),
+  },
+  Text: {
+    description: "A short plain sentence.",
+    properties: z.object({ text: Line }),
+  },
+} as const
+
+/** `present`'s input, a tree of `PRESENT_COMPONENTS`; each node's props are checked where it is drawn. */
+export const PresentInput = z
+  .looseObject({ _type: z.string().min(1) })
+  .refine((tree) => JSON.stringify(tree).length <= 8_000, "too large")
+
+/** `present`'s output: the tree is on screen, and the turn may end. */
+export const PresentOutput = z.strictObject({
+  outcome: z.literal("presented"),
+})
+
 /**
  * The kinds of action the owner may let the Chief of Staff do with no card,
  * named by the tool that does each. Paying money and a new phone or email on
@@ -926,6 +977,7 @@ export const COS_TOOLS = {
   },
   put_off: { input: PutOffInput, output: PutOffOutput },
   offer_choices: { input: OfferChoicesInput, output: OfferChoicesOutput },
+  present: { input: PresentInput, output: PresentOutput },
   inspect_domain: { input: InspectDomainInput, output: InspectDomainOutput },
   domain_bought: { input: DomainBoughtInput, output: BoughtElsewhereOutput },
   offer_grant: { input: OfferGrantInput, output: OfferGrantOutput },
@@ -1177,6 +1229,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
   }),
   z.strictObject({
     ...Called,
+    tool: z.literal("present"),
+    output: COS_TOOLS.present.output,
+  }),
+  z.strictObject({
+    ...Called,
     tool: z.literal("inspect_domain"),
     output: COS_TOOLS.inspect_domain.output,
   }),
@@ -1405,6 +1462,8 @@ export type SearchConversationsOutput = z.infer<
 export type PutOffOutput = z.infer<typeof PutOffOutput>
 export type OfferChoicesInput = z.infer<typeof OfferChoicesInput>
 export type OfferChoicesOutput = z.infer<typeof OfferChoicesOutput>
+export type PresentInput = z.infer<typeof PresentInput>
+export type PresentOutput = z.infer<typeof PresentOutput>
 export type GrantKind = z.infer<typeof GrantKind>
 export type OfferGrantInput = z.infer<typeof OfferGrantInput>
 export type OfferGrantOutput = z.infer<typeof OfferGrantOutput>

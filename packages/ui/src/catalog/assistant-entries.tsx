@@ -389,6 +389,56 @@ const ask = (text: string): ThreadMessageLike => ({
   role: "user",
 })
 
+/** A comparison the owner asked for, drawn with every `present` component; the Image is outside the vocabulary, so it is dropped. */
+const PRESENTED: ThreadMessageLike[] = [
+  ask("Should I offer weekly or fortnightly cleans?"),
+  {
+    content: [
+      {
+        text: "Weekly suits your busier homes; here's how the two compare.",
+        type: "text",
+      },
+      {
+        args: {
+          _type: "Card",
+          title: "Weekly or fortnightly",
+          children: [
+            {
+              _type: "Table",
+              columns: ["", "Weekly", "Fortnightly"],
+              rows: [
+                ["Price per visit", "£60", "£70"],
+                ["Visits a month", "4", "2"],
+                ["Best for", "Families, pets", "Flats, couples"],
+              ],
+            },
+            { _type: "Fact", label: "Your area", value: "Bristol and Bath" },
+            { _type: "Image", src: "https://example.com/x.png", alt: "x" },
+            { _type: "Text", text: "Most cleaners in Bristol offer both." },
+            {
+              _type: "Steps",
+              steps: ["Add both to your prices", "Show them on the quote form"],
+            },
+            {
+              _type: "Checklist",
+              items: [
+                { label: "Prices set", done: true },
+                { label: "Days you work" },
+              ],
+            },
+          ],
+        },
+        result: { outcome: "presented" },
+        toolCallId: "call_present",
+        toolName: "present",
+        type: "tool-call",
+      },
+    ],
+    role: "assistant",
+    status: { reason: "stop", type: "complete" },
+  },
+]
+
 const PUBLISH_TARGET = {
   changes: 3,
   domain: "example.com",
@@ -3697,6 +3747,15 @@ const assistantCatalog = [
       ),
     })
   ),
+  // A comparison the model composed, on a phone.
+  {
+    name: "Present",
+    render: () => (
+      <div className="w-[390px]">
+        <OwnerThread height="h-[44rem]" messages={PRESENTED} />
+      </div>
+    ),
+  },
   // The newest decision's quick replies, the recommendation first.
   {
     name: "DecisionPills",

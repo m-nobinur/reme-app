@@ -1,3 +1,4 @@
+import { buildPresentParameters } from "@assistant-ui/generative-ui/react"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import {
   ADDRESS_ASK,
@@ -24,6 +25,7 @@ import {
   type GrantKind,
   NOTES_MAX_CHARS,
   PALETTES,
+  PRESENT_COMPONENTS,
   PROFILE_MAX_CHARS,
   PRONOUNS,
   type ProfileLine,
@@ -115,6 +117,7 @@ import {
   newContact,
   offerChoices,
   ownerSaid,
+  present,
   putOff,
   readSite,
   recordReview,
@@ -295,6 +298,7 @@ ${VOICE}
 - Keep most replies to one to three short sentences, what an action did in the past tense; go longer only when they ask for detail or steps.
 - Bring up what they did not ask about once a sitting, in one line after your answer, never as a repeat of a card, and never what their profile says not to raise.
 - The chat renders markdown. Format only where it helps: a numbered list for steps in order, bold for the one fact they must not miss, inline code for text they will copy and a link named after its page. No headings, no tables (cards carry those), no bullet lists except for options. At most one bold phrase per reply, and never on one item of a list or a name in it.
+- When they ask to compare options, or for steps or a checklist to work through, show it with present: it reads at a glance on a phone, where a long list in words gets skimmed. Anything else gets prose.
 - Write hosts and names plain, with no quote marks. To offer a skip, say "You can skip this".
 - Say each piece of news once, and that something is watched for them or needs nothing from them once per thing per conversation; after that, say only what changed. A message the app posted was already shown to them: add only what it doesn't say, or that nothing has changed. Never use the same words twice in a conversation: it reads as a template.
 - When you set something up for them, sound like a sharp assistant, never a form: what is happening, why it matters to this business, what happens next and the one thing they can do, with the business's name, trade and area from the facts.
@@ -369,11 +373,22 @@ function lean(schema: unknown): unknown {
   )
 }
 
+/** `present`'s tree as the library builds it from our vocabulary; the chat draws it (#741). */
+const PRESENT_SCHEMA = buildPresentParameters(
+  Object.fromEntries(
+    Object.entries(PRESENT_COMPONENTS).map(([name, c]) => [
+      name,
+      { ...c, render: () => null },
+    ])
+  )
+)
+
 /** `name`'s input as the model reads it: `inputOf`, sent `lean`, checked by Zod. */
 const modelInput = <N extends CosToolName>(name: N) => {
   const input = inputOf(name)
   return jsonSchema<(typeof COS_TOOLS)[N]["input"]["_output"]>(
     async () => {
+      if (name === "present") return PRESENT_SCHEMA
       const schema = lean(
         await asSchema(input as FlexibleSchema<unknown>).jsonSchema
       ) as JSONSchema7
@@ -446,6 +461,8 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
   // After hermes-agent tools/clarify_tool.py CLARIFY_SCHEMA, MIT.
   offer_choices:
     'Show quick replies above their composer for the one decision your reply ends on: a tap sends its send as their message, and typing is always their other answer. Call it last, after your words, and alone: it ends your turn.\nORDER MATTERS: put the option you recommend FIRST; the app marks it recommended, so any other order recommends the wrong thing.\nCRITICAL: put each option ONLY in choices, NEVER list them in your reply, where they read as dead text they cannot tap. Right: "Shall I start the new About page?" with Go ahead, Not now. Wrong: "Go ahead, or wait?".\nlabel is a few words as they would answer aloud: "Yes, I bought it", "Not yet", never a caption such as "Bought it". send is their whole message, naming the thing, such as "I haven\'t bought brightwaycleaning.co.uk yet". Prefer making a reasonable default choice yourself when the decision is low-stakes.',
+  present:
+    "Show a comparison, a checklist, steps or key facts as a card in the chat, from the components _type names, nested in a Card's children. Write your line first: a call beside words ends your turn.",
   offer_grant:
     "Offer them a card that lets one kind of action run with no card from now on: create_reminder for a reminder they did not ask for in so many words, record_review for saving a customer's review.",
   put_off:
@@ -484,8 +501,12 @@ const MEMORY_TOOLS: readonly CosToolName[] = [
   "save_correction",
   "put_off",
 ]
-/** Asks the Developer or the owner and changes nothing: no card, in both modes, never in a turn nobody typed. */
-const ASK_TOOLS: readonly CosToolName[] = ["ask_developer", "offer_choices"]
+/** Asks the Developer or the owner, or shows the owner, and changes nothing: no card, in both modes, never in a turn nobody typed. */
+const ASK_TOOLS: readonly CosToolName[] = [
+  "ask_developer",
+  "offer_choices",
+  "present",
+]
 const ACT_TOOLS: readonly CosToolName[] = [
   "request_change",
   "answer_question",
@@ -1470,6 +1491,7 @@ const BODIES = {
   search_conversations: searchConversations,
   put_off: putOff,
   offer_choices: offerChoices,
+  present,
   offer_grant: offerGrant,
   skill_view: skillView,
   save_correction: saveCorrection,
@@ -2000,6 +2022,10 @@ function toolsFor(run: AgentTurn, allowed: readonly CosToolName[] | null) {
       ...describe("offer_choices"),
       inputSchema: modelInput("offer_choices"),
     }),
+    present: tool({
+      ...describe("present"),
+      inputSchema: modelInput("present"),
+    }),
     offer_grant: tool({
       ...describe("offer_grant"),
       inputSchema: modelInput("offer_grant"),
@@ -2239,10 +2265,10 @@ export function firstCall(
 }
 
 /**
- * Whether `step` wrote a reply beside memory or save_correction calls that
- * all saved: the turn ends there instead of spending a model call to say
- * what the reply already said. A refused or full save goes on, so the model
- * sees it and the reply never claims a save that failed.
+ * Whether `step` wrote a reply beside memory, save_correction or present
+ * calls that all went through: the turn ends there instead of spending a
+ * model call to say what the reply already said. A refused or full save goes
+ * on, so the model sees it and the reply never claims a save that failed.
  */
 export const savedWithReply = (
   step:
@@ -2256,11 +2282,16 @@ export const savedWithReply = (
   !!step?.text.trim() &&
   step.toolCalls.length > 0 &&
   step.toolCalls.every(
-    (c) => c.toolName === "memory" || c.toolName === "save_correction"
+    (c) =>
+      c.toolName === "memory" ||
+      c.toolName === "save_correction" ||
+      c.toolName === "present"
   ) &&
   step.toolResults.length === step.toolCalls.length &&
-  step.toolResults.every(
-    (r) => (r.output as { outcome?: unknown } | null)?.outcome === "saved"
+  step.toolResults.every((r) =>
+    ["saved", "presented"].includes(
+      (r.output as { outcome?: string } | null)?.outcome ?? ""
+    )
   )
 
 /** Whether a call of `risk` waits on its card, given the kinds the owner granted. */

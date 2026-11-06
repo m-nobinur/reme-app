@@ -6141,6 +6141,7 @@ export interface components {
         | "search_conversations"
         | "put_off"
         | "offer_choices"
+        | "present"
         | "inspect_domain"
         | "domain_bought"
         | "offer_grant"
@@ -6638,6 +6639,7 @@ export interface components {
           | "search_conversations"
           | "put_off"
           | "offer_choices"
+          | "present"
           | "inspect_domain"
           | "domain_bought"
           | "offer_grant"
@@ -9317,6 +9319,16 @@ export interface components {
           turn_id: string
           tool_call_id: string
           /** @constant */
+          tool: "present"
+          output: {
+            /** @constant */
+            outcome: "presented"
+          }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
           tool: "inspect_domain"
           output:
             | {
@@ -11871,6 +11883,7 @@ export interface components {
             | "search_conversations"
             | "put_off"
             | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -11927,6 +11940,7 @@ export interface components {
             | "search_conversations"
             | "put_off"
             | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -11981,6 +11995,7 @@ export interface components {
             | "search_conversations"
             | "put_off"
             | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -12036,6 +12051,7 @@ export interface components {
             | "search_conversations"
             | "put_off"
             | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -12090,6 +12106,7 @@ export interface components {
             | "search_conversations"
             | "put_off"
             | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -12144,6 +12161,7 @@ export interface components {
             | "search_conversations"
             | "put_off"
             | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
@@ -12198,6 +12216,7 @@ export interface components {
             | "search_conversations"
             | "put_off"
             | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"

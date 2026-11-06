@@ -2028,7 +2028,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(history).toContain("I haven't bought brightwaycleaning.co.uk yet")
   })
 
-  it("gives Ask mode the read tools, ask_developer, offer_choices, memory, save_correction and put_off", async () => {
+  it("gives Ask mode the read tools, ask_developer, offer_choices, present, memory, save_correction and put_off", async () => {
     const id = await conversation(me)
     const { model, sent } = scripted(said("Here is what I can see."))
     await turn(me, typed(id, "What can you do?", "ask"), { model })
@@ -2049,6 +2049,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "inspect_domain",
       "memory",
       "offer_choices",
+      "present",
       "put_off",
       "read_site",
       "save_correction",

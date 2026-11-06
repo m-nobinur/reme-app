@@ -21,6 +21,7 @@ import {
   COS_QUIET,
   COS_READS,
 } from "@workspace/ui/components/assistant/cos-tools"
+import { Present } from "@workspace/ui/components/assistant/present"
 import { RequestChange } from "@workspace/ui/components/assistant/request-change"
 import { ReviewQuoteForm } from "@workspace/ui/components/assistant/review-quote-form"
 import { isRepeat } from "@workspace/ui/lib/tool-state"
@@ -85,6 +86,7 @@ export const ownerToolkit = defineToolkit({
     {
       ask_open: AskOpen,
       request_change: RequestChange,
+      present: Present,
       ...COS_CARDS,
       ...COS_QUIET,
     },

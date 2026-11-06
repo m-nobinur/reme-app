@@ -13,6 +13,7 @@
     "prompt-size": "PROMPT_SIZE=1 vitest run test/cos-prompt-surface.test.ts --silent=false"
   },
   "dependencies": {
+    "@assistant-ui/generative-ui": "0.0.8",
     "@openrouter/ai-sdk-provider": "3.1.0",
     "@workos-inc/node": "10.11.0",
     "@workspace/contracts": "workspace:*",

@@ -53,6 +53,7 @@ import {
   type InspectDomainOutput,
   type OfferChoicesOutput,
   OwnerAnswerText,
+  type PresentOutput,
   PreviewLink,
   type ProfileLine,
   type PutOffInput,
@@ -1944,6 +1945,11 @@ const isTip = (kind: string): kind is TipKind => TipKind.safeParse(kind).success
  */
 export const offerChoices = async (): Promise<OfferChoicesOutput> => ({
   outcome: "offered",
+})
+
+/** A tree for the chat to draw from `PRESENT_COMPONENTS`; nothing runs, so the turn need not wait (#741). */
+export const present = async (): Promise<PresentOutput> => ({
+  outcome: "presented",
 })
 
 /**
