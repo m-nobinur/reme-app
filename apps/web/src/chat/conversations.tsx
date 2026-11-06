@@ -1,11 +1,7 @@
-import {
-  type RemoteThreadListAdapter,
-  RuntimeAdapterProvider,
-  useAui,
-} from "@assistant-ui/react"
+import { type RemoteThreadListAdapter, useAui } from "@assistant-ui/react"
 import type { Conversation } from "@workspace/contracts"
 import { titleText } from "@workspace/ui/lib/title"
-import { type PropsWithChildren, useMemo } from "react"
+import { useMemo } from "react"
 import {
   createConversation,
   getConversation,
@@ -14,11 +10,7 @@ import {
   updateConversation,
 } from "@/lib/api/server"
 import type { TransportedMessage } from "@/lib/api/types"
-import {
-  conversationHistory,
-  missingConversations,
-  toMetadata,
-} from "./history"
+import { conversationHistory, toMetadata } from "./history"
 
 /**
  * Stored conversations behind assistant-ui's thread list. The server is the
@@ -51,22 +43,30 @@ export async function readMessages(id: string) {
   return held?.messages ?? (await getConversationMessages({ data: { id } }))
 }
 
-/** Mounts the open thread's history for the runtime under it. */
-function ConversationHistory({ children }: PropsWithChildren) {
+/** The open thread's history for the runtime under it. */
+function useConversationAdapters() {
   const aui = useAui()
-  const history = useMemo(
-    () =>
-      conversationHistory(
+  return useMemo(
+    () => ({
+      history: conversationHistory(
         () => aui.threadListItem.getState().remoteId,
         readMessages
       ),
+    }),
     [aui]
   )
-  return (
-    <RuntimeAdapterProvider adapters={{ history }}>
-      {children}
-    </RuntimeAdapterProvider>
-  )
+}
+
+/**
+ * A conversation the owner opened by address and cannot have: another
+ * account's, or an id that was never stored. The thread list reports it as
+ * its switch error, and the chat shows an empty state rather than a thread
+ * nobody asked for.
+ */
+export class MissingConversation extends Error {
+  constructor() {
+    super("That conversation is not one of yours.")
+  }
 }
 
 /** A title stream with nothing in it: the server names conversations. */
@@ -91,12 +91,7 @@ export const conversationList: RemoteThreadListAdapter = {
     const found =
       opening.get(threadId)?.conversation ??
       (await getConversation({ data: { id: threadId } }))
-    if (!found) {
-      // The chat shows an empty state for it; the runtime stays on a new
-      // thread underneath.
-      missingConversations.add(threadId)
-      throw new Error("That conversation is not one of yours.")
-    }
+    if (!found) throw new MissingConversation()
     return toMetadata(found)
   },
   rename: async (remoteId, title) => {
@@ -115,5 +110,5 @@ export const conversationList: RemoteThreadListAdapter = {
     throw new Error("Conversations are archived, never deleted.")
   },
   generateTitle: async () => NO_TITLE(),
-  unstable_Provider: ConversationHistory,
+  unstable_useAdapters: useConversationAdapters,
 }

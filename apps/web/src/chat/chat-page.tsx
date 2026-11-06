@@ -1,5 +1,6 @@
 import {
   AssistantRuntimeProvider,
+  useAuiState,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react"
 import { ChatsCircleIcon } from "@phosphor-icons/react"
@@ -37,11 +38,12 @@ import { buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { LiveCardsProvider } from "@workspace/ui/lib/live-cards"
 import {
+  type PropsWithChildren,
+  type ReactNode,
   useEffect,
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react"
 import { deleteReminder } from "@/lib/api/server"
 import { assistantOf, briefingOf } from "@/lib/briefing"
@@ -49,16 +51,16 @@ import { LAST_SHOWN, OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { answerBuildQuestion } from "./build-questions"
 import { BuildStopped } from "./build-stopped"
-import { conversationList, seedOpening, unstored } from "./conversations"
+import {
+  conversationList,
+  MissingConversation,
+  seedOpening,
+  unstored,
+} from "./conversations"
 import { cosTools, liveKey, liveState, questionTitles } from "./cos-tools"
 import { saveDesignAnswer } from "./design"
 import { domainPurchase } from "./domain-purchase"
-import {
-  askedSend,
-  missingConversations,
-  startsNewChat,
-  tailOf,
-} from "./history"
+import { askedSend, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
 import { SendAsked } from "./send-asked"
 import { StillWorking } from "./still-working"
@@ -212,12 +214,6 @@ export function ChatPage() {
     })()
   }, [id, fresh, ask, askIntent, runtime])
 
-  const missing = useSyncExternalStore(
-    missingConversations.subscribe,
-    () => (id ? missingConversations.has(id) : false),
-    () => false
-  )
-
   // The cards name the question an answer goes to, and times in the
   // business's zone, and offer only what is still to do: no sign-in once
   // connected, no undo for a reminder gone. Keyed on strings, so a poll that
@@ -249,24 +245,27 @@ export function ChatPage() {
       <SendAsked conversation={id} intent={intent} />
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">
-        {missing ? (
-          <div className="mx-auto max-w-xl px-4 pt-16">
-            <EmptyState
-              action={
-                <Link
-                  className={buttonVariants({ variant: "outline" })}
-                  state={() => ({ chat: crypto.randomUUID() })}
-                  to="/app"
-                >
-                  Start a new chat
-                </Link>
-              }
-              description="It belongs to another account, or the link is wrong."
-              icon={<ChatsCircleIcon />}
-              title="This conversation is not here"
-            />
-          </div>
-        ) : (
+        <Opens
+          id={id}
+          gone={
+            <div className="mx-auto max-w-xl px-4 pt-16">
+              <EmptyState
+                action={
+                  <Link
+                    className={buttonVariants({ variant: "outline" })}
+                    state={() => ({ chat: crypto.randomUUID() })}
+                    to="/app"
+                  >
+                    Start a new chat
+                  </Link>
+                }
+                description="It belongs to another account, or the link is wrong."
+                icon={<ChatsCircleIcon />}
+                title="This conversation is not here"
+              />
+            </div>
+          }
+        >
           <CosToolsProvider value={shared.tools}>
             <AlwaysAllowProvider value={tapAlways}>
               <LiveCardsProvider value={shared.cards}>
@@ -308,8 +307,25 @@ export function ChatPage() {
               </LiveCardsProvider>
             </AlwaysAllowProvider>
           </CosToolsProvider>
-        )}
+        </Opens>
       </div>
     </AssistantRuntimeProvider>
   )
+}
+
+/** The chat, or `gone` when the address names a conversation the owner cannot open. */
+function Opens({
+  id,
+  gone,
+  children,
+}: PropsWithChildren<{ id: string | undefined; gone: ReactNode }>) {
+  const missing = useAuiState((s) => {
+    const failed = s.threads.switchError
+    return (
+      failed !== undefined &&
+      failed.threadId === id &&
+      failed.error instanceof MissingConversation
+    )
+  })
+  return missing ? gone : children
 }

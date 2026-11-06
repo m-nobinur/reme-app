@@ -14,7 +14,6 @@ import {
   conversationHistory,
   followThread,
   lastChat,
-  missingConversations,
   STORAGE_FORMAT,
   startsNewChat,
   tailOf,
@@ -206,17 +205,6 @@ it("starts a new chat only for a new New chat press", () => {
   // a new chat must survive it.
   expect(startsNewChat("a", undefined)).toBe(false)
   expect(startsNewChat("a", "a")).toBe(false)
-})
-
-it("remembers a conversation the owner cannot open, and says so", () => {
-  const seen: boolean[] = []
-  const stop = missingConversations.subscribe(() =>
-    seen.push(missingConversations.has("conv-9"))
-  )
-  expect(missingConversations.has("conv-9")).toBe(false)
-  missingConversations.add("conv-9")
-  expect(seen).toEqual([true])
-  stop()
 })
 
 it("reads a rated reply back with its thumb, on both ways a row loads", async () => {
