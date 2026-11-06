@@ -358,7 +358,7 @@ function ReplyStatus({
         {status}
         <CollapsibleTrigger
           aria-label="Earlier steps"
-          className="group/trigger inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
+          className="group/trigger inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
           data-slot="reply-status-trigger"
         >
           <CaretRightIcon
