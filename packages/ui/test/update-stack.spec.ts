@@ -68,3 +68,36 @@ for (const theme of ["light", "dark"]) {
     })
   }
 }
+
+for (const theme of ["light", "dark"]) {
+  for (const reducedMotion of ["reduce", "no-preference"] as const) {
+    test(`quick replies take the stack's place, ${theme}, motion ${reducedMotion}`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ reducedMotion })
+      await open(page, ENTRY, 390, theme)
+      const chat = page.locator('[data-state="pills-open"]')
+      const pills = chat.getByRole("group", { name: "Quick replies" })
+      await expect(
+        pills.getByRole("button", { name: "Bought it" })
+      ).toBeVisible()
+      await expect(chat.locator('[data-slot="update-stack"]')).toBeHidden()
+      await expect(
+        chat.locator('[data-slot="update-stack"] > [data-away]')
+      ).toHaveCount(1)
+      await chat.scrollIntoViewIfNeeded()
+      await chat.screenshot({
+        path: test
+          .info()
+          .outputPath(`pills-over-stack-390-${theme}-${reducedMotion}.png`),
+      })
+      // The stack is back where the other states show it.
+      await expect(
+        page.locator(
+          '[data-state="buying-elsewhere"] [data-slot="update-stack"]'
+        )
+      ).toBeVisible()
+      await axe(page, `${ENTRY} pills ${theme}`)
+    })
+  }
+}
