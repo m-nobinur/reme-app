@@ -7,7 +7,7 @@ import {
 } from "@workspace/ui/components/attention-card"
 import { Button } from "@workspace/ui/components/button"
 import { cn, META } from "@workspace/ui/lib/utils"
-import { type ReactNode, useEffect, useRef, useState } from "react"
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 
 export type Update = { id: string; content: ReactNode }
 
@@ -125,8 +125,8 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
 /**
  * What waits on the owner in a conversation, as a stack: the three that
  * matter most, one in front and the next two as edges under it. The front
- * one moves on by itself after a few seconds, the next rising out of the
- * stack as it sinks back in. It holds while the pointer is on the stack or
+ * one moves on by itself after a few seconds, sliding down and out as the
+ * next slides down into its place and the card eases to the new height. It holds while the pointer is on the stack or
  * focus is in it, stops for that view once the owner uses an arrow, and
  * never moves by itself under reduced motion. Every update stays mounted,
  * so one mid-publish keeps its state while another is in front.
@@ -139,6 +139,20 @@ export function UpdatePager({ updates }: { updates: readonly Update[] }) {
   const [stepped, setStepped] = useState(false)
   const count = deck.length
   const front = count ? at % count : 0
+  // The card that just left slides down and out; the rest wait above it.
+  const [seen, setSeen] = useState(front)
+  const [left, setLeft] = useState(-1)
+  if (seen !== front) {
+    setSeen(front)
+    setLeft(seen)
+  }
+  const [height, setHeight] = useState<number>()
+  const measure = useCallback((card: HTMLDivElement | null) => {
+    if (!card) return
+    const watch = new ResizeObserver(() => setHeight(card.offsetHeight))
+    watch.observe(card)
+    return () => watch.disconnect()
+  }, [])
   useEffect(() => {
     if (hovered || stepped || count < 2) return
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
@@ -204,21 +218,30 @@ export function UpdatePager({ updates }: { updates: readonly Update[] }) {
           </Button>
         </div>
       ) : null}
-      <div className={cn("relative overflow-hidden", BOX)}>
-        {/* One cell for every update, so the stack is as tall as the tallest. */}
-        <div className="grid min-w-0 *:[grid-area:1/1]">
+      <div className={cn("relative min-w-0 overflow-hidden", BOX)}>
+        {/* As tall as the update in front, easing as it changes. */}
+        <div
+          className="relative motion-safe:transition-[height] motion-safe:duration-enter motion-safe:ease-standard"
+          style={{ height }}
+        >
           {deck.map((update, index) => (
             <div
               aria-hidden={index !== front}
               className={cn(
-                "flex min-w-0 items-center transition-[opacity,translate,visibility] duration-enter ease-standard motion-reduce:transition-none",
+                "flex min-w-0 items-center transition-[opacity,translate,visibility] ease-standard motion-reduce:transition-none",
+                // The one leaving clears out before the next one settles in.
                 index === front
-                  ? "opacity-100"
-                  : "invisible translate-y-2 opacity-0"
+                  ? "opacity-100 delay-75 duration-enter"
+                  : "invisible absolute inset-x-0 top-0 opacity-0",
+                index !== front &&
+                  (index === left
+                    ? "translate-y-2 duration-fast"
+                    : "-translate-y-2")
               )}
               data-front={index === front || undefined}
               inert={index !== front}
               key={update.id}
+              ref={index === front ? measure : undefined}
             >
               {update.content}
             </div>

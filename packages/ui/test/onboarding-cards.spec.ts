@@ -323,6 +323,15 @@ test("a conversation's updates are a deck of three that steps with its arrows", 
   await expect(
     deck.getByRole("button", { name: "Publish", exact: true })
   ).toBeHidden()
+  // The card eases to the height of the row in front, not of the site card.
+  const front = deck.locator("[data-front]")
+  await expect
+    .poll(async () => {
+      const row = (await front.locator(":scope > *").boundingBox())?.height
+      const card = (await front.locator("..").boundingBox())?.height
+      return row === card
+    })
+    .toBe(true)
   await deck.getByRole("button", { name: "Previous update" }).click()
   await deck.getByRole("button", { name: "Previous update" }).click()
   await expect(deck.getByText("3/3")).toBeVisible()
