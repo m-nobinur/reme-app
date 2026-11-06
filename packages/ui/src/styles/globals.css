@@ -244,8 +244,6 @@
   --animate-update-ring: status-swing 1.4s ease-in-out 2;
   --animate-status-lift: status-lift 1.4s ease-in-out infinite;
   --animate-status-breathe: status-breathe 1.8s ease-in-out infinite;
-  --animate-status-reveal: status-reveal var(--duration-slow)
-    var(--ease-standard) backwards;
   /* The drawn icons' parts (status-icons.tsx). */
   --animate-icon-spin: icon-spin 3s linear infinite;
   --animate-icon-dash: icon-dash 1.2s linear infinite;
@@ -449,18 +447,6 @@
     }
     50% {
       opacity: 1;
-    }
-  }
-  @keyframes status-reveal {
-    from {
-      mask-image: linear-gradient(90deg, #000 45%, transparent 55%);
-      mask-size: 220% 100%;
-      mask-position: 100% 0;
-    }
-    to {
-      mask-image: linear-gradient(90deg, #000 45%, transparent 55%);
-      mask-size: 220% 100%;
-      mask-position: 0 0;
     }
   }
   @keyframes icon-spin {
