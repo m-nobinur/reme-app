@@ -1,5 +1,7 @@
+import type { AvatarId } from "@workspace/contracts"
+import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { Skeleton } from "@workspace/ui/components/skeleton"
-import type { FC } from "react"
+import type { CSSProperties, FC } from "react"
 
 /**
  * What a conversation looks like before its messages arrive. It imports
@@ -28,6 +30,36 @@ export const ThreadHistorySkeleton: FC = () => (
   </div>
 )
 
+/** The thread's own variables, which size its column and composer. */
+export const THREAD_STYLE = {
+  "--thread-max-width": "44rem",
+  "--composer-bg": "var(--color-card)",
+  "--composer-radius": "var(--radius-2xl)",
+  "--composer-padding": "8px",
+} as CSSProperties
+
+/** The new chat's greeting: the assistant's face, the question, the briefing. */
+export const ThreadWelcomeView: FC<{
+  avatar: AvatarId | null
+  briefing: string | null | undefined
+}> = ({ avatar, briefing }) => (
+  // No entrance motion: the page loads into the task, not into a show.
+  <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
+    <AssistantAvatar className="mb-4 size-14" id={avatar} />
+    <h1 className="aui-thread-welcome-message-inner font-semibold text-[1.75rem] leading-tight tracking-tight">
+      What should we do today?
+    </h1>
+    {briefing ? (
+      <p
+        data-slot="aui_thread-briefing"
+        className="mt-2 max-w-prose text-base text-muted-foreground"
+      >
+        {briefing}
+      </p>
+    ) : null}
+  </div>
+)
+
 /**
  * The whole thread before the chat chunk has loaded: the transcript skeleton
  * above an empty composer, in the thread's own layout and variables, so
@@ -36,20 +68,47 @@ export const ThreadHistorySkeleton: FC = () => (
  * decide where the column sits.
  */
 export const ThreadPending: FC = () => (
-  <div
-    className="flex h-full flex-col bg-background"
-    style={{
-      ["--thread-max-width" as string]: "44rem",
-      ["--composer-bg" as string]: "var(--color-card)",
-      ["--composer-radius" as string]: "var(--radius-2xl)",
-      ["--composer-padding" as string]: "8px",
-    }}
-  >
+  <div className="flex h-full flex-col bg-background" style={THREAD_STYLE}>
     <div className="flex flex-1 flex-col overflow-y-scroll pe-(--panel-inset)">
       <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
         <ThreadHistorySkeleton />
         <div className="mt-auto pb-4 md:pb-6">
           <div className="h-[calc(2.25rem+2*var(--composer-padding)+2px)] w-full rounded-(--composer-radius) border border-border bg-(--composer-bg)" />
+        </div>
+      </div>
+    </div>
+  </div>
+)
+
+/**
+ * A new chat before the chat chunk has loaded: the greeting it opens with
+ * above the tall empty composer, centred as the thread centres them, so the
+ * real one replaces it in place.
+ */
+export const NewChatPending: FC<{
+  avatar: AvatarId | null
+  briefing: string | null
+  /** How many updates the stack under the composer will show. */
+  updates: number
+}> = ({ avatar, briefing, updates }) => (
+  <div className="flex h-full flex-col bg-background" style={THREAD_STYLE}>
+    <div className="flex flex-1 flex-col overflow-y-scroll pe-(--panel-inset)">
+      <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col justify-center px-4 pt-4">
+        <ThreadWelcomeView avatar={avatar} briefing={briefing} />
+        <div className="flex flex-col gap-2 pb-4 md:pb-6">
+          <div className="h-[calc(4rem+0.5rem+2.25rem+2*var(--composer-padding)+2px)] w-full rounded-(--composer-radius) border border-border bg-(--composer-bg)" />
+          {updates > 0 ? (
+            // The deck's room for the edges of up to two cards under the front
+            // one. shortcut: the card is the site card's height, so a stack
+            // led by a one-line row is 4px shorter; measure if that shows.
+            <div
+              style={{
+                paddingBottom: `${Math.min(updates - 1, 2) * 0.375}rem`,
+              }}
+            >
+              <Skeleton className="h-[4.125rem] rounded-2xl motion-reduce:animate-none" />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

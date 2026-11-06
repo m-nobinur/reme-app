@@ -1,5 +1,31 @@
-import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router"
-import { ThreadPending } from "@workspace/ui/components/assistant/thread-pending"
+import {
+  createFileRoute,
+  getRouteApi,
+  lazyRouteComponent,
+  useParams,
+} from "@tanstack/react-router"
+import {
+  NewChatPending,
+  ThreadPending,
+} from "@workspace/ui/components/assistant/thread-pending"
+import { briefingOf } from "@/lib/briefing"
+import { newChatCount } from "@/lib/new-chat-stack"
+
+const frame = getRouteApi("/app")
+
+/** The page the chat chunk is loading for, in its own shape: a new chat or a stored one. */
+function ConversationPending() {
+  const { id } = useParams({ strict: false })
+  const { active, workspace } = frame.useLoaderData()
+  if (id) return <ThreadPending />
+  return (
+    <NewChatPending
+      avatar={workspace?.assistantAvatar ?? null}
+      briefing={briefingOf(active, workspace).line}
+      updates={newChatCount(workspace)}
+    />
+  )
+}
 
 /**
  * The conversation, around `/app` and `/app/c/$id` both, so one runtime
@@ -23,9 +49,9 @@ export const Route = createFileRoute("/app/_conversation")({
   // second lazy layer it never preloads, so the chat suspended on first render.
   codeSplitGroupings: [],
   ssr: false,
-  // The server renders this while the chat chunk loads. It is the thread's
-  // own shape, and it shows at once: the router's default waits 1s before
+  // The server renders this while the chat chunk loads, in the page's own
+  // shape, and it shows at once: the router's default waits 1s before
   // showing a pending screen, which leaves a blank page until then.
-  pendingComponent: ThreadPending,
+  pendingComponent: ConversationPending,
   pendingMs: 0,
 })

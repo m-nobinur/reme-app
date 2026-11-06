@@ -11,6 +11,7 @@ import {
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { useRef } from "react"
 import type { AttentionItem, Workspace } from "@/lib/api/types"
+import { newChatAttention } from "@/lib/new-chat-stack"
 import { anchorOf } from "@/lib/reminders"
 import { awaitsReadyLine, draftReview } from "@/lib/site-ready"
 import { type JourneyItem, journeyItem, stackOrder } from "@/lib/update-stack"
@@ -89,17 +90,7 @@ const journeyUpdates = (
  * ready card's row, so Publish works from here.
  */
 export function updatesOf(workspace: Workspace | null): Update[] {
-  const attention = workspace?.attention ?? []
-  const site = draftReview(workspace)
-  const rest = (["question", "approval", "reminder"] as const)
-    .flatMap((kind) => attention.filter((item) => item.kind === kind))
-    .filter(
-      (item) =>
-        !(
-          item.kind === "approval" &&
-          item.request.approval_id === site?.approvalId
-        )
-    )
+  const { site, rest } = newChatAttention(workspace)
   return stackOrder(
     journeyUpdates(workspace, !!site),
     site ? [{ id: "site", content: <SiteReadyCard row /> }] : [],

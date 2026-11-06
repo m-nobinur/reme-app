@@ -31,13 +31,15 @@ import {
   AssistantMessage as DefaultAssistantMessage,
   UserMessage,
 } from "@workspace/ui/components/assistant/thread-message"
-import { ThreadHistorySkeleton } from "@workspace/ui/components/assistant/thread-pending"
+import {
+  ThreadHistorySkeleton,
+  ThreadWelcomeView,
+} from "@workspace/ui/components/assistant/thread-pending"
 import {
   FollowBottom,
   KeepTurnAnchor,
   ThreadScrollToBottom,
 } from "@workspace/ui/components/assistant/thread-scroll"
-import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import { cn } from "@workspace/ui/lib/utils"
 import {
@@ -545,23 +547,7 @@ const ThreadMessages: FC = () => {
     ))
 }
 
-// No entrance motion: the page loads into the task, not into a show.
 const ThreadWelcome: FC = () => {
   const { briefing, avatar } = useContext(ThreadSettingsContext)
-  return (
-    <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
-      <AssistantAvatar className="mb-4 size-14" id={avatar ?? null} />
-      <h1 className="aui-thread-welcome-message-inner font-semibold text-[1.75rem] leading-tight tracking-tight">
-        What should we do today?
-      </h1>
-      {briefing ? (
-        <p
-          data-slot="aui_thread-briefing"
-          className="mt-2 max-w-prose text-base text-muted-foreground"
-        >
-          {briefing}
-        </p>
-      ) : null}
-    </div>
-  )
+  return <ThreadWelcomeView avatar={avatar ?? null} briefing={briefing} />
 }

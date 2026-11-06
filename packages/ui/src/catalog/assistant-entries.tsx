@@ -53,8 +53,10 @@ import {
   type ThreadProps,
 } from "@workspace/ui/components/assistant/thread"
 import {
+  NewChatPending,
   ThreadHistorySkeleton,
   ThreadPending,
+  ThreadWelcomeView,
 } from "@workspace/ui/components/assistant/thread-pending"
 import { ownerToolkit } from "@workspace/ui/components/assistant/toolkit"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
@@ -4038,6 +4040,28 @@ const assistantCatalog = [
       <div className="h-128">
         <ThreadPending />
       </div>
+    ),
+  },
+  {
+    // What the server sends for a new chat before the chat chunk loads.
+    name: "NewChatPending",
+    render: () => (
+      <div className="h-128">
+        <NewChatPending
+          avatar={null}
+          briefing="Your website is ready to go live."
+          updates={3}
+        />
+      </div>
+    ),
+  },
+  {
+    name: "ThreadWelcomeView",
+    render: () => (
+      <ThreadWelcomeView
+        avatar={null}
+        briefing="Your website is ready to go live."
+      />
     ),
   },
   {
