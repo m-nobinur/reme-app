@@ -53,6 +53,8 @@ export {
 } from "./facts.ts"
 export {
   BRING_BACKS,
+  GOOGLE_OFFERS,
+  GOOGLE_REST_DAYS,
   type JourneyCard,
   type JourneyChange,
   type JourneyInput,
@@ -99,10 +101,12 @@ export {
   dropElsewhere,
   type GoogleFacts,
   googlePlan,
+  latchKey,
   openTask,
   PURCHASE_HOLD_MS,
   putOff,
   readTasks,
+  recordLatches,
   type StepWrite,
   setStep,
   stepOf,

@@ -265,14 +265,15 @@ describe("journeyOf: bring-backs and their latches", () => {
       conversation: OTHER,
       recent: [{ at: ago(180), conversation: HERE }],
     }
+    const done = google({ state: "done" })
     expect(
       journey({
-        tasks: [address({ state: "later", later_until: ago(-60) })],
+        tasks: [address({ state: "later", later_until: ago(-60) }), done],
         visit: back,
       }).bring_back
     ).toBeNull()
     expect(
-      journey({ tasks: [address({ state: "declined" })], visit: back })
+      journey({ tasks: [address({ state: "declined" }), done], visit: back })
         .bring_back
     ).toBeNull()
     expect(journey({ card: card() }).bring_back).toBeNull()
@@ -285,6 +286,107 @@ describe("journeyOf: bring-backs and their latches", () => {
     }
     const nothing = { live: false, building: false, drafts: [] }
     expect(journey({ website: nothing, visit: back }).bring_back).toBeNull()
+  })
+})
+
+describe("journeyOf: Google after the domain is put off", () => {
+  const DAY = 24 * 60
+  const skipped = address({ state: "later", later_until: ago(-7 * DAY) })
+  const offer = (minutes: number): Latch => ({
+    key: `google_offer:${ago(minutes)}`,
+    at: ago(minutes),
+  })
+  /** Back in a new sitting: the owner last wrote `minutes` ago. */
+  const back = (minutes: number) => ({
+    conversation: HERE,
+    recent: [{ at: ago(minutes), conversation: HERE }],
+  })
+  const at = (over: Partial<JourneyInput>) =>
+    journey({ tasks: [skipped], ...over })
+
+  it("can be offered on the free address once the domain is put off or turned down", () => {
+    expect(at({}).google).toBe("offerable")
+    expect(journey({ tasks: [address({ state: "declined" })] }).google).toBe(
+      "offerable"
+    )
+    expect(
+      journey({ tasks: [address({ steps: [step("find_out", "done")] })] })
+        .google
+    ).toBe("waiting_for_domain")
+  })
+
+  it("never comes back in the sitting it was suggested in", () => {
+    const now = at({ visit: sameSitting, latches: [offer(5)] })
+    expect(now.bring_back).toBeNull()
+    expect(now.google_offered).toBe(ago(5))
+  })
+
+  it("comes back once on a return days later, and records it", () => {
+    const j = at({ visit: back(4 * DAY), latches: [offer(4 * DAY)] })
+    expect(j.bring_back).toBe("google")
+    expect(j.record.slice(0, 2)).toEqual([
+      `bring_back:${NOW.toISOString()}`,
+      `google_offer:${NOW.toISOString()}`,
+    ])
+    // The next message of that sitting: the bring-back's own latch holds it.
+    const next = at({
+      visit: sameSitting,
+      latches: [offer(4 * DAY), offer(1), { key: `bring_back:x`, at: ago(1) }],
+    })
+    expect(next.bring_back).toBeNull()
+  })
+
+  it("never twice in a row: a sitting soon after a suggestion stays quiet", () => {
+    expect(
+      at({ visit: back(2 * 60), latches: [offer(DAY)] }).bring_back
+    ).toBeNull()
+    expect(
+      at({ visit: back(2 * 60), latches: [offer(3 * DAY)] }).bring_back
+    ).toBe("google")
+  })
+
+  it("stops after three suggestions, leaving the stack's card to say it", () => {
+    const three = [offer(20 * DAY), offer(10 * DAY), offer(5 * DAY)]
+    expect(at({ visit: back(DAY), latches: three }).bring_back).toBeNull()
+    expect(at({ visit: back(DAY), latches: three.slice(1) }).bring_back).toBe(
+      "google"
+    )
+  })
+
+  it("waits out the owner's Not now, then comes back once", () => {
+    const putOff = (until: number) =>
+      google({ state: "later", later_until: ago(until) })
+    const latches = [offer(20 * DAY), offer(10 * DAY), offer(9 * DAY)]
+    expect(
+      journey({ tasks: [skipped, putOff(-DAY)], visit: back(DAY), latches })
+        .bring_back
+    ).toBeNull()
+    expect(
+      journey({ tasks: [skipped, putOff(DAY)], visit: back(DAY), latches })
+        .bring_back
+    ).toBe("google")
+    expect(
+      journey({
+        tasks: [skipped, putOff(2 * DAY)],
+        visit: back(DAY),
+        latches: [...latches, offer(DAY + 60)],
+      }).bring_back
+    ).toBeNull()
+  })
+
+  it("is never brought back after don't remind me, once connected, nor beside the address's own nudge", () => {
+    const tasks = (state: string) => [skipped, google({ state })]
+    for (const state of ["declined", "done", "active"]) {
+      expect(
+        journey({ tasks: tasks(state), visit: back(DAY) }).bring_back
+      ).toBeNull()
+    }
+    // An open address on a return is the one nudge.
+    const open = [address({ steps: [step("find_out", "pending")] })]
+    expect(journey({ tasks: open, visit: back(DAY) }).bring_back).toBe("return")
+    // Nor with no site to put on Google.
+    const nothing = { live: false, building: false, drafts: [] }
+    expect(at({ website: nothing, visit: back(DAY) }).bring_back).toBeNull()
   })
 })
 
