@@ -16,11 +16,14 @@ import { Switch } from "@workspace/ui/components/switch"
 import { cn } from "@workspace/ui/lib/utils"
 import { useCallback, useEffect, useId, useState } from "react"
 import {
+  completeWhatsAppSignup,
   disconnectChannel,
   getChannels,
+  getWhatsAppSignupConfig,
   setChannelUpdates,
   startWhatsAppLink,
 } from "@/lib/api/server"
+import { prepareEmbeddedSignup, type Signup } from "@/lib/whatsapp-signup"
 
 type WhatsApp = ChannelsState["whatsapp"]
 
@@ -224,6 +227,89 @@ function LinkRow({
 }
 
 /**
+ * The ways to get a number. "Use my WhatsApp Business number" opens Meta's
+ * sign-up popup; its configuration and script load while the page is open so
+ * the press can open the popup in the same tick.
+ */
+function ConnectNumber({ onConnected }: { onConnected: () => Promise<void> }) {
+  const [signup, setSignup] = useState<Signup | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<{ text: string; failed: boolean } | null>(
+    null
+  )
+  useEffect(() => {
+    let live = true
+    const unavailable = () =>
+      live &&
+      setNote({
+        text: "WhatsApp sign-up is not available right now.",
+        failed: false,
+      })
+    getWhatsAppSignupConfig()
+      .then((config) => (config ? prepareEmbeddedSignup(config) : null))
+      .then((next) => (next ? live && setSignup(next) : unavailable()))
+      .catch(unavailable)
+    return () => {
+      live = false
+    }
+  }, [])
+
+  const connect = () => {
+    if (!signup) return
+    setBusy(true)
+    setNote(null)
+    signup
+      .start()
+      .then(async (result) => {
+        if (!result) {
+          return setNote({
+            text: "Sign-up was closed before it finished.",
+            failed: false,
+          })
+        }
+        if (!(await completeWhatsAppSignup({ data: result }))) {
+          throw new Error("refused")
+        }
+        await onConnected()
+      })
+      .catch(() =>
+        setNote({
+          text: "Reme could not connect that number. Try again.",
+          failed: true,
+        })
+      )
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <div className="flex max-w-md flex-col gap-3">
+      <ConnectRows heading="Connect a number">
+        <ConnectRow
+          disabled={!signup || busy}
+          line="Keep the number your customers already message"
+          mark="whatsapp"
+          name="Use my WhatsApp Business number"
+          onClick={connect}
+        />
+        <ConnectRow
+          disabled
+          line="Reme sets up a UK mobile number for you"
+          mark="whatsapp"
+          name="Get a new number"
+        />
+      </ConnectRows>
+      {note?.failed ? (
+        <Failed>{note.text}</Failed>
+      ) : note ? (
+        <p className="text-muted-foreground" role="status">
+          {note.text}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+/**
  * The Messaging channels page: WhatsApp on the business's own number. What
  * shows follows the account: no number yet, a number the owner has not
  * linked their phone to, or linked chats.
@@ -262,22 +348,7 @@ export function MessagingChannels({
         <p className={NOTE}>
           Talk to Reme in WhatsApp, on your business's own number.
         </p>
-        <div className="max-w-md">
-          <ConnectRows heading="Coming soon">
-            <ConnectRow
-              disabled
-              line="Keep the number your customers already message"
-              mark="whatsapp"
-              name="Use my WhatsApp Business number"
-            />
-            <ConnectRow
-              disabled
-              line="Reme sets up a UK mobile number for you"
-              mark="whatsapp"
-              name="Get a new number"
-            />
-          </ConnectRows>
-        </div>
+        <ConnectNumber onConnected={refresh} />
       </div>
     )
   }

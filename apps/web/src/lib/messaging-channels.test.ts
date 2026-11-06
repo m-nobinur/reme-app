@@ -9,8 +9,17 @@ const server = vi.hoisted(() => ({
   startWhatsAppLink: vi.fn(),
   setChannelUpdates: vi.fn(),
   disconnectChannel: vi.fn(),
+  getWhatsAppSignupConfig: vi.fn(),
+  completeWhatsAppSignup: vi.fn(),
 }))
 vi.mock("@/lib/api/server", () => server)
+const popup = vi.hoisted(() => ({
+  prepareEmbeddedSignup: vi.fn(),
+  start: vi.fn(),
+}))
+vi.mock("@/lib/whatsapp-signup", () => popup)
+
+const RESULT = { code: "AQB", waba_id: "111", phone_number_id: "222" }
 
 const { MessagingChannels } = await import("./messaging-channels")
 
@@ -44,6 +53,14 @@ beforeEach(() => {
   server.startWhatsAppLink.mockReset().mockResolvedValue(STARTED)
   server.setChannelUpdates.mockReset().mockResolvedValue({ done: true })
   server.disconnectChannel.mockReset().mockResolvedValue({ done: true })
+  server.getWhatsAppSignupConfig
+    .mockReset()
+    .mockResolvedValue({ appId: "1", configId: "2" })
+  server.completeWhatsAppSignup.mockReset().mockResolvedValue(ACCOUNT)
+  popup.start.mockReset().mockResolvedValue(RESULT)
+  popup.prepareEmbeddedSignup
+    .mockReset()
+    .mockResolvedValue({ start: popup.start })
   onState.mockReset()
   refresh.mockClear()
   container = document.createElement("div")
@@ -55,15 +72,67 @@ afterEach(async () => {
   vi.useRealTimers()
 })
 
-it("offers the two ways to get a number, both still to come, when there is no account", async () => {
-  await show(stateOf({ account: null, links: [] }).whatsapp)
-  const rows = [...container.querySelectorAll('[data-slot="connect-row"]')]
-  expect(rows.map((row) => row.textContent)).toEqual([
+const NO_NUMBER = stateOf({ account: null, links: [] }).whatsapp
+const rows = () =>
+  [
+    ...container.querySelectorAll('[data-slot="connect-row"]'),
+  ] as HTMLButtonElement[]
+
+it("offers the two ways to get a number when there is no account: the first ready, the second still to come", async () => {
+  await show(NO_NUMBER)
+  expect(rows().map((row) => row.textContent)).toEqual([
     "Use my WhatsApp Business numberKeep the number your customers already message",
     "Get a new numberReme sets up a UK mobile number for you",
   ])
-  expect(rows.every((row) => (row as HTMLButtonElement).disabled)).toBe(true)
-  expect(container.textContent).toContain("Coming soon")
+  expect(rows().map((row) => row.disabled)).toEqual([false, true])
+  expect(popup.prepareEmbeddedSignup).toHaveBeenCalledWith({
+    appId: "1",
+    configId: "2",
+  })
+})
+
+it("connects the number from the popup's result and reads the account again", async () => {
+  await show(NO_NUMBER)
+  await act(async () => rows()[0]?.click())
+  expect(popup.start).toHaveBeenCalledTimes(1)
+  expect(server.completeWhatsAppSignup).toHaveBeenCalledWith({ data: RESULT })
+  expect(refresh).toHaveBeenCalledTimes(2)
+  expect(container.textContent).not.toContain("could not connect")
+})
+
+it("says so, quietly, when the popup was closed, and sends nothing", async () => {
+  popup.start.mockResolvedValue(null)
+  await show(NO_NUMBER)
+  await act(async () => rows()[0]?.click())
+  expect(container.textContent).toContain(
+    "Sign-up was closed before it finished."
+  )
+  expect(container.querySelector('[role="alert"]')).toBeNull()
+  expect(server.completeWhatsAppSignup).not.toHaveBeenCalled()
+})
+
+it("says the number could not be connected when the api refuses it or the popup fails", async () => {
+  server.completeWhatsAppSignup.mockResolvedValue(null)
+  await show(NO_NUMBER)
+  await act(async () => rows()[0]?.click())
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    "Reme could not connect that number. Try again."
+  )
+  expect(refresh).toHaveBeenCalledTimes(1)
+
+  popup.start.mockRejectedValue(new Error("The sign-up never finished."))
+  await act(async () => rows()[0]?.click())
+  expect(container.querySelector('[role="alert"]')).not.toBeNull()
+})
+
+it("keeps the row off and says why when the api has no sign-up configuration", async () => {
+  server.getWhatsAppSignupConfig.mockResolvedValue(null)
+  await show(NO_NUMBER)
+  expect(rows()[0]?.disabled).toBe(true)
+  expect(container.textContent).toContain(
+    "WhatsApp sign-up is not available right now."
+  )
+  expect(popup.prepareEmbeddedSignup).not.toHaveBeenCalled()
 })
 
 it("says where a number that is not active stands", async () => {

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 import type { QuestionReply } from "@workspace/contracts"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { EMPTY_WORKSPACE } from "../attention"
-import { LINK, STARTED, stateOf } from "../channels-samples"
+import { ACCOUNT, LINK, STARTED, stateOf } from "../channels-samples"
 import { apiSource, treeOf } from "./client"
 import { SessionEnded, type StaffMember } from "./types"
 
@@ -1005,6 +1005,42 @@ it("starts a WhatsApp link, and treats a refusal as none", async () => {
   expect(await apiSource.startWhatsAppLink("k-8")).toBeNull()
   answers["POST /channels/whatsapp/link"] = refusal(503, "unavailable")
   await expect(apiSource.startWhatsAppLink("k-9")).rejects.toThrow("503")
+})
+
+it("reads what the sign-up popup opens with, and none where the api has none", async () => {
+  answers["GET /channels/whatsapp/signup"] = { app_id: "11", config_id: "22" }
+  expect(await apiSource.signupConfig()).toEqual({
+    appId: "11",
+    configId: "22",
+  })
+  answers["GET /channels/whatsapp/signup"] = refusal(
+    503,
+    "channels.signup_unavailable"
+  )
+  expect(await apiSource.signupConfig()).toBeNull()
+  answers["GET /channels/whatsapp/signup"] = refusal(404, "channels.not_found")
+  expect(await apiSource.signupConfig()).toBeNull()
+})
+
+it("hands the popup's result to the api, and treats a refusal as none", async () => {
+  const popup = { code: "AQB", waba_id: "111", phone_number_id: "222" }
+  answers["POST /channels/whatsapp/signup"] = ACCOUNT
+  expect(await apiSource.completeWhatsAppSignup(popup, "k-10")).toEqual(ACCOUNT)
+  expect(headerOf(calls.at(-1), "idempotency-key")).toBe("k-10")
+  answers["POST /channels/whatsapp/signup"] = refusal(
+    409,
+    "channels.number_taken"
+  )
+  expect(await apiSource.completeWhatsAppSignup(popup, "k-11")).toBeNull()
+  answers["POST /channels/whatsapp/signup"] = refusal(
+    502,
+    "channels.signup_failed"
+  )
+  expect(await apiSource.completeWhatsAppSignup(popup, "k-12")).toBeNull()
+  answers["POST /channels/whatsapp/signup"] = refusal(500, "internal")
+  await expect(apiSource.completeWhatsAppSignup(popup, "k-13")).rejects.toThrow(
+    "500"
+  )
 })
 
 it("switches updates on a linked chat and disconnects it", async () => {
