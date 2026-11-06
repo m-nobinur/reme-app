@@ -364,6 +364,7 @@ export const AskDeveloperInput = z.strictObject({
   question: Text(500),
   /** Routes to look at, when the owner named pages. */
   pages: z.array(z.string().min(1).max(120)).max(5).optional(),
+  step: ToolStep,
 })
 
 /**
@@ -403,6 +404,7 @@ export const ReadSiteInput = z.strictObject({
   page: PagePath.optional().describe(
     'A page\'s path from the outline, such as "about" or "services/deep-clean", for its sections and blocks in full. Leave it out for the outline.'
   ),
+  step: ToolStep,
 })
 
 /**
@@ -624,7 +626,10 @@ export const RecordReviewOutput = z.discriminatedUnion("outcome", [
  * Its output is `BoughtElsewhereOutput`: the connect's own once the registry
  * shows the name, else that it does not yet.
  */
-export const DomainBoughtInput = z.strictObject({ name: DomainName })
+export const DomainBoughtInput = z.strictObject({
+  name: DomainName,
+  step: ToolStep,
+})
 
 /** `inspect_domain`'s input: a name the owner says they have, not yet connected. */
 export const InspectDomainInput = z.strictObject({

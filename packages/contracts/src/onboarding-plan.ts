@@ -231,6 +231,10 @@ export const OnboardingStatus = z.strictObject({
   facts: z
     .array(z.enum(PLAN_FACT_KEYS as [PlanFactKey, ...PlanFactKey[]]))
     .max(PLAN_FACT_KEYS.length),
+  /** How long the turn had run when this was sent, for the row's clock: the browser's own ids and clock cannot reset it. */
+  ms: z.int().nonnegative().optional(),
+  /** A finished tool's step line: kept in the turn's list of lines, never the line shown now. */
+  past: z.literal(true).optional(),
 })
 
 /**
