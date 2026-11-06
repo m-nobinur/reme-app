@@ -278,7 +278,41 @@ const statusLineCatalog: Entry[] = [
     name: "ReplyStatus open",
     render: () => <ReplyRow open />,
   },
+  { name: "ReplyStatus over a turn", render: () => <ReplyTurn /> },
 ]
+
+const PATEL = [
+  "Reme is reading your message",
+  "Looking for Mrs Patel's usual clean",
+  "Checking Tuesday's diary",
+  "Setting Tuesday's reminder to call Mrs Patel",
+]
+
+/** A turn's row as its lines come, its clock running from the turn's start. */
+function ReplyTurn() {
+  const [at, setAt] = useState(0)
+  const [since] = useState(() => Date.now())
+  return (
+    <Stack>
+      <ReplyStatus
+        announce={false}
+        delay={0}
+        label={PATEL[at] as string}
+        lines={PATEL.slice(1, at + 1)}
+        since={since}
+      />
+      <Button
+        className="self-start"
+        disabled={at === PATEL.length - 1}
+        onClick={() => setAt((n) => n + 1)}
+        size="sm"
+        variant="outline"
+      >
+        Next line
+      </Button>
+    </Stack>
+  )
+}
 
 /** The reply's row seven seconds into a turn, after a narrator line and a finished read. */
 const ReplyRow = ({ open = false }: { open?: boolean }) => (

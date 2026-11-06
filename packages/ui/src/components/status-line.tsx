@@ -278,7 +278,9 @@ function StatusLine({
       </span>
       {count > 1 ? <span className="tabular-nums">×{count}</span> : null}
       {clock !== null && clockAfter !== null && clock >= clockAfter ? (
-        <span className="text-xs tabular-nums">{duration(clock)}</span>
+        <span className="shrink-0 whitespace-nowrap text-xs tabular-nums">
+          {duration(clock)}
+        </span>
       ) : null}
     </span>
   )
@@ -369,7 +371,7 @@ function ReplyStatus({
         </CollapsibleTrigger>
       </span>
       <CollapsibleContent data-slot="reply-status-lines">
-        <ul className="mt-1 flex flex-col gap-1 ps-6 text-muted-foreground/80 text-xs">
+        <ul className="mt-1 flex flex-col gap-1 ps-6 text-muted-foreground text-xs">
           {earlier.map((line, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: a line can come back, and the list only grows
             <li key={i}>{line}</li>
