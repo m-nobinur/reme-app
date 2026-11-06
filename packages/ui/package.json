@@ -10,7 +10,7 @@
     "test:update": "playwright test --update-snapshots"
   },
   "dependencies": {
-    "@assistant-ui/react": "0.15.31",
+    "@assistant-ui/react": "0.15.32",
     "@assistant-ui/react-markdown": "0.14.24",
     "@base-ui/react": "^1.9.0",
     "@fontsource-variable/geist": "^5.3.0",

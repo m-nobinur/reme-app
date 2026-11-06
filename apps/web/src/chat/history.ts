@@ -15,7 +15,7 @@ import type { ChatMessage } from "./message"
  */
 
 /**
- * The storage format `@assistant-ui/ai-sdk` 0.0.2 reads and writes. It
+ * The storage format `@assistant-ui/ai-sdk` 0.0.15 reads and writes. It
  * declares this type and the adapter but exports neither, so it is restated
  * here from its declaration: a `UIMessage` without its id.
  */

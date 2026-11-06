@@ -170,7 +170,7 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: 1.64.0
-        version: 1.64.0(patch_hash=23149ceffec68764ec6541862138f3e738b3f6e6c5d6beafbbb651690c5bae45)(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.155.0(@types/node@24.19.2))
+        version: 1.64.0(patch_hash=23149ceffec68764ec6541862138f3e738b3f6e6c5d6beafbbb651690c5bae45)(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.155.0(@cloudflare/workers-types@4.20260702.1)(@types/node@24.19.2))
       '@flue/runtime':
         specifier: 2.3.0
         version: 2.3.0(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.32.0(@cfworker/json-schema@4.1.1)(zod@4.6.7))(@smithy/signature-v4@5.7.4)(typescript@6.0.3)(undici@8.12.2)(ws@8.22.0)(zod@4.6.7)
@@ -232,12 +232,12 @@ importers:
       '@ai-sdk/react':
         specifier: 4.0.147
         version: 4.0.147(react@19.3.1)(zod@4.6.7)
+      '@assistant-ui/ai-sdk':
+        specifier: 0.0.15
+        version: 0.0.15(@opentelemetry/api@1.9.0)(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react@19.3.1)(zod@4.6.7)
       '@assistant-ui/react':
-        specifier: 0.15.31
-        version: 0.15.31(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
-      '@assistant-ui/react-ai-sdk':
-        specifier: 1.4.20
-        version: 1.4.20(@opentelemetry/api@1.9.0)(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react@19.3.1)(zod@4.6.7)
+        specifier: 0.15.32
+        version: 0.15.32(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -286,7 +286,7 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: 1.64.0
-        version: 1.64.0(patch_hash=23149ceffec68764ec6541862138f3e738b3f6e6c5d6beafbbb651690c5bae45)(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.155.0(@types/node@24.19.2))
+        version: 1.64.0(patch_hash=23149ceffec68764ec6541862138f3e738b3f6e6c5d6beafbbb651690c5bae45)(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.155.0(@cloudflare/workers-types@4.20260702.1)(@types/node@24.19.2))
       '@types/node':
         specifier: ^24
         version: 24.19.2
@@ -550,11 +550,11 @@ importers:
   packages/ui:
     dependencies:
       '@assistant-ui/react':
-        specifier: 0.15.31
-        version: 0.15.31(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
+        specifier: 0.15.32
+        version: 0.15.32(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
       '@assistant-ui/react-markdown':
         specifier: 0.14.24
-        version: 0.14.24(@assistant-ui/react@0.15.31(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1)))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.14.24(@assistant-ui/react@0.15.32(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1)))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@base-ui/react':
         specifier: ^1.9.0
         version: 1.9.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -710,8 +710,8 @@ packages:
       react:
         optional: true
 
-  '@assistant-ui/core@0.3.31':
-    resolution: {integrity: sha512-NrTSgdUTM0SVmos3YMAAvPqDDNlxFmwVTjnA06T+4A7DcXswsKrBw65BsfSEn4m1DFSwaD3rfMlIFTEK3ei4uQ==}
+  '@assistant-ui/core@0.3.32':
+    resolution: {integrity: sha512-eEOuM3K0HWoetfFW8WwGJrhFu7lAfn/Su9us6xMk9HbHUc3/5jL6EOa2VsxrWeZbPqu/yXxGT2KaaFVvzZtCbA==}
     peerDependencies:
       '@assistant-ui/store': ^0.3.22
       '@assistant-ui/tap': ^0.9.24
@@ -721,16 +721,6 @@ packages:
       '@types/react':
         optional: true
       react:
-        optional: true
-
-  '@assistant-ui/react-ai-sdk@1.4.20':
-    resolution: {integrity: sha512-S1qjeS91cgU1q8nrmCKT/i/OhgKHbQQ/jOtxczF3ZoSTqivtfxxMCMEfsJL3I16JwCKQJR5B0RJK+lh9XiiQpg==}
-    peerDependencies:
-      '@types/react': '*'
-      ai: ^7.0.101
-      react: ^18 || ^19
-    peerDependenciesMeta:
-      '@types/react':
         optional: true
 
   '@assistant-ui/react-markdown@0.14.24':
@@ -743,8 +733,8 @@ packages:
       '@types/react':
         optional: true
 
-  '@assistant-ui/react@0.15.31':
-    resolution: {integrity: sha512-vTTcI2963DO5CYrKh8CYkJ0stQcu0JXxUQM0nepsP2Zy4QfrovVuiYkAhKM1U4jMnGHy3sQ9ovxH0VTZrScnZg==}
+  '@assistant-ui/react@0.15.32':
+    resolution: {integrity: sha512-cw+8UQRnJocyHEaNc3+S+ulZaFp4UoVnbjyRmVFZcq8XSHpe4onz7ZkXkBl7L8IZftgvNdHS9ZEujnqohwzibw==}
     peerDependencies:
       '@types/react': '*'
       '@types/react-dom': '*'
@@ -3687,8 +3677,8 @@ packages:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
     engines: {node: '>=12'}
 
-  assistant-cloud@0.2.8:
-    resolution: {integrity: sha512-KCFwGcDgGUvKoQNw0zyEeFrS7F5B6QXfDaZ/QCNAjDWs7FxomFtLrXxlFGwlvueE+QK5vlOAdNnvKc9QfRzcqA==}
+  assistant-cloud@0.2.9:
+    resolution: {integrity: sha512-v7HVmQemWIeM9pZjVglviS9mXaoK0aW/Pz9zQYo91XZp8n17Fi9Q7lMpy572TUUYhQAKRqDWZvXpfpPDzwiPWA==}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
       '@opentelemetry/exporter-trace-otlp-http': '>=0.200.0'
@@ -3704,8 +3694,8 @@ packages:
       ai:
         optional: true
 
-  assistant-stream@0.3.54:
-    resolution: {integrity: sha512-Jed48fZg12rzHHWDoTIRKLAO7SovX942f5VXCZ/GifGhaBH0fS1wZhhWhT8BVldJ4uDnCAMlszPGl82eZwO+vw==}
+  assistant-stream@0.3.55:
+    resolution: {integrity: sha512-hwdutUKnpM/93isBoQdmqGfEUVaxz36mORF7LdNwRQ1bmFDH6H7QOGbD8trIFU3eC4LL4CNJCA4PHFLgCubI6A==}
     peerDependencies:
       ai: ^6.0.0 || ^7.0.0
       ioredis: ^5.10.1 || ^6.0.0
@@ -6697,8 +6687,8 @@ packages:
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
-  zustand@5.0.15:
-    resolution: {integrity: sha512-MpSEjRiBkA9crSYeOUH32rJC7SVqAbm0Fqcqge/bUi2PPoLcBWKOsG+C8mevmpr8TwXHBVkChbbJiyvkE+i/3A==}
+  zustand@5.0.16:
+    resolution: {integrity: sha512-Uv7e327ihlCfayfja3hDc0M64Upev1LWBKpRobdK4NyovDDPeeX4imWXc/wzC1yc6fkYPoAY/ncKVPAs2jrtQw==}
     engines: {node: '>=12.20.0'}
     peerDependencies:
       '@types/react': '>=18.0.0'
@@ -6771,12 +6761,12 @@ snapshots:
     dependencies:
       '@ai-sdk/mcp': 2.0.78(zod@4.6.7)
       '@ai-sdk/react': 4.0.147(react@19.3.1)(zod@4.6.7)
-      '@assistant-ui/core': 0.3.31(@assistant-ui/store@0.3.22(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@types/react@19.3.0)(react@19.3.1))(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@opentelemetry/api@1.9.0)(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react@19.3.1)
+      '@assistant-ui/core': 0.3.32(@assistant-ui/store@0.3.22(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@types/react@19.3.0)(react@19.3.1))(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@opentelemetry/api@1.9.0)(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react@19.3.1)
       '@assistant-ui/store': 0.3.22(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@types/react@19.3.0)(react@19.3.1)
       '@assistant-ui/tap': 0.9.24(@types/react@19.3.0)(react@19.3.1)
       ai: 7.0.143(zod@4.6.7)
-      assistant-cloud: 0.2.8(@opentelemetry/api@1.9.0)(ai@7.0.143(zod@4.6.7))
-      assistant-stream: 0.3.54(ai@7.0.143(zod@4.6.7))
+      assistant-cloud: 0.2.9(@opentelemetry/api@1.9.0)(ai@7.0.143(zod@4.6.7))
+      assistant-stream: 0.3.55(ai@7.0.143(zod@4.6.7))
     optionalDependencies:
       '@types/react': 19.3.0
       react: 19.3.1
@@ -6788,12 +6778,12 @@ snapshots:
       - redis
       - zod
 
-  '@assistant-ui/core@0.3.31(@assistant-ui/store@0.3.22(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@types/react@19.3.0)(react@19.3.1))(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@opentelemetry/api@1.9.0)(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react@19.3.1)':
+  '@assistant-ui/core@0.3.32(@assistant-ui/store@0.3.22(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@types/react@19.3.0)(react@19.3.1))(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@opentelemetry/api@1.9.0)(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react@19.3.1)':
     dependencies:
       '@assistant-ui/store': 0.3.22(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@types/react@19.3.0)(react@19.3.1)
       '@assistant-ui/tap': 0.9.24(@types/react@19.3.0)(react@19.3.1)
-      assistant-cloud: 0.2.8(@opentelemetry/api@1.9.0)(ai@7.0.143(zod@4.6.7))
-      assistant-stream: 0.3.54(ai@7.0.143(zod@4.6.7))
+      assistant-cloud: 0.2.9(@opentelemetry/api@1.9.0)(ai@7.0.143(zod@4.6.7))
+      assistant-stream: 0.3.55(ai@7.0.143(zod@4.6.7))
       nanoid: 6.0.2
     optionalDependencies:
       '@types/react': 19.3.0
@@ -6806,24 +6796,9 @@ snapshots:
       - ioredis
       - redis
 
-  '@assistant-ui/react-ai-sdk@1.4.20(@opentelemetry/api@1.9.0)(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react@19.3.1)(zod@4.6.7)':
+  '@assistant-ui/react-markdown@0.14.24(@assistant-ui/react@0.15.32(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1)))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
-      '@assistant-ui/ai-sdk': 0.0.15(@opentelemetry/api@1.9.0)(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react@19.3.1)(zod@4.6.7)
-      ai: 7.0.143(zod@4.6.7)
-      react: 19.3.1
-    optionalDependencies:
-      '@types/react': 19.3.0
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@opentelemetry/exporter-trace-otlp-http'
-      - '@opentelemetry/sdk-trace-base'
-      - ioredis
-      - redis
-      - zod
-
-  '@assistant-ui/react-markdown@0.14.24(@assistant-ui/react@0.15.31(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1)))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
-    dependencies:
-      '@assistant-ui/react': 0.15.31(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
+      '@assistant-ui/react': 0.15.32(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
       '@radix-ui/react-primitive': 2.2.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@types/hast': 3.0.5
       classnames: 2.5.1
@@ -6837,20 +6812,20 @@ snapshots:
       - react-dom
       - supports-color
 
-  '@assistant-ui/react@0.15.31(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))':
+  '@assistant-ui/react@0.15.32(@opentelemetry/api@1.9.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))':
     dependencies:
-      '@assistant-ui/core': 0.3.31(@assistant-ui/store@0.3.22(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@types/react@19.3.0)(react@19.3.1))(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@opentelemetry/api@1.9.0)(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react@19.3.1)
+      '@assistant-ui/core': 0.3.32(@assistant-ui/store@0.3.22(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@types/react@19.3.0)(react@19.3.1))(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@opentelemetry/api@1.9.0)(@types/react@19.3.0)(ai@7.0.143(zod@4.6.7))(react@19.3.1)
       '@assistant-ui/store': 0.3.22(@assistant-ui/tap@0.9.24(@types/react@19.3.0)(react@19.3.1))(@types/react@19.3.0)(react@19.3.1)
       '@assistant-ui/tap': 0.9.24(@types/react@19.3.0)(react@19.3.1)
-      assistant-cloud: 0.2.8(@opentelemetry/api@1.9.0)(ai@7.0.143(zod@4.6.7))
-      assistant-stream: 0.3.54(ai@7.0.143(zod@4.6.7))
+      assistant-cloud: 0.2.9(@opentelemetry/api@1.9.0)(ai@7.0.143(zod@4.6.7))
+      assistant-stream: 0.3.55(ai@7.0.143(zod@4.6.7))
       radix-ui: 1.8.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       react-textarea-autosize: 8.5.9(@types/react@19.3.0)(react@19.3.1)
       safe-content-frame: 0.0.34
       zod: 4.6.7
-      zustand: 5.0.15(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
+      zustand: 5.0.16(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
     optionalDependencies:
       '@types/react': 19.3.0
       '@types/react-dom': 19.3.0(@types/react@19.3.0)
@@ -7595,7 +7570,7 @@ snapshots:
     optionalDependencies:
       workerd: 1.20261023.1
 
-  '@cloudflare/vite-plugin@1.64.0(patch_hash=23149ceffec68764ec6541862138f3e738b3f6e6c5d6beafbbb651690c5bae45)(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.155.0(@types/node@24.19.2))':
+  '@cloudflare/vite-plugin@1.64.0(patch_hash=23149ceffec68764ec6541862138f3e738b3f6e6c5d6beafbbb651690c5bae45)(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.155.0(@cloudflare/workers-types@4.20260702.1)(@types/node@24.19.2))':
     dependencies:
       '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261012.1)
       miniflare: 5.20261012.0-beta(@types/node@24.19.2)
@@ -9186,7 +9161,7 @@ snapshots:
   '@rolldown/binding-win32-x64-msvc@1.2.14':
     optional: true
 
-  '@rolldown/plugin-babel@0.2.4(@babel/core@7.29.7)(@babel/runtime@7.29.7)(rolldown@1.2.14)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))':
+  '@rolldown/plugin-babel@0.2.4(@babel/core@7.29.7)(@babel/runtime@7.29.7)(rolldown@1.2.14)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
       '@babel/core': 7.29.7
       picomatch: 4.0.7
@@ -9694,7 +9669,7 @@ snapshots:
       '@rolldown/pluginutils': 1.0.1
       vite: 8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
     optionalDependencies:
-      '@rolldown/plugin-babel': 0.2.4(@babel/core@7.29.7)(@babel/runtime@7.29.7)(rolldown@1.2.14)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+      '@rolldown/plugin-babel': 0.2.4(@babel/core@7.29.7)(@babel/runtime@7.29.7)(rolldown@1.2.14)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/mocker@5.0.5(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
@@ -9820,7 +9795,7 @@ snapshots:
       '@modelcontextprotocol/client': 2.3.0
       '@modelcontextprotocol/sdk': 1.32.0(@cfworker/json-schema@4.1.1)(zod@4.6.7)
       '@modelcontextprotocol/server': 2.3.0
-      '@rolldown/plugin-babel': 0.2.4(@babel/core@7.29.7)(@babel/runtime@7.29.7)(rolldown@1.2.14)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+      '@rolldown/plugin-babel': 0.2.4(@babel/core@7.29.7)(@babel/runtime@7.29.7)(rolldown@1.2.14)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
       cron-schedule: 6.0.0
       esbuild: 0.28.2
       mimetext: 3.0.28
@@ -9901,9 +9876,9 @@ snapshots:
 
   assertion-error@2.0.1: {}
 
-  assistant-cloud@0.2.8(@opentelemetry/api@1.9.0)(ai@7.0.143(zod@4.6.7)):
+  assistant-cloud@0.2.9(@opentelemetry/api@1.9.0)(ai@7.0.143(zod@4.6.7)):
     dependencies:
-      assistant-stream: 0.3.54(ai@7.0.143(zod@4.6.7))
+      assistant-stream: 0.3.55(ai@7.0.143(zod@4.6.7))
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
       ai: 7.0.143(zod@4.6.7)
@@ -9911,7 +9886,7 @@ snapshots:
       - ioredis
       - redis
 
-  assistant-stream@0.3.54(ai@7.0.143(zod@4.6.7)):
+  assistant-stream@0.3.55(ai@7.0.143(zod@4.6.7)):
     dependencies:
       '@standard-schema/spec': 1.1.0
       '@types/json-schema': 7.0.15
@@ -10015,7 +9990,8 @@ snapshots:
 
   atomically@1.7.0: {}
 
-  aws4fetch@1.0.20: {}
+  aws4fetch@1.0.20:
+    optional: true
 
   axe-core@4.14.0: {}
 
@@ -13135,7 +13111,7 @@ snapshots:
 
   zod@4.6.7: {}
 
-  zustand@5.0.15(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1)):
+  zustand@5.0.16(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1)):
     optionalDependencies:
       '@types/react': 19.3.0
       react: 19.3.1

@@ -30,11 +30,7 @@ import type { ChatMessage } from "./message"
  * format it names, and the decode the runtime runs on our rows.
  */
 const require = createRequire(import.meta.url)
-const aiSdk = dirname(
-  createRequire(require.resolve("@assistant-ui/react-ai-sdk")).resolve(
-    "@assistant-ui/ai-sdk"
-  )
-)
+const aiSdk = dirname(require.resolve("@assistant-ui/ai-sdk"))
 const ADAPTER_FILE = join(aiSdk, "adapters", "aiSDKFormatAdapter.js")
 const installed = async () =>
   (await import(pathToFileURL(ADAPTER_FILE).href))
