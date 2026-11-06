@@ -12,6 +12,7 @@ import {
   events,
   newUlid,
   offerOf,
+  scheduledJobs,
   sql,
   supersedeFact,
 } from "@workspace/db"
@@ -19,6 +20,7 @@ import { afterAll, describe, expect, it, vi } from "vitest"
 import type { writeText } from "../src/heartbeat-write.ts"
 import { openChat } from "./chat.ts"
 import { freshOrg, kit, newAssignment } from "./fixture.ts"
+import { previewed } from "./site.ts"
 
 // app.ts loads both at import time; neither is reached here.
 vi.mock("../src/sandbox.ts", () => ({
@@ -43,6 +45,7 @@ const {
   retryingText,
   stoppedText,
   DRAFT_BACK,
+  tryAgain,
 } = await import("../src/retry.ts")
 const { workKey } = await import("../src/sandbox.ts")
 const { advance } = await import("../src/state.ts")
@@ -83,7 +86,13 @@ describe("whether a failed build is started again", () => {
     }
     expect(decide({ ...ended, reason: "constructor" })).toBe("quiet")
     expect(decide({ ...ended, origin: "console" })).toBe("quiet")
-    expect(decide({ ...ended, busy: true })).toBe("quiet")
+  })
+
+  it("leaves a stop to the assistant while another build holds the site", () => {
+    expect(decide({ ...ended, busy: true })).toBe("busy")
+    expect(
+      decide({ ...ended, busy: true, reason: "blueprint.undecided" })
+    ).toBe("quiet")
   })
 })
 
@@ -410,51 +419,110 @@ live("a failed owner build's retry", () => {
     return ids
   }
 
-  it("says once that a failed change gave the earlier draft back, and starts nothing", async () => {
-    const orgId = await freshOrg(kit)
-    const draft = await newAssignment(kit, orgId)
-    for (const to of [
-      "briefing",
-      "planning",
-      "implementing",
-      "validating",
-      "preview_ready",
-      "awaiting_review",
-    ] as const) {
-      await advance(kit, draft, to)
-    }
-    // As `holdDraft` leaves it: paused, which frees the site for the change.
-    await advance(kit, draft, "paused", { reason: "change.held" })
-    const change = await kit.withOrg({ orgId }, async (db) => {
-      // A build, since a revise would need the draft's revision row: only
-      // the link to the draft decides this branch.
-      const made = await insertAssignment(db, orgId, "k-draft", true, {
-        kind: "site.build",
+  /** A change to the owner's unpublished draft, failed for `reason`, with the draft given back. */
+  async function failedDraftChange(lane: "full" | "quick", reason: string) {
+    const site = await previewed()
+    await advance(kit, site.ids, "awaiting_review")
+    const change = await kit.withOrg({ orgId: site.orgId }, async (db) => {
+      const made = await insertAssignment(db, site.orgId, `k-${lane}`, true, {
+        kind: "site.revise",
         goal: "Make the headline shorter.",
         model: "A",
         withhold: [],
-        lane: "full",
+        lane,
         change_kind: "copy",
+        draft: site.revisionId,
       })
       if (!("row" in made)) throw new Error("not created")
-      await db
-        .update(assignments)
-        .set({ revisionOfAssignmentId: draft.assignmentId })
-        .where(eq(assignments.id, made.row.id))
       return made.row.id
     })
-    const ids = await fail(
-      { orgId, assignmentId: change },
+    const ids = await fail({ orgId: site.orgId, assignmentId: change }, reason)
+    return { ...site, change: ids }
+  }
+
+  it("keeps the Try again pill when a change to a draft stops for good, and starts nothing", async () => {
+    const site = await failedDraftChange(
+      "quick",
       "gates.repair_budget_exhausted"
     )
     created.length = 0
-    const first = await afterFailure(env, kit, ids)
+    const first = await afterFailure(env, kit, site.change)
     expect(first).toEqual({
       retry_id: null,
-      note: { key: `site.draft_back:${change}`, text: DRAFT_BACK },
+      note: {
+        key: `site.draft_back:${site.change.assignmentId}`,
+        text: DRAFT_BACK,
+        choices: tryAgain("site.revise"),
+      },
     })
-    expect(await afterFailure(env, kit, ids)).toEqual(first)
+    expect(await afterFailure(env, kit, site.change)).toEqual(first)
     expect(created).toEqual([])
+  })
+
+  it("retries a full change to a draft from the same draft, then keeps the pill if it fails again", async () => {
+    const site = await failedDraftChange(
+      "full",
+      "gates.repair_budget_exhausted"
+    )
+    created.length = 0
+    const first = await afterFailure(env, kit, site.change)
+    expect(first.retry_id).toEqual(created[0])
+    expect(first.note?.key).toBe(`site.retrying:${site.change.assignmentId}`)
+    expect(await afterFailure(env, kit, site.change)).toEqual(first)
+    expect(created).toHaveLength(1)
+
+    const [row] = await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db
+        .select({ of: assignments.revisionOfAssignmentId })
+        .from(assignments)
+        .where(eq(assignments.id, first.retry_id as string))
+    )
+    expect(row?.of).toBe(site.ids.assignmentId)
+
+    const retry = await fail(
+      { orgId: site.orgId, assignmentId: first.retry_id as string },
+      "developer.stalled"
+    )
+    expect(await afterFailure(env, kit, retry)).toEqual({
+      retry_id: null,
+      note: {
+        key: `site.draft_back:${retry.assignmentId}`,
+        text: DRAFT_BACK,
+        choices: tryAgain("site.revise"),
+      },
+    })
+    expect(created).toHaveLength(1)
+  })
+
+  it("asks for the assistant's turn when a build stops while another holds the site, and posts nothing itself", async () => {
+    const orgId = await freshOrg(kit)
+    const ids = await failedBuild(orgId, "gates.repair_budget_exhausted", "k-a")
+    await kit.withOrg({ orgId }, (db) =>
+      insertAssignment(db, orgId, "k-b", true, {
+        kind: "site.build",
+        goal: "Build the site again.",
+        model: "A",
+        withhold: [],
+        lane: "full",
+        change_kind: null,
+      })
+    )
+    created.length = 0
+    expect(await afterFailure(env, kit, ids)).toEqual({
+      retry_id: null,
+      note: null,
+    })
+    expect(created).toEqual([])
+    expect(await notesOf(orgId, ids.assignmentId)).toEqual([
+      expect.objectContaining({ kind: "stopped", next: "none" }),
+    ])
+    const wake = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ at: scheduledJobs.nextRunAt })
+        .from(scheduledJobs)
+        .where(sql`${scheduledJobs.kind} = 'cos_wake'`)
+    )
+    expect(wake).toHaveLength(1)
   })
 
   it("starts one retry with the plan, however often the step runs, and says so", async () => {

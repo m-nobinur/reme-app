@@ -29,6 +29,7 @@ import {
   type Posted,
   pgCode,
   postAssistantMessage,
+  queueWake,
   readTasks,
   sql,
   type Tenancy,
@@ -88,17 +89,21 @@ export type Ended = {
   lane: string
   retry_of: string | null
   reason: string | null
-  /** Another site build is open: it speaks for itself. */
+  /** Another site build is open, and holds the site. */
   busy: boolean
 }
 
-/** Retry an owner's build or full rebuild once; say a retry's failure, or a quick change's. */
-export function decide(ended: Ended): "retry" | "stop" | "quiet" {
+/**
+ * Retry an owner's build or full rebuild once; say a retry's failure, or a
+ * quick change's. `busy`: another build holds the site, so neither a retry
+ * nor a note of ours may race its own, and the assistant tells the stop.
+ */
+export function decide(ended: Ended): "retry" | "stop" | "quiet" | "busy" {
   if (ended.origin !== "owner" || !ended.kind.startsWith("site.")) {
     return "quiet"
   }
   if (buildFailure(ended.reason).retry === null) return "quiet"
-  if (ended.busy) return "quiet"
+  if (ended.busy) return "busy"
   if (ended.retry_of) return "stop"
   return ended.kind === "site.build" || ended.lane === "full" ? "retry" : "stop"
 }
@@ -123,9 +128,9 @@ export function resumedText(kind: string): string {
   return `${subject(kind)} got stuck, so I restarted it from where it left off. Nothing for you to do: I'll say here when the draft is ready.`
 }
 
-/** A change to an unpublished draft failed, and the draft it started from is back. */
+/** A change to an unpublished draft stopped for good, and the draft it started from is back. */
 export const DRAFT_BACK =
-  "I couldn't make your change, so your earlier draft is still ready to publish. Nothing for you to do."
+  "I couldn't make your change, so your earlier draft is still ready to publish. Say try again, or tell me what to change."
 
 /** The stopped note's one quick reply: the try again its words ask for. */
 export const tryAgain = (kind: string): Choices => [
@@ -733,14 +738,13 @@ export async function afterFailure(
     const choices = await creationChoices(db, ids)
     const reason = await failureReason(db, ids.assignmentId)
     const report = await lastReport(db, ids.assignmentId)
-    // This build's own retry, made by an earlier attempt of the step, is not another build.
-    const [open] = await db
+    // This build's own retry, made by an earlier attempt of the step, is not another build, and nor is the draft this change gave back.
+    const open = await db
       .select({ id: assignments.id })
       .from(assignments)
       .where(
         sql`${assignments.kind} like 'site.%' and ${assignments.state} not in ('published', 'failed', 'cancelled') and ${assignments.idempotencyKey} <> ${key}`
       )
-      .limit(1)
     const failed = (report?.gates ?? []).filter((g) => !g.passed)
     // The draft this change started from, given back with its review (state.ts).
     const [draft] = row?.revisionOfAssignmentId
@@ -756,7 +760,7 @@ export async function afterFailure(
       choices,
       reason,
       failed: [...new Set(failed.map((g) => g.gate))],
-      busy: Boolean(open),
+      busy: open.some((o) => o.id !== row?.revisionOfAssignmentId),
       draftBack: Boolean(draft),
     }
   })
@@ -790,6 +794,17 @@ export async function afterFailure(
     }
     await writeNote(kit, ids.orgId, note)
     if (next === "none") return { retry_id: null, note: null }
+    // The draft that is back is what the owner has: its line says so.
+    if (read.draftBack) {
+      return {
+        retry_id: null,
+        note: {
+          key: `site.draft_back:${ids.assignmentId}`,
+          text: DRAFT_BACK,
+          choices: tryAgain(row.kind),
+        },
+      }
+    }
     const text = stoppedText(row.kind, reason)
     return {
       retry_id: null,
@@ -800,15 +815,14 @@ export async function afterFailure(
       },
     }
   }
-  // The draft that is back is what the owner has: one line, and no retry.
-  if (read.draftBack) {
-    await stop("none")
-    return {
-      retry_id: null,
-      note: { key: `site.draft_back:${ids.assignmentId}`, text: DRAFT_BACK },
-    }
+  if (verdict === "busy") {
+    // The stop's handoff asked for no turn (`told`): ask for one now, so the
+    // assistant tells it once, in one voice, with the running build in view.
+    await kit.withOrg({ orgId: ids.orgId }, (db) => queueWake(db, ids.orgId))
+    return stop("none")
   }
-  if (verdict === "quiet") return stop("none")
+  if (verdict === "quiet")
+    return stop(read.draftBack ? "waiting_owner" : "none")
   if (verdict === "stop") return stop("waiting_owner")
   // A retry that carries on from the kept site keeps the photos placed in it.
   const kept = (await env.SITES.head(workKey(ids))) !== null
@@ -821,6 +835,7 @@ export async function afterFailure(
       lane: choices.lane,
       change_kind: choices.change_kind,
       ...(choices.brief ? { brief: choices.brief } : {}),
+      ...(choices.draft ? { draft: choices.draft } : {}),
       retry_of: {
         assignment_id: ids.assignmentId,
         blueprint: kept ? row.blueprint : redrawn(row.blueprint),
