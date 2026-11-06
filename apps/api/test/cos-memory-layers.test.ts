@@ -294,7 +294,10 @@ describe.skipIf(!url)("on a live connection", () => {
   afterAll(() => kit.close())
 
   const ctx = (who: Owner) =>
-    ({ kit, owner: { orgId: who.orgId } }) as unknown as ToolContext
+    ({
+      kit,
+      owner: { orgId: who.orgId, session: {} },
+    }) as unknown as ToolContext
 
   /** A conversation of `who` holding `said` as the owner's messages, and an assistant reply. */
   async function session(who: Owner, said: string[], reply = "Noted.") {

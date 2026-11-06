@@ -72,19 +72,24 @@ function nextOf({ address }: JourneyState, card: AddressCard | null) {
 }
 
 function addressLine(
+  workspace: CosWorkspace,
   journey: JourneyState,
   card: AddressCard | null,
   now: Date,
   zone: string | null
 ): string {
-  return addressState(journey, card, now, zone) + nextOf(journey, card)
+  const task = workspace.tasks?.find((t) => t.kind === "address")
+  const said =
+    task?.steps.find((s) => s.step === "purchase")?.state === "in_progress"
+  return addressState(journey, card, now, zone, said) + nextOf(journey, card)
 }
 
 function addressState(
   { address: { stage, name, until } }: JourneyState,
   card: AddressCard | null,
   now: Date,
-  zone: string | null
+  zone: string | null,
+  said: boolean
 ): string {
   switch (stage) {
     case "live":
@@ -94,6 +99,8 @@ function addressState(
     case "paying":
       return `Web address: ${name} is being bought here and waits for the owner's payment.`
     case "buying_elsewhere":
+      if (said)
+        return `Web address: the owner says they bought ${name}; the registry does not show it yet and is looked at daily. They have answered: never ask whether they bought it; they are told when it shows.`
       return `Web address: the owner is buying ${name} themselves. When they say it's bought, call domain_bought with that name; until then, ask whether they have bought it, never assume.`
     case "bought":
       return `Web address: the owner bought ${name} themselves and the registry shows it; putting the website on it is next (connect_domain once they say yes).`
@@ -349,7 +356,7 @@ export function openItems(
   return [
     OPEN_ITEMS_HEADER,
     `- ${websiteLine(workspace)}`,
-    `- ${addressLine(journey, card, now, zone)}`,
+    `- ${addressLine(workspace, journey, card, now, zone)}`,
     `- ${googleLine(workspace, journey, zone)}`,
     ...(questions > 0
       ? [

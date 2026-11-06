@@ -18,7 +18,7 @@ import {
 import { vouched } from "@workspace/gates/contacts"
 import type { LanguageModel } from "ai"
 import { settleCard } from "./build-questions.ts"
-import { cosModel, turnNotes } from "./chat.ts"
+import { cancelOpenCard, cosModel, turnNotes } from "./chat.ts"
 import { ownerOf, runOpened } from "./continue.ts"
 import {
   activeTools,
@@ -290,7 +290,7 @@ export async function wakeTurn(
       prefix: state.prefixLogged ? null : prefix,
       events: notes.events,
       skills: notes.skills,
-      messages: [],
+      messages: await cancelOpenCard(db, sessionId),
       context: {
         turn_id: turn.turnId,
         prefix_sha256: prefix.sha256,

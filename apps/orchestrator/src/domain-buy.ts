@@ -21,6 +21,7 @@ import {
   appendEvent,
   currentFacts,
   domains,
+  dropElsewhere,
   eq,
   events,
   type OrgScopedDb,
@@ -297,6 +298,7 @@ export async function find(
   if (out.length === 0) return fromEnvelope(409, BUY_REFUSALS.unavailable)
   await kit.withOrg({ orgId }, async (db) => {
     const task = await openTask(db, orgId, "address")
+    await dropElsewhere(db, task)
     await setStep(db, task, "choose", {
       state: "blocked",
       blocked_on: "owner_action",
@@ -1364,8 +1366,23 @@ export async function boughtElsewhere(
   } catch {
     // No hold for this name: the owner bought one we never offered.
   }
-  if (!registered)
+  if (!registered) {
+    // The owner's word is kept now, so no later conversation asks again; the
+    // hold's daily look finishes the step.
+    await kit.withOrg({ orgId }, async (db) => {
+      const [held] = await db
+        .select({ id: ownerTasks.id })
+        .from(ownerTasks)
+        .where(
+          sql`${ownerTasks.kind} = 'address' and ${ownerTasks.state} in ('active', 'later')
+            and ${ownerTasks.detail}->>'origin' = 'buying_elsewhere' and ${ownerTasks.detail}->>'name' = ${name}`
+        )
+      if (!held) return
+      const task = await openTask(db, orgId, "address")
+      await setStep(db, task, "purchase", { state: "in_progress" })
+    })
     return { status: 200, output: { outcome: "not_registered_yet", name } }
+  }
   await kit.withOrg({ orgId }, async (db) => {
     const task = await openTask(db, orgId, "address", { name })
     await setStep(db, task, "purchase", { state: "done" })

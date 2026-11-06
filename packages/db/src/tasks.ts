@@ -53,6 +53,22 @@ export async function openTask(
 }
 
 /**
+ * A fresh list of names leaves nothing of a name the owner was buying
+ * elsewhere: the name, the origin and the wait on the purchase.
+ */
+export async function dropElsewhere(
+  db: OrgScopedDb,
+  taskId: string
+): Promise<void> {
+  const dropped = await db.execute(sql`
+    update owner_tasks set detail = detail - 'name' - 'origin'
+    where id = ${taskId} and detail->>'origin' = 'buying_elsewhere'
+    returning id`)
+  if (dropped.length > 0)
+    await setStep(db, taskId, "purchase", { state: "pending" })
+}
+
+/**
  * Puts the open task off for `days`: `later` until then, the same row as
  * `openTask` finds when the owner is asked again.
  */
