@@ -1173,7 +1173,10 @@ describe.skipIf(!url)("buying a name elsewhere, against a database", () => {
         output: { outcome: "not_registered_yet", name },
       }
     )
-    expect((await stepOf(site.orgId, "purchase")).step?.state).toBe("blocked")
+    // The owner's word is kept while the registry has yet to show the name.
+    expect((await stepOf(site.orgId, "purchase")).step?.state).toBe(
+      "in_progress"
+    )
     rdap.registered.add(name)
     const done = await boughtElsewhere(setup.env, kit, site.orgId, { name })
     expect(done).toMatchObject({
@@ -1228,6 +1231,23 @@ describe.skipIf(!url)("buying a name elsewhere, against a database", () => {
     expect(await isRegistered(name)).toBe(true)
     rdap.registered.add("rdap-says.com")
     expect(await isRegistered("rdap-says.com")).toBe(true)
+  })
+
+  it("keeps nothing of a name being bought elsewhere when a fresh list of names is shown", async () => {
+    const site = await published()
+    const setup = buyEnv(site.store)
+    const name = unique()
+    await buyElsewhere(setup.env, kit, site.orgId, { name })
+    await followUpElsewhere(kit, site.orgId, name)
+    expect((await stepOf(site.orgId, "purchase")).task?.state).toBe("later")
+    stubNet(false, { "brightclean.com": priced("brightclean.com") })
+    expect(await find(setup.env, kit, site.orgId, {})).toMatchObject({
+      outcome: "found",
+    })
+    const { task, step } = await stepOf(site.orgId, "purchase")
+    expect(task?.state).toBe("active")
+    expect(task?.detail).toEqual({})
+    expect(step).toMatchObject({ state: "pending", note: null })
   })
 
   it("follows up once and puts the address task off for a week", async () => {

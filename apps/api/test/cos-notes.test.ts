@@ -140,6 +140,23 @@ describe("the open items note", () => {
     )
   })
 
+  it("does not ask again once the owner said they bought it and the registry is yet to show it", () => {
+    const said = address({
+      detail: { name: "sparkleclean.co.uk", origin: "buying_elsewhere" },
+      steps: [
+        step("find_out", "done"),
+        step("choose", "done"),
+        step("purchase", "in_progress"),
+      ],
+    })
+    const text = openItems({ ...EMPTY, tasks: [said] }, null, NOW).join("\n")
+    expect(text).toMatch(
+      /says they bought sparkleclean\.co\.uk; the registry does not show it yet/
+    )
+    expect(text).toMatch(/never ask whether they bought it/)
+    expect(text).not.toMatch(/call domain_bought/)
+  })
+
   it("tells a draft waiting from a published site, and Google's turn once a domain connects", () => {
     const waiting = openItems(
       {
