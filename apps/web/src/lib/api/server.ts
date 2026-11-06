@@ -440,6 +440,13 @@ export const removeCorrection = createServerFn({ method: "POST" })
       await source.removeCorrection(data.id)
   )
 
+/** The dictation socket's address with a ticket on it; null with no session. */
+export const getDictationSocket = createServerFn({ method: "POST" }).handler(
+  async (): Promise<string | null> => {
+    return await source.dictationSocket()
+  }
+)
+
 /** The key a browser subscribes to push with; null where push is off. */
 export const getPushKey = createServerFn({ method: "GET" }).handler(
   async (): Promise<string | null> => {

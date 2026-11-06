@@ -44,6 +44,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react"
 import { deleteReminder } from "@/lib/api/server"
 import { assistantOf, briefingOf } from "@/lib/briefing"
@@ -59,6 +60,7 @@ import {
 } from "./conversations"
 import { cosTools, liveKey, liveState, questionTitles } from "./cos-tools"
 import { saveDesignAnswer } from "./design"
+import { dictation } from "./dictation"
 import { domainPurchase } from "./domain-purchase"
 import { askedSend, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
@@ -233,6 +235,11 @@ export function ChatPage() {
   }, [titles, zone, key])
 
   const assistant = assistantOf(live.workspace)
+  const dictationNotice = useSyncExternalStore(
+    dictation.notice.subscribe,
+    dictation.notice.read,
+    () => null
+  )
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -287,6 +294,7 @@ export function ChatPage() {
                             assistant={live.workspace?.assistantName}
                             briefing={briefing.line}
                             components={{ ToolFallback: Approval }}
+                            dictationNotice={dictationNotice}
                             lastShown={LAST_SHOWN}
                             mode={mode}
                             onRetry={() => retry.current?.()}

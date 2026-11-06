@@ -11,6 +11,9 @@ import {
   ConversationHistory,
   ConversationList,
   type CreateReminderRequest,
+  DICTATION_PATH,
+  DICTATION_TICKET_PATH,
+  DictationTicket,
   DomainCheckout,
   DomainName,
   DomainPurchaseStatus,
@@ -866,6 +869,26 @@ async function removeCorrection(
   return MemoryView.parse(await response.json())
 }
 
+/**
+ * Where the browser opens a dictation: the api's own host, which the session
+ * cookie does not reach, so the socket carries a ticket the owner's session
+ * just minted.
+ */
+async function dictationSocket(): Promise<string | null> {
+  const response = await call(DICTATION_TICKET_PATH, { method: "POST" })
+  if (!response || response.status === 401 || response.status === 403) {
+    return null
+  }
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for dictation`)
+  }
+  const { ticket } = DictationTicket.parse(await response.json())
+  const socket = new URL(DICTATION_PATH, apiUrl())
+  socket.protocol = socket.protocol === "https:" ? "wss:" : "ws:"
+  socket.searchParams.set("ticket", ticket)
+  return socket.toString()
+}
+
 async function pushKey(): Promise<string | null> {
   const body = await get("/push/config")
   return body === null ? null : PushConfig.parse(body).public_key
@@ -1030,6 +1053,7 @@ export const apiSource: OwnerDataSource = {
   grants,
   setGrant,
   removeCorrection,
+  dictationSocket,
   pushKey,
   subscribePush,
   unsubscribePush,
