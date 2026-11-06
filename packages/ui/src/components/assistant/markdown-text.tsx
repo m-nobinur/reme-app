@@ -19,14 +19,16 @@ type MarkdownTextProps = Partial<TextMessagePartProps> & {
 }
 
 /**
- * Streamed words revealed at a steady reading pace, about 65 characters a
- * second, and any backlog within 2.5 s: the library's default drains it in
- * a quarter second, so a reply that arrives in one burst read as one block
- * (2026-11-04). Reduced motion shows the words at once.
+ * assistant-ui's own pace for streamed words, at most 5 ms a character, so a
+ * streamed reply shows as fast as the model writes it. A reply that lands in
+ * one burst, as onboarding's planner sends its words, plays in over 0.8 s
+ * rather than the library's 0.25 s, so it still reads as written (owner,
+ * 2026-11-06; 2.5 s at 65 characters a second had held streamed replies
+ * behind the model). Reduced motion shows the words at once.
  */
 export const READING_PACE: SmoothOptions = {
-  drainMs: 2_500,
-  maxCharIntervalMs: 15,
+  drainMs: 800,
+  maxCharIntervalMs: 5,
 }
 
 const useShallowStable = <T extends Record<string, unknown> | undefined>(

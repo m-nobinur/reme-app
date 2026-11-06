@@ -5,7 +5,10 @@ import {
   type ThreadMessageLike,
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
-import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
+import {
+  MarkdownText,
+  READING_PACE,
+} from "@workspace/ui/components/assistant/markdown-text"
 import { Thread } from "@workspace/ui/components/assistant/thread"
 import {
   act,
@@ -300,7 +303,7 @@ it("a reply streaming in never shows a raw asterisk, an empty bullet or a headin
   expect(md.querySelector("em")?.textContent).toBe("Not sure")
 })
 
-it("reveals a reply that arrived in one burst at a reading pace, and shows a settled one whole", async () => {
+it("plays a burst in within 0.8 s, streams at the library's pace, and shows a settled reply whole", async () => {
   const motion = (reduce: boolean) =>
     vi.stubGlobal("matchMedia", (query: string) => ({
       matches: reduce && query.includes("reduce"),
@@ -334,16 +337,16 @@ it("reveals a reply that arrived in one burst at a reading pace, and shows a set
   }
   const length = (md: HTMLElement) => md.textContent?.trim().length ?? 0
 
+  expect(READING_PACE.maxCharIntervalMs).toBe(5)
   motion(false)
   const streaming = await shown(true)
   expect(length(streaming)).toBeLessThan(10)
-  await act(() => new Promise((resolve) => setTimeout(resolve, 500)))
-  // About 65 characters a second: a third of it after half a second, where
-  // the library's default had drawn nearly all of it.
+  await act(() => new Promise((resolve) => setTimeout(resolve, 250)))
+  // Part of it a quarter second in, where the library's default had drawn it all.
   expect(length(streaming)).toBeGreaterThan(10)
-  expect(length(streaming)).toBeLessThan(burst.length / 2)
+  expect(length(streaming)).toBeLessThan(burst.trim().length)
   await vi.waitFor(() => expect(length(streaming)).toBe(burst.trim().length), {
-    timeout: 4_000,
+    timeout: 1_500,
   })
   await unmount?.()
 
