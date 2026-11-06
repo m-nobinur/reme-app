@@ -21,9 +21,11 @@ import {
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  MicrophoneIcon,
   PaintBrushIcon,
   PlusIcon,
   SquareIcon,
+  StopIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
   XIcon,
@@ -201,6 +203,8 @@ export type ThreadProps = {
   lastShown?: ThreadLastShown | undefined
   /** Sends the owner's last message again, offered on a reply that failed. */
   onRetry?: (() => void) | undefined
+  /** In a few words, why dictation did not start or stopped, under the composer's field. */
+  dictationNotice?: string | null | undefined
 }
 
 export type ThreadReveal = {
@@ -322,6 +326,7 @@ export const Thread: FC<ThreadProps> = ({
   mode,
   assistant,
   onRetry,
+  dictationNotice,
   after,
   updates,
   reveal,
@@ -352,6 +357,7 @@ export const Thread: FC<ThreadProps> = ({
       mode,
       assistant,
       onRetry,
+      dictationNotice,
     }),
     [
       stored,
@@ -362,6 +368,7 @@ export const Thread: FC<ThreadProps> = ({
       mode,
       assistant,
       onRetry,
+      dictationNotice,
     ]
   )
   // Held by its parts, so a caller's inline object does not redraw every
@@ -1206,6 +1213,7 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
     placeholder = "Send a message",
     questionPlaceholder,
     mode,
+    dictationNotice,
   } = useContext(ThreadSettingsContext)
   const input = useContext(ComposerInputContext)
   const aui = useAui()
@@ -1281,6 +1289,14 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
         />
         <ComposerSend expanded={expanded} />
       </div>
+      {/* Always in the page, so a notice that appears in it is read out. */}
+      <p
+        aria-live="polite"
+        className="px-3 pt-2 text-muted-foreground text-sm empty:hidden"
+        data-slot="aui_dictation-notice"
+      >
+        {dictationNotice}
+      </p>
     </ComposerPrimitive.Root>
   )
 }
@@ -1419,11 +1435,68 @@ const ComposerMode: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   )
 }
 
+/**
+ * Voice dictation: the words land in the field as they are recognised, each
+ * partial replacing the last, and the owner can type among them. Tap again to
+ * stop. Without a dictation adapter the mic is disabled.
+ */
+const ComposerDictate: FC = () => {
+  const sendable = useSendable()
+  const button = "aui-composer-dictate size-8 rounded-full"
+  return (
+    <>
+      <AuiIf condition={(s) => s.composer.dictation == null}>
+        <ComposerPrimitive.Dictate
+          disabled={!sendable}
+          render={
+            <TooltipIconButton
+              aria-label="Dictate"
+              className={cn(button, "text-muted-foreground")}
+              side="bottom"
+              size="icon"
+              tooltip="Dictate"
+              type="button"
+              variant="ghost"
+            />
+          }
+        >
+          <MicrophoneIcon aria-hidden className="size-4" />
+        </ComposerPrimitive.Dictate>
+      </AuiIf>
+      <AuiIf condition={(s) => s.composer.dictation != null}>
+        <ComposerPrimitive.StopDictation
+          render={
+            <TooltipIconButton
+              aria-label="Stop dictating"
+              className={cn(
+                button,
+                "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+              )}
+              side="bottom"
+              size="icon"
+              tooltip="Stop dictating"
+              type="button"
+              variant="ghost"
+            />
+          }
+        >
+          <StopIcon
+            aria-hidden
+            className="size-4 motion-safe:animate-pulse"
+            weight="fill"
+          />
+        </ComposerPrimitive.StopDictation>
+      </AuiIf>
+    </>
+  )
+}
+
 const ComposerSend: FC<{ expanded: boolean }> = ({ expanded }) => {
   const sendable = useSendable()
   return (
     // In the expanded composer the buttons sit under the field, send at the right.
-    <div className={cn("flex", expanded && "ms-auto")}>
+    <div className={cn("flex gap-1", expanded && "ms-auto")}>
+      <ComposerDictate />
       <AuiIf condition={(s) => !s.thread.isRunning}>
         <ComposerPrimitive.Send
           disabled={!sendable}
