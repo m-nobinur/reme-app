@@ -10,6 +10,8 @@ import { axe, open } from "./helpers"
 const WIDTHS = { phone: 390, desktop: 1440 } as const
 
 const input = (page: Page) => page.getByLabel("Message input")
+/** What the catalog's dictation hears. */
+const HEARD = "Please book a clean for Friday morning"
 const menu = (page: Page) => page.locator('[data-slot="dropdown-menu-content"]')
 
 /** Opens a menu and waits for its entry transition, so a scan sees it settled. */
@@ -144,27 +146,63 @@ test("on a phone a row of chips scrolls sideways and fades at the edge", async (
   )
 })
 
-test("dictating puts the words in the field and turns the mic into a stop", async ({
+test("dictating shows the level, × and ✓ in place of the mic and send, the words still settling muted", async ({
   page,
 }) => {
   await open(page, "ThreadDictating", WIDTHS.phone)
-  await expect(input(page)).toHaveValue(
-    "Please book a clean for Friday morning"
-  )
+  await expect(input(page)).toHaveValue(HEARD)
   await expect(page.getByRole("button", { name: "Dictate" })).toHaveCount(0)
-  const stop = page.getByRole("button", { name: "Stop dictating" })
-  await expect(stop).toBeVisible()
-  // A touch target, and reachable by keyboard.
-  const box = await stop.boundingBox()
-  expect(box?.width).toBeGreaterThanOrEqual(32)
-  await stop.focus()
-  await expect(stop).toBeFocused()
-  await stop.press("Enter")
-  await expect(page.getByRole("button", { name: "Dictate" })).toBeVisible()
-  // What was heard stays for the owner to edit or send.
-  await expect(input(page)).toHaveValue(
-    "Please book a clean for Friday morning"
+  await expect(page.getByRole("button", { name: "Send message" })).toHaveCount(
+    0
   )
+  // Still being recognised: drawn over the field, muted and italic.
+  const phrase = page.locator('[data-slot="aui_dictation-heard"] span')
+  await expect(phrase).toHaveText(HEARD)
+  await expect(phrase).toHaveCSS("font-style", "italic")
+  // Speaking: the dots have risen into bars, and say nothing to a reader.
+  const meter = page.locator('[data-slot="aui_dictation-level"]')
+  await expect(meter).toHaveAttribute("aria-hidden", "true")
+  await expect
+    .poll(() =>
+      meter
+        .locator("span")
+        .nth(2)
+        .evaluate((bar) => bar.getBoundingClientRect().height)
+    )
+    .toBeGreaterThan(10)
+  const cancel = page.getByRole("button", { name: "Cancel dictation" })
+  const done = page.getByRole("button", { name: "Done" })
+  for (const button of [cancel, done]) {
+    const box = await button.boundingBox()
+    expect(box?.width).toBe(36)
+    expect(box?.height).toBe(36)
+  }
+  await done.focus()
+  await expect(done).toBeFocused()
+  await done.press("Enter")
+  await expect(page.getByRole("button", { name: "Dictate" })).toBeVisible()
+  // What was heard stays for the owner to edit or send, and nothing sent.
+  await expect(input(page)).toHaveValue(HEARD)
+  await expect(page.getByRole("button", { name: "Send message" })).toBeVisible()
+})
+
+test("listening before a word is heard says so in the field, the dots still", async ({
+  page,
+}) => {
+  await open(page, "ThreadListening", WIDTHS.phone)
+  await expect(input(page)).toHaveAttribute("placeholder", "Listening…")
+  await expect(input(page)).toHaveValue("")
+  const bars = page.locator('[data-slot="aui_dictation-level"] span')
+  await expect(bars).toHaveCount(5)
+  for (const height of await bars.evaluateAll((all) =>
+    all.map((bar) => bar.getBoundingClientRect().height)
+  ))
+    expect(height).toBe(4)
+  // Announced once, in the notice line, without a visible second line.
+  const notice = page.locator('[data-slot="aui_dictation-notice"]')
+  await expect(notice).toHaveText("Listening")
+  await expect(notice).toHaveClass(/sr-only/)
+  await axe(page, "listening")
 })
 
 test("a dictation that could not start says so under the field", async ({
@@ -183,11 +221,9 @@ test("a dictation that could not start says so under the field", async ({
 })
 
 /** Hold Space in the composer to dictate, with the mic's adapter in the fixture. */
-const HEARD = "Please book a clean for Friday morning"
 const dictate = (page: Page) =>
   page.getByRole("button", { name: "Dictate", exact: true })
-const stopDictating = (page: Page) =>
-  page.getByRole("button", { name: "Stop dictating" })
+const done = (page: Page) => page.getByRole("button", { name: "Done" })
 /** Longer than the hold that starts dictation, with room to spare. */
 const PAST_HOLD = 700
 
@@ -200,12 +236,24 @@ test.describe("hold Space to dictate, the microphone allowed", () => {
     await open(page, "ThreadEmptyPhone", WIDTHS.phone)
     await input(page).focus()
     await page.keyboard.down("Space")
-    await expect(stopDictating(page)).toBeVisible()
+    await expect(done(page)).toBeVisible()
     await expect(input(page)).toHaveValue(HEARD)
     await page.keyboard.up("Space")
     await expect(dictate(page)).toBeVisible()
     // The held key typed nothing of its own.
     await expect(input(page)).toHaveValue(HEARD)
+  })
+
+  test("× drops what this dictation wrote and keeps what was typed before it", async ({
+    page,
+  }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).fill("Hi ")
+    await dictate(page).click()
+    await expect(input(page)).toHaveValue(`Hi ${HEARD}`)
+    await page.getByRole("button", { name: "Cancel dictation" }).click()
+    await expect(dictate(page)).toBeVisible()
+    await expect(input(page)).toHaveValue("Hi ")
   })
 
   test("a short press types a space", async ({ page }) => {

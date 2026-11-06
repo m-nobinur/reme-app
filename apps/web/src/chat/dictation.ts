@@ -92,9 +92,22 @@ export function resampler(from: number, to = DICTATION_SAMPLE_RATE) {
 /** A running capture. */
 export type Microphone = { stop: () => void }
 
-/** Opens the microphone and calls `onAudio` with 16 kHz mono 16-bit PCM. */
+/** How loud a chunk of capture is, 0 to 1 (after hermes-agent voice-level-processor.ts, MIT). */
+export function levelOf(samples: Float32Array): number {
+  let sum = 0
+  for (const sample of samples) sum += sample * sample
+  return samples.length
+    ? Math.min(1, (Math.sqrt(sum / samples.length) * 128) / 42)
+    : 0
+}
+
+/**
+ * Opens the microphone and calls `onAudio` with 16 kHz mono 16-bit PCM, and
+ * `onLevel` with each chunk's loudness.
+ */
 export async function openMicrophone(
-  onAudio: (pcm: ArrayBuffer) => void
+  onAudio: (pcm: ArrayBuffer) => void,
+  onLevel: (level: number) => void = () => undefined
 ): Promise<Microphone> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
@@ -103,8 +116,11 @@ export async function openMicrophone(
   const source = context.createMediaStreamSource(stream)
   const tap = context.createScriptProcessor(4096, 1, 1)
   const down = resampler(context.sampleRate)
-  tap.onaudioprocess = (event) =>
-    onAudio(down(event.inputBuffer.getChannelData(0)).buffer as ArrayBuffer)
+  tap.onaudioprocess = (event) => {
+    const samples = event.inputBuffer.getChannelData(0)
+    onLevel(levelOf(samples))
+    onAudio(down(samples).buffer as ArrayBuffer)
+  }
   // A tap only fires while it is connected through; its output stays silent.
   source.connect(tap)
   tap.connect(context.destination)
@@ -170,6 +186,17 @@ const parse = (data: unknown): unknown => {
 export class RelayDictationAdapter implements DictationAdapter {
   readonly notice = new Notice()
   private settled: string[] = []
+  private current: DictationAdapter.Session | undefined
+  private levels = new Set<(level: number) => void>()
+
+  /** Ends the dictation running now, as the composer's cancel. */
+  readonly cancel = () => this.current?.cancel()
+
+  /** The microphone's level, 0 to 1, as each chunk is captured. */
+  readonly onLevel = (listener: (level: number) => void) => {
+    this.levels.add(listener)
+    return () => void this.levels.delete(listener)
+  }
 
   /**
    * The phrases the last dictation settled, once, if it ended by being
@@ -228,6 +255,7 @@ export class RelayDictationAdapter implements DictationAdapter {
         return () => void speech.delete(callback)
       },
     }
+    adapter.current = session
 
     function finish(reason: "stopped" | "cancelled" | "error", say?: string) {
       if (ended) return
@@ -254,10 +282,15 @@ export class RelayDictationAdapter implements DictationAdapter {
       if (!parts.supported()) return fail(NOTICES.unsupported)
       // The microphone first: a refusal costs no ticket and no model socket.
       try {
-        mic = await parts.microphone((pcm) => {
-          if (socket?.readyState === OPEN) socket.send(pcm)
-          else if (unsent.length < 100) unsent.push(pcm)
-        })
+        mic = await parts.microphone(
+          (pcm) => {
+            if (socket?.readyState === OPEN) socket.send(pcm)
+            else if (unsent.length < 100) unsent.push(pcm)
+          },
+          (level) => {
+            for (const listener of adapter.levels) listener(level)
+          }
+        )
       } catch (error) {
         return fail(microphoneNotice(error))
       }

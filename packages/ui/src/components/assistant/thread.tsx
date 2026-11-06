@@ -147,8 +147,18 @@ export type ThreadProps = {
   onRetry?: (() => void) | undefined
   /** In a few words, why dictation did not start or stopped, under the composer's field. */
   dictationNotice?: string | null | undefined
+  /** The dictation behind the composer's mic, for its cancel and its level meter. */
+  dictation?: ThreadDictation | undefined
   /** The face the owner picked for their assistant, over the welcome; Reme's own without one. */
   avatar?: AvatarId | null | undefined
+}
+
+/** What the composer needs of a dictation beyond assistant-ui's adapter. */
+export type ThreadDictation = {
+  /** Ends the dictation running now, keeping none of its words for later. */
+  cancel: () => void
+  /** The microphone's level, 0 to 1, as it is captured. */
+  onLevel: (listener: (level: number) => void) => () => void
 }
 
 export type ThreadReveal = {
@@ -214,6 +224,7 @@ export const Thread: FC<ThreadProps> = ({
   assistant,
   onRetry,
   dictationNotice,
+  dictation,
   avatar,
   after,
   updates,
@@ -246,6 +257,7 @@ export const Thread: FC<ThreadProps> = ({
       assistant,
       onRetry,
       dictationNotice,
+      dictation,
       avatar,
     }),
     [
@@ -258,6 +270,7 @@ export const Thread: FC<ThreadProps> = ({
       assistant,
       onRetry,
       dictationNotice,
+      dictation,
       avatar,
     ]
   )

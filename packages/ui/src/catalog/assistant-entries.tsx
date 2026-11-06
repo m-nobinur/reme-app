@@ -49,6 +49,7 @@ import {
   OWNER_QUICK_ACTIONS,
   SITE_CHANGE_MODE,
   Thread,
+  type ThreadDictation,
   type ThreadProps,
 } from "@workspace/ui/components/assistant/thread"
 import {
@@ -285,20 +286,49 @@ function TrayStates({
 
 const HEARD = "Please book a clean for Friday morning"
 
-/** A dictation that has heard the start of a sentence and is still listening. */
-const LISTENING: DictationAdapter = {
-  listen: () => ({
-    status: { type: "running" },
-    stop: async () => undefined,
-    cancel: () => undefined,
-    onSpeechStart: () => () => undefined,
-    onSpeechEnd: () => () => undefined,
-    onSpeech: (callback) => {
-      queueMicrotask(() => callback({ transcript: HEARD, isFinal: false }))
+/**
+ * A running dictation that, unless `quiet`, has heard the start of a
+ * sentence; its cancel ends it as the app's adapter does.
+ */
+function listening(quiet = false): DictationAdapter & ThreadDictation {
+  let current: DictationAdapter.Session | undefined
+  return {
+    listen: () => {
+      const ended = new Set<(result: DictationAdapter.Result) => void>()
+      const session: DictationAdapter.Session = {
+        status: { type: "running" },
+        stop: async () => undefined,
+        cancel: () => {
+          session.status = { type: "ended", reason: "cancelled" }
+          for (const callback of ended) callback({ transcript: "" })
+        },
+        onSpeechStart: () => () => undefined,
+        onSpeechEnd: (callback) => {
+          ended.add(callback)
+          return () => void ended.delete(callback)
+        },
+        onSpeech: (callback) => {
+          if (!quiet) {
+            queueMicrotask(() =>
+              callback({ transcript: HEARD, isFinal: false })
+            )
+          }
+          return () => undefined
+        },
+      }
+      current = session
+      return session
+    },
+    cancel: () => current?.cancel(),
+    onLevel: (listener) => {
+      if (!quiet) listener(0.7)
       return () => undefined
     },
-  }),
+  }
 }
+
+const LISTENING = listening()
+const QUIET = listening(true)
 
 /** Starts the dictation as the owner's tap on the mic would. */
 function StartDictating() {
@@ -3878,6 +3908,24 @@ const assistantCatalog = [
           height="h-[32rem]"
           isDisabled={false}
           messages={DECISION}
+          settings={{ dictation: LISTENING }}
+        >
+          <StartDictating />
+        </OwnerThread>
+      </div>
+    ),
+  },
+  {
+    // Listening before a word is heard: the dots still and dim, the field waiting.
+    name: "ThreadListening",
+    render: () => (
+      <div className="w-[390px]">
+        <OwnerThread
+          dictation={QUIET}
+          height="h-[32rem]"
+          isDisabled={false}
+          messages={[]}
+          settings={{ dictation: QUIET }}
         >
           <StartDictating />
         </OwnerThread>
@@ -3912,6 +3960,7 @@ const assistantCatalog = [
           height="h-[32rem]"
           isDisabled={false}
           messages={[]}
+          settings={{ dictation: LISTENING }}
         />
       </div>
     ),

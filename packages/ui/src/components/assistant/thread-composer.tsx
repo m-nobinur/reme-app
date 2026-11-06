@@ -6,10 +6,10 @@ import {
 } from "@assistant-ui/react"
 import {
   ArrowUpIcon,
+  CheckCircleIcon,
   MicrophoneIcon,
   PlusIcon,
   SquareIcon,
-  StopIcon,
   XIcon,
 } from "@phosphor-icons/react"
 import { RECAP_REPLY, SKIP_REPLY } from "@workspace/contracts"
@@ -44,6 +44,7 @@ import {
   type RefObject,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react"
@@ -151,6 +152,8 @@ export const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
   }, [mode, input])
   useTypeToComposer(input)
   const hold = useHoldToDictate()
+  const dictating = useAuiState((s) => s.composer.dictation != null)
+  const hearing = useAuiState((s) => !!s.composer.dictation?.transcript)
   return (
     <ComposerPrimitive.Root
       className={cn(
@@ -171,45 +174,62 @@ export const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
         )}
       >
         {mode ? <ComposerMode input={input} /> : <QuickActions input={input} />}
-        <ComposerPrimitive.Input
-          ref={input}
-          placeholder={
-            mode?.placeholder ??
-            (asking && questionPlaceholder ? questionPlaceholder : placeholder)
-          }
+        <div
           className={cn(
-            "aui-composer-input max-h-48 min-w-0 resize-none bg-transparent px-1.5 py-1.25 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60",
-            expanded ? "order-first min-h-16 basis-full" : "min-h-9 flex-1"
+            "grid min-w-0",
+            expanded ? "order-first basis-full" : "flex-1"
           )}
-          rows={1}
-          autoFocus={autoFocus}
-          disabled={!sendable}
-          enterKeyHint="send"
-          aria-label="Message input"
-          // assistant-ui sends nothing on Enter while a reply runs, but lets
-          // the key type a new line into what the owner waits to send.
-          onKeyDown={(e) => {
-            if (
-              e.key === "Enter" &&
-              !e.shiftKey &&
-              !e.nativeEvent.isComposing &&
-              aui.thread().getState().isRunning
-            )
-              e.preventDefault()
-            hold.onKeyDown(e)
-          }}
-          onKeyUp={hold.onKeyUp}
-          onBlur={hold.onBlur}
-        />
+        >
+          <ComposerPrimitive.Input
+            ref={input}
+            placeholder={
+              dictating
+                ? "Listening…"
+                : (mode?.placeholder ??
+                  (asking && questionPlaceholder
+                    ? questionPlaceholder
+                    : placeholder))
+            }
+            className={cn(
+              FIELD,
+              "aui-composer-input resize-none bg-transparent text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60",
+              expanded ? "min-h-16" : "min-h-9",
+              hearing && "text-transparent"
+            )}
+            rows={1}
+            autoFocus={autoFocus}
+            disabled={!sendable}
+            enterKeyHint="send"
+            aria-label="Message input"
+            // assistant-ui sends nothing on Enter while a reply runs, but lets
+            // the key type a new line into what the owner waits to send.
+            onKeyDown={(e) => {
+              if (
+                e.key === "Enter" &&
+                !e.shiftKey &&
+                !e.nativeEvent.isComposing &&
+                aui.thread().getState().isRunning
+              )
+                e.preventDefault()
+              hold.onKeyDown(e)
+            }}
+            onKeyUp={hold.onKeyUp}
+            onBlur={hold.onBlur}
+          />
+          <HeardSoFar input={input} />
+        </div>
         <ComposerSend expanded={expanded} />
       </div>
       {/* Always in the page, so a notice that appears in it is read out. */}
       <p
         aria-live="polite"
-        className="px-3 pt-2 text-muted-foreground text-sm empty:hidden"
+        className={cn(
+          "px-3 pt-2 text-muted-foreground text-sm empty:hidden",
+          !dictationNotice && "sr-only"
+        )}
         data-slot="aui_dictation-notice"
       >
-        {dictationNotice}
+        {dictationNotice ?? (dictating ? "Listening" : null)}
       </p>
     </ComposerPrimitive.Root>
   )
@@ -344,7 +364,7 @@ function useMicrophoneGranted() {
 /**
  * Hold Space to dictate. In the composer, with the caret at the start of a
  * word and nothing selected, Space held past `HOLD_TO_DICTATE_MS` starts the
- * composer's dictation, and letting go stops it as the Stop button does, so
+ * composer's dictation, and letting go stops it as Done does, so
  * the words are tidied the same way. A shorter press types its space as it
  * is let go. Only once the browser has granted the microphone, so a first
  * use goes through the button and its prompt, and never while an input
@@ -433,69 +453,161 @@ const ComposerMode: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   )
 }
 
+/** The field's box, shared by the input and the words drawn over it. */
+const FIELD = "max-h-48 min-w-0 px-1.5 py-1.25 text-chat [grid-area:1/1]"
+
 /**
- * Voice dictation: the words land in the field as they are recognised, each
- * partial replacing the last, and the owner can type among them. Tap again to
- * stop, or hold Space in the field instead (`useHoldToDictate`). Without a
- * dictation adapter the mic is disabled.
+ * While a phrase is still being recognised, the field's own text is hidden
+ * and drawn again over it, the phrase muted and italic: a textarea cannot
+ * style part of its text. assistant-ui keeps that phrase at the end of the
+ * text until it settles.
  */
-const ComposerDictate: FC = () => {
-  const sendable = useSendable()
-  const button = "aui-composer-dictate rounded-full"
+const HeardSoFar: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
+  input,
+}) => {
+  const text = useAuiState((s) => s.composer.text)
+  const phrase = useAuiState((s) => s.composer.dictation?.transcript)
+  const box = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (box.current && input.current) {
+      box.current.scrollTop = input.current.scrollTop
+    }
+  })
+  if (!phrase || !text.endsWith(phrase)) return null
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        FIELD,
+        "pointer-events-none overflow-hidden whitespace-pre-wrap break-words text-chat-foreground"
+      )}
+      data-slot="aui_dictation-heard"
+      ref={box}
+    >
+      {text.slice(0, -phrase.length)}
+      <ComposerPrimitive.DictationTranscript className="text-muted-foreground italic" />
+    </div>
+  )
+}
+
+/** The bars' heights at full level, centre highest (after hermes-agent voice-activity.tsx, MIT). */
+const BARS = [0.5, 0.78, 1, 0.78, 0.5]
+
+/**
+ * The microphone's level as a row of dots that rise into bars, written
+ * straight to a CSS variable so a level redraws no React tree. Still for
+ * anyone who asked for less motion.
+ */
+const LevelMeter: FC = () => {
+  const { dictation } = useContext(ThreadSettingsContext)
+  const meter = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!dictation || matchMedia("(prefers-reduced-motion: reduce)").matches)
+      return
+    return dictation.onLevel((level) =>
+      meter.current?.style.setProperty("--level", String(level))
+    )
+  }, [dictation])
+  return (
+    <span
+      aria-hidden
+      className="flex h-9 items-center gap-1 px-2 text-foreground"
+      data-slot="aui_dictation-level"
+      ref={meter}
+    >
+      {BARS.map((weight) => (
+        <span
+          className="w-1 rounded-full bg-current opacity-[calc(0.3+var(--level,0)*0.7)] transition-[height,opacity] duration-100 ease-out"
+          key={weight}
+          style={{ height: `calc(4px + var(--level, 0) * ${weight * 18}px)` }}
+        />
+      ))}
+    </span>
+  )
+}
+
+/**
+ * Listening, in place of the mic and send: the level, × to drop what this
+ * dictation wrote and keep what was typed before it, and ✓ to keep the
+ * words, which the tidy pass then cleans. Neither sends.
+ */
+const ComposerListening: FC = () => {
+  const aui = useAui()
+  const { dictation } = useContext(ThreadSettingsContext)
+  const [before] = useState(() => aui.composer().getState().text)
   return (
     <>
-      <AuiIf condition={(s) => s.composer.dictation == null}>
-        <ComposerPrimitive.Dictate
-          disabled={!sendable}
-          render={
-            <TooltipIconButton
-              aria-label="Dictate"
-              className={cn(button, "text-muted-foreground")}
-              side="bottom"
-              size="icon"
-              tooltip="Dictate, or hold Space to talk"
-              type="button"
-              variant="ghost"
-            />
-          }
-        >
-          <MicrophoneIcon aria-hidden className="size-4" weight="bold" />
-        </ComposerPrimitive.Dictate>
-      </AuiIf>
-      <AuiIf condition={(s) => s.composer.dictation != null}>
-        <ComposerPrimitive.StopDictation
-          render={
-            <TooltipIconButton
-              aria-label="Stop dictating"
-              className={cn(
-                button,
-                "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
-              )}
-              side="bottom"
-              size="icon"
-              tooltip="Stop dictating"
-              type="button"
-              variant="ghost"
-            />
-          }
-        >
-          <StopIcon
-            aria-hidden
-            className="size-4 motion-safe:animate-pulse"
-            weight="fill"
+      <LevelMeter />
+      <TooltipIconButton
+        aria-label="Cancel dictation"
+        className="text-muted-foreground"
+        data-slot="aui_dictation-cancel"
+        onClick={() => {
+          dictation?.cancel()
+          aui.composer().setText(before)
+        }}
+        side="bottom"
+        size="icon"
+        tooltip="Cancel dictation"
+        type="button"
+        variant="ghost"
+      >
+        <XIcon aria-hidden className="size-4" weight="bold" />
+      </TooltipIconButton>
+      <ComposerPrimitive.StopDictation
+        render={
+          <TooltipIconButton
+            aria-label="Done"
+            data-slot="aui_dictation-done"
+            side="bottom"
+            size="icon"
+            tooltip="Done"
+            type="button"
+            variant="default"
           />
-        </ComposerPrimitive.StopDictation>
-      </AuiIf>
+        }
+      >
+        <CheckCircleIcon aria-hidden className="size-4.5" weight="bold" />
+      </ComposerPrimitive.StopDictation>
     </>
   )
 }
 
 const ComposerSend: FC<{ expanded: boolean }> = ({ expanded }) => {
-  const sendable = useSendable()
+  const dictating = useAuiState((s) => s.composer.dictation != null)
   return (
     // In the expanded composer the buttons sit under the field, send at the right.
-    <div className={cn("flex gap-1", expanded && "ms-auto")}>
-      <ComposerDictate />
+    <div className={cn("flex items-center gap-1", expanded && "ms-auto")}>
+      {dictating ? <ComposerListening /> : <ComposerSendButtons />}
+    </div>
+  )
+}
+
+/**
+ * The mic, then send or stop. The mic starts a dictation; holding Space in
+ * the field does too (`useHoldToDictate`). Without a dictation adapter it is
+ * disabled.
+ */
+const ComposerSendButtons: FC = () => {
+  const sendable = useSendable()
+  return (
+    <>
+      <ComposerPrimitive.Dictate
+        disabled={!sendable}
+        render={
+          <TooltipIconButton
+            aria-label="Dictate"
+            className="aui-composer-dictate text-muted-foreground"
+            side="bottom"
+            size="icon"
+            tooltip="Dictate, or hold Space to talk"
+            type="button"
+            variant="ghost"
+          />
+        }
+      >
+        <MicrophoneIcon aria-hidden className="size-4" weight="bold" />
+      </ComposerPrimitive.Dictate>
       <AuiIf condition={(s) => !s.thread.isRunning}>
         <ComposerPrimitive.Send
           disabled={!sendable}
@@ -535,6 +647,6 @@ const ComposerSend: FC<{ expanded: boolean }> = ({ expanded }) => {
           />
         </ComposerPrimitive.Cancel>
       </AuiIf>
-    </div>
+    </>
   )
 }

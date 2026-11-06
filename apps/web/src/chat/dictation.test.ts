@@ -13,7 +13,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/api/server", () => ({ getDictationSocket: vi.fn() }))
 
-const { NOTICES, RelayDictationAdapter, resampler } = await import(
+const { NOTICES, RelayDictationAdapter, levelOf, resampler } = await import(
   "./dictation"
 )
 
@@ -47,7 +47,11 @@ type Setup = {
   socket: FakeSocket
   heard: DictationAdapter.Result[]
   ended: number
-  mic: { onAudio: (chunk: ArrayBuffer) => void; stopped: number }
+  mic: {
+    onAudio: (chunk: ArrayBuffer) => void
+    onLevel: (level: number) => void
+    stopped: number
+  }
   session: DictationAdapter.Session
   adapter: InstanceType<typeof RelayDictationAdapter>
   ticket: ReturnType<typeof vi.fn>
@@ -65,6 +69,7 @@ function build(
   const socket = new FakeSocket()
   const mic = {
     onAudio: vi.fn() as (chunk: ArrayBuffer) => void,
+    onLevel: vi.fn() as (level: number) => void,
     stopped: 0,
   }
   const ticket = vi.fn(async () =>
@@ -75,8 +80,9 @@ function build(
     socket: ticket,
     microphone:
       over.microphone ??
-      (async (onAudio) => {
+      (async (onAudio, onLevel = () => undefined) => {
         mic.onAudio = onAudio
+        mic.onLevel = onLevel
         return { stop: () => void mic.stopped++ }
       }),
     connect: connect as never,
@@ -299,6 +305,34 @@ it("cancels without a notice and without sending the stop", async () => {
   expect(setup.mic.stopped).toBe(1)
   expect(setup.socket.sent).not.toContain(DICTATION_STOP)
   expect(setup.adapter.notice.text).toBeNull()
+})
+
+it("is cancelled from the composer's ×, keeping no phrase to tidy", async () => {
+  const setup = await running()
+  setup.socket.say({ type: "final", text: "Book a clean." })
+  setup.adapter.cancel()
+  expect(setup.session.status).toEqual({ type: "ended", reason: "cancelled" })
+  expect(setup.ended).toBe(1)
+  expect(setup.adapter.take()).toEqual([])
+})
+
+it("passes the microphone's level to whoever listens, until they stop", async () => {
+  const setup = await running()
+  const levels: number[] = []
+  const stop = setup.adapter.onLevel((level) => levels.push(level))
+  setup.mic.onLevel(0.4)
+  stop()
+  setup.mic.onLevel(0.9)
+  expect(levels).toEqual([0.4])
+})
+
+it("reads a chunk's level from its loudness: silence none, speech some, a full swing all", () => {
+  expect(levelOf(new Float32Array(256))).toBe(0)
+  expect(levelOf(new Float32Array(0))).toBe(0)
+  const speech = levelOf(new Float32Array(256).fill(0.1))
+  expect(speech).toBeGreaterThan(0.2)
+  expect(speech).toBeLessThan(0.4)
+  expect(levelOf(new Float32Array(256).fill(1))).toBe(1)
 })
 
 it("clears the last notice when a new dictation starts", async () => {

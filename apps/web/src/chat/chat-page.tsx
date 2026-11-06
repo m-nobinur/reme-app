@@ -285,6 +285,7 @@ export function ChatPage() {
               avatar={live.workspace?.assistantAvatar ?? null}
               briefing={briefing.line}
               components={{ ToolFallback: Approval }}
+              dictation={dictation}
               dictationNotice={dictationNotice}
               lastShown={LAST_SHOWN}
               mode={mode}
