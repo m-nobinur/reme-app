@@ -1666,6 +1666,60 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       return { ...done, sent: saving.sent }
     }
 
+    it("ends the turn on a reply written beside a save that went through, and goes on after a refusal", async () => {
+      const id = await conversation(me)
+      const replied = (text: string, input: unknown): Step => [
+        ...said(text).slice(0, -1),
+        ...calls({
+          id: `call_${crypto.randomUUID().slice(0, 8)}`,
+          tool: "memory",
+          input,
+        }).slice(1),
+      ]
+      const saved = scripted(
+        replied("Noted, Mrs Patel has Tuesday mornings.", {
+          target: "notes",
+          operations: [
+            {
+              action: "add",
+              content:
+                "Mrs Patel on Lord Street always wants Tuesday mornings.",
+            },
+          ],
+        })
+      )
+      await turn(
+        me,
+        typed(
+          id,
+          "Mrs Patel on Lord Street always wants Tuesday mornings",
+          "ask"
+        ),
+        {
+          model: saved.model,
+        }
+      )
+      expect(saved.sent).toHaveLength(1)
+      expect((await turnsOf(id)).at(-1)).toMatchObject({
+        outcome: "answered",
+        steps: 1,
+      })
+
+      const refused = scripted(
+        replied("Removed.", {
+          target: "notes",
+          operations: [
+            { action: "remove", old_text: "nothing like this is stored" },
+          ],
+        }),
+        said("I couldn't find that note.")
+      )
+      await turn(me, typed(id, "Forget what I said about Thursdays", "ask"), {
+        model: refused.model,
+      })
+      expect(refused.sent).toHaveLength(2)
+    })
+
     it("recalls a preference twenty turns and one new conversation later, and undo restores the version before", async () => {
       const first = await conversation(me)
       const told = await tell(me, first, "I prefer calls after 4pm.", {
