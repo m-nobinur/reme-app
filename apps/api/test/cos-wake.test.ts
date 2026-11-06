@@ -11,6 +11,7 @@ import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
 import postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { DEFAULT_MODEL, WAKE_LINE } from "../src/cos/agent.ts"
+import { CONTEXT_POLICY } from "../src/cos/history.ts"
 import { SessionBusy } from "../src/cos/turns.ts"
 import {
   isQuiet,
@@ -204,6 +205,66 @@ describe.skipIf(!url)("a proactive turn", () => {
     expect(closed.map((e) => CosTurn.parse(e.payload).outcome)).toEqual([
       "answered",
     ])
+  }, 30_000)
+
+  it("cancels a card still open, in its row and in the model's history, and runs", async () => {
+    await clearPosts()
+    const id = await chatWithResult()
+    const turnId = newUlid()
+    const call = `call_${turnId}`
+    const message = {
+      id: `asst_${turnId}`,
+      role: "assistant",
+      parts: [
+        { type: "step-start" },
+        {
+          type: "tool-request_change",
+          toolCallId: call,
+          state: "approval-requested",
+          input: { text: "Add Saturdays" },
+          approval: { id: `appr_${turnId}` },
+        },
+      ],
+    }
+    await admin`
+      insert into conversation_messages (conversation_id, id, org_id, format, content)
+      values (${id}, ${message.id}, ${me.orgId}, 'ai-sdk/v6', ${admin.json(message)})`
+    const logged = (type: string, payload: object) =>
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        appendSessionEvent(db, {
+          orgId: me.orgId,
+          staffId: null,
+          assignmentId: null,
+          sessionId: id,
+          type,
+          payload: { turn_id: turnId, ...payload },
+          taint: [],
+        })
+      )
+    await logged("cos.message", {
+      message: {
+        id: `u_${turnId}`,
+        role: "user",
+        parts: [{ type: "text", text: "Add Saturdays" }],
+      },
+    })
+    await logged("cos.context", {
+      prefix_sha256: "a".repeat(64),
+      context_policy_version: CONTEXT_POLICY.version,
+      mode: "act",
+      active_tools: [],
+      text: "Mode: act.",
+      reserved_usd: 0.05,
+    })
+    await logged("cos.message", { message })
+    await logged("cos.turn", {})
+    const { model, sent } = replying("Your photo gallery page is live.")
+    expect(await wake(model)).toBe("ran")
+    expect(await lastRun()).toMatchObject({ detail: "sent:in_app" })
+    const [row] = await admin<{ content: { parts: { state?: string }[] } }[]>`
+      select content from conversation_messages where id = ${message.id}`
+    expect(row?.content.parts[1]?.state).toBe("output-error")
+    expect(JSON.stringify(sent[0]?.prompt)).toContain(call)
   }, 30_000)
 
   it("spends none of the day's posts on a [quiet] turn, and posts no fourth event-driven message in a day", async () => {

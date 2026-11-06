@@ -2272,6 +2272,23 @@ async function cancelPending(
 }
 
 /**
+ * A turn the owner did not start cancels the card still open, as a typed
+ * message does: the row, and the logged message the model's history ends
+ * the call in, so it holds no call without a result.
+ */
+export async function cancelOpenCard(
+  db: OrgScopedDb,
+  id: string
+): Promise<Opening["messages"]> {
+  const card = await readCard(db, id, null)
+  if (!(await cancelPending(db, id, card)) || !card) return []
+  const logged = await loggedMessage(db, id, card.id)
+  if (!logged) return []
+  const message = { ...logged, parts: cancelParts(logged.parts) }
+  return [{ message, taint: messageTaint(message) }]
+}
+
+/**
  * A typed message: the owner's row, then a new assistant row with the next
  * step. A call the tail left pending is cancelled first, the way
  * assistant-ui's `cancelPendingToolCallsOnSend` cancels it on screen. While
