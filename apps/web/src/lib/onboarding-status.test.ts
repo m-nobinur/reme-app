@@ -2,8 +2,11 @@
 import { ONBOARDING_STATUS, type OnboardingStatus } from "@workspace/contracts"
 import {
   clearOnboardingStatus,
+  onboardingStatusNow,
   readOnboardingStatus,
+  type StatusTurn,
   useOnboardingWait,
+  useStatusTurn,
 } from "@workspace/ui/hooks/use-onboarding-status"
 import { waitingLine } from "@workspace/ui/lib/activity-copy"
 import { act, createElement } from "react"
@@ -139,5 +142,64 @@ describe("the waiting line as a turn goes on", () => {
     expect(line()).toBe("Reme is still working on it")
     await wait(18)
     expect(line()).toBe("Reme is taking longer than usual")
+  })
+})
+
+describe("the turn's clock and lines", () => {
+  const read = (data: Partial<OnboardingStatus>) =>
+    readOnboardingStatus(
+      { type: ONBOARDING_STATUS, data: { facts: [], ...data } },
+      () => undefined
+    )
+  let turn: StatusTurn = { since: null, lines: [] }
+  let root: Root
+
+  beforeEach(async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(100_000)
+    clearOnboardingStatus()
+    root = createRoot(document.createElement("div"))
+    const Probe = () => {
+      turn = useStatusTurn()
+      return null
+    }
+    await act(async () => root.render(createElement(Probe)))
+  })
+
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    clearOnboardingStatus()
+    vi.useRealTimers()
+  })
+
+  it("counts from the turn's start as the api sent it, and keeps the lines it showed and finished steps", async () => {
+    await act(async () => {
+      read({
+        on: { kind: "doing", text: "Checking Tuesday's diary" },
+        ms: 1_700,
+      })
+    })
+    expect(turn.since).toBe(98_300)
+    await act(async () => {
+      vi.advanceTimersByTime(1_000)
+      // A later status never moves the start.
+      read({
+        on: { kind: "doing", text: "Reading last week's clicks" },
+        ms: 2_000,
+        past: true,
+      })
+      read({ on: { kind: "thinking", text: "Weighing it" }, ms: 2_500 })
+    })
+    expect(turn).toEqual({
+      since: 98_300,
+      lines: ["Checking Tuesday's diary", "Reading last week's clicks"],
+    })
+    // A finished step is never the line shown now.
+    expect(onboardingStatusNow()).toEqual({
+      kind: "thinking",
+      text: "Weighing it",
+    })
+    await act(async () => clearOnboardingStatus())
+    expect(turn).toEqual({ since: null, lines: [] })
   })
 })

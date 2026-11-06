@@ -1,6 +1,7 @@
 import { Button } from "@workspace/ui/components/button"
 import { StepMark } from "@workspace/ui/components/live-panel"
 import {
+  ReplyStatus,
   StateIcon,
   StatusIcon,
   type StatusKind,
@@ -269,6 +270,32 @@ const statusLineCatalog: Entry[] = [
       </Stack>
     ),
   },
+  {
+    name: "ReplyStatus closed",
+    render: () => <ReplyRow />,
+  },
+  {
+    name: "ReplyStatus open",
+    render: () => <ReplyRow open />,
+  },
 ]
+
+/** The reply's row seven seconds into a turn, after a narrator line and a finished read. */
+const ReplyRow = ({ open = false }: { open?: boolean }) => (
+  <Stack>
+    <ReplyStatus
+      announce={false}
+      defaultOpen={open}
+      delay={0}
+      elapsed={7_000}
+      label="Setting Tuesday's reminder to call Mrs Patel"
+      lines={[
+        "Looking for Mrs Patel's usual clean",
+        "Checking Tuesday's diary",
+        "Setting Tuesday's reminder to call Mrs Patel",
+      ]}
+    />
+  </Stack>
+)
 
 export { statusLineCatalog }

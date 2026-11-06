@@ -1,5 +1,9 @@
 // @vitest-environment happy-dom
-import { StatusLine, ToolStatus } from "@workspace/ui/components/status-line"
+import {
+  ReplyStatus,
+  StatusLine,
+  ToolStatus,
+} from "@workspace/ui/components/status-line"
 import { FADE_MS, foldLines, holdFor } from "@workspace/ui/lib/status-line"
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -160,4 +164,34 @@ it("shows the clock only after the chat threshold", async () => {
   expect(text()).toBe("Checking your DNS")
   await wait(2000)
   expect(text()).toBe("Checking your DNS16 s")
+})
+
+it("shows the reply row's clock from the turn's start after 3 s, and opens its earlier lines", async () => {
+  vi.setSystemTime(10_000)
+  const reply = (lines: string[]) =>
+    act(async () =>
+      root.render(
+        createElement(ReplyStatus, {
+          delay: 0,
+          label: "Setting Tuesday's reminder",
+          lines,
+          since: 8_000,
+        })
+      )
+    )
+  await reply(["Setting Tuesday's reminder"])
+  // The line showing now is never listed under itself: no chevron.
+  expect(container.querySelector("button")).toBeNull()
+  expect(text()).toBe("Setting Tuesday's reminder")
+  await wait(1000)
+  expect(text()).toBe("Setting Tuesday's reminder3 s")
+  await reply(["Checking Tuesday's diary", "Setting Tuesday's reminder"])
+  const trigger = container.querySelector("button")
+  expect(trigger?.getAttribute("aria-label")).toBe("Earlier steps")
+  expect(trigger?.getAttribute("aria-expanded")).toBe("false")
+  await act(async () => trigger?.click())
+  expect(trigger?.getAttribute("aria-expanded")).toBe("true")
+  expect(
+    container.querySelector('[data-slot="reply-status-lines"]')?.textContent
+  ).toBe("Checking Tuesday's diary")
 })
