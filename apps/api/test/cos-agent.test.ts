@@ -79,6 +79,7 @@ import {
   CACHE_LIFE_MS,
   CACHED_INSTRUCTIONS,
   type CosAgent,
+  cacheLifeOf,
   callKey,
   callRepeated,
   contextOf,
@@ -1818,17 +1819,24 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       await turn(me, typed(second, "And now?", "ask"), { model: warm.model })
       expect(systemOf(warm.sent)).toEqual(systemOf(fresh.sent))
 
-      // Past the shortest cache's life, the next turn takes a fresh snapshot.
-      vi.useFakeTimers({
-        toFake: ["Date"],
-        now: Date.now() + CACHE_LIFE_MS + 60_000,
-      })
-      const later = scripted(said("Back again."))
-      try {
-        await turn(me, typed(second, "Morning", "ask"), { model: later.model })
-      } finally {
-        vi.useRealTimers()
+      // Terra served the last call: its cache outlives the shortest life, so
+      // the snapshot holds until Terra's own life is past.
+      const turnAfter = async (ms: number, text: string) => {
+        vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + ms })
+        const next = scripted(said("Back again."))
+        try {
+          await turn(me, typed(second, text, "ask"), { model: next.model })
+        } finally {
+          vi.useRealTimers()
+        }
+        return next
       }
+      const stillWarm = await turnAfter(CACHE_LIFE_MS + 60_000, "Still there?")
+      expect(systemOf(stillWarm.sent)).toEqual(systemOf(fresh.sent))
+      const later = await turnAfter(
+        cacheLifeOf(DEFAULT_MODEL) + CACHE_LIFE_MS + 120_000,
+        "Morning"
+      )
       expect(profileIn(later.sent)).toBe(
         profile("Prefers calls after 4pm", "Quotes go out on Fridays")
       )

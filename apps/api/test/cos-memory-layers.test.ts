@@ -22,6 +22,7 @@ import {
   budgetLine,
   CACHE_LIFE_MS,
   CACHED_INSTRUCTIONS,
+  cacheLifeOf,
   instructionsFor,
   LAYER_CAPS,
   LIMITS,
@@ -278,6 +279,7 @@ describe("the memory snapshot", () => {
     memory: "OWNER PROFILE",
     compacted: false,
     lastCallAt: new Date(now - 60_000),
+    lastModel: null,
   }
 
   it("is taken at the first turn, after a compaction and past the cache's life, never while the cache is warm", () => {
@@ -293,6 +295,34 @@ describe("the memory snapshot", () => {
       )
     ).toBe(true)
     expect(CACHE_LIFE_MS).toBe(300_000)
+  })
+
+  it("keeps the snapshot for the cache life of the model that served the last call", () => {
+    const lives = {
+      "openai/gpt-6.1-terra": 30 * 60_000,
+      "openai/gpt-6.1-sol": 30 * 60_000,
+      "anthropic/claude-sonnet-5.5": 5 * 60_000,
+      "google/gemini-3.8-flash": 5 * 60_000,
+      "deepseek/deepseek-v4.1-flash-1017": 5 * 60_000,
+      "x-ai/grok-4.7": CACHE_LIFE_MS,
+      "mock-model-id": CACHE_LIFE_MS,
+    }
+    for (const [lastModel, life] of Object.entries(lives)) {
+      expect(cacheLifeOf(lastModel)).toBe(life)
+      const at = (ago: number) =>
+        snapshotDue(
+          { ...held, lastModel, lastCallAt: new Date(now - ago) },
+          now
+        )
+      expect(at(life - 1)).toBe(false)
+      expect(at(life)).toBe(false)
+      expect(at(life + 1)).toBe(true)
+      expect(snapshotDue({ ...held, lastModel, compacted: true }, now)).toBe(
+        true
+      )
+    }
+    expect(cacheLifeOf(null)).toBe(CACHE_LIFE_MS)
+    expect(cacheLifeOf("constructor/x")).toBe(CACHE_LIFE_MS)
   })
 
   it("is sent after the unchanged instructions as a block of its own with its own marker", () => {
@@ -556,6 +586,16 @@ describe.skipIf(!url)("on a live connection", () => {
     await put("cos.call", { turn_id: turnId, step: 0, sha256: "b".repeat(64) })
     expect(await snapshot()).toEqual({})
     expect(await snapshot(Date.now() + CACHE_LIFE_MS + 60_000)).toEqual(first)
+    await put("cos.step", {
+      turn_id: turnId,
+      step: 0,
+      messages: [],
+      usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 },
+      cost_usd: 0,
+      model: "openai/gpt-6.1-terra",
+    })
+    expect(await snapshot(Date.now() + CACHE_LIFE_MS + 60_000)).toEqual({})
+    expect(await snapshot(Date.now() + 30 * 60_000 + 60_000)).toEqual(first)
     await put("cos.compaction", {
       summary: "Earlier turns.",
       replaced_range: { from_seq: 0, to_seq: 1 },

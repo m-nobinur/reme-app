@@ -2319,14 +2319,24 @@ export const CACHED_INSTRUCTIONS: SystemModelMessage = {
   providerOptions: MARKER,
 }
 
-/**
- * The shortest prompt-cache life among the routes the CoS can take, checked
- * 2026-11-07 on openrouter.ai/docs/guides/best-practices/prompt-caching:
- * Anthropic's cache lasts 5 minutes, refreshed on each read; a Gemini cache
- * write lasts 5 minutes and is not refreshed ("TTL is on average 3-5
- * minutes" for its implicit cache); OpenAI's lasts 30 minutes at least.
- */
-export const CACHE_LIFE_MS = 5 * 60_000
+/** How long each provider keeps a prompt cache, by the model id's provider. */
+export const CACHE_LIVES = new Map([
+  // "a minimum 30-minute TTL by default" for GPT-5.6 and newer, https://openrouter.ai/docs/guides/best-practices/prompt-caching, 2026-11-07
+  ["openai", 30 * 60_000],
+  // "By default, the cache expires after 5 minutes", https://openrouter.ai/docs/guides/best-practices/prompt-caching, 2026-11-07
+  ["anthropic", 5 * 60_000],
+  // "Cache Writes have a 5 minute Time-to-Live (TTL)", https://openrouter.ai/docs/guides/best-practices/prompt-caching, 2026-11-07
+  ["google", 5 * 60_000],
+  // No life documented for the hosts we route it to (https://api-docs.deepseek.com/guides/kv_cache covers DeepSeek's own host, which HOST_ROUTING skips), 2026-11-07
+  ["deepseek", 5 * 60_000],
+])
+
+/** The shortest life in `CACHE_LIVES`: a model with no entry gets it. */
+export const CACHE_LIFE_MS = Math.min(...CACHE_LIVES.values())
+
+/** The cache life of the model `modelId` names, or the shortest for an unknown one. */
+export const cacheLifeOf = (modelId: string | null) =>
+  CACHE_LIVES.get(modelId?.split("/")[0] ?? "") ?? CACHE_LIFE_MS
 
 /**
  * The memory snapshot a conversation's latest snapshot turn logged on its
@@ -2350,16 +2360,22 @@ export const memoryOf = (log: readonly SessionEvent[]) =>
  * conversation's first turn so the prefix cache holds, while writes change
  * the live rows and the model sees its own saves in the history. A fresh one
  * costs no cache only after a compaction, which rebuilds the cached history
- * anyway, or once the last call is older than `CACHE_LIFE_MS`.
+ * anyway, or once the last call is older than the cache life of the model
+ * that served it (`cacheLifeOf`).
  */
 export const snapshotDue = (
-  held: { memory: string | null; compacted: boolean; lastCallAt: Date | null },
+  held: {
+    memory: string | null
+    compacted: boolean
+    lastCallAt: Date | null
+    lastModel: string | null
+  },
   now = Date.now()
 ) =>
   held.memory === null ||
   held.compacted ||
   held.lastCallAt === null ||
-  now - held.lastCallAt.getTime() > CACHE_LIFE_MS
+  now - held.lastCallAt.getTime() > cacheLifeOf(held.lastModel)
 
 /**
  * The `memory` a turn's `cos.context` logs: a fresh snapshot of `persona`
@@ -2375,6 +2391,7 @@ export async function memorySnapshot(
     memory: string | null
     compacted: boolean
     last_call: string | null
+    last_model: string | null
   }>(sql`
     with held as (
       select seq, payload->>'memory' as memory from events
@@ -2387,12 +2404,16 @@ export async function memorySnapshot(
           and seq > coalesce((select seq from held), -1)) as compacted,
       (select max(recorded_at)::text from events
         where session_id = ${sessionId}
-          and type in ('cos.call', 'cos.step')) as last_call`)
+          and type in ('cos.call', 'cos.step')) as last_call,
+      (select payload->>'model' from events
+        where session_id = ${sessionId} and type = 'cos.step'
+        order by seq desc limit 1) as last_model`)
   const due = snapshotDue(
     {
       memory: held?.memory ?? null,
       compacted: held?.compacted ?? false,
       lastCallAt: held?.last_call ? new Date(held.last_call) : null,
+      lastModel: held?.last_model ?? null,
     },
     now
   )
