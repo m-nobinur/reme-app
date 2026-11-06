@@ -402,11 +402,12 @@ describe.skipIf(!url)("a turn cut off, and its continuation", () => {
     })
     await logged("cos.message", { message })
     await logged("cos.turn", { outcome: "stopped" })
-    const [{ id: jobId }] = (await admin<{ id: string }[]>`
+    const [queued] = await admin<{ id: string }[]>`
       insert into scheduled_jobs (org_id, kind, ref_id, payload, next_run_at)
       values (${me.orgId}, 'cos_continue', ${id},
         ${admin.json({ turn_id: turnId, attempt: 1 })}, now())
-      returning id`) as [{ id: string }]
+      returning id`
+    const jobId = queued?.id as string
     const next = scripted(said("Which number shall I use?"))
     expect(await run(jobId, next.model)).toBe("ran")
     const [row] = await admin<{ content: { parts: { state?: string }[] } }[]>`
