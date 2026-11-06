@@ -149,7 +149,9 @@ export function UpdatePager({ updates }: { updates: readonly Update[] }) {
   const [height, setHeight] = useState<number>()
   const measure = useCallback((card: HTMLDivElement | null) => {
     if (!card) return
-    const watch = new ResizeObserver(() => setHeight(card.offsetHeight))
+    const watch = new ResizeObserver(([entry]) =>
+      setHeight(entry?.borderBoxSize[0]?.blockSize)
+    )
     watch.observe(card)
     return () => watch.disconnect()
   }, [])
