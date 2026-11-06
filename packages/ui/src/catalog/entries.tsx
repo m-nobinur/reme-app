@@ -17,9 +17,11 @@ import {
   PasswordField,
   StrengthBar,
 } from "@workspace/ui/components/password-field"
+import { QrCode } from "@workspace/ui/components/qr-code"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { DoneIcon } from "@workspace/ui/components/status-line"
 import { SubmitButton } from "@workspace/ui/components/submit-button"
+import { Switch } from "@workspace/ui/components/switch"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import type { PasswordVerdict } from "@workspace/ui/lib/password-policy"
 import type { ReactNode } from "react"
@@ -250,6 +252,32 @@ const catalog: CatalogEntry[] = [
           mark="google-search-console"
           name="Google Search Console"
         />
+        <ConnectRow
+          disabled
+          line="Keep the number your customers already message"
+          mark="whatsapp"
+          name="Use my WhatsApp Business number"
+        />
+      </div>
+    ),
+  },
+  {
+    name: "QrCode",
+    render: () => (
+      <QrCode
+        className="size-56"
+        label="Code to scan with your phone's camera"
+        value="https://wa.me/447700900123?text=Connect%20Reme%20Jb3k9QwXz1mP0aRtYc7Vn5HgLd2UeSfI"
+      />
+    ),
+  },
+  {
+    name: "Switch",
+    render: () => (
+      <div className="flex flex-col gap-3">
+        <Switch aria-label="Send updates here" defaultChecked />
+        <Switch aria-label="Send updates here, off" />
+        <Switch aria-label="Send updates here, unavailable" disabled />
       </div>
     ),
   },
