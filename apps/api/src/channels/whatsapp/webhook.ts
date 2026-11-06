@@ -1,8 +1,11 @@
 import {
   channelInbound,
   channelLinkOf,
+  channelLinks,
+  eq,
   orgs,
   redeemChannelCode,
+  sql,
   type Tenancy,
   whatsAppAccountByPhone,
 } from "@workspace/db"
@@ -12,6 +15,7 @@ import { boundedBody } from "../../http.ts"
 import { same } from "../../stripe.ts"
 import { hashCode } from "../token.ts"
 import { GraphFailed, graphOf, sendText } from "./graph.ts"
+import { sayGoodbye, tapOf, tell } from "./reply.ts"
 import type { ChannelJob } from "./turn.ts"
 
 export const WEBHOOK_PATH = "/channels/whatsapp/webhook"
@@ -22,6 +26,8 @@ const BODY_CAP = 3 * 1024 * 1024
 const GATHER_SECONDS = 2
 /** What the settings page's link puts in the owner's WhatsApp: 24 bytes, base64url. */
 const CODE = /^Connect Reme ([A-Za-z0-9_-]{32})$/
+/** The owner's two words to Reme itself, as `new` or `*new*`. */
+const COMMAND = /^[\s*/]*(new|stop)[\s*]*$/i
 
 export const whatsAppEnabled = (env: Env) => env.WHATSAPP_ENABLED === "1"
 
@@ -153,6 +159,10 @@ async function receive(
   const link = await channelLinkOf(kit, accountId, message.from)
   // shortcut: anyone else is a customer, dropped until the customer story.
   if (!link) return
+  const word = COMMAND.exec(message.text?.body ?? "")?.[1]?.toLowerCase()
+  if (word) return command(env, kit, link, message.id, message.from, raw, word)
+  // A list pick or a tap on a button we did not send has nothing to answer.
+  if (message.type === "interactive" && !tapOf(raw)) return
   await kit.withOrg({ orgId: link.orgId }, (db) =>
     db
       .insert(channelInbound)
@@ -172,6 +182,49 @@ async function receive(
     linkId: link.linkId,
   }
   await env.AFTER_TURN.send(job, { delaySeconds: GATHER_SECONDS })
+}
+
+/**
+ * *new* points the link at a fresh conversation and *stop* ends the link.
+ * The word is stored already processed, so a redelivery acts once and a
+ * waiting message never reads it as a question.
+ */
+async function command(
+  env: Env,
+  kit: Tenancy,
+  link: { linkId: string; orgId: string },
+  messageId: string,
+  from: string,
+  raw: Record<string, unknown>,
+  word: string
+): Promise<void> {
+  const first = await kit.withOrg({ orgId: link.orgId }, async (db) => {
+    const stored = await db
+      .insert(channelInbound)
+      .values({
+        orgId: link.orgId,
+        kind: "whatsapp",
+        externalMessageId: messageId,
+        linkId: link.linkId,
+        body: raw,
+        processedAt: sql`now()`,
+      })
+      .onConflictDoNothing()
+      .returning({ id: channelInbound.externalMessageId })
+    if (stored.length === 0) return false
+    await db
+      .update(channelLinks)
+      .set(
+        word === "stop" ? { revokedAt: sql`now()` } : { conversationId: null }
+      )
+      .where(eq(channelLinks.id, link.linkId))
+    return true
+  })
+  if (!first) return
+  if (word === "stop") {
+    return sayGoodbye(env, kit, link.orgId, from, new Date())
+  }
+  return tell(env, kit, link.orgId, from, () => "Started a new conversation.")
 }
 
 /** A stranger's code, or a spent one, gets no answer. */

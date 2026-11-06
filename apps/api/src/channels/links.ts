@@ -21,6 +21,7 @@ import type { Owner } from "../changes.ts"
 import { isOrgOwner } from "../domain-buy.ts"
 import { failure, invalid, keyMissing, readBody } from "../http.ts"
 import { hashCode } from "./token.ts"
+import { sayGoodbye } from "./whatsapp/reply.ts"
 
 /**
  * The owner's side of messaging channels: what is linked, a one-time code to
@@ -56,7 +57,7 @@ const base64url = (bytes: Uint8Array) =>
 /** `GET /channels`, `POST /channels/whatsapp/link`, `PATCH` and `DELETE /channels/links/{id}`. */
 export async function channelsRoute(
   request: Request,
-  env: Pick<Env, "WHATSAPP_ENABLED">,
+  env: Pick<Env, "WHATSAPP_ENABLED" | "CHANNEL_TOKEN_KEY">,
   kit: Tenancy,
   owner: Owner
 ): Promise<Response | null> {
@@ -199,7 +200,12 @@ export async function channelsRoute(
       .update(channelLinks)
       .set({ revokedAt: new Date() })
       .where(await mine(db))
-      .returning({ id: channelLinks.id })
+      .returning({
+        externalId: channelLinks.externalId,
+        lastInboundAt: channelLinks.lastInboundAt,
+      })
   )
-  return row ? new Response(null, { status: 204 }) : gone()
+  if (!row) return gone()
+  await sayGoodbye(env, kit, owner.orgId, row.externalId, row.lastInboundAt)
+  return new Response(null, { status: 204 })
 }
