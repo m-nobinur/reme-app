@@ -8,6 +8,9 @@ import type {
   BuildStopCause,
   BuildSummary,
   ChangeKind,
+  ChannelLinkPatch,
+  ChannelLinkStarted,
+  ChannelsState,
   Conversation,
   ConversationMessage,
   ConversationPatch,
@@ -330,6 +333,17 @@ export type OwnerDataSource = {
     key: string
   ) => Promise<string | null>
   unsubscribePush: (id: string) => Promise<WriteOutcome>
+  /** The owner's messaging channels; null with no session or where the api serves none (the gate is off). */
+  channels: () => Promise<ChannelsState | null>
+  /** A fresh WhatsApp link with its one-time code in it, or null when the api refused it. */
+  startWhatsAppLink: (key: string) => Promise<ChannelLinkStarted | null>
+  updateChannelLink: (
+    id: string,
+    patch: ChannelLinkPatch,
+    key: string
+  ) => Promise<WriteOutcome>
+  /** Revokes a linked chat. */
+  disconnectChannelLink: (id: string) => Promise<WriteOutcome>
   /** The zone this browser keeps, for the org to take when it differs. */
   setTimeZone: (zone: string) => Promise<void>
   /** A domain purchase's Checkout, or the api's refusal code. Keyed by `key`. */

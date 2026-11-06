@@ -39,6 +39,7 @@ import spaceship from "../assets/brand-marks/spaceship.svg" // Simple Icons 16.3
 import squarespace from "../assets/brand-marks/squarespace.svg" // Iconify logos:squarespace 1.2.18, Gil Barbara, CC0-1.0
 import transip from "../assets/brand-marks/transip.png" // official mark from transip.nl's touch icon, fetched 2026-11-01, used only to name the provider
 import vercel from "../assets/brand-marks/vercel.svg" // Iconify logos:vercel-icon 1.2.18, Gil Barbara, CC0-1.0
+import whatsapp from "../assets/brand-marks/whatsapp.svg" // Iconify logos:whatsapp-icon 1.2.18, Gil Barbara, CC0-1.0
 import wix from "../assets/brand-marks/wix.svg" // Iconify logos:wix 1.2.18, Gil Barbara, CC0-1.0
 import wordpress from "../assets/brand-marks/wordpress.svg" // Iconify logos:wordpress-icon 1.2.18, Gil Barbara, CC0-1.0
 
@@ -80,6 +81,7 @@ const MARKS: Readonly<Record<string, string>> = {
   squarespace,
   transip,
   vercel,
+  whatsapp,
   wix,
   wordpress,
 }

@@ -17,6 +17,7 @@ export function ConnectRow({
   line,
   href,
   newTab = false,
+  disabled = false,
   onClick,
   className,
 }: {
@@ -24,33 +25,54 @@ export function ConnectRow({
   /** The vendored mark's id; none draws the globe. */
   mark?: string | null
   line: string
-  href: string
+  /** Where the row goes; without one the row is a button that runs `onClick`. */
+  href?: string
   newTab?: boolean
+  /** A button row that does nothing yet. */
+  disabled?: boolean
   onClick?: () => void
   className?: string
 }) {
   const Trail = newTab ? ArrowSquareOutIcon : CaretRightIcon
-  return (
-    <a
-      className={cn(
-        "group/connect flex items-center gap-3 rounded-2xl border border-border bg-card p-2 pe-4 text-card-foreground outline-none transition-colors duration-fast hover:border-foreground/25 hover:bg-foreground/5 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring forced-colors:focus-visible:outline-2 forced-colors:focus-visible:outline-solid",
-        className
-      )}
-      data-slot="connect-row"
-      href={href}
-      onClick={onClick}
-      {...(newTab && { rel: "noopener noreferrer", target: "_blank" })}
-    >
+  const classes = cn(
+    "group/connect flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-2 pe-4 text-start text-card-foreground outline-none transition-colors duration-fast hover:border-foreground/25 hover:bg-foreground/5 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60 forced-colors:focus-visible:outline-2 forced-colors:focus-visible:outline-solid",
+    className
+  )
+  const content = (
+    <>
       <BrandMark mark={mark} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="font-medium text-sm">{name}</span>
         <span className="text-muted-foreground text-sm">{line}</span>
       </span>
-      <Trail
-        aria-hidden
-        className="size-4 shrink-0 text-muted-foreground transition-colors duration-fast group-hover/connect:text-foreground"
-      />
+      {disabled ? null : (
+        <Trail
+          aria-hidden
+          className="size-4 shrink-0 text-muted-foreground transition-colors duration-fast group-hover/connect:text-foreground"
+        />
+      )}
       {newTab ? <span className="sr-only"> (opens in a new tab)</span> : null}
+    </>
+  )
+  return href === undefined ? (
+    <button
+      className={classes}
+      data-slot="connect-row"
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      {content}
+    </button>
+  ) : (
+    <a
+      className={classes}
+      data-slot="connect-row"
+      href={href}
+      onClick={onClick}
+      {...(newTab && { rel: "noopener noreferrer", target: "_blank" })}
+    >
+      {content}
     </a>
   )
 }
