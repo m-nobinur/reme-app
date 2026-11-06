@@ -463,7 +463,7 @@ describe("the review's prefix", () => {
       "act"
     ) as unknown as {
       settings: {
-        instructions: string
+        instructions: { content: string }
         tools: Record<string, { description: string }>
         activeTools: string[]
       }
@@ -477,7 +477,7 @@ describe("the review's prefix", () => {
       providerOptions: { openrouter: Record<string, string> }
     }
     expect(first.prompt[0]).toEqual({ role: "system", content: INSTRUCTIONS })
-    expect(agent.settings.instructions).toBe(INSTRUCTIONS)
+    expect(agent.settings.instructions.content).toBe(INSTRUCTIONS)
     expect(first.tools.map((t) => [t.name, t.description])).toEqual(turnTools)
     expect(first.providerOptions.openrouter).toEqual({
       session_id: await PREFIX_KEY,
