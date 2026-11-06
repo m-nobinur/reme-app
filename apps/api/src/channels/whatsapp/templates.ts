@@ -4,6 +4,7 @@ import {
   deliveries,
   eq,
   inQuiet,
+  memberships,
   nextRun,
   orgs,
   sql,
@@ -102,7 +103,7 @@ export type UpdateSent =
   | "held"
   /** Another consumer holds the row, or it is settled. */
   | "busy"
-  /** The link is revoked, its updates are off, or the number is gone. */
+  /** The link is revoked, its updates are off, its person no longer an active owner, or the number is gone. */
   | "gone"
   | "expired"
   | "failed"
@@ -138,8 +139,13 @@ export async function sendUpdate(
       })
       .from(channelLinks)
       .innerJoin(orgs, eq(orgs.id, channelLinks.orgId))
+      // Rechecked at send: a held update can outlive the person's ownership.
+      .innerJoin(
+        memberships,
+        sql`${memberships.orgId} = ${channelLinks.orgId} and ${memberships.userId} = ${channelLinks.userId}`
+      )
       .where(
-        sql`${channelLinks.id} = ${linkId} and ${channelLinks.revokedAt} is null and ${channelLinks.updates}`
+        sql`${channelLinks.id} = ${linkId} and ${channelLinks.revokedAt} is null and ${channelLinks.updates} and ${memberships.role} = 'owner' and ${memberships.status} = 'active'`
       )
     const graph = chat ? await graphOf(env, db, orgId) : null
     return { stale: claimed.stale, chat, graph }

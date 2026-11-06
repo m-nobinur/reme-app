@@ -326,4 +326,13 @@ describe.skipIf(!url)("updates to the owner's WhatsApp", () => {
     expect(graph).toEqual([])
     expect(await rowOf(body.key)).toMatchObject({ state: "suppressed" })
   })
+
+  // Last: it demotes the suite's owner.
+  it("sends nothing held for someone no longer an owner", async () => {
+    const { linkId } = await chat(1)
+    const body = await update(linkId, "heartbeat", "For owners only.")
+    await admin`update memberships set role = 'staff' where org_id = ${who.orgId}`
+    expect(await sendUpdate(bindings(), kit, body)).toBe("gone")
+    expect(graph).toEqual([])
+  })
 })
