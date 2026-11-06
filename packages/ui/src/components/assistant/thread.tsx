@@ -177,13 +177,6 @@ export type ThreadLastShown = {
 const isNewChatView = (s: AssistantState) =>
   s.thread.messages.length === 0 && (!s.thread.isLoading || s.threads.isLoading)
 
-// A switched thread that is still fetching its history: skeleton, not welcome.
-const isHistoryLoadingView = (s: AssistantState) =>
-  s.thread.messages.length === 0 &&
-  s.thread.isLoading &&
-  !s.thread.isDisabled &&
-  !s.threads.isLoading
-
 /**
  * Holds `value` true for `ms` after it turns false. The runtime swaps the
  * placeholder thread for the stored one in two steps, and the loading flags
@@ -203,13 +196,18 @@ const useHeld = (value: boolean, ms: number) => {
   return value || held
 }
 
-const HistoryLoading: FC<{ stored: boolean }> = ({ stored }) => {
+// Loading until it is the thread on screen with its history in. The runtime
+// builds a switched thread off screen and keeps the previous one on screen
+// meanwhile, loaded and not loading.
+const isStoredLoading = (s: AssistantState, stored: string) =>
+  s.thread.isLoading ||
+  s.threads.isLoading ||
+  s.threadListItem.remoteId !== stored
+
+// Only a stored conversation has history to wait for; a new chat has none.
+const HistoryLoading: FC<{ loading: boolean }> = ({ loading }) => {
   const empty = useAuiState((s) => s.thread.messages.length === 0)
-  const loading = useAuiState((s) =>
-    stored ? s.thread.isLoading || s.threads.isLoading : isHistoryLoadingView(s)
-  )
-  const held = useHeld(loading, 300)
-  return empty && held ? <ThreadHistorySkeleton /> : null
+  return empty && loading ? <ThreadHistorySkeleton /> : null
 }
 
 export const Thread: FC<ThreadProps> = ({
@@ -236,15 +234,22 @@ export const Thread: FC<ThreadProps> = ({
   // the middle. Until then it is loading, and the held flag keeps the render
   // in between from showing the welcome.
   const loadingStored = useAuiState((s) =>
-    stored
-      ? s.thread.isLoading ||
-        s.threads.isLoading ||
-        s.threadListItem.remoteId !== stored
-      : false
+    stored ? isStoredLoading(s, stored) : false
   )
   const holdStored = useHeld(loadingStored, 300)
+  // The stored conversation the address just left. A new chat's address
+  // comes first and the runtime's switch to it a render or more later, so
+  // until then the thread on screen is still that conversation.
+  const [address, setAddress] = useState({ stored, left: stored })
+  if (address.stored !== stored) setAddress({ stored, left: address.stored })
+  const left = address.left
+  const leaving = useAuiState(
+    (s) => !stored && left !== undefined && s.threadListItem.remoteId === left
+  )
   const isEmpty = useAuiState((s) =>
-    stored ? !holdStored && s.thread.messages.length === 0 : isNewChatView(s)
+    stored
+      ? !holdStored && s.thread.messages.length === 0
+      : leaving || isNewChatView(s)
   )
   const settings = useMemo(
     () => ({
@@ -307,7 +312,8 @@ export const Thread: FC<ThreadProps> = ({
                 after={after}
                 autoFocus={autoFocus}
                 isEmpty={isEmpty}
-                stored={Boolean(stored)}
+                leaving={leaving}
+                loading={Boolean(stored) && holdStored}
                 updates={updates}
               />
             </ComposerInputContext.Provider>
@@ -357,11 +363,12 @@ const useNewSince = (
 
 const ThreadRoot: FC<{
   isEmpty: boolean
+  leaving: boolean
+  loading: boolean
   autoFocus: boolean
-  stored: boolean
   after: ReactNode
   updates: ReactNode
-}> = ({ isEmpty, autoFocus, stored, after, updates }) => {
+}> = ({ isEmpty, leaving, loading, autoFocus, after, updates }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext)
   // Where the question tray docks, above the composer; each question's call
   // sits in the transcript and draws itself here.
@@ -427,7 +434,7 @@ const ThreadRoot: FC<{
                   // screen reader.
                   <h1 className="sr-only">Conversation</h1>
                 )}
-                <HistoryLoading stored={stored} />
+                <HistoryLoading loading={loading} />
 
                 {/* The space assistant-ui holds below a pinned reply goes last,
                 after the slot. An empty slot's margin takes back its gap. A
@@ -441,10 +448,10 @@ const ThreadRoot: FC<{
                     !isEmpty && "mb-14"
                   )}
                 >
-                  <ThreadMessages />
+                  {leaving ? null : <ThreadMessages />}
                   {/* Always in the page, so a card that appears in it is read out. */}
                   <div aria-live="polite" className="empty:-mt-6" ref={setSlot}>
-                    {after}
+                    {leaving ? null : after}
                   </div>
                 </div>
                 <div
@@ -464,9 +471,13 @@ const ThreadRoot: FC<{
                 >
                   <ThreadScrollToBottom below={below} unseen={unseen} />
                   <div className="flex flex-col gap-2">
-                    <SkipThisOne />
-                    <RecapReplies />
-                    <LatestChoices />
+                    {leaving ? null : (
+                      <>
+                        <SkipThisOne />
+                        <RecapReplies />
+                        <LatestChoices />
+                      </>
+                    )}
                     {/* A stack that slid away leaves no gap behind it. */}
                     <div
                       className="empty:hidden has-[>[data-slot=update-stack][data-away]]:-mb-2 motion-safe:transition-[margin] motion-safe:duration-enter motion-safe:ease-standard"

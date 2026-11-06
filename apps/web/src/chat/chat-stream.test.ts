@@ -6,6 +6,7 @@ import {
   AssistantRuntimeProvider,
   AuiConfig,
   Tools,
+  useAuiState,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react"
 import {
@@ -21,7 +22,7 @@ import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button
 import { Thread } from "@workspace/ui/components/assistant/thread"
 import { ownerToolkit } from "@workspace/ui/components/assistant/toolkit"
 import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
-import { act, createElement, useEffect, useState } from "react"
+import { act, createElement, useEffect, useLayoutEffect, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { conversationList } from "./conversations"
@@ -214,6 +215,7 @@ afterEach(async () => {
   mounted = []
   vi.unstubAllGlobals()
   churn = false
+  record = null
 })
 
 /** What Retry sends, as the chat page holds it. */
@@ -650,7 +652,8 @@ it("a stored conversation's skeleton stays up until its messages arrive, with no
       '[data-slot="aui_thread-history-skeleton"]'
     )
       ? "skeleton"
-      : transcript(container).length
+      : transcript(container).length ||
+          container.querySelector('[data-slot="conversation-card"]')
         ? "messages"
         : "blank"
     if (seen.at(-1) !== now) seen.push(now)
@@ -812,6 +815,94 @@ it("sends a Connect pressed on a new chat's stack once, with its intent, into th
   await vi.waitFor(() => expect(sent).toHaveLength(2))
   expect(sent[1]).not.toHaveProperty("intent")
   expect(created).toBe(1)
+})
+
+/** Records what the owner sees where the conversation goes, on each change. */
+let record: (() => void) | null = null
+
+/** Records on every render of the page, which a change of address is. */
+function Probe() {
+  useLayoutEffect(() => record?.())
+  return null
+}
+
+/** A card the chat page puts under an open conversation, as its ready card. */
+function ConversationCard() {
+  const shown = useAuiState((s) => s.thread.messages.length > 0)
+  return shown ? createElement("p", { "data-slot": "conversation-card" }) : null
+}
+
+/** The chat page as the address moves: one runtime, its thread following `id`. */
+function Moving({ id }: { id: string | undefined }) {
+  const runtime = useRemoteThreadListRuntime({
+    adapter: conversationList,
+    runtimeHook: useThreadRuntime,
+    threadId: id,
+  })
+  return createElement(
+    AssistantRuntimeProvider,
+    { runtime, config: TOOLKIT },
+    createElement(Thread, {
+      autoFocus: false,
+      stored: id,
+      after: createElement(ConversationCard),
+    }),
+    createElement(Probe)
+  )
+}
+
+/** Each state shown from now on: skeleton, messages, welcome or blank. */
+function watch(container: HTMLElement) {
+  const seen: string[] = []
+  record = () => {
+    const now = container.querySelector(
+      '[data-slot="aui_thread-history-skeleton"]'
+    )
+      ? "skeleton"
+      : transcript(container).length ||
+          container.querySelector('[data-slot="conversation-card"]')
+        ? "messages"
+        : container.textContent?.includes("What should we do today?")
+          ? "welcome"
+          : "blank"
+    if (seen.at(-1) !== now) seen.push(now)
+  }
+  new MutationObserver(() => record?.()).observe(container, {
+    childList: true,
+    subtree: true,
+  })
+  return seen
+}
+
+async function mountMoving(id: string | undefined) {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  mounted.push({ root, container })
+  await act(async () => root.render(createElement(Moving, { id })))
+  return { root, container }
+}
+
+it("opening a conversation from a new chat shows the skeleton, never a blank transcript", async () => {
+  stored = FIXTURE.histories.start
+  const { root, container } = await mountMoving(undefined)
+  await vi.waitFor(() =>
+    expect(container.textContent).toContain("What should we do today?")
+  )
+  const seen = watch(container)
+  await act(async () => root.render(createElement(Moving, { id: ID })))
+  await vi.waitFor(() => expect(seen.at(-1)).toBe("messages"))
+  expect(seen).toEqual(["skeleton", "messages"])
+})
+
+it("leaving a conversation for a new chat shows the welcome, never the old messages", async () => {
+  stored = FIXTURE.histories.start
+  const { root, container } = await mountMoving(ID)
+  await vi.waitFor(() => expect(transcript(container)).not.toHaveLength(0))
+  const seen = watch(container)
+  await act(async () => root.render(createElement(Moving, { id: undefined })))
+  await vi.waitFor(() => expect(seen.at(-1)).toBe("welcome"))
+  expect(seen).toEqual(["welcome"])
 })
 
 it("renders a recorded answer turn the way a reload of the stored row does", async () => {

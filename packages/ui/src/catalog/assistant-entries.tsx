@@ -4019,6 +4019,7 @@ const assistantCatalog = [
         isDisabled={false}
         isLoading
         messages={[]}
+        stored="stored-loading"
       />
     ),
   },
