@@ -17,6 +17,7 @@ import {
   type RegistrantField,
   type RegistrantType,
   RowEnding,
+  SKIP_DOMAIN,
   toE164,
 } from "@workspace/contracts"
 import { Problem } from "@workspace/ui/components/assistant/decision"
@@ -277,8 +278,7 @@ export function subLine(
   return price ? `${price} at Cloudflare` : "Price shown at Cloudflare"
 }
 
-/** What the picker's Skip says as the owner, so the assistant answers in the chat. */
-export const SKIP_DOMAIN = "I'll skip the domain for now"
+export { SKIP_DOMAIN }
 
 /** Shown until the website is published. */
 const PICKER_HINT =
