@@ -44,7 +44,10 @@ import {
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
 import { DecisionPills } from "@workspace/ui/components/assistant/decision-pills"
 import { DesignReply } from "@workspace/ui/components/assistant/design-reply"
-import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
+import {
+  MarkdownText,
+  READING_PACE,
+} from "@workspace/ui/components/assistant/markdown-text"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
 import {
   ReasoningGroup as DefaultReasoningGroup,
@@ -1547,13 +1550,9 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
   )
 }
 
-/** How long a played-in message shows the typing dot, then takes over its words. */
+/** How long a played-in message shows the typing dot, then plays in its words. */
 const REVEAL_TYPING_MS = 700
 const REVEAL_TYPING_REDUCED_MS = 300
-const REVEAL_WRITING_MS = 1100
-
-/** Each word with the space after it, so a prefix reads as the text so far. */
-const wordsOf = (text: string) => text.match(/\S+\s*/g) ?? []
 
 type Reveal =
   /** Not played in: the message as it stands. */
@@ -1565,14 +1564,16 @@ type Reveal =
 
 /**
  * Plays in the opening message, alone in the thread, the first time this
- * browser shows it. Decided once, when the message first renders, so a
- * history that loads later never replays it. The owner typing or sending
- * ends it at once, and less motion skips the words.
+ * browser shows it: the typing dot, then its words at the reading pace every
+ * reply streams at, which shows them all within `READING_PACE.drainMs`.
+ * Decided once, when the message first renders, so a history that loads
+ * later never replays it. The owner typing or sending ends it at once, and
+ * less motion skips the words.
  */
 const useReveal = (): Reveal => {
   const reveal = useContext(ThreadRevealContext)
   const aui = useAui()
-  const [words] = useState(() => {
+  const [text] = useState(() => {
     const message = aui.message().getState()
     const opening =
       message.role === "assistant" &&
@@ -1580,14 +1581,12 @@ const useReveal = (): Reveal => {
       aui.thread().getState().messages.length === 1
     if (!reveal || !opening || !reveal.unseen(message.id, createdAt(message)))
       return null
-    return wordsOf(
-      message.parts
-        .flatMap((part) => (part.type === "text" ? [part.text] : []))
-        .join("\n\n")
-    )
+    return message.parts
+      .flatMap((part) => (part.type === "text" ? [part.text] : []))
+      .join("\n\n")
   })
   const id = useAuiState((s) => s.message.id)
-  const [shown, setShown] = useState<number | null>(null)
+  const [writing, setWriting] = useState(false)
   const [over, setOver] = useState(false)
   const interrupted = useAuiState(
     (s) => !s.thread.composer.isEmpty || s.thread.messages.length > 1
@@ -1596,26 +1595,23 @@ const useReveal = (): Reveal => {
     if (interrupted) setOver(true)
   }, [interrupted])
   useEffect(() => {
-    if (!words) return
+    if (text === null) return
     reveal?.seen(id)
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
-    // About a second for the words whatever their number, within reason.
-    const step = Math.min(60, Math.max(12, REVEAL_WRITING_MS / words.length))
-    const write = (count: number) => {
-      if (count >= words.length) return setOver(true)
-      setShown(count)
-      timer = setTimeout(() => write(count + 1), step)
-    }
     let timer = setTimeout(
-      () => (reduced ? setOver(true) : write(1)),
+      () => {
+        if (reduced) return setOver(true)
+        setWriting(true)
+        timer = setTimeout(() => setOver(true), READING_PACE.drainMs)
+      },
       reduced ? REVEAL_TYPING_REDUCED_MS : REVEAL_TYPING_MS
     )
     return () => clearTimeout(timer)
-  }, [words, reveal, id])
-  if (!words) return { phase: "still" }
+  }, [text, reveal, id])
+  if (text === null) return { phase: "still" }
   if (over) return { phase: "played" }
-  if (shown === null) return { phase: "typing" }
-  return { phase: "writing", text: words.slice(0, shown).join("") }
+  if (!writing) return { phase: "typing" }
+  return { phase: "writing", text }
 }
 
 const AssistantMessage: FC = () => {
@@ -1670,8 +1666,7 @@ const AssistantMessage: FC = () => {
           ) : reveal.phase === "writing" ? (
             <div aria-hidden>
               <TextMessagePartProvider isRunning text={reveal.text}>
-                {/* The reveal paces the words itself; the reading pace would lag it. */}
-                <MarkdownText smooth />
+                <MarkdownText />
               </TextMessagePartProvider>
             </div>
           ) : (

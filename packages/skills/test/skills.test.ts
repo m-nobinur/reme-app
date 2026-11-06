@@ -128,7 +128,6 @@ describe("skills", () => {
     expect(cos.map((s) => s.name)).toEqual([
       "web-address",
       "google-search",
-      "website-changes",
       "site-change",
       "builds",
       "reviews",

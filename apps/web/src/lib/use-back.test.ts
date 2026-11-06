@@ -3,7 +3,7 @@ import { SITTING_GAP_MS } from "@workspace/contracts"
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { useBack } from "./use-back"
+import { followRegistrar, useBack } from "./use-back"
 
 let root: Root
 let container: HTMLDivElement
@@ -40,6 +40,7 @@ beforeEach(async () => {
   container = document.createElement("div")
   root = createRoot(container)
   await visibility("visible")
+  await show(false)
 })
 
 afterEach(async () => {
@@ -48,8 +49,9 @@ afterEach(async () => {
 
 const latest = () => seen.at(-1)
 
-it("is back when the tab is shown again after it was hidden", async () => {
+it("is back when the tab is shown again after a registrar link hid it", async () => {
   await show(true)
+  followRegistrar()
   expect(latest()).toBe(false)
   await visibility("hidden")
   expect(latest()).toBe(false)
@@ -57,8 +59,24 @@ it("is back when the tab is shown again after it was hidden", async () => {
   expect(latest()).toBe(true)
 })
 
+it("is not back when the tab was hidden by something other than the registrar link", async () => {
+  await show(true)
+  await visibility("hidden")
+  await visibility("visible")
+  expect(latest()).toBe(false)
+})
+
+it("is back when the link was followed before the question began to wait", async () => {
+  followRegistrar()
+  await visibility("hidden")
+  await show(true)
+  await visibility("visible")
+  expect(latest()).toBe(true)
+})
+
 it("forgets the return once nothing waits", async () => {
   await show(true)
+  followRegistrar()
   await visibility("hidden")
   await visibility("visible")
   await show(false)
@@ -81,6 +99,7 @@ it("is not back again after the owner writes while still on the page", async () 
   const at = (minutes: number) =>
     new Date(Date.now() - minutes * 60_000).toISOString()
   await show(true, at(5))
+  followRegistrar()
   await visibility("hidden")
   await visibility("visible")
   expect(latest()).toBe(true)

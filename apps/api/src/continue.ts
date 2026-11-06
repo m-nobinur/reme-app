@@ -20,7 +20,7 @@ import type { LanguageModel } from "ai"
 import { enqueueAfterTurn } from "./after-turn.ts"
 import { settleCard } from "./build-questions.ts"
 import type { Owner } from "./changes.ts"
-import { cosModel, putRow, turnNotes } from "./chat.ts"
+import { cancelOpenCard, cosModel, putRow, turnNotes } from "./chat.ts"
 import {
   type AgentTurn,
   activeTools,
@@ -198,7 +198,7 @@ export async function continueTurn(
     const turn: Turn = { ...session, turnId: newUlid() }
     await beginTurn(db, turn, {
       prefix: state.prefixLogged ? null : prefix,
-      messages: [],
+      messages: await cancelOpenCard(db, sessionId),
       context: {
         turn_id: turn.turnId,
         prefix_sha256: prefix.sha256,

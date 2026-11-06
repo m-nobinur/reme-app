@@ -148,7 +148,7 @@ describe.skipIf(!LIVE)("a skill loaded for a plain topic", () => {
   it("prints the first step with and without the load", async () => {
     for (const [said, skill] of [
       ["How's the update going?", "builds"],
-      ["Can you make the homepage colours a bit warmer?", "website-changes"],
+      ["Can you make the homepage colours a bit warmer?", "site-change"],
     ] as const) {
       await firstStep(said, null)
       await firstStep(said, skill)

@@ -21,7 +21,8 @@ export const GIVE_UP_MS = 30 * DAY_MS
  * `elsewhere-{hash}`. It looks at the registry at once, then holds a day at a
  * time on the owner's `owner_done`, looking again after each wake or
  * timeout. The registry showing the name (or the owner connecting one) ends
- * it, with an offer to connect when nobody asked yet. After three days one
+ * it, with an offer to connect when nobody asked yet; so does a fresh list of
+ * names that drops this one, silently. After three days one
  * follow-up; after a month it stops. Every body is in domain-buy.ts.
  */
 export class ElsewhereWorkflow extends WorkflowEntrypoint<
@@ -51,6 +52,7 @@ export class ElsewhereWorkflow extends WorkflowEntrypoint<
     for (let n = 1; ; n++) {
       await say(`say ${n}`, seen.say)
       if (seen.registered || seen.claimed) return { outcome: "bought" }
+      if (seen.dropped) return { outcome: "dropped" }
       if (seen.at - started >= GIVE_UP_MS) return { outcome: "stopped" }
       if (!followed && seen.at - started >= FOLLOW_UP_MS) {
         const message = await step.do("follow up", () =>

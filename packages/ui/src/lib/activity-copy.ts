@@ -788,6 +788,10 @@ export const toolLine = (
   ctx?: CopyContext
 ) => toolSay(tool, phase, args, ctx).text
 
+/** The kind of work a tool does, for its icon; one the table does not know is thinking. */
+export const toolKind = (tool: string): StatusKind =>
+  known(tool) ? TOOLS[tool].kind : "thinking"
+
 /** Every state the AI SDK gives a tool part. */
 export const PART_STATES = [
   "input-streaming",

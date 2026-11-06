@@ -1250,6 +1250,20 @@ describe.skipIf(!url)("buying a name elsewhere, against a database", () => {
     expect(step).toMatchObject({ state: "pending", note: null })
   })
 
+  it("says nothing about a name a fresh list dropped, even once the registry shows it", async () => {
+    const site = await published()
+    const setup = buyEnv(site.store)
+    const name = unique()
+    await buyElsewhere(setup.env, kit, site.orgId, { name })
+    stubNet(false, { "brightclean.com": priced("brightclean.com") })
+    await find(setup.env, kit, site.orgId, {})
+    rdap.registered.add(name)
+    const seen = await lookElsewhere(kit, site.orgId, name)
+    expect(seen.result).toMatchObject({ registered: false, dropped: true })
+    expect(seen.reading).toBeUndefined()
+    expect((await stepOf(site.orgId, "purchase")).step?.state).toBe("pending")
+  })
+
   it("follows up once and puts the address task off for a week", async () => {
     const site = await published()
     const setup = buyEnv(site.store)
