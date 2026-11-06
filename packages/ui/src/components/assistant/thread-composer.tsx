@@ -441,7 +441,7 @@ const ComposerMode: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
  */
 const ComposerDictate: FC = () => {
   const sendable = useSendable()
-  const button = "aui-composer-dictate size-8 rounded-full"
+  const button = "aui-composer-dictate rounded-full"
   return (
     <>
       <AuiIf condition={(s) => s.composer.dictation == null}>
@@ -459,7 +459,7 @@ const ComposerDictate: FC = () => {
             />
           }
         >
-          <MicrophoneIcon aria-hidden className="size-4" />
+          <MicrophoneIcon aria-hidden className="size-4" weight="bold" />
         </ComposerPrimitive.Dictate>
       </AuiIf>
       <AuiIf condition={(s) => s.composer.dictation != null}>
