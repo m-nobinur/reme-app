@@ -231,6 +231,8 @@ export async function creationChoices(
   retry_of: string | null
   /** The change brief the owner's assistant wrote, when it sent one. */
   brief: OwnerBrief | null
+  /** The draft revision a change started from, before the site was live. */
+  draft: string | null
 }> {
   const [row] = await db
     .select({ payload: events.payload })
@@ -253,6 +255,10 @@ export async function creationChoices(
     kind: typeof payload.kind === "string" ? payload.kind : "site.build",
     retry_of: typeof payload.retry_of === "string" ? payload.retry_of : null,
     brief: OwnerBrief.safeParse(payload.brief).data ?? null,
+    draft:
+      typeof payload.draft_revision_id === "string"
+        ? payload.draft_revision_id
+        : null,
   }
 }
 

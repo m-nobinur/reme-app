@@ -305,6 +305,64 @@ export function answerPrompt(
 const AREAS = SiteReview.shape.findings.element.shape.area.options
 const SEVERITIES = ["high", "medium", "low"] as const
 
+const plain = { type: "string" } as const
+
+/** The answer's shape for structured output; `Answered` checks what a strict schema cannot (length limits). */
+export const ANSWER_SCHEMA = {
+  name: "site_answer",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["answer", "sure", "sources"],
+    properties: {
+      answer: plain,
+      sure: { type: "boolean" },
+      sources: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["kind", "ref"],
+          properties: {
+            kind: { type: "string", enum: [...SOURCE_KINDS] },
+            ref: plain,
+          },
+        },
+      },
+    },
+  },
+}
+
+/** The review's shape for structured output, checked again by `reportOf`. */
+export const REVIEW_SCHEMA = {
+  name: "site_review",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["verdict", "strengths", "findings"],
+    properties: {
+      verdict: plain,
+      strengths: { type: "array", items: plain },
+      findings: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["severity", "area", "page", "quote", "issue", "fix"],
+          properties: {
+            severity: { type: "string", enum: [...SEVERITIES] },
+            area: { type: "string", enum: [...AREAS] },
+            page: plain,
+            quote: { anyOf: [plain, { type: "null" }] },
+            issue: plain,
+            fix: plain,
+          },
+        },
+      },
+    },
+  },
+}
+
 /** The review call's prompt: a reviewer who did not build the site, stable first as the answer's is. */
 export function reviewPrompt(
   focus: string,
@@ -435,6 +493,25 @@ export function reportOf(
 
 type Complete = typeof completeOnce
 
+/**
+ * The JSON object in a reply that may wear a code fence or a lead-in: the
+ * span from the first "{" to the last "}" (after hermes-agent
+ * tools/delegation_output_schema.py, MIT).
+ */
+export function jsonOf(reply: string): unknown {
+  const raw = reply.trim()
+  const start = raw.indexOf("{")
+  const end = raw.lastIndexOf("}")
+  return JSON.parse(start >= 0 && end > start ? raw.slice(start, end + 1) : raw)
+}
+
+/** What a reply that would not parse looked like, for the log: its size and both ends, never the middle. */
+export const shapeOf = (reply: string) => ({
+  length: reply.length,
+  head: reply.slice(0, 80),
+  tail: reply.length > 80 ? reply.slice(-80) : "",
+})
+
 /** One Sonnet call on the `quick_section` route, reserved against the assistant's daily cap. */
 async function consult(
   env: Env,
@@ -442,6 +519,7 @@ async function consult(
   orgId: string,
   job: "ask_developer" | "site_review",
   prompt: { system: string; user: string },
+  schema: { name: string; schema: Record<string, unknown> },
   maxTokens: number,
   complete: Complete,
   images?: { data: string; mimeType: string }[]
@@ -464,6 +542,7 @@ async function consult(
     effort: effortOf("quick_section", model),
     maxTokens,
     ...prompt,
+    schema,
     ...(images?.length ? { images } : {}),
     sessionId: orgId,
   })
@@ -476,7 +555,20 @@ async function consult(
     },
     ms: Date.now() - started,
   })
-  return JSON.parse(reply.text.replace(/^```(?:json)?\s*|\s*```$/g, ""))
+  try {
+    return jsonOf(reply.text)
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        type: "consult.unparsed",
+        job,
+        model: reply.model,
+        message: error instanceof Error ? error.message : String(error),
+        ...shapeOf(reply.text),
+      })
+    )
+    throw error
+  }
 }
 
 const Answered = z.object({
@@ -509,6 +601,7 @@ export async function askDeveloper(
       orgId,
       "ask_developer",
       answerPrompt(input.question, record),
+      ANSWER_SCHEMA,
       2_000,
       complete
     )
@@ -640,6 +733,7 @@ export async function runReview(
     orgId,
     "site_review",
     reviewPrompt(started?.payload.focus ?? "The whole site.", record),
+    REVIEW_SCHEMA,
     6_000,
     complete,
     images

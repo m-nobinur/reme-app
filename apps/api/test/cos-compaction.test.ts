@@ -807,6 +807,13 @@ describe("the summary call", () => {
     )
   })
 
+  it("asks for the owner's name or 'the owner', and a pronoun only when the owner wrote one", async () => {
+    const { model, prompts } = fakeModel("A summary.")
+    await summarise(cosOf(model), await hello(), plan())
+    expect(prompts[0]).toContain("Name the owner by the name they gave")
+    expect(prompts[0]).toContain("only if the owner wrote which to use")
+  })
+
   it("sends no secret in the history or the previous summary", async () => {
     const { model, prompts } = fakeModel("A summary.")
     const withSecret = await callOf(

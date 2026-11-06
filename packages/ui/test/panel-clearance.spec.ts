@@ -38,6 +38,26 @@ test("on a phone nothing scrolls sideways", async ({ page }) => {
   expect(composer.right).toBeLessThanOrEqual(390)
 })
 
+for (const theme of ["light", "dark"]) {
+  test(`on a phone the floating pill sits under the page, ${theme}`, async ({
+    page,
+  }) => {
+    await open(page, "WorkspaceShell floating", 390, theme)
+    const bottoms = await page.evaluate(() => ({
+      page: document.querySelector("#main")?.getBoundingClientRect().bottom,
+      pill: document.querySelector("#workspace-panel")?.getBoundingClientRect()
+        .top,
+    }))
+    expect(bottoms.pill).toBeGreaterThanOrEqual(bottoms.page ?? Infinity)
+    await page.locator("#workspace-panel").screenshot({
+      path: test.info().outputPath(`floating-pill-390-${theme}.png`),
+    })
+    await page.screenshot({
+      path: test.info().outputPath(`floating-shell-390-${theme}.png`),
+    })
+  })
+}
+
 for (const width of [390, 1440]) {
   test(`at ${width} wide the floating pill keeps no room and fits`, async ({
     page,

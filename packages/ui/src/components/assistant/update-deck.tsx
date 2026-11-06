@@ -1,5 +1,6 @@
 import { CaretLeftIcon, CaretRightIcon, type Icon } from "@phosphor-icons/react"
 import { Docked } from "@workspace/ui/components/assistant/question-tray"
+import { usePillsShown } from "@workspace/ui/components/assistant/reply-pill"
 import {
   type AttentionKind,
   attentionKind,
@@ -139,11 +140,28 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
 /**
  * The stack above a conversation's composer, as one item of its tray: a
  * question card that docks takes the slot, and the stack waits behind it.
+ * Quick replies matter most, so while a row of them is up the stack slides
+ * down and away, and rises back once they are answered or gone (the
+ * collapse after hermes-agent apps/desktop/src/components/assistant-ui/tool/fallback.tsx, MIT).
  */
 export function DockedUpdates({ updates }: { updates: readonly Update[] }) {
+  const away = usePillsShown()
   return updates.length ? (
     <Docked name="update-stack" settled standing>
-      <UpdateDeck updates={updates} />
+      <div
+        className={cn(
+          "grid motion-safe:transition-[grid-template-rows,opacity,translate,visibility] motion-safe:duration-enter motion-safe:ease-standard",
+          away
+            ? "invisible translate-y-4 grid-rows-[0fr] opacity-0"
+            : "grid-rows-[1fr]"
+        )}
+        data-away={away || undefined}
+        inert={away}
+      >
+        <div className={cn("min-h-0", away && "overflow-hidden")}>
+          <UpdateDeck updates={updates} />
+        </div>
+      </div>
     </Docked>
   ) : null
 }

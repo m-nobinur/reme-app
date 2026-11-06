@@ -96,6 +96,7 @@ export {
   addressStage,
   CONNECT_DEADLINE_MS,
   type DomainFacts,
+  dropElsewhere,
   type GoogleFacts,
   googlePlan,
   openTask,

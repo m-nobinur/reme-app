@@ -3013,6 +3013,14 @@ const STACK_STATES: [string, ReactNode, ThreadMessageLike[]?][] = [
     />,
     ASK_FACT_OPEN.slice(0, 1),
   ],
+  [
+    "pills-open",
+    <StackedReady
+      key="pills-open"
+      lead={[journeyRow("Finished buying sparkleclean.co.uk?", "Connect it")]}
+    />,
+    DECISION,
+  ],
 ]
 
 /** The payment dialog behind its button, with test values. */

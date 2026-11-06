@@ -5,8 +5,10 @@ import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
   createContext,
+  type Dispatch,
   type ReactNode,
   type RefObject,
+  type SetStateAction,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -21,6 +23,17 @@ const INTO_COMPOSER_MS = 200
 type Into = (pill: HTMLElement, then: () => unknown) => void
 
 const IntoComposer = createContext<Into | null>(null)
+
+/** How many rows of quick replies the thread shows above its composer, and the way to count one. */
+type Shown = { rows: number; set: Dispatch<SetStateAction<number>> }
+
+const PillsShown = createContext<Shown | null>(null)
+
+/** Lets a thread's rows of quick replies be counted, so what sits above its composer can make way for them. */
+export const PillsShownProvider = PillsShown.Provider
+
+/** Whether a row of quick replies is up in this thread, so the update stack gives way to it. */
+export const usePillsShown = () => (useContext(PillsShown)?.rows ?? 0) > 0
 
 /**
  * A quick reply: one tap sends it, and the owner's message reads its label
@@ -143,6 +156,12 @@ function ComposerPills({ gone = false, ...row }: Row) {
     void slide(pill, then).finally(() => setLeaving(false))
   }
   const away = typed || leaving || gone
+  const counted = useContext(PillsShown)?.set
+  useEffect(() => {
+    if (gone || !counted) return
+    counted((rows) => rows + 1)
+    return () => counted((rows) => rows - 1)
+  }, [gone, counted])
   return (
     <IntoComposer.Provider value={into}>
       <div

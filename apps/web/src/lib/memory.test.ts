@@ -27,8 +27,16 @@ it("says each remembered change in the owner's own line", () => {
       ],
     })
   ).toBe(
-    'Saved to memory: Prefers calls after 4pm; Quotes go out on Fridays (updated); removed "Away in August"'
+    'Saved to memory: Prefers calls after 4pm; Quotes go out on Fridays (updated). Removed from memory: "Away in August"'
   )
+})
+
+it("says a removal as a removal, never as saved", () => {
+  expect(
+    memoryChipText({
+      changes: [{ kind: "removed", text: "I don't work Fridays." }],
+    })
+  ).toBe('Removed from memory: "I don\'t work Fridays."')
 })
 
 it("says what a saved memory call changed in its own turn", () => {
@@ -100,7 +108,7 @@ it("says what a saved remember call changed in its own turn, and nothing for one
   expect(
     chip({ outcome: "saved", note: "Saved.", fullness: "3 of 40" })
   ).toContain(
-    "Saved to memory: Prefers calls after 4pm; removed &quot;August&quot;"
+    "Saved to memory: Prefers calls after 4pm. Removed from memory: &quot;August&quot;"
   )
   expect(chip({ outcome: "stopped", note: "Stopped." })).toBe("")
 })
