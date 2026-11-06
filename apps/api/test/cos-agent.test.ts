@@ -2372,6 +2372,25 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     })
   })
 
+  it("waits out a writer that holds the turn's lock for a moment, as a summary write does", async () => {
+    const id = await conversation(me)
+    let locked: () => void = () => undefined
+    const ready = new Promise<void>((resolve) => {
+      locked = resolve
+    })
+    const writer = admin.begin(async (tx) => {
+      await tx`select pg_advisory_xact_lock(2, hashtext(${id}::text))`
+      locked()
+      await new Promise((resolve) => setTimeout(resolve, 80))
+    })
+    await ready
+    const { response } = await send(me, typed(id, "Are you there?"), {
+      model: scripted(said("Yes.")).model,
+    })
+    await writer
+    expect(response.status, await response.text()).toBe(200)
+  })
+
   it("answers chat.busy while a turn is open, and abandons one past totalMs plus the grace", async () => {
     const id = await conversation(me)
     const hold = gate()
