@@ -14,10 +14,8 @@ import {
   type PaletteFromImage,
 } from "@workspace/contracts"
 import { QuestionTray } from "@workspace/ui/components/assistant/question-tray"
-import {
-  type TrayServices,
-  TrayServicesProvider,
-} from "@workspace/ui/components/assistant/tray-services"
+import type { TrayServices } from "@workspace/ui/components/assistant/tray-services"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import { act, type ComponentProps, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
@@ -193,8 +191,8 @@ async function render(
   await act(async () =>
     root.render(
       createElement(
-        TrayServicesProvider,
-        { value: services },
+        ChatServicesProvider,
+        { value: { tray: services } },
         createElement(QuestionTray, {
           input: INPUT,
           onFinish,

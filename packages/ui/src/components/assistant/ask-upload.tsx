@@ -12,18 +12,11 @@ import {
   TrayNote,
 } from "@workspace/ui/components/assistant/question-tray"
 import { Button } from "@workspace/ui/components/button"
+import { useChatService } from "@workspace/ui/lib/chat-services"
 import { askUploadView } from "@workspace/ui/lib/tool-state"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
-import {
-  createContext,
-  type DragEvent,
-  useContext,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react"
+import { type DragEvent, useEffect, useId, useRef, useState } from "react"
 
 /**
  * The photo step of onboarding, in the question tray: drop photos or choose
@@ -36,11 +29,6 @@ import {
 
 /** Stores the photos and answers what was stored, or throws a sentence for the owner. */
 export type UploadPhotos = (files: File[]) => Promise<UploadedAssets>
-
-const UploadContext = createContext<UploadPhotos | null>(null)
-
-/** Gives the upload card the app's way to store photos. */
-export const UploadPhotosProvider = UploadContext.Provider
 
 const NO_UPLOAD =
   "Photos cannot be uploaded here. Skip this and add them later."
@@ -57,7 +45,7 @@ type Picked = {
 
 const AskUpload: ToolCallMessagePartComponent = (props) => {
   const view = askUploadView(props)
-  const upload = useContext(UploadContext)
+  const upload = useChatService("uploadPhotos")
   const id = useId()
   const [collapsed, setCollapsed] = useState(false)
   const [picked, setPicked] = useState<Picked[]>([])

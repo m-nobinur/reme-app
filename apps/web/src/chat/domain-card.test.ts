@@ -1,14 +1,14 @@
 // @vitest-environment happy-dom
 import type { CheckDomainOutput } from "@workspace/contracts"
-import { Approval } from "@workspace/ui/components/assistant/approval"
 import {
   DONE_WAITING,
   domainStatusText,
 } from "@workspace/ui/components/assistant/domain"
-import { LiveCardsProvider } from "@workspace/ui/lib/live-cards"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, expect, it, vi } from "vitest"
+import { ToolCard } from "./fixtures/tool-card"
 
 ;(
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -65,7 +65,7 @@ async function draw(props: Props, live?: readonly string[]) {
   const container = document.createElement("div")
   const root = createRoot(container)
   const respondToApproval = vi.fn()
-  const card = createElement(Approval, {
+  const card = createElement(ToolCard, {
     toolName: "connect_domain",
     toolCallId: "call-1",
     args: { name: NAME },
@@ -77,12 +77,14 @@ async function draw(props: Props, live?: readonly string[]) {
     root.render(
       live
         ? createElement(
-            LiveCardsProvider,
+            ChatServicesProvider,
             {
               value: {
-                googleConnected: null,
-                domainLive: (name) => live.includes(name),
-                published: null,
+                liveCards: {
+                  googleConnected: null,
+                  domainLive: (name) => live.includes(name),
+                  published: null,
+                },
               },
             },
             card

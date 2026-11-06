@@ -12,11 +12,11 @@ import {
   type PhotosAnswer,
   TrayPhotos,
 } from "@workspace/ui/components/assistant/tray-photos"
-import {
-  type TrayPageProps,
-  type TrayServices,
-  TrayServicesProvider,
+import type {
+  TrayPageProps,
+  TrayServices,
 } from "@workspace/ui/components/assistant/tray-services"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import { useEffect, useRef, useState } from "react"
 import type { CatalogEntry } from "./entries"
 
@@ -174,7 +174,7 @@ function PhotosState({
     <section className={`flex max-w-2xl flex-col gap-3 ${width ?? ""}`}>
       <h3 className="font-medium text-muted-foreground text-xs">{title}</h3>
       <div ref={root}>
-        <TrayServicesProvider value={given}>
+        <ChatServicesProvider value={{ tray: given }}>
           <TrayFrame
             collapsed={false}
             onCollapsedChange={() => undefined}
@@ -196,7 +196,7 @@ function PhotosState({
               toolCallId="design_photos"
             />
           </TrayFrame>
-        </TrayServicesProvider>
+        </ChatServicesProvider>
       </div>
     </section>
   )

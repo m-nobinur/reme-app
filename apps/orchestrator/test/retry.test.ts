@@ -382,7 +382,12 @@ live("a failed owner build's retry", () => {
   } as unknown as Pick<Env, "ASSIGNMENTS" | "SITES">
 
   /** An owner's build with a plan whose photos were drawn, failed for `reason`. */
-  async function failedBuild(orgId: string, reason: string, key: string) {
+  async function failedBuild(
+    orgId: string,
+    reason: string,
+    key: string,
+    label?: string
+  ) {
     const plan = fallbackBlueprint({ facts: [], recent: [] })
     const drawn: Blueprint = {
       ...plan,
@@ -398,6 +403,7 @@ live("a failed owner build's retry", () => {
         withhold: [],
         lane: "full",
         change_kind: null,
+        ...(label ? { label } : {}),
       })
       if (!("row" in result)) throw new Error("not created")
       await db
@@ -523,6 +529,26 @@ live("a failed owner build's retry", () => {
         .where(sql`${scheduledJobs.kind} = 'cos_wake'`)
     )
     expect(wake).toHaveLength(1)
+  })
+
+  it("carries the change's label into its retry, so the ready line names it", async () => {
+    const orgId = await freshOrg(kit)
+    const ids = await failedBuild(
+      orgId,
+      "gates.repair_budget_exhausted",
+      "k-label",
+      "your hero title"
+    )
+    const { retry_id } = await afterFailure(env, kit, ids)
+    const [made] = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ payload: events.payload })
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${retry_id} and ${events.type} = 'assignment.created'`
+        )
+    )
+    expect(made?.payload).toMatchObject({ label: "your hero title" })
   })
 
   it("starts one retry with the plan, however often the step runs, and says so", async () => {

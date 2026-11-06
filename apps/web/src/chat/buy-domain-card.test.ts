@@ -4,11 +4,9 @@ import type {
   DomainPurchaseStatus,
   DomainRegistrantPrefill,
 } from "@workspace/contracts"
-import { Approval } from "@workspace/ui/components/assistant/approval"
 import {
   type CheckoutStart,
   type DomainPurchase,
-  DomainPurchaseProvider,
   purchaseStatusOf,
   readDetails,
   registrarPrice,
@@ -16,9 +14,11 @@ import {
   subLine,
 } from "@workspace/ui/components/assistant/buy-domain"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
+import { ToolCard } from "./fixtures/tool-card"
 
 ;(
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -225,9 +225,9 @@ async function draw(
         TraySlotProvider,
         { value: tray },
         createElement(
-          DomainPurchaseProvider,
-          { value: purchase },
-          createElement(Approval, {
+          ChatServicesProvider,
+          { value: { domainPurchase: purchase } },
+          createElement(ToolCard, {
             toolName,
             toolCallId: "call-1",
             argsText: "",

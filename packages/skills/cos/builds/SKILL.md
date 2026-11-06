@@ -12,7 +12,7 @@ status:
 What to say about a build of the website while it runs, and after it stops.
 
 ## When to use
-- They ask how a build is going, how long is left, why one stopped, or to try it again. Starting a stopped build again needs this skill alone: website-changes and site-change are for changing the site.
+- They ask how a build is going, how long is left, why one stopped, or to try it again. Starting a stopped build again needs this skill alone: site-change is for changing the site.
 - The workspace shows a build longer than usual, restarted, stuck, fixing or stopped.
 
 ## Procedure

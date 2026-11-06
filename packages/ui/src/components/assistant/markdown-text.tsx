@@ -26,10 +26,10 @@ type MarkdownTextProps = Partial<TextMessagePartProps> & {
  * 2026-11-06; 2.5 s at 65 characters a second had held streamed replies
  * behind the model). Reduced motion shows the words at once.
  */
-export const READING_PACE: SmoothOptions = {
+export const READING_PACE = {
   drainMs: 800,
   maxCharIntervalMs: 5,
-}
+} satisfies SmoothOptions
 
 const useShallowStable = <T extends Record<string, unknown> | undefined>(
   value: T

@@ -1370,14 +1370,7 @@ export async function boughtElsewhere(
     // The owner's word is kept now, so no later conversation asks again; the
     // hold's daily look finishes the step.
     await kit.withOrg({ orgId }, async (db) => {
-      const [held] = await db
-        .select({ id: ownerTasks.id })
-        .from(ownerTasks)
-        .where(
-          sql`${ownerTasks.kind} = 'address' and ${ownerTasks.state} in ('active', 'later')
-            and ${ownerTasks.detail}->>'origin' = 'buying_elsewhere' and ${ownerTasks.detail}->>'name' = ${name}`
-        )
-      if (!held) return
+      if (!(await isBuying(db, name))) return
       const task = await openTask(db, orgId, "address")
       await setStep(db, task, "purchase", { state: "in_progress" })
     })
@@ -1390,19 +1383,42 @@ export async function boughtElsewhere(
   return connect(env, kit, orgId, { name, approval_id: `owner_done:${name}` })
 }
 
+/** Whether the open address task is still the owner buying `name` elsewhere. */
+const isBuying = async (db: OrgScopedDb, name: string) => {
+  const [held] = await db
+    .select({ id: ownerTasks.id })
+    .from(ownerTasks)
+    .where(
+      sql`${ownerTasks.kind} = 'address' and ${ownerTasks.state} in ('active', 'later')
+        and ${ownerTasks.detail}->>'origin' = 'buying_elsewhere' and ${ownerTasks.detail}->>'name' = ${name}`
+    )
+  return Boolean(held)
+}
+
 /**
  * The hold's daily look: whether the registry shows the name, or the owner
  * has a claim already. Registered and unclaimed, Reme offers to connect it
- * once; a look the owner's done woke finds the claim and says nothing.
+ * once; a look the owner's done woke finds the claim and says nothing. A
+ * name the owner moved on from (a fresh list of names) is `dropped`: the
+ * hold ends there and says nothing.
  */
 export async function lookElsewhere(
   kit: Tenancy,
   orgId: string,
   name: string
-): Promise<Observed<{ registered: boolean; claimed: boolean; at: number }>> {
+): Promise<
+  Observed<{
+    registered: boolean
+    claimed: boolean
+    dropped?: boolean
+    at: number
+  }>
+> {
   const done = await claimed(kit, orgId)
   const at = Date.now()
   if (done) return { result: { registered: false, claimed: true, at } }
+  if (!(await kit.withOrg({ orgId }, (db) => isBuying(db, name))))
+    return { result: { registered: false, claimed: false, dropped: true, at } }
   const registered = await isRegistered(name)
   return {
     result: { registered, claimed: false, at },

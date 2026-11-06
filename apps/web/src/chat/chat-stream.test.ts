@@ -4,6 +4,8 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import {
   AssistantRuntimeProvider,
+  AuiConfig,
+  Tools,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react"
 import {
@@ -13,12 +15,12 @@ import {
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
-import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
-import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { Thread } from "@workspace/ui/components/assistant/thread"
+import { ownerToolkit } from "@workspace/ui/components/assistant/toolkit"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import { act, createElement, useEffect, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
@@ -108,6 +110,7 @@ const FIXTURE = JSON.parse(
   streams: Record<"typed" | "phone" | "skip" | "deny" | "change", Stream>
 }
 const ID = FIXTURE.conversation.id
+const TOOLKIT = AuiConfig({ tools: Tools({ toolkit: ownerToolkit }) })
 
 /** What the api holds now, and how it answers the next `/chat` turns. */
 let stored: unknown
@@ -254,24 +257,20 @@ function Chat() {
   })
   return createElement(
     AssistantRuntimeProvider,
-    { runtime },
+    { runtime, config: TOOLKIT },
     createElement(SendAsked, { conversation: ID, intent }),
     createElement(ServerButtonUI),
     createElement(ChangeAskedUI),
     createElement(PersonaCardUI),
     createElement(
-      CosToolsProvider,
-      { value: tools },
-      createElement(
-        SaveDesignAnswerProvider,
-        { value: saveDesignAnswer },
-        createElement(Thread, {
-          autoFocus: false,
-          stored: ID,
-          components: { ToolFallback: Approval },
-          onRetry: () => retry.current?.(),
-        })
-      )
+      ChatServicesProvider,
+      { value: { cosTools: tools, saveDesignAnswer } },
+      createElement(Thread, {
+        autoFocus: false,
+        stored: ID,
+        components: { ToolFallback: Approval },
+        onRetry: () => retry.current?.(),
+      })
     )
   )
 }
@@ -781,7 +780,7 @@ function NewChat() {
   })
   return createElement(
     AssistantRuntimeProvider,
-    { runtime },
+    { runtime, config: TOOLKIT },
     createElement(SendAsked, { conversation: undefined, intent }),
     createElement(Thread, { autoFocus: false })
   )

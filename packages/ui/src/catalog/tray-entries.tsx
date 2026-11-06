@@ -21,10 +21,8 @@ import {
   type QuestionTrayStart,
   ShowFoldedQuestion,
 } from "@workspace/ui/components/assistant/question-tray"
-import {
-  type TrayServices,
-  TrayServicesProvider,
-} from "@workspace/ui/components/assistant/tray-services"
+import type { TrayServices } from "@workspace/ui/components/assistant/tray-services"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import type { CatalogEntry } from "./entries"
 
 /**
@@ -741,7 +739,7 @@ function States({ name, states }: { name: string; states: readonly State[] }) {
         >
           <h3 className="font-medium text-muted-foreground text-xs">{title}</h3>
           <div className="flex flex-col gap-2">
-            <TrayServicesProvider value={fakes(rounds, services)}>
+            <ChatServicesProvider value={{ tray: fakes(rounds, services) }}>
               <QuestionTray
                 businessName="Mop & Pail Cleaning"
                 input={input ?? INPUT}
@@ -751,7 +749,7 @@ function States({ name, states }: { name: string; states: readonly State[] }) {
                 // One call per state, so each keeps its own logo brief.
                 toolCallId={`catalog:${name}:${title}`}
               />
-            </TrayServicesProvider>
+            </ChatServicesProvider>
             <div className="rounded-4xl border border-border bg-card px-5 py-4 text-muted-foreground text-sm">
               Tell Sam what to do instead…
             </div>
@@ -773,15 +771,7 @@ const trayCatalog: CatalogEntry[] = [
   })),
   // The logo page's parts, and the services it draws designs with.
   ...(
-    [
-      "TrayLogo",
-      "TrayServicesProvider",
-      "Ways",
-      "Fold",
-      "Summary",
-      "DropTile",
-      "RadioTile",
-    ] as const
+    ["TrayLogo", "Ways", "Fold", "Summary", "DropTile", "RadioTile"] as const
   ).map((name) => ({
     name,
     render: () => (

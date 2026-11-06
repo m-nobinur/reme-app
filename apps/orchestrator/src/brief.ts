@@ -229,6 +229,8 @@ export async function creationChoices(
   kind: string
   /** The failed build this one starts again (retry.ts). */
   retry_of: string | null
+  /** A change's short name in the owner's terms, which a retry carries. */
+  label: string | null
   /** The change brief the owner's assistant wrote, when it sent one. */
   brief: OwnerBrief | null
   /** The draft revision a change started from, before the site was live. */
@@ -254,6 +256,7 @@ export async function creationChoices(
     change_kind: ChangeKind.safeParse(payload.change_kind).data ?? null,
     kind: typeof payload.kind === "string" ? payload.kind : "site.build",
     retry_of: typeof payload.retry_of === "string" ? payload.retry_of : null,
+    label: typeof payload.label === "string" ? payload.label : null,
     brief: OwnerBrief.safeParse(payload.brief).data ?? null,
     draft:
       typeof payload.draft_revision_id === "string"

@@ -1,8 +1,10 @@
 import {
   AssistantRuntimeProvider,
+  AuiConfig,
   type DictationAdapter,
   type ThreadMessageLike,
   type ThreadSuggestion,
+  Tools,
   useAui,
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
@@ -27,21 +29,13 @@ import {
 } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { ChoiceForm } from "@workspace/ui/components/assistant/ask-choice"
-import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
-import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
-import {
-  AnswerBuildQuestionProvider,
-  BuildQuestionsUI,
-} from "@workspace/ui/components/assistant/build-questions"
+import { BuildQuestionsUI } from "@workspace/ui/components/assistant/build-questions"
 import {
   type DomainPurchase,
-  DomainPurchaseProvider,
   SKIP_DOMAIN,
 } from "@workspace/ui/components/assistant/buy-domain"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { ChipRow } from "@workspace/ui/components/assistant/chip-row"
-import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
-import { AlwaysAllowProvider } from "@workspace/ui/components/assistant/decision"
 import { makeEnquiryCardUI } from "@workspace/ui/components/assistant/enquiry-card"
 import { ConnectGoogleRow } from "@workspace/ui/components/assistant/google"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
@@ -62,8 +56,8 @@ import {
   ThreadHistorySkeleton,
   ThreadPending,
 } from "@workspace/ui/components/assistant/thread-pending"
+import { ownerToolkit } from "@workspace/ui/components/assistant/toolkit"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
-import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
 import {
   DockedUpdates,
   type Update,
@@ -88,6 +82,7 @@ import {
 } from "@workspace/ui/components/tooltip"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import { BROKEN, designText } from "@workspace/ui/lib/tool-state"
 import {
   type ReactNode,
@@ -128,6 +123,9 @@ import {
 // under load because a slow paint changes which entries are painted while off
 // screen. `catalog.spec.ts` now asserts no scroll-to-bottom button is visible,
 // so a height that is too tight fails with that message rather than flaking.
+/** The cards a thread draws, registered as the app registers them. */
+const TOOLKIT = AuiConfig({ tools: Tools({ toolkit: ownerToolkit }) })
+
 /** A fixed zone, so the catalog reads the same on every machine, and the one open question. */
 const COS_TOOLS_FIXTURE = {
   zone: "Europe/London",
@@ -234,7 +232,7 @@ function FixtureThread({
   })
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
+    <AssistantRuntimeProvider config={TOOLKIT} runtime={runtime}>
       {children}
       <div
         className={
@@ -243,13 +241,13 @@ function FixtureThread({
             : `${height} overflow-hidden rounded-3xl border border-border`
         }
       >
-        <CosToolsProvider value={COS_TOOLS_FIXTURE}>
+        <ChatServicesProvider value={{ cosTools: COS_TOOLS_FIXTURE }}>
           <Thread
             autoFocus={false}
             components={{ ToolFallback: Approval }}
             {...settings}
           />
-        </CosToolsProvider>
+        </ChatServicesProvider>
       </div>
     </AssistantRuntimeProvider>
   )
@@ -2903,7 +2901,7 @@ function SendingThread({ streamed }: { streamed: boolean }) {
     },
   })
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
+    <AssistantRuntimeProvider config={TOOLKIT} runtime={runtime}>
       <div className="h-[44rem] overflow-hidden rounded-3xl border border-border">
         <Thread autoFocus={false} components={{ ToolFallback: Approval }} />
       </div>
@@ -3271,25 +3269,23 @@ const assistantCatalog = [
   })),
   { name: "QuoteFormPreview", render: () => <QuotePreviewSample /> },
   // The upload card and the provider that gives it the app's upload.
-  ...(["AskUpload", "UploadPhotosProvider"] as const).map((name) => ({
+  ...(["AskUpload"] as const).map((name) => ({
     name,
     render: () => (
-      <UploadPhotosProvider value={fakeUpload}>
+      <ChatServicesProvider value={{ uploadPhotos: fakeUpload }}>
         <TrayStates
           height="h-[48rem]"
           open={ASK_UPLOAD_OPEN}
           settled={ASK_UPLOAD_STATES}
         />
-      </UploadPhotosProvider>
+      </ChatServicesProvider>
     ),
   })),
   // The design tray as a thread docks it, and the providers it reads.
-  ...(
-    ["AskDesign", "SaveDesignAnswerProvider", "TraySlotProvider"] as const
-  ).map((name) => ({
+  ...(["AskDesign", "TraySlotProvider"] as const).map((name) => ({
     name,
     render: () => (
-      <SaveDesignAnswerProvider value={async () => undefined}>
+      <ChatServicesProvider value={{ saveDesignAnswer: async () => undefined }}>
         <FixtureThread
           height="h-[44rem]"
           isDisabled={false}
@@ -3312,14 +3308,14 @@ const assistantCatalog = [
             },
           ]}
         />
-      </SaveDesignAnswerProvider>
+      </ChatServicesProvider>
     ),
   })),
   {
     // The owner's reply to a finished design tray, as chips.
     name: "DesignReply",
     render: () => (
-      <TrayServicesProvider value={TRAY_SERVICES}>
+      <ChatServicesProvider value={{ tray: TRAY_SERVICES }}>
         <FixtureThread
           height="h-[22rem]"
           messages={[
@@ -3340,7 +3336,7 @@ const assistantCatalog = [
             reply(designText(ASK_DESIGN_INPUT, DESIGN_ANSWERS)),
           ]}
         />
-      </TrayServicesProvider>
+      </ChatServicesProvider>
     ),
   },
   {
@@ -3523,9 +3519,7 @@ const assistantCatalog = [
   },
   // The card the three tools share, its outcome lines and its provider, on
   // a waiting card, a done one and a refused one.
-  ...(
-    ["Decision", "Done", "Problem", "TrayApproval", "CosToolsProvider"] as const
-  ).map((name) => ({
+  ...(["Decision", "Done", "Problem", "TrayApproval"] as const).map((name) => ({
     name,
     render: () => (
       <FixtureThread
@@ -3540,16 +3534,16 @@ const assistantCatalog = [
   })),
   // A waiting card with the app's tap behind it, so Always allow shows.
   {
-    name: "AlwaysAllowProvider",
+    name: "ChatServicesProvider",
     render: () => (
-      <AlwaysAllowProvider value={() => undefined}>
+      <ChatServicesProvider value={{ alwaysAllow: () => undefined }}>
         <FixtureThread
           height="h-[14rem]"
           messages={[CREATE_REMINDER_STATES[2]].filter(
             (message) => message !== undefined
           )}
         />
-      </AlwaysAllowProvider>
+      </ChatServicesProvider>
     ),
   },
   {
@@ -3602,9 +3596,9 @@ const assistantCatalog = [
     render: () => (
       <div className="flex flex-col gap-4">
         <FixtureThread height="h-[44rem]" messages={CONNECT_STEPS_NOW} />
-        <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+        <ChatServicesProvider value={{ domainPurchase: CATALOG_PURCHASE }}>
           <FixtureThread height="h-[56rem]" messages={CONNECT_STEPS_PAUSED} />
-        </DomainPurchaseProvider>
+        </ChatServicesProvider>
       </div>
     ),
   },
@@ -3623,26 +3617,24 @@ const assistantCatalog = [
   {
     name: "FindDomain",
     render: () => (
-      <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+      <ChatServicesProvider value={{ domainPurchase: CATALOG_PURCHASE }}>
         <div className="flex flex-col gap-4">
           <FixtureThread height="h-[64rem]" messages={FIND_DOMAIN_STATES} />
           <FixtureThread height="h-[48rem]" messages={FIND_DOMAIN_BUY_HERE} />
           <FixtureThread height="h-[56rem]" messages={FIND_DOMAIN_AGAIN} />
         </div>
-      </DomainPurchaseProvider>
+      </ChatServicesProvider>
     ),
   },
   // The purchase card, its tray and the provider that gives it the app's checkout.
-  ...(["BuyDomain", "BuyTray", "DomainPurchaseProvider"] as const).map(
-    (name) => ({
-      name,
-      render: () => (
-        <DomainPurchaseProvider value={CATALOG_PURCHASE}>
-          <FixtureThread height="h-[260rem]" messages={BUY_DOMAIN_STATES} />
-        </DomainPurchaseProvider>
-      ),
-    })
-  ),
+  ...(["BuyDomain", "BuyTray"] as const).map((name) => ({
+    name,
+    render: () => (
+      <ChatServicesProvider value={{ domainPurchase: CATALOG_PURCHASE }}>
+        <FixtureThread height="h-[260rem]" messages={BUY_DOMAIN_STATES} />
+      </ChatServicesProvider>
+    ),
+  })),
   // Opened from its button: Stripe.js cannot start here, so the payment side
   // shows its "did not load" line beside the order summary.
   { name: "PayDialog", render: () => <PayDialogSample /> },
@@ -3679,7 +3671,7 @@ const assistantCatalog = [
     (name) => ({
       name,
       render: () => (
-        <AnswerBuildQuestionProvider value={answerSlowly}>
+        <ChatServicesProvider value={{ answerBuildQuestion: answerSlowly }}>
           <OwnerThread
             height="h-[32rem]"
             messages={ADDRESS_QUESTIONS}
@@ -3687,7 +3679,7 @@ const assistantCatalog = [
           >
             <BuildQuestionsUI />
           </OwnerThread>
-        </AnswerBuildQuestionProvider>
+        </ChatServicesProvider>
       ),
     })
   ),
@@ -3697,22 +3689,20 @@ const assistantCatalog = [
     render: () => <OwnerThread height="h-[32rem]" messages={DECISION} />,
   },
   // The question stack and the provider that gives it the app's answer call.
-  ...(["BuildQuestionsUI", "AnswerBuildQuestionProvider"] as const).map(
-    (name) => ({
-      name,
-      render: () => (
-        <AnswerBuildQuestionProvider value={answerSlowly}>
-          <OwnerThread
-            height="h-[40rem]"
-            messages={BUILD_QUESTIONS}
-            stored="00000000-0000-4000-8000-0000000000a1"
-          >
-            <BuildQuestionsUI />
-          </OwnerThread>
-        </AnswerBuildQuestionProvider>
-      ),
-    })
-  ),
+  ...(["BuildQuestionsUI"] as const).map((name) => ({
+    name,
+    render: () => (
+      <ChatServicesProvider value={{ answerBuildQuestion: answerSlowly }}>
+        <OwnerThread
+          height="h-[40rem]"
+          messages={BUILD_QUESTIONS}
+          stored="00000000-0000-4000-8000-0000000000a1"
+        >
+          <BuildQuestionsUI />
+        </OwnerThread>
+      </ChatServicesProvider>
+    ),
+  })),
   {
     name: "ChangeAskedUI",
     render: () => (

@@ -1051,6 +1051,7 @@
   "ElsewhereWorkflow": {
     "registered": ["look 1", "wait 1", "look 2", "say 2"],
     "owner done": ["look 1", "wait 1", "look 2"],
+    "dropped": ["look 1", "wait 1", "look 2"],
     "follow up and stop": [
       "look 1",
       "wait 1",

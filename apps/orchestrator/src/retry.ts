@@ -836,6 +836,7 @@ export async function afterFailure(
       change_kind: choices.change_kind,
       ...(choices.brief ? { brief: choices.brief } : {}),
       ...(choices.draft ? { draft: choices.draft } : {}),
+      ...(choices.label ? { label: choices.label } : {}),
       retry_of: {
         assignment_id: ids.assignmentId,
         blueprint: kept ? row.blueprint : redrawn(row.blueprint),

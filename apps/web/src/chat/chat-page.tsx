@@ -1,5 +1,7 @@
 import {
   AssistantRuntimeProvider,
+  AuiConfig,
+  Tools,
   useAuiState,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react"
@@ -14,16 +16,8 @@ import {
 } from "@tanstack/react-router"
 import type { ChatRequest } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
-import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
-import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
-import {
-  AnswerBuildQuestionProvider,
-  BuildQuestionsUI,
-} from "@workspace/ui/components/assistant/build-questions"
-import { DomainPurchaseProvider } from "@workspace/ui/components/assistant/buy-domain"
+import { BuildQuestionsUI } from "@workspace/ui/components/assistant/build-questions"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
-import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
-import { AlwaysAllowProvider } from "@workspace/ui/components/assistant/decision"
 import { makeEnquiryCardUI } from "@workspace/ui/components/assistant/enquiry-card"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
@@ -33,10 +27,10 @@ import {
   SITE_CHANGE_MODE,
   Thread,
 } from "@workspace/ui/components/assistant/thread"
-import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
+import { ownerToolkit } from "@workspace/ui/components/assistant/toolkit"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
-import { LiveCardsProvider } from "@workspace/ui/lib/live-cards"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import {
   type PropsWithChildren,
   type ReactNode,
@@ -81,6 +75,8 @@ const composed = new Set<string>()
 const tapAlways = (approvalId: string) => {
   alwaysTapped.add(approvalId)
 }
+
+const config = AuiConfig({ tools: Tools({ toolkit: ownerToolkit }) })
 
 /**
  * The conversation at `/app` (a new one) and `/app/c/$id` (a stored one).
@@ -225,14 +221,22 @@ export function ChatPage() {
   const key = liveKey(live.workspace)
   const shared = useMemo(() => {
     const { cards, reminderOpen } = liveState(key)
-    const tools = {
-      ...cosTools(titles, zone),
-      removeReminder: (reminder: string) =>
-        deleteReminder({ data: { id: reminder } }),
-      ...(reminderOpen && { reminderOpen }),
+    return {
+      cosTools: {
+        ...cosTools(titles, zone),
+        removeReminder: (reminder: string) =>
+          deleteReminder({ data: { id: reminder } }),
+        ...(reminderOpen && { reminderOpen }),
+      },
+      liveCards: cards,
+      alwaysAllow: tapAlways,
+      uploadPhotos,
+      tray: services,
+      saveDesignAnswer,
+      domainPurchase,
+      answerBuildQuestion,
     }
-    return { tools, cards }
-  }, [titles, zone, key])
+  }, [titles, zone, key, services])
 
   const assistant = assistantOf(live.workspace)
   const dictationNotice = useSyncExternalStore(
@@ -242,7 +246,7 @@ export function ChatPage() {
   )
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
+    <AssistantRuntimeProvider config={config} runtime={runtime}>
       <ServerButtonUI />
       <ChangeAskedUI />
       <BuildQuestionsUI />
@@ -273,48 +277,32 @@ export function ChatPage() {
             </div>
           }
         >
-          <CosToolsProvider value={shared.tools}>
-            <AlwaysAllowProvider value={tapAlways}>
-              <LiveCardsProvider value={shared.cards}>
-                <UploadPhotosProvider value={uploadPhotos}>
-                  <TrayServicesProvider value={services}>
-                    <SaveDesignAnswerProvider value={saveDesignAnswer}>
-                      <DomainPurchaseProvider value={domainPurchase}>
-                        <AnswerBuildQuestionProvider
-                          value={answerBuildQuestion}
-                        >
-                          <Thread
-                            after={
-                              <>
-                                <StillWorking />
-                                <ConversationUpdates />
-                                <BuildStopped />
-                              </>
-                            }
-                            assistant={live.workspace?.assistantName}
-                            briefing={briefing.line}
-                            components={{ ToolFallback: Approval }}
-                            dictationNotice={dictationNotice}
-                            lastShown={LAST_SHOWN}
-                            mode={mode}
-                            onRetry={() => retry.current?.()}
-                            // One neutral line: rotating ideas offered work the
-                            // owner could not ask for yet.
-                            placeholder={`Message ${assistant}…`}
-                            questionPlaceholder={`Tell ${assistant} what to do instead…`}
-                            quickActions={OWNER_QUICK_ACTIONS}
-                            reveal={onboarding ? OPENING_REVEAL : undefined}
-                            stored={id}
-                            updates={<ChatUpdates />}
-                          />
-                        </AnswerBuildQuestionProvider>
-                      </DomainPurchaseProvider>
-                    </SaveDesignAnswerProvider>
-                  </TrayServicesProvider>
-                </UploadPhotosProvider>
-              </LiveCardsProvider>
-            </AlwaysAllowProvider>
-          </CosToolsProvider>
+          <ChatServicesProvider value={shared}>
+            <Thread
+              after={
+                <>
+                  <StillWorking />
+                  <ConversationUpdates />
+                  <BuildStopped />
+                </>
+              }
+              assistant={live.workspace?.assistantName}
+              briefing={briefing.line}
+              components={{ ToolFallback: Approval }}
+              dictationNotice={dictationNotice}
+              lastShown={LAST_SHOWN}
+              mode={mode}
+              onRetry={() => retry.current?.()}
+              // One neutral line: rotating ideas offered work the
+              // owner could not ask for yet.
+              placeholder={`Message ${assistant}…`}
+              questionPlaceholder={`Tell ${assistant} what to do instead…`}
+              quickActions={OWNER_QUICK_ACTIONS}
+              reveal={onboarding ? OPENING_REVEAL : undefined}
+              stored={id}
+              updates={<ChatUpdates />}
+            />
+          </ChatServicesProvider>
         </Opens>
       </div>
     </AssistantRuntimeProvider>
