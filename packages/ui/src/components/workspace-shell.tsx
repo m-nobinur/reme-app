@@ -406,7 +406,10 @@ function WorkspaceShell({
             "min-h-0 flex-1 overflow-y-auto",
             docked &&
               "max-md:pt-[calc(var(--pill,2.625rem)+var(--gap)+0.5rem)] lg:[--panel-inset:calc(22rem+var(--gap)+0.5rem)]",
-            floating && "pb-16"
+            // On a phone the pill has a strip of its own under the page, so
+            // text never scrolls beneath it.
+            floating &&
+              "pb-16 max-md:mb-[calc(2.625rem+var(--gap)*2)] max-md:pb-0"
           )}
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.
