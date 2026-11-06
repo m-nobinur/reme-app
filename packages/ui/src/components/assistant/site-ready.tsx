@@ -32,8 +32,8 @@ export const PUBLISH_LATE_MS = 150_000
  * It is drawn from the workspace, not stored in the thread, and never
  * optimistic: Publish waits for the server, and "approved" shows only once
  * the decision is recorded. Docked, it is one item of the update stack above
- * the composer (`spot`) until the site is published: its first row, which
- * opens the whole card. In a thread it is drawn into one node that moves
+ * the composer (`spot`) until the site is published: its first row alone,
+ * since the panel keeps the preview. In a thread it is drawn into one node that moves
  * from the chat to the stack, so docking moves the card rather than drawing
  * it again.
  * As a row, it is that row alone, for the new chat's updates.
@@ -55,7 +55,6 @@ export function SiteReady({
   onMakeChanges,
   docked = false,
   spot,
-  closeOn = null,
   row = false,
   className,
 }: {
@@ -88,20 +87,11 @@ export function SiteReady({
    * is drawn). Left out, the card stays where it is drawn.
    */
   spot?: HTMLElement | null
-  /** A docked card the owner opened closes when this changes: each message they send. */
-  closeOn?: string | null
   /** Only its first row, unframed, for a deck of updates. */
   row?: boolean
   className?: string
 }) {
   const id = useId()
-  const [open, setOpen] = useState(false)
-  // Closed in the render that sees the new value, not by a remount.
-  const [openFor, setOpenFor] = useState(closeOn)
-  if (openFor !== closeOn) {
-    setOpenFor(closeOn)
-    setOpen(false)
-  }
   const inTray = docked && !!spot
   const checking = published && !live
   const [late, setLate] = useState(false)
@@ -137,15 +127,13 @@ export function SiteReady({
       />
     </p>
   )
-  // A heading cannot sit inside the docked row's button.
-  const Title = inTray ? "span" : "h3"
   const name = (
     <>
       <SiteIcon src={pictures?.icon} />
       <span className="flex min-w-0 flex-1 flex-col text-left">
-        <Title className="font-medium text-sm" id={`${id}-title`}>
+        <h3 className="font-medium text-sm" id={`${id}-title`}>
           {title}
-        </Title>
+        </h3>
         <span className={META}>{meta}</span>
       </span>
     </>
@@ -225,19 +213,7 @@ export function SiteReady({
       data-slot={inTray ? "site-ready-docked" : "site-ready"}
     >
       <div className="flex items-center gap-3 p-3">
-        {inTray ? (
-          // Docked it is one row, which opens and closes the whole card in place.
-          <button
-            aria-expanded={open}
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            onClick={() => setOpen(!open)}
-            type="button"
-          >
-            {name}
-          </button>
-        ) : (
-          name
-        )}
+        {name}
         {connect ? (
           <Button
             className="shrink-0"
@@ -251,7 +227,7 @@ export function SiteReady({
         ) : null}
         {publish}
       </div>
-      {inTray && !open ? null : (
+      {inTray ? null : (
         <>
           {typeof preview === "object" ? (
             // The same preview as the link below, so a screen reader hears it once.

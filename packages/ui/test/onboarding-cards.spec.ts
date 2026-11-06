@@ -284,7 +284,7 @@ test("the ready cards with a step beside Publish fit a phone and pass axe", asyn
   expect(box && connect && connect.x >= box.x).toBe(true)
 })
 
-test("a docked ready card is one row above the composer that opens in place", async ({
+test("a docked ready card is one row above the composer, with no preview to open", async ({
   page,
 }) => {
   await open(page, "SiteReady")
@@ -293,15 +293,17 @@ test("a docked ready card is one row above the composer that opens in place", as
   await expect(
     docked.getByRole("button", { name: "Publish", exact: true })
   ).toBeEnabled()
+  await expect(
+    docked.getByRole("heading", { name: "Brightclean website" })
+  ).toBeVisible()
+  // The panel keeps the preview, so the row opens nothing.
+  await expect(
+    docked.getByRole("button", { name: /Brightclean website/ })
+  ).toHaveCount(0)
   await expect(docked.getByRole("img", { name: /home page/ })).toHaveCount(0)
-  const row = docked.getByRole("button", { name: /Brightclean website/ })
-  await expect(row).toHaveAttribute("aria-expanded", "false")
-  await row.click()
-  await expect(row).toHaveAttribute("aria-expanded", "true")
-  await expect(docked.getByRole("img", { name: /home page/ })).toBeVisible()
   await expect(
     docked.getByRole("button", { name: "Request changes" })
-  ).toBeEnabled()
+  ).toHaveCount(0)
 })
 
 test("a conversation's updates are a deck of three that steps with its arrows", async ({

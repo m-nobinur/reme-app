@@ -21,17 +21,16 @@ afterEach(() => {
   document.body.innerHTML = ""
 })
 
-it("moves into the tray as the same card and closes on a new message", async () => {
+it("moves into the tray as the same card, its first row alone", async () => {
   const tray = document.createElement("div")
   const chat = document.createElement("div")
   document.body.appendChild(chat)
   document.body.appendChild(tray)
   const root = createRoot(chat)
-  const draw = (docked: boolean, closeOn: string | null) =>
+  const draw = (docked: boolean) =>
     act(async () =>
       root.render(
         createElement(SiteReady, {
-          closeOn,
           docked,
           meta: "Ready now",
           onApprove: () => undefined,
@@ -44,22 +43,17 @@ it("moves into the tray as the same card and closes on a new message", async () 
       )
     )
 
-  await draw(false, null)
+  await draw(false)
   const card = chat.querySelector("article")
   expect(card).not.toBeNull()
   expect(tray.querySelector("article")).toBeNull()
 
-  await draw(true, "2026-10-25T10:00:00Z")
+  await draw(true)
   expect(tray.querySelector("article")).toBe(card)
   expect(chat.querySelector("article")).toBeNull()
-
-  const row = tray.querySelector("button[aria-expanded]")
-  await act(async () => (row as HTMLButtonElement).click())
-  expect(row?.getAttribute("aria-expanded")).toBe("true")
-
-  await draw(true, "2026-10-25T10:05:00Z")
-  expect(tray.querySelector("article")).toBe(card)
-  expect(row?.getAttribute("aria-expanded")).toBe("false")
+  // The panel keeps the preview, so docked it never opens one.
+  expect(tray.querySelector("button[aria-expanded]")).toBeNull()
+  expect(tray.textContent).not.toContain("Request changes")
 
   await act(async () => root.unmount())
   expect(tray.childElementCount).toBe(0)
