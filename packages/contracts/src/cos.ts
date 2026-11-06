@@ -1346,6 +1346,7 @@ export const SkillTrigger = z.enum([
   "address_yes",
   "address_no",
   "bought_elsewhere",
+  "address_skipped",
   "connect_google",
   "schedule",
   "topic",

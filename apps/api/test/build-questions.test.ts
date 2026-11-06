@@ -7,6 +7,7 @@ import {
 } from "@workspace/contracts"
 import {
   currentFact,
+  openTask,
   postAssistantMessage,
   readTasks,
   serverMessageId,
@@ -15,7 +16,12 @@ import {
   tenancy,
 } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { ADDRESS_SKIPPED, fits, storable } from "../src/build-questions.ts"
+import {
+  ADDRESS_SKIPPED,
+  ADDRESS_SKIPPED_GOOGLE,
+  fits,
+  storable,
+} from "../src/build-questions.ts"
 import {
   type Owner,
   owner,
@@ -299,19 +305,53 @@ describe.skipIf(!url)("answering a question card, on a live connection", () => {
       question_id: have,
       answer: { kind: "value", value: ADDRESS_ASK.later },
     })
-    const said = await kit.withOrg({ orgId: who.orgId }, (db) =>
-      db.execute<{ text: string }>(
-        sql`select content->'parts'->1->>'text' as text from conversation_messages
-          where conversation_id = ${id} order by seq desc limit 1`
+    const last = (conversation: string) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        db.execute<{ text: string; button: string | null }>(
+          sql`select content->'parts'->1->>'text' as text,
+              content->'parts'->2->'data'->>'label' as button
+            from conversation_messages
+            where conversation_id = ${conversation} order by seq desc limit 1`
+        )
+      )
+    // The next useful step: Google, with its button, remembered as suggested.
+    expect((await last(id))[0]).toEqual({
+      text: ADDRESS_SKIPPED_GOOGLE,
+      button: "Connect Google",
+    })
+    const offers = await kit.withOrg({ orgId: who.orgId }, (db) =>
+      db.execute<{ n: number }>(
+        sql`select count(*)::int as n from deliveries where key like 'journey:%:google_offer:%'`
       )
     )
-    expect(said[0]?.text).toBe(ADDRESS_SKIPPED)
+    expect(offers[0]?.n).toBe(1)
     const task = await addressTask()
     expect(task?.state).toBe("later")
     const days =
       (Date.parse(task?.later_until ?? "") - Date.now()) / (24 * 3600 * 1000)
     expect(days).toBeGreaterThan(6.9)
     expect(days).toBeLessThan(7.1)
+
+    // Google already settled: the domain's own line, and nothing remembered.
+    await kit.withOrg({ orgId: who.orgId }, async (db) => {
+      await openTask(db, who.orgId, "google")
+      await db.execute(
+        sql`update owner_tasks set state = 'done', done_at = now() where kind = 'google'`
+      )
+    })
+    const again = addressStack()
+    const skipped = await posted(again.stack)
+    await skipped.reply(stubOrchestrator(), {
+      question_id: again.have,
+      answer: { kind: "value", value: ADDRESS_ASK.later },
+    })
+    expect((await last(skipped.id))[0]).toEqual({
+      text: ADDRESS_SKIPPED,
+      button: null,
+    })
+    await kit.withOrg({ orgId: who.orgId }, (db) =>
+      db.execute(sql`delete from owner_tasks where kind = 'google'`)
+    )
 
     const yes = addressStack()
     const asked = await posted(yes.stack)

@@ -7,6 +7,7 @@ import {
 import {
   deployments,
   domains,
+  ownerTasks,
   postAssistantMessage,
   searchConnections,
   sql,
@@ -92,7 +93,7 @@ async function connected(kit: Tenancy, owner: Owner): Promise<boolean> {
   return row?.state === "active"
 }
 
-const CONNECT: ServerButton = {
+export const GOOGLE_BUTTON: ServerButton = {
   label: "Connect Google",
   action: { kind: "connect", service: "google" },
 }
@@ -110,11 +111,11 @@ const RESULT: Record<
   },
   failed: {
     text: "Google didn't connect, so your site isn't in Search Console yet. The sign-in link runs out if it sits for a while. Say the word and I'll send a fresh one.",
-    button: CONNECT,
+    button: GOOGLE_BUTTON,
   },
   scopes_missing: {
     text: "Google needs one more permission before I can add your site. Connect again and leave both boxes ticked.",
-    button: { ...CONNECT, label: "Reconnect Google" },
+    button: { ...GOOGLE_BUTTON, label: "Reconnect Google" },
   },
 }
 
@@ -188,21 +189,23 @@ export async function connectGoogle(
   }
   // Google learns the address customers keep, so it waits for the owner's
   // own domain: live, or claimed and connecting, which the first publish or
-  // its activation hands to Google.
-  const [domain] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-    db
-      .select({ id: domains.id })
-      .from(domains)
-      .where(sql`${domains.state} in ('awaiting_dns', 'verifying', 'active')`)
-      .limit(1)
+  // its activation hands to Google; or the free address once the owner put
+  // the domain off or turned it down, moved to their domain when one goes live.
+  const [ready] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db.execute<{ ok: boolean }>(sql`
+      select exists (select 1 from ${domains}
+          where ${domains.state} in ('awaiting_dns', 'verifying', 'active'))
+        or exists (select 1 from ${ownerTasks}
+          where ${ownerTasks.kind} = 'address' and ${ownerTasks.state} in ('later', 'declined')) as ok`)
   )
-  if (!domain) {
+  if (!ready?.ok) {
     return {
       outcome: "refused",
       error: {
         class: "validation",
         code: "search.needs_domain",
-        message: "Google comes once the website has a domain of its own.",
+        message:
+          "Google comes once the website has a domain of its own, or once the owner puts the domain off: if they chose the free address, call put_off with kind address first.",
       },
     }
   }

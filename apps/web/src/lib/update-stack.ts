@@ -28,8 +28,10 @@ export type JourneyItem = {
  * agree. The address item stands wherever the journey offers a Connect
  * (`offer`, the draft-ready line's own rule) or the owner skipped it, once
  * there is a site to put it on (`site`: a draft on screen, or one ready or
- * live). Google follows once the address is connecting or live, until it is
- * connected or turned down. A name the owner went to buy asks "Finished
+ * live). Google follows once the address is connecting or live, or on the
+ * site's free address once the owner skipped the address or turned it down,
+ * until it is connected or turned down; only then does a skipped address
+ * come back as Add your domain. A name the owner went to buy asks "Finished
  * buying?" only once they are `back` from its registrar link (`useBack`):
  * until then the chat already holds the question.
  */
@@ -51,13 +53,12 @@ export function journeyItem(
   const drawn =
     site || journey.website === "draft_ready" || journey.website === "published"
   if (drawn && offer) return address("Choose your domain", "Connect now")
-  if (drawn && stage === "put_off") {
-    return address("Add your domain", "Connect now")
-  }
+  const free = drawn && (stage === "put_off" || stage === "declined")
   if (
-    (stage === "connecting" || stage === "live") &&
+    (stage === "connecting" || stage === "live" || free) &&
     journey.google !== "connected" &&
-    journey.google !== "declined"
+    journey.google !== "declined" &&
+    journey.google !== "waiting_for_domain"
   ) {
     return {
       id: "google",
@@ -66,6 +67,9 @@ export function journeyItem(
       lead: false,
       ...CONNECT_GOOGLE,
     }
+  }
+  if (drawn && stage === "put_off") {
+    return address("Add your domain", "Connect now")
   }
   return null
 }

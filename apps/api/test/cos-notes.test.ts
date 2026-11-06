@@ -5,6 +5,7 @@ import {
   boughtReply,
   type CosWorkspace,
   type OwnerTask,
+  SKIP_DOMAIN,
 } from "@workspace/contracts"
 import { type JourneyInput, journeyOf, offerOf } from "@workspace/db"
 import { describe, expect, it } from "vitest"
@@ -13,6 +14,7 @@ import { CONTEXT_POLICY, deriveCosMessages } from "../src/cos/history.ts"
 import {
   ASIDE_LINE,
   cardState,
+  GOOGLE_BACK_LINE,
   handoverNote,
   leftOutLine,
   NEWS_RULE,
@@ -20,6 +22,7 @@ import {
   RETURN_LINE,
   sessionNote,
   skillsDue,
+  TRIGGER_LINES,
 } from "../src/cos/notes.ts"
 
 const NOW = new Date("2026-11-05T10:00:00.000Z")
@@ -98,7 +101,7 @@ describe("the open items note", () => {
       "- Web address: not settled. The owner chose Skip for now on the address card, until Thursday 12 November. Whether they have a domain is unknown: ask, never guess."
     )
     expect(lines).toContain(
-      "- Google: not connected; it waits for a domain of the website's own."
+      "- Google: not connected; it can go on the free address, and moves to their own domain once one is connected. Connect Search Console waits on the stack under the chat. Suggest it only when this note brings it back or they ask."
     )
     expect(lines.at(-1)).toMatch(/No question card waits on screen/)
   })
@@ -182,7 +185,7 @@ describe("the open items note", () => {
     )
     expect(waiting).toContain("- Website: draft ready, not published.")
     expect(waiting.join("\n")).toMatch(
-      /Google: not connected; it can be offered/
+      /Google: not connected; it can go on their own domain\. Connect Search Console waits on the stack/
     )
     const live = openItems(
       { ...EMPTY, site: { host: "x.reme.site", live_version: 2 } },
@@ -304,6 +307,23 @@ describe("the skills code loads", () => {
     expect(
       skillsDue({ said: "I've bought sparkleclean.co.uk, what next?" })
     ).toEqual([])
+  })
+
+  it("loads Google's connect as the next step when the domain is put off in words, while Google can be offered", () => {
+    const next = [
+      { name: "web-address", trigger: "address_skipped" },
+      { name: "google-search", trigger: "address_skipped" },
+      { name: "google-search", part: "connect", trigger: "address_skipped" },
+    ]
+    for (const said of [
+      SKIP_DOMAIN,
+      `${SKIP_DOMAIN} and use the free address`,
+    ]) {
+      expect(skillsDue({ said, google: true }), said).toEqual(next)
+      expect(skillsDue({ said }), said).toEqual(next.slice(0, 1))
+    }
+    expect(skillsDue({ said: "Skip it", google: true })).toEqual([])
+    expect(TRIGGER_LINES.address_skipped.length).toBeLessThanOrEqual(50)
   })
 
   it("reads a loaded skill back after the owner's message, as a skill_view call and its result", () => {
@@ -486,12 +506,38 @@ describe("the journey's lines", () => {
     expect(yes.join("\n")).toMatch(/Next: view web-address, connect-own\./)
   })
 
-  it("points Google's next step at its connect part only once it can be offered", () => {
-    const connecting = { ...DRAFT, tasks: STAGES.connecting }
-    expect(
-      turn({ tasks: STAGES.connecting }, connecting).lines.join("\n")
-    ).toMatch(/it can be offered now[^\n]*Next: view google-search, connect\./)
+  it("points Google's next step at its connect part only when it is brought back", () => {
+    const back = {
+      conversation: HERE,
+      recent: [{ at: ago(180), conversation: HERE }],
+    }
+    for (const stage of ["connecting", "put_off", "declined"] as const) {
+      const at = { ...DRAFT, tasks: STAGES[stage] }
+      expect(
+        turn({ tasks: STAGES[stage] }, at).lines.join("\n"),
+        stage
+      ).not.toMatch(/google-search/)
+      const lines = turn({ tasks: STAGES[stage], visit: back }, at).lines
+      expect(lines, stage).toContain(GOOGLE_BACK_LINE)
+      expect(lines.filter((l) => l === GOOGLE_BACK_LINE)).toHaveLength(1)
+    }
+    expect(GOOGLE_BACK_LINE).toMatch(/Next: view google-search, connect\.$/)
+    expect(GOOGLE_BACK_LINE).toMatch(/If they asked not to be reminded/)
     expect(turn().lines.join("\n")).not.toMatch(/google-search/)
+  })
+
+  it("says when Google was last suggested, so a reply never repeats it", () => {
+    const at = { ...DRAFT, tasks: STAGES.put_off }
+    const { lines } = turn(
+      {
+        tasks: STAGES.put_off,
+        visit: sitting,
+        latches: [{ key: `google_offer:${ago(5)}`, at: ago(5) }],
+      },
+      at
+    )
+    expect(lines.join("\n")).toMatch(/You last suggested it at 9:\d\d AM\./)
+    expect(lines).not.toContain(GOOGLE_BACK_LINE)
   })
 
   it("brings a waiting card back after an aside once a sitting, then leaves it to the stack", () => {

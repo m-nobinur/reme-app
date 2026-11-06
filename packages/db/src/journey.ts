@@ -15,6 +15,17 @@ export { SITTING_GAP_MS }
 /** Bring-backs of an open question a sitting: once, as Hermes reports a thing once and then stays silent. */
 export const BRING_BACKS = 1
 
+/** Days between Google suggestions, so one never comes in the sitting after another. */
+export const GOOGLE_REST_DAYS = 3
+
+/**
+ * Google suggestions in all, the first included, before only the stack holds
+ * it; the end of a date the owner put it off to allows one more. After
+ * hermes-agent cron/suggestions.py MAX_PENDING, MIT: "so the list never
+ * becomes a nag wall".
+ */
+export const GOOGLE_OFFERS = 3
+
 /** The address card as a turn reads it (`cardState`), with when it was shown. */
 export type JourneyCard = {
   answer: "yes" | "no" | "later" | null
@@ -80,8 +91,13 @@ export type JourneyState = Journey & {
   sitting: { fresh: boolean; away_ms: number | null; since: string } | null
   /** Untold changes since the owner's last message, on a turn they typed. */
   changes: JourneyChange[]
-  /** Bring the open address back this turn: after an aside while its card waits, or on a return. */
-  bring_back: "aside" | "return" | null
+  /**
+   * One nudge this turn at most: the open address after an aside while its
+   * card waits, or on a return; else Google on a return.
+   */
+  bring_back: "aside" | "return" | "google" | null
+  /** When Google was last suggested (`google_offer:` latches), if ever. */
+  google_offered: string | null
   /** What the newest draft left out, while the owner has not been told; on a turn they typed only. */
   left_out: string[]
   /** Ledger keys to record when this turn's note says them. */
@@ -103,6 +119,11 @@ export const offerOf = (
   stage: Journey["address"]["stage"]
 ): Journey["address"]["offer"] => OFFERS[stage] ?? null
 
+/**
+ * Google goes on the website's own domain, live or connecting, or on the free
+ * address once the owner put the domain off or turned it down; Search
+ * Console moves to their domain when one is connected.
+ */
 function googleOf(
   tasks: readonly OwnerTask[],
   own: boolean,
@@ -270,28 +291,51 @@ export function journeyOf(input: JourneyInput): JourneyState {
     sitting && newest?.left_out?.length && leftOutTold < LEFT_OUT_TURNS
       ? [...newest.left_out]
       : []
-  const bring_back = !due
+  const google = googleOf(
+    input.tasks,
+    ["connecting", "live", "put_off", "declined"].includes(stage),
+    now
+  )
+  const address = !due
     ? null
     : waiting
       ? "aside"
       : sitting.fresh
         ? "return"
         : null
+  const offers = latches
+    .filter((l) => l.key.startsWith("google_offer:"))
+    .map((l) => Date.parse(l.at))
+    .sort((a, b) => a - b)
+  const lastOffer = offers.at(-1)
+  const later = input.tasks.find((t) => t.kind === "google")?.later_until
+  const putOffEnd = later ? Date.parse(later) : null
+  const googleDue =
+    sitting?.fresh === true &&
+    google === "offerable" &&
+    website !== "none" &&
+    brought < BRING_BACKS &&
+    left_out.length === 0 &&
+    (lastOffer === undefined ||
+      now.getTime() - lastOffer >= GOOGLE_REST_DAYS * 86_400_000) &&
+    (putOffEnd === null
+      ? offers.length < GOOGLE_OFFERS
+      : !offers.some((at) => at >= putOffEnd))
+  const bring_back = address ?? (googleDue ? "google" : null)
   return {
     website,
     address: { stage, ...(name && { name }), offer, ...(until && { until }) },
-    google: googleOf(
-      input.tasks,
-      stage === "connecting" || stage === "live",
-      now
-    ),
+    google,
     waiting,
     sitting,
     changes,
     bring_back,
+    google_offered:
+      lastOffer === undefined ? null : new Date(lastOffer).toISOString(),
     left_out,
     record: [
       ...(bring_back ? [`bring_back:${now.toISOString()}`] : []),
+      ...(bring_back === "google" ? [`google_offer:${now.toISOString()}`] : []),
       ...changes.map((c) => `told:${c.key}`),
       ...(left_out.length > 0 ? [`${leftOutKey}:${leftOutTold + 1}`] : []),
     ],

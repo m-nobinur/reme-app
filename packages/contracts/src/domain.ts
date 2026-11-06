@@ -173,6 +173,9 @@ export function addressReply(choice: string, name?: string): string | null {
   return choice === ADDRESS_ASK.no ? ADDRESS_ASK.no : null
 }
 
+/** What the picker's Skip says as the owner; the free address choice after Not yet starts with it too. */
+export const SKIP_DOMAIN = "I'll skip the domain for now"
+
 /**
  * The owner's words from I bought it and Not yet, for a domain they are
  * buying themselves: one place for the buttons and the turn that reads them.

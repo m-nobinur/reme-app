@@ -11,8 +11,33 @@ import {
   type TaskStepState,
 } from "@workspace/contracts"
 import { and, eq, sql } from "drizzle-orm"
-import { ownerTasks, taskSteps } from "./schema.ts"
+import { deliveries, ownerTasks, taskSteps } from "./schema.ts"
 import type { OrgScopedDb } from "./tenancy.ts"
+
+/** A journey ledger row's `deliveries` key: the latch key under this org's prefix. */
+export const latchKey = (key: string) =>
+  sql`'journey:' || current_setting('app.org_id') || ':' || ${key}`
+
+/** Journey latches (`Latch` in journey.ts) written once each. */
+export async function recordLatches(
+  db: OrgScopedDb,
+  keys: readonly string[],
+  at: Date = new Date()
+): Promise<void> {
+  if (keys.length === 0) return
+  await db
+    .insert(deliveries)
+    .values(
+      keys.map((key) => ({
+        orgId: sql`current_setting('app.org_id')::uuid`,
+        key: sql`${latchKey(key)}`,
+        channel: "in_app" as const,
+        state: "sent" as const,
+        sentAt: at,
+      }))
+    )
+    .onConflictDoNothing()
+}
 
 // The owner task store. Plain writes for the probe engine and the call sites,
 // one read for the panel and the assistant, and `syncTasks`, the one mapping
