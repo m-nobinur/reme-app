@@ -453,13 +453,17 @@ export type Patched = { before: string; after: string }
 
 /**
  * What a saved batch tells the model, after hermes-agent
- * tools/memory_tool_store.py `_success_response` (MIT): the entry count, and
- * each patched entry before and after, so a patch that took more than meant
- * shows.
+ * tools/memory_tool_store.py `_success_response` (MIT): the entry count,
+ * each patched entry before and after and each removed entry in full, so a
+ * short match that took the wrong line shows.
  */
 export const savedOf = (
   target: string,
-  done: { lines: readonly ProfileLine[]; patched: Patched[] },
+  done: {
+    lines: readonly ProfileLine[]
+    patched: Patched[]
+    removed: string[]
+  },
   max: number
 ) => ({
   outcome: "saved" as const,
@@ -468,6 +472,7 @@ export const savedOf = (
   fullness: fullness(done.lines, max),
   entry_count: done.lines.length,
   ...(done.patched.length > 0 && { patched: done.patched }),
+  ...(done.removed.length > 0 && { removed: done.removed }),
 })
 
 /** What a batch that would not fit says, and the entries to consolidate (Hermes's IF FULL). */
@@ -493,11 +498,12 @@ export function applyOperations(
   max: number = PROFILE_MAX_CHARS,
   elsewhere: readonly Elsewhere[] = []
 ):
-  | { ok: true; lines: ProfileLine[]; patched: Patched[] }
+  | { ok: true; lines: ProfileLine[]; patched: Patched[]; removed: string[] }
   | { ok: false; refusal: Refusal }
   | { ok: false; full: Full } {
   let held = [...lines]
   const changed: Patched[] = []
+  const removed: string[] = []
   for (const [i, op] of ops.entries()) {
     const pos = `Operation ${i + 1} (${op.action})`
     if (
@@ -538,6 +544,7 @@ export function applyOperations(
     }
     if (op.action === "remove") {
       held = held.filter((l) => l.id !== hit?.id)
+      if (hit) removed.push(hit.text)
       continue
     }
     const text =
@@ -610,7 +617,7 @@ export function applyOperations(
       },
     }
   }
-  return { ok: true, lines: held, patched: changed }
+  return { ok: true, lines: held, patched: changed, removed }
 }
 
 /** Why `text` may not be written, or null. */

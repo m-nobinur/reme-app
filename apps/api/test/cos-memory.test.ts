@@ -259,6 +259,7 @@ describe("applying operations", () => {
     expect(done.ok && done.patched).toEqual([
       { before: "Prefers calls after 4pm", after: "Prefers calls after 5pm" },
     ])
+    expect(done.ok && done.removed).toEqual(["Quotes go out on Fridays"])
   })
 
   it("refuses an exact duplicate, whatever its case or spacing", () => {
@@ -768,6 +769,7 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
         outcome: "saved",
         fullness: "91%, 1,449/1,600 chars",
         entry_count: 5,
+        removed: [words("h")],
       })
       expect(await lines()).toHaveLength(5)
       expect(
@@ -808,6 +810,7 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
       const saved = await said(turn, add("Likes short replies"))
       expect(saved).toMatchObject({ outcome: "saved", entry_count: 3 })
       expect(saved).not.toHaveProperty("patched")
+      expect(saved).not.toHaveProperty("removed")
       expect(await lines()).toEqual([
         "Prefers calls after 4pm",
         "Has a van",

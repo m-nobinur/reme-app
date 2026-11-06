@@ -32399,6 +32399,17 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "removed": {
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
                       }
                     },
                     "required": [
@@ -52525,6 +52536,17 @@
                     "after"
                   ],
                   "additionalProperties": false
+                }
+              },
+              "removed": {
+                "minItems": 1,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "pattern": "\\S"
                 }
               }
             },

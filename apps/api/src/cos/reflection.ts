@@ -366,7 +366,7 @@ export function reviewBatch(
   max: number,
   elsewhere: readonly Elsewhere[] = []
 ):
-  | { ok: true; lines: ProfileLine[]; patched: Patched[] }
+  | { ok: true; lines: ProfileLine[]; patched: Patched[]; removed: string[] }
   | { ok: false; refusal: Guarded }
   | { ok: false; full: Full } {
   const why = guardOps(lines, ops, left)

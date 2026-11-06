@@ -258,6 +258,8 @@ export const MemoryOutput = z.discriminatedUnion("outcome", [
       .min(1)
       .max(8)
       .optional(),
+    /** Each entry a remove took out, in full. */
+    removed: z.array(Text(PROFILE_LINE_MAX)).min(1).max(8).optional(),
   }),
   z.strictObject({
     outcome: z.literal("full"),

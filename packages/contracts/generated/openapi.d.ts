@@ -9204,6 +9204,7 @@ export interface components {
                   before: string
                   after: string
                 }[]
+                removed?: string[]
               }
             | {
                 /** @constant */
@@ -14481,6 +14482,7 @@ export interface components {
             before: string
             after: string
           }[]
+          removed?: string[]
         }
       | {
           /** @constant */
