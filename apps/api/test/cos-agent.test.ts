@@ -421,11 +421,16 @@ describe("the CoS's instructions", () => {
 
   describe("on the website's own address and Google", () => {
     it("speak with the why and a benefit in the owner's terms, never the plumbing", () => {
-      expect(INSTRUCTIONS).toMatch(
-        /When you set something up for them, sound like a sharp assistant, never a form: what is happening, why it matters to this business, what happens next and the one thing they can do/
-      )
-      expect(INSTRUCTIONS).toMatch(
-        /Never say DNS, CNAME, record, SSL, certificate, property, sitemap or propagation to them/
+      for (const name of ["web-address", "google-search"]) {
+        expect(skill(name)).toMatch(
+          /When you set something up for them, sound like a sharp assistant, never a form: what is happening, why it matters to this business, what happens next and the one thing they can do/
+        )
+        expect(skill(name)).toMatch(
+          /Never say DNS, CNAME, record, SSL, certificate, property, sitemap or propagation to them/
+        )
+      }
+      expect(skill("web-address")).toMatch(
+        /Write hosts and names plain, with no quote marks\. To offer a skip, say "You can skip this"/
       )
       expect(INSTRUCTIONS).toMatch(
         /Never open with "Good news", "Great" or "Nice work"\./
