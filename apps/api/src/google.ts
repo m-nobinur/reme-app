@@ -209,5 +209,10 @@ export async function connectGoogle(
       },
     }
   }
-  return { url: new URL("/api/google/start", env.WEB_ORIGIN).href }
+  const start = new URL("/api/google/start", env.WEB_ORIGIN)
+  // Plain http only on a host that never leaves the machine (RFC 6761).
+  const local =
+    start.hostname === "localhost" || start.hostname.endsWith(".localhost")
+  if (start.protocol !== "https:" && !local) return { available: false }
+  return { url: start.href }
 }
