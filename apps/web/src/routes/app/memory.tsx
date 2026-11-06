@@ -1,5 +1,5 @@
 import { BrainIcon } from "@phosphor-icons/react"
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router"
+import { createFileRoute, useRouter } from "@tanstack/react-router"
 import {
   type ApprovalGrantSwitch,
   type MemoryReviewAction,
@@ -365,14 +365,6 @@ function Memory() {
           </ol>
         </section>
       ) : null}
-
-      <p className={`mt-8 ${META}`}>
-        Business details are kept on the{" "}
-        <Link className="underline underline-offset-4" to="/app/profile">
-          business page
-        </Link>
-        .
-      </p>
     </>
   )
 }
