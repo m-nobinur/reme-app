@@ -3,7 +3,6 @@ import {
   AuiConfig,
   type DictationAdapter,
   type ThreadMessageLike,
-  type ThreadSuggestion,
   Tools,
   useAui,
   useExternalStoreRuntime,
@@ -167,7 +166,6 @@ function FixtureThread({
   height = "h-[48rem]",
   messages,
   settings,
-  suggestions,
   isDisabled = true,
   isRunning = false,
   isLoading = false,
@@ -190,7 +188,6 @@ function FixtureThread({
   bare?: boolean
   messages: ThreadMessageLike[]
   settings?: Omit<ThreadProps, "components" | "autoFocus">
-  suggestions?: ThreadSuggestion[]
   isDisabled?: boolean
   isRunning?: boolean
   isLoading?: boolean
@@ -209,7 +206,6 @@ function FixtureThread({
     onNew: noop,
     // A card's answer goes nowhere in a fixture, which is not an error.
     onAddToolResult: noop,
-    suggestions,
     adapters: {
       ...(rates ? { feedback: { submit: noop } } : {}),
       ...(dictation ? { dictation } : {}),
@@ -287,13 +283,6 @@ function TrayStates({
   )
 }
 
-/** The composer's surroundings as the owner app sets them: the "+" starters. */
-const SUGGESTIONS: ThreadSuggestion[] = [
-  { prompt: "What changed in the new version?" },
-  { prompt: "What do you need from me?" },
-  { prompt: "What is on my website now?" },
-]
-
 const HEARD = "Please book a clean for Friday morning"
 
 /** A dictation that has heard the start of a sentence and is still listening. */
@@ -321,7 +310,7 @@ function StartDictating() {
 }
 
 /** More than a phone's width holds, as the owner's follow-ups can be. */
-const LONG_SUGGESTIONS: ThreadSuggestion[] = [
+const LONG_SUGGESTIONS = [
   { prompt: "Draft three onboarding prompts" },
   { prompt: "Turn this into a checklist" },
   { prompt: "Write copy for the welcome screen" },
@@ -2938,7 +2927,6 @@ function ConversationSample({ stored }: { stored?: string }) {
           briefing:
             "Your website is live. Your latest changes are ready to publish.",
         }}
-        suggestions={SUGGESTIONS}
       />
     </WorkspaceShell>
   )
@@ -2987,6 +2975,84 @@ const READY = {
   preview: { url: "https://preview.example.invalid/" },
   onApprove: noop,
   onMakeChanges: noop,
+}
+
+/** A question as the stack shows it. */
+const questionRow = (id: string, title: string) => ({
+  id,
+  content: (
+    <UpdateRow
+      action={
+        <Button size="sm" variant="outline">
+          Answer
+        </Button>
+      }
+      icon={<UpdateKindIcon kind="question" />}
+      meta="Sam asked"
+      title={title}
+    />
+  ),
+})
+
+/** A new chat's six updates, most pressing first. */
+const NEW_CHAT_UPDATES: Update[] = [
+  {
+    id: "site",
+    content: (
+      <SiteReady
+        meta="Not published · Today, 4:05 pm"
+        onApprove={noop}
+        onMakeChanges={noop}
+        pictures={{
+          laptop: KITCHEN,
+          "laptop-2": KITCHEN,
+          phone: KITCHEN,
+          icon: ICON,
+        }}
+        preview="loading"
+        row
+        title="Brightclean website"
+      />
+    ),
+  },
+  questionRow("areas", "Which areas do you cover?"),
+  questionRow("hours", "Do you work on Saturdays?"),
+  questionRow("prices", "What do you charge for an end of tenancy clean?"),
+  {
+    id: "reminder",
+    content: (
+      <UpdateRow
+        icon={<UpdateKindIcon kind="reminder" />}
+        meta="Reminder"
+        title="Call the window supplier"
+      />
+    ),
+  },
+  questionRow("photos", "Can you send photos of your team?"),
+]
+
+/** A new chat with its updates under the composer; `open` spreads them as a tap does. */
+function NewChatDeck({ open = false }: { open?: boolean }) {
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    box.current
+      ?.querySelector('[data-slot="update-deck"]')
+      ?.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" })
+      )
+  }, [open])
+  return (
+    <div className="contents" ref={box}>
+      <FixtureThread
+        messages={[]}
+        settings={{
+          briefing: "Your website is ready to go live.",
+          updates: <UpdateDeck updates={NEW_CHAT_UPDATES} />,
+        }}
+      />
+    </div>
+  )
 }
 
 /** The journey's row in the update stack, as the app draws it. */
@@ -3450,70 +3516,15 @@ const assistantCatalog = [
       ),
     })
   ),
-  // A new chat's updates: the site to publish, a question and a reminder,
-  // one in front with the other two as edges under it, each a row of its own.
+  // A new chat's updates, under the composer: the site to publish in front,
+  // questions and reminders behind it as edges.
   ...(["UpdateDeck", "UpdateRow", "UpdateKindIcon"] as const).map((name) => ({
     name,
-    render: () => (
-      <FixtureThread
-        height="h-[34rem]"
-        messages={[]}
-        settings={{
-          briefing: "Your website is ready to go live.",
-          updates: (
-            <UpdateDeck
-              updates={[
-                {
-                  id: "site",
-                  content: (
-                    <SiteReady
-                      meta="Not published · Today, 4:05 pm"
-                      onApprove={noop}
-                      onMakeChanges={noop}
-                      pictures={{
-                        laptop: KITCHEN,
-                        "laptop-2": KITCHEN,
-                        phone: KITCHEN,
-                        icon: ICON,
-                      }}
-                      preview="loading"
-                      row
-                      title="Brightclean website"
-                    />
-                  ),
-                },
-                {
-                  id: "question",
-                  content: (
-                    <UpdateRow
-                      action={
-                        <Button size="sm" variant="outline">
-                          Answer
-                        </Button>
-                      }
-                      icon={<UpdateKindIcon kind="question" />}
-                      meta="Sam asked"
-                      title="Which areas do you cover?"
-                    />
-                  ),
-                },
-                {
-                  id: "reminder",
-                  content: (
-                    <UpdateRow
-                      icon={<UpdateKindIcon kind="reminder" />}
-                      meta="Reminder"
-                      title="Call the window supplier"
-                    />
-                  ),
-                },
-              ]}
-            />
-          ),
-        }}
-      />
-    ),
+    render: () => <NewChatDeck />,
   })),
+  // The same stack spread out, as a tap leaves it: four cards in view, the
+  // rest scrolling inside it.
+  { name: "UpdateDeck open", render: () => <NewChatDeck open /> },
   {
     name: "RequestChange",
     render: () => (
@@ -3803,15 +3814,15 @@ const assistantCatalog = [
     ),
   },
   {
-    // The new chat's suggestions on a phone: one row, fading at its right edge.
+    // The new chat on a phone, its mic ready: tap it, or hold Space in the field.
     name: "ThreadEmptyPhone",
     render: () => (
       <div className="w-[390px]">
         <OwnerThread
+          dictation={LISTENING}
           height="h-[32rem]"
           isDisabled={false}
           messages={[]}
-          suggestions={LONG_SUGGESTIONS}
         />
       </div>
     ),
@@ -3831,7 +3842,6 @@ const assistantCatalog = [
           briefing:
             "Your website is live. Your latest changes are ready to publish.",
         }}
-        suggestions={SUGGESTIONS}
       />
     ),
   },
@@ -3892,7 +3902,7 @@ const assistantCatalog = [
   },
   { name: "Conversation", render: () => <ConversationSample /> },
   // A stored conversation with nothing in it yet, as onboarding opens: the
-  // same welcome and suggestions, composer in the middle.
+  // same welcome, composer in the middle.
   {
     name: "Conversation stored and empty",
     render: () => <ConversationSample stored="stored-1" />,

@@ -101,7 +101,7 @@ test.describe("with reduced motion", () => {
   }
 })
 
-test("the empty state opens on the briefing and what to ask", async ({
+test("the empty state opens on the briefing, with no chips above the composer", async ({
   page,
 }) => {
   await open(page, "ThreadEmpty")
@@ -112,48 +112,22 @@ test("the empty state opens on the briefing and what to ask", async ({
     "Your website is live. Your latest changes are ready to publish."
   )
   await expect(input(page)).toHaveAttribute("placeholder", "Ask Reme anything…")
-  await expect(page.locator(".aui-thread-welcome-suggestion")).toHaveText([
-    "What changed in the new version?",
-    "What do you need from me?",
-    "What is on my website now?",
-  ])
-  // One row of chips on a single line, above the composer.
-  const composer = await page
-    .locator('[data-slot="aui_composer-shell"]')
-    .boundingBox()
-  const chips = await page
-    .locator(".aui-thread-welcome-suggestion")
-    .evaluateAll((nodes) =>
-      nodes.map((node) => {
-        const box = node.getBoundingClientRect()
-        return { x: box.x, y: box.y, bottom: box.bottom }
-      })
-    )
-  expect(chips[0]?.bottom).toBeLessThan(composer?.y ?? 0)
-  for (const [index, chip] of chips.entries()) {
-    expect(chip.y).toBe(chips[0]?.y)
-    if (index > 0) expect(chip.x).toBeGreaterThan(chips[index - 1]?.x ?? 0)
-  }
+  await expect(page.locator('[data-slot="chip-row"]')).toHaveCount(0)
 })
 
-test("on a phone the suggestions scroll sideways and fade at the edge", async ({
+test("on a phone a row of chips scrolls sideways and fades at the edge", async ({
   page,
 }) => {
-  await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+  await open(page, "ChipRow", WIDTHS.phone)
   const row = page.locator('[data-slot="chip-row"]')
+  await row.evaluate((node) => node.scrollTo({ left: 0 }))
   const last = page.getByRole("button", {
     name: "Summarise this week's enquiries",
   })
   await expect(row).toHaveAttribute("data-fade-end", "true")
   await expect(row).not.toHaveAttribute("data-fade-start")
-  // The row scrolls; the thread around it never does.
   expect(
     await row.evaluate((node) => node.scrollWidth > node.clientWidth)
-  ).toBe(true)
-  expect(
-    await page
-      .locator('[data-slot="aui_thread-viewport"]')
-      .evaluate((node) => node.scrollWidth <= node.clientWidth)
   ).toBe(true)
   // Tab walks the row: the last chip takes the focus and scrolls into view.
   await page
@@ -208,6 +182,88 @@ test("a dictation that could not start says so under the field", async ({
   ).toBeVisible()
 })
 
+/** Hold Space in the composer to dictate, with the mic's adapter in the fixture. */
+const HEARD = "Please book a clean for Friday morning"
+const dictate = (page: Page) =>
+  page.getByRole("button", { name: "Dictate", exact: true })
+const stopDictating = (page: Page) =>
+  page.getByRole("button", { name: "Stop dictating" })
+/** Longer than the hold that starts dictation, with room to spare. */
+const PAST_HOLD = 700
+
+test.describe("hold Space to dictate, the microphone allowed", () => {
+  test.use({ permissions: ["microphone"] })
+
+  test("holding Space starts dictation and letting go stops it", async ({
+    page,
+  }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).focus()
+    await page.keyboard.down("Space")
+    await expect(stopDictating(page)).toBeVisible()
+    await expect(input(page)).toHaveValue(HEARD)
+    await page.keyboard.up("Space")
+    await expect(dictate(page)).toBeVisible()
+    // The held key typed nothing of its own.
+    await expect(input(page)).toHaveValue(HEARD)
+  })
+
+  test("a short press types a space", async ({ page }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).focus()
+    await page.keyboard.press("Space")
+    await expect(input(page)).toHaveValue(" ")
+    await page.waitForTimeout(PAST_HOLD)
+    await expect(dictate(page)).toBeVisible()
+  })
+
+  test("Space held in the middle of a word types as before", async ({
+    page,
+  }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).fill("Hello")
+    await page.keyboard.down("Space")
+    await page.waitForTimeout(PAST_HOLD)
+    await page.keyboard.up("Space")
+    await expect(dictate(page)).toBeVisible()
+    await expect(input(page)).toHaveValue("Hello ")
+  })
+
+  test("Space held while an input method composes is left to it", async ({
+    page,
+  }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).focus()
+    await input(page).dispatchEvent("keydown", {
+      key: " ",
+      code: "Space",
+      isComposing: true,
+    })
+    await page.waitForTimeout(PAST_HOLD)
+    await expect(dictate(page)).toBeVisible()
+  })
+
+  test("the mic's tooltip names the shortcut", async ({ page }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await dictate(page).hover()
+    await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+      "Dictate, or hold Space to talk"
+    )
+  })
+})
+
+test("before the microphone is allowed, holding Space only types", async ({
+  page,
+}) => {
+  await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+  await input(page).focus()
+  await page.keyboard.down("Space")
+  await page.waitForTimeout(PAST_HOLD)
+  await page.keyboard.up("Space")
+  await expect(dictate(page)).toBeVisible()
+  await expect(input(page)).toHaveValue(" ")
+})
+
 test("with no notice the composer has no gap for one", async ({ page }) => {
   await open(page, "ThreadEmpty")
   await expect(page.locator('[data-slot="aui_dictation-notice"]')).toBeHidden()
@@ -216,7 +272,6 @@ test("with no notice the composer has no gap for one", async ({ page }) => {
 test("with nothing read, the empty state has no line", async ({ page }) => {
   await open(page, "ThreadEmptyUnread")
   await expect(page.locator('[data-slot="aui_thread-briefing"]')).toHaveCount(0)
-  await expect(page.locator(".aui-thread-welcome-suggestion")).toHaveCount(0)
 })
 
 test("a quick action puts its sentence in the composer, focused", async ({

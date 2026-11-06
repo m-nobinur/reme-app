@@ -1,11 +1,6 @@
 import { useChat } from "@ai-sdk/react"
 import { useAISDKRuntime } from "@assistant-ui/ai-sdk"
-import {
-  type FeedbackAdapter,
-  type ThreadSuggestion,
-  useAui,
-  useAuiState,
-} from "@assistant-ui/react"
+import { type FeedbackAdapter, useAui, useAuiState } from "@assistant-ui/react"
 import { CARD_ANSWERED, type ChatRequest } from "@workspace/contracts"
 import {
   clearOnboardingStatus,
@@ -62,7 +57,6 @@ function typedText(message: unknown): string {
 
 export function useConversationRuntime({
   onFinish,
-  suggestions,
   intent,
   onIntentSent,
   tail,
@@ -72,7 +66,6 @@ export function useConversationRuntime({
   onFinish: () => void
   /** Reads the panel's workspace now: a turn has written facts it shows. */
   refresh?: () => void
-  suggestions: ThreadSuggestion[]
   /**
    * The composer's mode, read when the owner sends: that send carries it
    * and `onIntentSent` ends it. A ref, since this hook renders apart from
@@ -354,7 +347,6 @@ export function useConversationRuntime({
       // turns, so two assistant rows in a row are never one reply: a message
       // the assistant posted on its own is a message of its own.
       joinStrategy: "none",
-      suggestions,
       adapters: { feedback, dictation },
     }
   )

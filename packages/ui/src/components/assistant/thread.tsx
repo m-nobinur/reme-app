@@ -10,7 +10,6 @@ import {
   MessagePartPrimitive,
   MessagePrimitive,
   type PartState,
-  SuggestionPrimitive,
   TextMessagePartProvider,
   ThreadPrimitive,
   type ToolCallMessagePartComponent,
@@ -42,7 +41,6 @@ import {
   waitsOnRecap,
   waitsToSkip,
 } from "@workspace/ui/components/assistant/ask-open"
-import { ChipRow } from "@workspace/ui/components/assistant/chip-row"
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
 import { DecisionPills } from "@workspace/ui/components/assistant/decision-pills"
 import { DesignReply } from "@workspace/ui/components/assistant/design-reply"
@@ -104,6 +102,8 @@ import {
   createContext,
   type FC,
   type PropsWithChildren,
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type RefObject,
   useContext,
@@ -171,8 +171,8 @@ export type ThreadProps = {
   components?: ThreadComponents | undefined
   /**
    * The id of a stored conversation, at its own address. It is never a new
-   * chat: while its history loads it shows a skeleton, never the welcome or
-   * suggestions, and nothing sends until the thread is that conversation.
+   * chat: while its history loads it shows a skeleton, never the welcome,
+   * and nothing sends until the thread is that conversation.
    * Once loaded and still empty it shows the welcome, like a new chat.
    */
   stored?: string | undefined
@@ -336,7 +336,7 @@ export const Thread: FC<ThreadProps> = ({
   lastShown,
 }) => {
   // A stored conversation with nothing in it is as empty as a new chat, once
-  // its history is in: the same welcome and suggestions, with the composer in
+  // its history is in: the same welcome, with the composer in
   // the middle. Until then it is loading, and the held flag keeps the render
   // in between from showing the welcome.
   const loadingStored = useAuiState((s) =>
@@ -850,9 +850,6 @@ const ThreadRoot: FC<{
                     <SkipThisOne />
                     <RecapReplies />
                     <LatestChoices />
-                    <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
-                      <ThreadSuggestions />
-                    </AuiIf>
                     {/* A stack that slid away leaves no gap behind it. */}
                     <div
                       className="empty:hidden has-[>[data-slot=update-stack][data-away]]:-mb-2 motion-safe:transition-[margin] motion-safe:duration-enter motion-safe:ease-standard"
@@ -1181,30 +1178,6 @@ const RecapReplies: FC = () => {
 const LatestChoices: FC = () => (useSendable() ? <DecisionPills /> : null)
 
 /** What to ask, as one row of chips above the composer; a press sends it. */
-const ThreadSuggestions: FC = () => (
-  <AuiIf condition={(s) => s.thread.suggestions.length > 0}>
-    <ChipRow
-      aria-label="Suggestions"
-      className="aui-thread-welcome-suggestions"
-      role="group"
-    >
-      <ThreadPrimitive.Suggestions>
-        {() => <ThreadSuggestionItem />}
-      </ThreadPrimitive.Suggestions>
-    </ChipRow>
-  </AuiIf>
-)
-
-const ThreadSuggestionItem: FC = () => (
-  <SuggestionPrimitive.Trigger
-    send
-    render={<ReplyPill className="aui-thread-welcome-suggestion" />}
-  >
-    <SuggestionPrimitive.Title />
-    <SuggestionPrimitive.Description className="ms-1 empty:hidden" />
-  </SuggestionPrimitive.Trigger>
-)
-
 /**
  * The composer. `expanded` is the new chat's: the field above, and the plus and
  * send under it. Once there is a conversation it is one compact row.
@@ -1244,6 +1217,7 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
     if (mode) input.current?.focus()
   }, [mode, input])
   useTypeToComposer(input)
+  const hold = useHoldToDictate()
   return (
     <ComposerPrimitive.Root
       className={cn(
@@ -1289,7 +1263,10 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
               aui.thread().getState().isRunning
             )
               e.preventDefault()
+            hold.onKeyDown(e)
           }}
+          onKeyUp={hold.onKeyUp}
+          onBlur={hold.onBlur}
         />
         <ComposerSend expanded={expanded} />
       </div>
@@ -1390,18 +1367,102 @@ function useTypeToComposer(input: RefObject<HTMLTextAreaElement | null>) {
       // fires the input event React reads.
       event.preventDefault()
       field.focus()
-      if (document.execCommand?.("insertText", false, event.key)) return
-      field.setRangeText(
-        event.key,
-        field.selectionStart,
-        field.selectionEnd,
-        "end"
-      )
-      field.dispatchEvent(new Event("input", { bubbles: true }))
+      typeInto(field, event.key)
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
   }, [input])
+}
+
+/** Types `text` at the caret: insertText keeps the editor's undo and fires the input event React reads. */
+function typeInto(field: HTMLTextAreaElement, text: string) {
+  if (document.execCommand?.("insertText", false, text)) return
+  field.setRangeText(text, field.selectionStart, field.selectionEnd, "end")
+  field.dispatchEvent(new Event("input", { bubbles: true }))
+}
+
+/** How long Space is held in the composer before it dictates instead of typing. */
+const HOLD_TO_DICTATE_MS = 300
+
+/** Whether the browser has already granted the microphone; false where it cannot say. */
+function useMicrophoneGranted() {
+  const [granted, setGranted] = useState(false)
+  useEffect(() => {
+    let status: PermissionStatus | undefined
+    let gone = false
+    const read = () => setGranted(status?.state === "granted")
+    navigator.permissions?.query({ name: "microphone" }).then(
+      (found) => {
+        if (gone) return
+        status = found
+        read()
+        found.addEventListener("change", read)
+      },
+      () => undefined
+    )
+    return () => {
+      gone = true
+      status?.removeEventListener("change", read)
+    }
+  }, [])
+  return granted
+}
+
+/**
+ * Hold Space to dictate. In the composer, with the caret at the start of a
+ * word and nothing selected, Space held past `HOLD_TO_DICTATE_MS` starts the
+ * composer's dictation, and letting go stops it as the Stop button does, so
+ * the words are tidied the same way. A shorter press types its space as it
+ * is let go. Only once the browser has granted the microphone, so a first
+ * use goes through the button and its prompt, and never while an input
+ * method is composing (after hermes-agent apps/desktop/src/lib/keybinds/combo.ts, MIT).
+ */
+function useHoldToDictate() {
+  const aui = useAui()
+  const granted = useMicrophoneGranted()
+  const held = useRef<"pending" | "dictating" | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const end = (field: HTMLTextAreaElement, typed: boolean) => {
+    clearTimeout(timer.current)
+    const was = held.current
+    held.current = null
+    if (was === "dictating") aui.composer().stopDictation()
+    else if (was === "pending" && typed) typeInto(field, " ")
+  }
+  return {
+    onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key !== " ") return
+      if (held.current) return event.preventDefault()
+      const field = event.currentTarget
+      const before = field.value[field.selectionStart - 1]
+      if (
+        !granted ||
+        event.repeat ||
+        event.nativeEvent.isComposing ||
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        field.selectionStart !== field.selectionEnd ||
+        (before !== undefined && !/\s/.test(before)) ||
+        !aui.thread().getState().capabilities.dictation ||
+        aui.composer().getState().dictation != null
+      )
+        return
+      event.preventDefault()
+      held.current = "pending"
+      timer.current = setTimeout(() => {
+        held.current = "dictating"
+        aui.composer().startDictation()
+      }, HOLD_TO_DICTATE_MS)
+    },
+    onKeyUp: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === " ") end(event.currentTarget, true)
+    },
+    onBlur: (event: ReactFocusEvent<HTMLTextAreaElement>) =>
+      end(event.currentTarget, false),
+  }
 }
 
 /**
@@ -1442,7 +1503,8 @@ const ComposerMode: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
 /**
  * Voice dictation: the words land in the field as they are recognised, each
  * partial replacing the last, and the owner can type among them. Tap again to
- * stop. Without a dictation adapter the mic is disabled.
+ * stop, or hold Space in the field instead (`useHoldToDictate`). Without a
+ * dictation adapter the mic is disabled.
  */
 const ComposerDictate: FC = () => {
   const sendable = useSendable()
@@ -1458,7 +1520,7 @@ const ComposerDictate: FC = () => {
               className={cn(button, "text-muted-foreground")}
               side="bottom"
               size="icon"
-              tooltip="Dictate"
+              tooltip="Dictate, or hold Space to talk"
               type="button"
               variant="ghost"
             />
