@@ -28,6 +28,7 @@ import {
   contextOf,
   cosPrefix,
   LIMITS,
+  memorySnapshot,
   newRunState,
   personaOf,
   reservation,
@@ -179,13 +180,14 @@ export async function continueTurn(
     if (state.frozen) return "frozen" as const
     if (!(await withinCap(db, job.orgId, reserved))) return "over_cap" as const
     const { mode } = CosContext.parse(continued.payload)
+    const persona = personaOf(facts, profile, working)
     const context = contextOf(
       mode,
       workspace,
       found.zone,
       new Date(),
       undefined,
-      personaOf(facts, profile, working),
+      persona,
       false,
       null,
       facts,
@@ -207,6 +209,7 @@ export async function continueTurn(
         active_tools: activeTools(mode),
         text: context.text,
         reserved_usd: reserved,
+        ...(await memorySnapshot(db, sessionId, persona)),
       },
       contextTaint: context.taint,
     })

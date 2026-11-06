@@ -4,6 +4,7 @@ import { expect, it } from "vitest"
 import {
   CACHED_INSTRUCTIONS,
   INSTRUCTIONS,
+  instructionsFor,
   withHistoryMarker,
 } from "../src/cos/agent.ts"
 
@@ -88,4 +89,35 @@ it("marks the last user message before the context note, inside its text part", 
     { type: "text", text: "second", cache_control: { type: "ephemeral" } },
   ])
   expect(withHistoryMarker(messages, "not sent")).toEqual(messages)
+})
+
+it("sends the memory snapshot as a second system message with its own marker, three markers in all", async () => {
+  const { model, sent } = recorded()
+  const text = (t: string) => [{ type: "text" as const, text: t }]
+
+  await generateText({
+    model,
+    instructions: instructionsFor("OWNER PROFILE"),
+    messages: withHistoryMarker(
+      [
+        { role: "user", content: text("first") },
+        { role: "assistant", content: text("reply one") },
+        { role: "user", content: text("Mode: ask.") },
+        { role: "user", content: text("second") },
+      ],
+      "Mode: ask."
+    ),
+  })
+
+  const body = sent[0]?.messages ?? []
+  const block = (t: string) => ({
+    role: "system",
+    content: [{ type: "text", text: t, cache_control: { type: "ephemeral" } }],
+  })
+  expect(body.slice(0, 2)).toEqual([
+    block(INSTRUCTIONS),
+    block("OWNER PROFILE"),
+  ])
+  // Anthropic allows four breakpoints; OpenRouter reads only the last for Gemini.
+  expect(JSON.stringify(body).match(/cache_control/g)).toHaveLength(3)
 })

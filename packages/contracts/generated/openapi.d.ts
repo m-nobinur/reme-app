@@ -6157,6 +6157,7 @@ export interface components {
       )[]
       text: string
       reserved_usd: number
+      memory?: string
     }
     CosEvent: {
       /** @enum {string} */

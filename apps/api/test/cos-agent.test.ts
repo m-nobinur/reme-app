@@ -76,6 +76,8 @@ import {
   APPROVAL_TTL_MS,
   activeTools,
   binds,
+  CACHE_LIFE_MS,
+  CACHED_INSTRUCTIONS,
   type CosAgent,
   callKey,
   callRepeated,
@@ -1644,7 +1646,11 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const profileIn = (sent: CallOptions[]) => {
       const text = (sent.at(-1)?.prompt ?? [])
         .flatMap((m) =>
-          Array.isArray(m.content) ? (m.content as object[]) : []
+          typeof m.content === "string"
+            ? [{ text: m.content }]
+            : Array.isArray(m.content)
+              ? (m.content as object[])
+              : []
         )
         .map((part) => ("text" in part ? String(part.text) : ""))
         .join("\n")
@@ -1652,6 +1658,10 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         text
       )?.[1]
     }
+
+    /** The system blocks a turn's last call sent. */
+    const systemOf = (sent: CallOptions[]) =>
+      (sent.at(-1)?.prompt ?? []).filter((m) => m.role === "system")
 
     /** The owner tells the CoS something, and the model saves it with `memory`. */
     async function tell(
@@ -1748,7 +1758,11 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       expect(refused.sent).toHaveLength(2)
     })
 
-    it("recalls a preference twenty turns and one new conversation later, and a removal through the tool takes the line out", async () => {
+    it("freezes memory per conversation: a save reaches the next conversation, and the same one past the cache's life", async () => {
+      const profile = (...lines: string[]) => {
+        const used = lines.join("\n").length
+        return `OWNER PROFILE (who the owner is) [${Math.round((used / 1_600) * 100)}%, ${used}/1,600 chars]\n${lines.join("\n")}\n`
+      }
       const first = await conversation(me)
       const told = await tell(me, first, "I prefer calls after 4pm.", {
         action: "add",
@@ -1768,8 +1782,12 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
           model: last.model,
         })
       }
-      expect(profileIn((last as { sent: CallOptions[] }).sent)).toBe(
-        "OWNER PROFILE (who the owner is) [1%, 23/1,600 chars]\nPrefers calls after 4pm\n"
+      const sent = (last as { sent: CallOptions[] }).sent
+      // Frozen at the first turn, before the save: the model has the save from its history.
+      expect(profileIn(sent)).toBeUndefined()
+      expect(systemOf(sent)[0]?.content).toBe(CACHED_INSTRUCTIONS.content)
+      expect(JSON.stringify(sent.at(-1)?.prompt)).toContain(
+        "Prefers calls after 4pm"
       )
       expect(
         (await turnsOf(first)).every((t) => t.outcome === "answered")
@@ -1778,32 +1796,49 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       const second = await conversation(me)
       const fresh = scripted(said("Hello."))
       await turn(me, typed(second, "Hi", "ask"), { model: fresh.model })
-      expect(profileIn(fresh.sent)).toBe(
-        "OWNER PROFILE (who the owner is) [1%, 23/1,600 chars]\nPrefers calls after 4pm\n"
-      )
+      expect(profileIn(fresh.sent)).toBe(profile("Prefers calls after 4pm"))
+      expect(systemOf(fresh.sent)[0]?.content).toBe(CACHED_INSTRUCTIONS.content)
 
-      // A second line, then the owner takes it back through the assistant.
+      // A save lands in the live rows; the conversation keeps its snapshot byte for byte.
       await tell(me, second, "Quotes go out on Fridays.", {
         action: "add",
         content: "Quotes go out on Fridays",
       })
+      const page = async () =>
+        (
+          (await (
+            await me.call(stubOrchestrator(), "/memory", { method: "GET" })
+          ).json()) as { lines: { text: string }[] }
+        ).lines.map((l) => l.text)
+      expect(await page()).toEqual([
+        "Prefers calls after 4pm",
+        "Quotes go out on Fridays",
+      ])
+      const warm = scripted(said("Fine."))
+      await turn(me, typed(second, "And now?", "ask"), { model: warm.model })
+      expect(systemOf(warm.sent)).toEqual(systemOf(fresh.sent))
+
+      // Past the shortest cache's life, the next turn takes a fresh snapshot.
+      vi.useFakeTimers({
+        toFake: ["Date"],
+        now: Date.now() + CACHE_LIFE_MS + 60_000,
+      })
+      const later = scripted(said("Back again."))
+      try {
+        await turn(me, typed(second, "Morning", "ask"), { model: later.model })
+      } finally {
+        vi.useRealTimers()
+      }
+      expect(profileIn(later.sent)).toBe(
+        profile("Prefers calls after 4pm", "Quotes go out on Fridays")
+      )
+
+      // The owner takes a line back through the assistant, never the page.
       await tell(me, second, "Scrap the Friday quotes line.", {
         action: "remove",
         old_text: "Quotes go out on Fridays",
       })
-      const view = await me.call(stubOrchestrator(), "/memory", {
-        method: "GET",
-      })
-      expect(
-        ((await view.json()) as { lines: { text: string }[] }).lines.map(
-          (l) => l.text
-        )
-      ).toEqual(["Prefers calls after 4pm"])
-      const again = scripted(said("Fine."))
-      await turn(me, typed(second, "And now?", "ask"), { model: again.model })
-      expect(profileIn(again.sent)).toBe(
-        "OWNER PROFILE (who the owner is) [1%, 23/1,600 chars]\nPrefers calls after 4pm\n"
-      )
+      expect(await page()).toEqual(["Prefers calls after 4pm"])
     })
 
     it("refuses a line that reads as an attack, and the model is told why", async () => {

@@ -1077,8 +1077,8 @@ export const CosPrefix = z.strictObject({
 
 /**
  * The `cos.context` payload, a turn's first. Labelled `untrusted_input` when
- * `text` holds owner text and `inferred` when it holds another agent's, such
- * as a question's `why`; both when it holds both.
+ * `text` or `memory` holds owner text and `inferred` when it holds another
+ * agent's, such as a question's `why`; both when it holds both.
  */
 export const CosContext = z.strictObject({
   turn_id: Ulid,
@@ -1088,6 +1088,12 @@ export const CosContext = z.strictObject({
   active_tools: z.array(LoggedToolName),
   text: z.string().min(1),
   reserved_usd: Usd,
+  /**
+   * The owner profile and working notes as this turn froze them, empty when
+   * both were: every call of the conversation sends the latest one logged,
+   * byte for byte, until a turn takes a fresh one. Absent on the other turns.
+   */
+  memory: z.string().optional(),
 })
 
 const Content = ConversationMessage.shape.content.shape

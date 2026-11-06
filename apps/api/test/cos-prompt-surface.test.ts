@@ -58,17 +58,26 @@ describe("the CoS's prompt surface", () => {
     }
   })
 
-  it("renders the core byte for byte the same for two orgs and two turns", () => {
-    const sent = (orgId: string, turnId: string) =>
+  it("renders the core byte for byte the same for two orgs and two turns, with or without a memory snapshot", () => {
+    const sent = (orgId: string, turnId: string, memory?: string) =>
       (
         cosAgent(
-          { turn: { orgId, turnId, sessionId: turnId } } as AgentTurn,
+          {
+            turn: { orgId, turnId, sessionId: turnId },
+            log:
+              memory === undefined
+                ? []
+                : [{ seq: 0, type: "cos.context", payload: { memory } }],
+          } as unknown as AgentTurn,
           {} as LanguageModel,
           "act"
-        ) as unknown as { settings: { instructions: { content: string } } }
-      ).settings.instructions.content
-    const first = sent("00000000-0000-4000-8000-00000000000a", "t1")
+        ) as unknown as { settings: { instructions: { content: string }[] } }
+      ).settings.instructions.map((m) => m.content)
+    const [first, ...rest] = sent("00000000-0000-4000-8000-00000000000a", "t1")
     expect(first).toBe(INSTRUCTIONS)
-    expect(sent("00000000-0000-4000-8000-00000000000b", "t2")).toBe(first)
+    expect(rest).toEqual([])
+    expect(
+      sent("00000000-0000-4000-8000-00000000000b", "t2", "OWNER PROFILE")
+    ).toEqual([first, "OWNER PROFILE"])
   })
 })

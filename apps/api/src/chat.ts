@@ -74,6 +74,7 @@ import {
   cosPrefix,
   FALLBACK_MODEL,
   LIMITS,
+  memorySnapshot,
   messageTaint,
   NotRun,
   newRunState,
@@ -1190,6 +1191,7 @@ export async function chat(
         notes: working,
       } = loaded ?? (await loadWorkspace(tools))
       const granted = await grantedKinds(db)
+      const persona = personaOf(facts, profile, working)
       const notes = await turnNotes(
         db,
         id,
@@ -1207,7 +1209,7 @@ export async function chat(
         zone ?? null,
         new Date(),
         turn.kind === "message" ? parsed.data.intent : undefined,
-        personaOf(facts, profile, working),
+        persona,
         turn.kind === "message" && log.fresh,
         // Not waited for: the prompt's own Google rule holds without Jev's line.
         await Promise.race([google, null]),
@@ -1231,6 +1233,7 @@ export async function chat(
           active_tools: activeTools(mode),
           text: context.text,
           reserved_usd: fallback ? 0 : reserve,
+          ...(await memorySnapshot(db, id, persona)),
         },
         contextTaint: [...new Set([...context.taint, ...notes.taint])],
       })

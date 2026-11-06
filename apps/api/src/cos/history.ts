@@ -111,9 +111,13 @@ export type ContextPolicy = {
  * (`clearedOutputs`), the cap is 128,000 tokens, the head a first summary
  * keeps has its tool output cleared, and the summary names the skills it
  * replaced with Hermes's reload notice.
+ * Version 27 moves the owner profile and the working notes out of the
+ * context into a snapshot the conversation's `cos.context` logs (`memory`),
+ * sent as a system block after the instructions (after Hermes's frozen
+ * memory snapshot).
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "26",
+  version: "27",
   keepLast: 20,
   historyTokens: 128_000,
 }

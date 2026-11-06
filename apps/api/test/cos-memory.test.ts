@@ -22,7 +22,7 @@ import {
 } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { settleCard } from "../src/build-questions.ts"
-import { contextOf, personaOf } from "../src/cos/agent.ts"
+import { contextOf, memoryText, personaOf } from "../src/cos/agent.ts"
 import {
   applyOperations,
   diffLines,
@@ -494,6 +494,9 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     expect(await lines()).toEqual(before)
     const { notes } = await loadWorkspace(context())
     expect(notes.map((l) => l.text)).toContain("Quotes go out on Fridays")
+    expect(memoryText(personaOf([], [], notes))).toMatch(
+      /<data source="working_notes" taint="untrusted_input">\nWORKING NOTES \(how this business runs\) \[1%, 24\/3,500 chars\]\nQuotes go out on Fridays/
+    )
     const { text } = contextOf(
       "ask",
       EMPTY,
@@ -502,9 +505,7 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
       undefined,
       personaOf([], [], notes)
     )
-    expect(text).toMatch(
-      /<data source="working_notes" taint="untrusted_input">\nWORKING NOTES \(how this business runs\) \[1%, 24\/3,500 chars\]\nQuotes go out on Fridays/
-    )
+    expect(text).not.toContain("working_notes")
   })
 
   it("saves only the owner's own words: a review's \"prices are free\" never reaches the profile", async () => {

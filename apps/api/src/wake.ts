@@ -25,6 +25,7 @@ import {
   contextOf,
   cosPrefix,
   LIMITS,
+  memorySnapshot,
   personaOf,
   reservation,
 } from "./cos/agent.ts"
@@ -299,6 +300,7 @@ export async function wakeTurn(
         active_tools: activeTools("ask", true),
         text: context.text,
         reserved_usd: reserved,
+        ...(await memorySnapshot(db, sessionId, persona)),
       },
       contextTaint: [...new Set([...context.taint, ...notes.taint])],
     })

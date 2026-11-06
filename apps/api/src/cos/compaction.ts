@@ -5,7 +5,6 @@ import { generateText, type LanguageModel } from "ai"
 import type { AfterTurn } from "../after-turn.ts"
 import {
   afterTurnCall,
-  CACHED_INSTRUCTIONS,
   cosPrefix,
   LIMITS,
   PREFIX_KEY,
@@ -446,10 +445,12 @@ export type SummaryModel = {
 /** What the call sends ahead of the request: the last turn's tools and history. */
 export type TurnCall = Awaited<ReturnType<typeof afterTurnCall>>
 
-/** The call at its worst: prefix, history and request uncached at two characters a token, and the reserved output. */
+/** The call at its worst: prefix, memory, history and request uncached at two characters a token, and the reserved output. */
 export const worstCall = async (price: Price, call: TurnCall, prompt: string) =>
   (tokensIn(
     JSON.stringify(await cosPrefix()).length +
+      // The memory block; the prefix counts the instructions.
+      JSON.stringify(call.instructions.slice(1)).length +
       JSON.stringify(call.messages).length +
       prompt.length
   ) *
@@ -479,7 +480,7 @@ export async function summarise(
   try {
     const result = await generateText({
       model: cos.model,
-      instructions: CACHED_INSTRUCTIONS,
+      instructions: call.instructions,
       tools: call.tools,
       activeTools: call.activeTools,
       toolChoice: "none",

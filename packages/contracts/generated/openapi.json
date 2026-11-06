@@ -21757,6 +21757,9 @@
           "reserved_usd": {
             "type": "number",
             "minimum": 0
+          },
+          "memory": {
+            "type": "string"
           }
         },
         "required": [

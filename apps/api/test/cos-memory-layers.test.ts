@@ -20,10 +20,18 @@ import { recentSkills } from "../src/chat.ts"
 import {
   BUDGET_WARNING_RATIO,
   budgetLine,
+  CACHE_LIFE_MS,
+  CACHED_INSTRUCTIONS,
+  instructionsFor,
   LAYER_CAPS,
   LIMITS,
   lastStep,
   layersOf,
+  memoryOf,
+  memorySnapshot,
+  memoryText,
+  personaOf,
+  snapshotDue,
   WARN_AT,
 } from "../src/cos/agent.ts"
 import {
@@ -246,20 +254,71 @@ describe("the step budget", () => {
         content: [
           {
             type: "text",
-            text: `Mode: ask.\n<data source="owner_profile" taint="untrusted_input">\n${"p".repeat(400)}\n</data>\nOpen items`,
+            text: `Mode: ask.\nOpen items ${"n".repeat(400)}`,
           },
         ],
       },
       { role: "user", content: [{ type: "text", text: "Hello" }] },
       { role: "assistant", content: [{ type: "text", text: "w".repeat(80) }] },
     ]
-    const got = layersOf(messages, prefix)
+    const got = layersOf(messages, prefix, "p".repeat(400))
     expect(got.core).toBe(100)
     expect(got.skill_views).toBeGreaterThan(200)
     expect(got.history).toBeGreaterThan(100)
-    expect(got.memory).toBeGreaterThan(100)
+    expect(got.memory).toBe(100)
+    expect(got.notes).toBeGreaterThan(100)
     expect(got.message).toBeGreaterThan(0)
     expect(got.steps).toBeGreaterThan(20)
+  })
+})
+
+describe("the memory snapshot", () => {
+  const now = Date.parse(AT)
+  const held = {
+    memory: "OWNER PROFILE",
+    compacted: false,
+    lastCallAt: new Date(now - 60_000),
+  }
+
+  it("is taken at the first turn, after a compaction and past the cache's life, never while the cache is warm", () => {
+    expect(snapshotDue(held, now)).toBe(false)
+    expect(snapshotDue({ ...held, memory: "" }, now)).toBe(false)
+    expect(snapshotDue({ ...held, memory: null }, now)).toBe(true)
+    expect(snapshotDue({ ...held, compacted: true }, now)).toBe(true)
+    expect(snapshotDue({ ...held, lastCallAt: null }, now)).toBe(true)
+    expect(
+      snapshotDue(
+        { ...held, lastCallAt: new Date(now - CACHE_LIFE_MS - 1) },
+        now
+      )
+    ).toBe(true)
+    expect(CACHE_LIFE_MS).toBe(300_000)
+  })
+
+  it("is sent after the unchanged instructions as a block of its own with its own marker", () => {
+    const snapshot = memoryText(
+      personaOf([], [line("Prefers calls after 4pm")])
+    )
+    const [instructions, block, ...rest] = instructionsFor(snapshot)
+    expect(instructions).toBe(CACHED_INSTRUCTIONS)
+    expect(block).toEqual({
+      role: "system",
+      content: snapshot,
+      providerOptions: CACHED_INSTRUCTIONS.providerOptions,
+    })
+    expect(rest).toEqual([])
+    expect(instructionsFor("")).toEqual([CACHED_INSTRUCTIONS])
+  })
+
+  it("reads the latest snapshot the log holds, an empty one included, and keeps it across turns that take none", () => {
+    const context = (snapshot?: string) => ({
+      seq: 0,
+      type: "cos.context",
+      payload: snapshot === undefined ? {} : { memory: snapshot },
+    })
+    expect(memoryOf([])).toBe("")
+    expect(memoryOf([context("first"), context()])).toBe("first")
+    expect(memoryOf([context("first"), context(""), context()])).toBe("")
   })
 })
 
@@ -472,6 +531,37 @@ describe.skipIf(!url)("on a live connection", () => {
     })
     const stale = await kit.withOrg({ orgId: me.orgId }, (db) => memoryView(db))
     expect(stale.skills.notes[0]?.lines).toMatchObject([{ stale: true }])
+  })
+
+  it("snapshots memory at the first turn, keeps it while the cache is warm, and takes a fresh one past its life or after a compaction", async () => {
+    const { id, put } = await session(me, ["Hi"])
+    const persona = personaOf([], [line("Prefers calls after 4pm")])
+    const snapshot = (now?: number) =>
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        memorySnapshot(db, id, persona, now)
+      )
+    const turnId = "01J00000000000000000000010"
+    const first = await snapshot()
+    expect(first).toEqual({ memory: memoryText(persona) })
+    await put("cos.context", {
+      turn_id: turnId,
+      prefix_sha256: "a".repeat(64),
+      context_policy_version: "27",
+      mode: "ask",
+      active_tools: [],
+      text: "Mode: ask.",
+      reserved_usd: 0,
+      ...first,
+    })
+    await put("cos.call", { turn_id: turnId, step: 0, sha256: "b".repeat(64) })
+    expect(await snapshot()).toEqual({})
+    expect(await snapshot(Date.now() + CACHE_LIFE_MS + 60_000)).toEqual(first)
+    await put("cos.compaction", {
+      summary: "Earlier turns.",
+      replaced_range: { from_seq: 0, to_seq: 1 },
+      dropped_refs: [],
+    })
+    expect(await snapshot()).toEqual(first)
   })
 
   it("searches only this org's earlier conversations, best and newest first, never tool results", async () => {
