@@ -1,9 +1,11 @@
 import {
   AssistantRuntimeProvider,
   AuiConfig,
+  type DictationAdapter,
   type ThreadMessageLike,
   type ThreadSuggestion,
   Tools,
+  useAui,
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
 import { CopyIcon, GlobeIcon, GoogleLogoIcon } from "@phosphor-icons/react"
@@ -82,7 +84,13 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
 import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import { BROKEN, designText } from "@workspace/ui/lib/tool-state"
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
+import {
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react"
 import { ICON } from "./panel-entries"
 import {
   INPUT as ASK_DESIGN_INPUT,
@@ -166,8 +174,11 @@ function FixtureThread({
   bare = false,
   rates = false,
   stored,
+  dictation,
   children,
 }: {
+  /** What the mic listens through; without one the mic is disabled. */
+  dictation?: DictationAdapter
   /** Mounted beside the thread, as the app mounts what registers a part's card. */
   children?: ReactNode
   /** The thread is this stored conversation, as at `/app/c/$id`. */
@@ -201,6 +212,7 @@ function FixtureThread({
     suggestions,
     adapters: {
       ...(rates ? { feedback: { submit: noop } } : {}),
+      ...(dictation ? { dictation } : {}),
       ...(stored
         ? {
             threadList: {
@@ -281,6 +293,32 @@ const SUGGESTIONS: ThreadSuggestion[] = [
   { prompt: "What do you need from me?" },
   { prompt: "What is on my website now?" },
 ]
+
+const HEARD = "Please book a clean for Friday morning"
+
+/** A dictation that has heard the start of a sentence and is still listening. */
+const LISTENING: DictationAdapter = {
+  listen: () => ({
+    status: { type: "running" },
+    stop: async () => undefined,
+    cancel: () => undefined,
+    onSpeechStart: () => () => undefined,
+    onSpeechEnd: () => () => undefined,
+    onSpeech: (callback) => {
+      queueMicrotask(() => callback({ transcript: HEARD, isFinal: false }))
+      return () => undefined
+    },
+  }),
+}
+
+/** Starts the dictation as the owner's tap on the mic would. */
+function StartDictating() {
+  const aui = useAui()
+  useEffect(() => {
+    aui.composer().startDictation()
+  }, [aui])
+  return null
+}
 
 /** More than a phone's width holds, as the owner's follow-ups can be. */
 const LONG_SUGGESTIONS: ThreadSuggestion[] = [
@@ -3727,6 +3765,40 @@ const assistantCatalog = [
     render: () => <OwnerThread height="h-[56rem]" messages={CONVERSATION} />,
   },
   { name: "ChipRow", render: () => <ScrolledChips /> },
+  {
+    // On a phone, mid-sentence: the words so far in the field, the mic now a stop.
+    name: "ThreadDictating",
+    render: () => (
+      <div className="w-[390px]">
+        <OwnerThread
+          dictation={LISTENING}
+          height="h-[32rem]"
+          isDisabled={false}
+          messages={DECISION}
+        >
+          <StartDictating />
+        </OwnerThread>
+      </div>
+    ),
+  },
+  {
+    // The mic would not open: a few words under the field, typed text left alone.
+    name: "ThreadDictationNotice",
+    render: () => (
+      <div className="w-[390px]">
+        <OwnerThread
+          dictation={LISTENING}
+          height="h-[32rem]"
+          isDisabled={false}
+          messages={DECISION}
+          settings={{
+            dictationNotice:
+              "Microphone access is off. Allow it in your browser to dictate.",
+          }}
+        />
+      </div>
+    ),
+  },
   {
     // The new chat's suggestions on a phone: one row, fading at its right edge.
     name: "ThreadEmptyPhone",

@@ -334,6 +334,10 @@ export type OwnerDataSource = {
     input: CreateReminderRequest,
     key: string
   ) => Promise<WriteOutcome>
+  /** The address of the api's dictation socket with a fresh ticket on it, or null with no session. */
+  dictationSocket: () => Promise<string | null>
+  /** The dictated words with fillers and false starts gone, or null to leave them as heard. */
+  tidyDictation: (text: string) => Promise<string | null>
   /** The VAPID public key a browser subscribes with, or null where push is off. */
   pushKey: () => Promise<string | null>
   /** Saves this browser for push. Its id, or null when the api refused it. */

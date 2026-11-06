@@ -1,5 +1,6 @@
 import {
   CreateOrgRequest,
+  DICTATION_PATH,
   idempotencyKey,
   QUOTE_PATH,
   REQUEST_FAILED,
@@ -13,6 +14,7 @@ import {
 } from "./account.ts"
 import { type AfterTurn, afterTurnBatch } from "./after-turn.ts"
 import { bridge, type Owner } from "./changes.ts"
+import { dictate } from "./dictation.ts"
 import { stripeWebhook } from "./domain-buy.ts"
 import { certificateWebhook } from "./domain-certificate.ts"
 import { receiveQuote } from "./enquiry.ts"
@@ -286,6 +288,11 @@ async function route(
   // A visitor's quote request from a published website, through the router.
   if (pathname === QUOTE_PATH && method === "POST") {
     return receiveQuote(request, env, kit, env.QUOTE_LIMIT)
+  }
+
+  // A microphone's socket, from the page's ticket: it has no cookie to read.
+  if (pathname === DICTATION_PATH && method === "GET") {
+    return dictate(request, env)
   }
 
   const session = await readSession(request, env)

@@ -16,6 +16,7 @@ import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
 import { useEffect, useRef, useState } from "react"
 import { getConversationMessages, rateMessage } from "@/lib/api/server"
+import { dictation } from "./dictation"
 import { followThread, toUIMessage } from "./history"
 import {
   IN_FLIGHT_MS,
@@ -354,7 +355,7 @@ export function useConversationRuntime({
       // the assistant posted on its own is a message of its own.
       joinStrategy: "none",
       suggestions,
-      adapters: { feedback },
+      adapters: { feedback, dictation },
     }
   )
   // The composer's words, kept in this tab by stored thread, so a reload, a

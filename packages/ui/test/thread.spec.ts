@@ -170,6 +170,49 @@ test("on a phone the suggestions scroll sideways and fade at the edge", async ({
   )
 })
 
+test("dictating puts the words in the field and turns the mic into a stop", async ({
+  page,
+}) => {
+  await open(page, "ThreadDictating", WIDTHS.phone)
+  await expect(input(page)).toHaveValue(
+    "Please book a clean for Friday morning"
+  )
+  await expect(page.getByRole("button", { name: "Dictate" })).toHaveCount(0)
+  const stop = page.getByRole("button", { name: "Stop dictating" })
+  await expect(stop).toBeVisible()
+  // A touch target, and reachable by keyboard.
+  const box = await stop.boundingBox()
+  expect(box?.width).toBeGreaterThanOrEqual(32)
+  await stop.focus()
+  await expect(stop).toBeFocused()
+  await stop.press("Enter")
+  await expect(page.getByRole("button", { name: "Dictate" })).toBeVisible()
+  // What was heard stays for the owner to edit or send.
+  await expect(input(page)).toHaveValue(
+    "Please book a clean for Friday morning"
+  )
+})
+
+test("a dictation that could not start says so under the field", async ({
+  page,
+}) => {
+  await open(page, "ThreadDictationNotice", WIDTHS.phone)
+  const notice = page.locator('[data-slot="aui_dictation-notice"]')
+  await expect(notice).toHaveText(
+    "Microphone access is off. Allow it in your browser to dictate."
+  )
+  await expect(notice).toHaveAttribute("aria-live", "polite")
+  await expect(page.getByRole("button", { name: "Dictate" })).toBeEnabled()
+  await expect(
+    page.getByLabel("Message input").locator("xpath=ancestor::form")
+  ).toBeVisible()
+})
+
+test("with no notice the composer has no gap for one", async ({ page }) => {
+  await open(page, "ThreadEmpty")
+  await expect(page.locator('[data-slot="aui_dictation-notice"]')).toBeHidden()
+})
+
 test("with nothing read, the empty state has no line", async ({ page }) => {
   await open(page, "ThreadEmptyUnread")
   await expect(page.locator('[data-slot="aui_thread-briefing"]')).toHaveCount(0)

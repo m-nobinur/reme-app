@@ -11,6 +11,12 @@ import {
   ConversationHistory,
   ConversationList,
   type CreateReminderRequest,
+  DICTATION_PATH,
+  DICTATION_TICKET_PATH,
+  DICTATION_TIDY_MS,
+  DICTATION_TIDY_PATH,
+  DictationTicket,
+  DictationTidyResult,
   DomainCheckout,
   DomainName,
   DomainPurchaseStatus,
@@ -866,6 +872,37 @@ async function removeCorrection(
   return MemoryView.parse(await response.json())
 }
 
+/**
+ * Where the browser opens a dictation: the api's own host, which the session
+ * cookie does not reach, so the socket carries a ticket the owner's session
+ * just minted.
+ */
+async function dictationSocket(): Promise<string | null> {
+  const response = await call(DICTATION_TICKET_PATH, { method: "POST" })
+  if (!response || response.status === 401 || response.status === 403) {
+    return null
+  }
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for dictation`)
+  }
+  const { ticket } = DictationTicket.parse(await response.json())
+  const socket = new URL(DICTATION_PATH, apiUrl())
+  socket.protocol = socket.protocol === "https:" ? "wss:" : "ws:"
+  socket.searchParams.set("ticket", ticket)
+  return socket.toString()
+}
+
+/** The dictated words tidied, or null to keep them as heard: nothing to tidy, a refusal or a pass that failed. */
+async function tidyDictation(text: string): Promise<string | null> {
+  const response = await call(DICTATION_TIDY_PATH, {
+    method: "POST",
+    body: { text },
+    timeoutMs: DICTATION_TIDY_MS,
+  })
+  if (!response?.ok) return null
+  return DictationTidyResult.parse(await response.json()).text
+}
+
 async function pushKey(): Promise<string | null> {
   const body = await get("/push/config")
   return body === null ? null : PushConfig.parse(body).public_key
@@ -1030,6 +1067,8 @@ export const apiSource: OwnerDataSource = {
   grants,
   setGrant,
   removeCorrection,
+  dictationSocket,
+  tidyDictation,
   pushKey,
   subscribePush,
   unsubscribePush,
