@@ -129,14 +129,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.clock.runFor(200)
     await expect(outgoing).toHaveCount(0)
     if (FRAMES) {
-      const strip = shots
-        .map(
-          (png) => `<img src="data:image/png;base64,${png.toString("base64")}">`
-        )
-        .join("")
-      await page.setContent(
-        `<body style="margin:0;display:flex;flex-direction:column;width:max-content">${strip}</body>`
-      )
+      await page.setContent(strip(shots))
       await page.screenshot({
         fullPage: true,
         path: `${FRAMES}/changing-words-strip-${theme}.png`,
