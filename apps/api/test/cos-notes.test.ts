@@ -219,7 +219,7 @@ describe("the skills code loads", () => {
   const yes = { answer: "yes" as const, waiting: null }
   const no = { answer: "no" as const, waiting: null }
 
-  it("loads on explicit triggers only, never from the owner's words or the workspace", () => {
+  it("loads on explicit triggers, never from the owner's words alone or the workspace", () => {
     expect(skillsDue({ handover: true })).toEqual([
       { name: "web-address", trigger: "handover" },
     ])
@@ -232,11 +232,24 @@ describe("the skills code loads", () => {
     expect(skillsDue({ scheduled: "weekly-review" })).toEqual([
       { name: "weekly-review", trigger: "schedule" },
     ])
-    // Words alone, however close, load nothing: the model views what it needs.
+    // Words alone, however close, load nothing: the model views what it needs,
+    // unless Jev is sure of the one skill they are about.
     expect(skillsDue({ said: "Help me set up my web address" })).toEqual([])
     expect(skillsDue({ said: "Can I get on Google?" })).toEqual([])
     expect(skillsDue({ said: ADDRESS_ASK.no })).toEqual([])
     expect(skillsDue({})).toEqual([])
+  })
+
+  it("loads the skill a typed message is plainly about, after any explicit trigger", () => {
+    expect(
+      skillsDue({ said: "How's the update going?", topic: "builds" })
+    ).toEqual([{ name: "builds", trigger: "topic" }])
+    expect(
+      skillsDue({ intent: "connect_google", topic: "web-address" })
+    ).toEqual([{ name: "google-search", trigger: "connect_google" }])
+    expect(skillsDue({ handover: true, topic: "builds" })).toEqual([
+      { name: "web-address", trigger: "handover" },
+    ])
   })
 
   it("loads the matching part for the address card's answer, only with the card's own reply", () => {

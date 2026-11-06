@@ -372,7 +372,7 @@ export type SkillLoad = { name: string; part?: string; trigger: SkillTrigger }
  * characters. A scheduled run's comes from its skill.
  */
 export const TRIGGER_LINES: Record<
-  Exclude<SkillTrigger, "schedule">,
+  Exclude<SkillTrigger, "schedule" | "topic">,
   string
 > = {
   handover: "Using my domain expertise to set up your address",
@@ -383,11 +383,12 @@ export const TRIGGER_LINES: Record<
 }
 
 /**
- * The skills code loads this turn (plan §3), only on an explicit trigger,
- * matched by what the owner pressed and never by their words: the CoS's
- * first turn after onboarding, a Connect button (`intent`), an answer on
- * the address card as its stored answer and its reply both say, and a
- * scheduled run. Everything else the model views itself.
+ * The skills code loads this turn (plan §3): on an explicit trigger, matched
+ * by what the owner pressed (the CoS's first turn after onboarding, a
+ * Connect button (`intent`), an answer on the address card as its stored
+ * answer and its reply both say, a scheduled run); failing those, the one
+ * skill Jev is sure a typed message is plainly about (`topic`), which saves
+ * the model a step. Everything else the model views itself.
  */
 export function skillsDue({
   handover = false,
@@ -395,6 +396,7 @@ export function skillsDue({
   card = null,
   said = null,
   scheduled = null,
+  topic = null,
 }: {
   handover?: boolean
   intent?: "connect_address" | "connect_google" | null
@@ -402,6 +404,7 @@ export function skillsDue({
   /** The owner's message, compared only with the card's own reply. */
   said?: string | null
   scheduled?: string | null
+  topic?: string | null
 }): SkillLoad[] {
   if (scheduled) return [{ name: scheduled, trigger: "schedule" }]
   if (intent === "connect_google")
@@ -421,7 +424,8 @@ export function skillsDue({
   }
   if (intent === "connect_address")
     return [{ name: "web-address", trigger: "connect_address" }]
-  return handover ? [{ name: "web-address", trigger: "handover" }] : []
+  if (handover) return [{ name: "web-address", trigger: "handover" }]
+  return topic ? [{ name: topic, trigger: "topic" }] : []
 }
 
 /**

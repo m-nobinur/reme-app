@@ -1420,7 +1420,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
 
     it("ends on the Skip branch with a closing line", async () => {
       const fresh = await owner(kit, url as string, "chat-manual")
-      const talk = talker(fresh)
+      const talk = talker(fresh, undefined, {
+        topic: async (said) =>
+          said === "How's the update going?" ? "builds" : null,
+      })
       await fresh.call(stubOrchestrator(), "/facts", {
         method: "POST",
         headers: { "idempotency-key": crypto.randomUUID() },
@@ -1474,6 +1477,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       for (const [message_id, intent, text] of [
         ["u_after_3", "connect_address", "Help me set up my web address"],
         ["u_after_4", "connect_google", "Connect Google to my website"],
+        // A message Jev reads as plainly about one skill loads it by its words.
+        ["u_after_5", undefined, "How's the update going?"],
       ] as const) {
         await talk.send({
           conversation_id: id,
@@ -1517,6 +1522,11 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           trigger: "connect_google",
           status: "Using my SEO skills to connect Google Search",
         },
+        {
+          name: "builds",
+          trigger: "topic",
+          status: "Using my web development experience",
+        },
       ])
       expect(handovers[0]?.payload).toHaveProperty(
         "summary",
@@ -1532,7 +1542,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
               .context_policy_version
           ).startsWith("onboarding-")
       )
-      expect(contexts).toHaveLength(4)
+      expect(contexts).toHaveLength(5)
       for (const c of contexts)
         expect((c.payload as { text: string }).text).toMatch(
           /Open items, from the records[\s\S]*- Web address: not settled/

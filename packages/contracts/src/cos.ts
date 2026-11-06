@@ -1332,7 +1332,7 @@ export const CosEvent = z.strictObject({
 /**
  * What made code load a skill: the owner's first CoS turn after onboarding,
  * a Connect button, an answer on the address card, Connect Search Console,
- * or a scheduled run. Matched by what the owner pressed, never by words.
+ * a scheduled run, or a typed message Jev reads as plainly about one skill.
  */
 export const SkillTrigger = z.enum([
   "handover",
@@ -1341,6 +1341,7 @@ export const SkillTrigger = z.enum([
   "address_no",
   "connect_google",
   "schedule",
+  "topic",
 ])
 
 /**

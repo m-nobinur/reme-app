@@ -48,7 +48,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
-import { procedure } from "@workspace/skills"
+import { procedure, skillsFor } from "@workspace/skills"
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -141,11 +141,13 @@ import {
   withoutProviderData,
 } from "./http.ts"
 import {
+  JEV,
   type JevDecision,
   jev,
   jevApproval,
   jevAsksGoogle,
   jevReading,
+  jevTopic,
   matched,
   readReply,
   type Verdict,
@@ -711,6 +713,11 @@ export type ChatDeps = {
    * OpenRouter when the api holds a key. Tests pass one.
    */
   googleFirst?: ((said: string) => Promise<boolean>) | null
+  /**
+   * The one skill a typed message is plainly about, loaded before the first
+   * step: left out, Jev on OpenRouter when the api holds a key. Tests pass one.
+   */
+  topic?: ((said: string) => Promise<string | null>) | null
 }
 
 /** What a turn is, read before its lock: whether onboarding runs, and the card it waits on. */
@@ -918,6 +925,26 @@ export async function chat(
       ? readingOf(ahead.card && ahead.asked ? ahead.asked : null, turn.text)
       : null
   reading?.catch(() => undefined)
+  const topicOf =
+    deps.topic !== undefined
+      ? deps.topic
+      : env.OPENROUTER_API_KEY
+        ? (said: string) =>
+            jevTopic(
+              env.OPENROUTER_API_KEY as string,
+              said,
+              skillsFor("cos"),
+              (loaded?.workspace.builds.length ?? 0) > 0,
+              fetch,
+              JEV.topicMs
+            )
+        : null
+  // Read beside the turn's start and waited for only when its notes are
+  // written, so most of Jev's time overlaps the turn's own reads.
+  const topic =
+    turn.kind === "message" && topicOf
+      ? topicOf(turn.text).catch(() => null)
+      : Promise.resolve(null)
   // An owner asking for Google is told why the address comes first while no
   // domain of the site's own is live, and gets the button at once when one
   // is; Jev reads the ask here, beside the turn.
@@ -1141,7 +1168,8 @@ export async function chat(
         log.fresh,
         turn.kind === "message" ? turn.text : null,
         null,
-        turn.kind === "message" ? parsed.data.intent : null
+        turn.kind === "message" ? parsed.data.intent : null,
+        await topic
       )
       const context = contextOf(
         mode,
@@ -2074,7 +2102,9 @@ export async function turnNotes(
   /** The skill a schedule started this turn for. */
   scheduled: string | null = null,
   /** The Connect button the owner pressed before this message, if any. */
-  intent: ChatRequest["intent"] | null = null
+  intent: ChatRequest["intent"] | null = null,
+  /** The skill a typed message is plainly about (`jevTopic`), if any. */
+  topic: string | null = null
 ): Promise<{
   lines: string[]
   events: CosEvent[]
@@ -2124,13 +2154,14 @@ export async function turnNotes(
     card,
     said,
     scheduled,
+    topic,
   }).filter(({ name, part }) => !loaded.includes(`${name}/${part ?? ""}`))
   const skills: CosSkill[] = []
   for (const { name, part, trigger } of due) {
     const found = procedure("cos", name)
     if (!found) continue
     const line =
-      trigger === "schedule"
+      trigger === "schedule" || trigger === "topic"
         ? (found.status[0] as string)
         : TRIGGER_LINES[trigger]
     const view = viewOf(
