@@ -1,5 +1,7 @@
 import { ErrorEnvelope, OWNER_BRIDGE_HEADERS } from "@workspace/contracts"
 import {
+  channelLinkCodes,
+  channelLinks,
   eq,
   jobRuns,
   memberships,
@@ -9,6 +11,7 @@ import {
   sql,
   tenancy,
   users,
+  whatsappAccounts,
 } from "@workspace/db"
 import { clearOrgs, type Tx } from "@workspace/db/fixtures/seed"
 import postgres from "postgres"
@@ -295,6 +298,37 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
       await db
         .insert(jobRuns)
         .values({ jobId, orgId, runAt: new Date(0), outcome: "done" })
+      const [self] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.workosUserId, session.workosUserId))
+      const [account] = await db
+        .insert(whatsappAccounts)
+        .values({
+          orgId,
+          wabaId: "1001",
+          phoneNumberId: `${Date.now()}`,
+          displayNumber: "+447700900123",
+          displayName: "Probe",
+          tokenCiphertext: "v1.a.b",
+          source: "dev",
+          status: "active",
+        })
+        .returning({ id: whatsappAccounts.id })
+      await db.insert(channelLinks).values({
+        orgId,
+        userId: self?.id as string,
+        accountId: account?.id as string,
+        externalId: "447700900124",
+        label: "+44 7*** ***124",
+      })
+      await db.insert(channelLinkCodes).values({
+        hash: "A".repeat(43),
+        orgId,
+        userId: self?.id as string,
+        kind: "whatsapp",
+        expiresAt: new Date(Date.now() + 60_000),
+      })
     })
     const workos = fakeWorkos({
       [session.workosOrganizationId]: [session.workosUserId],
@@ -322,6 +356,10 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
       select (select count(*)::int from scheduled_jobs where org_id = ${orgId}) as jobs,
         (select count(*)::int from job_runs where org_id = ${orgId}) as runs`
     expect(jobs).toEqual({ jobs: 0, runs: 0 })
+    const [channels] = await admin<{ links: number; codes: number }[]>`
+      select (select count(*)::int from channel_links where org_id = ${orgId}) as links,
+        (select count(*)::int from channel_link_codes where org_id = ${orgId}) as codes`
+    expect(channels).toEqual({ links: 0, codes: 0 })
     expect(workos.gone).toEqual([
       session.workosOrganizationId,
       session.workosUserId,
