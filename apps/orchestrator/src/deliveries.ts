@@ -5,6 +5,7 @@ import {
   type ServerMessage,
 } from "@workspace/contracts"
 import {
+  channelLinks,
   deliveries,
   eq,
   failureCode,
@@ -28,7 +29,8 @@ import { type PushDelivery, pushFor, sendPush } from "./push.ts"
  * crash past the lease can repeat one email, which the in-app path avoids by
  * posting under a stable message id. An email whose send fails with no
  * provider code may have left, so it settles as `unknown` and is never
- * sent again. A delivered in-app message also queues a push (push.ts).
+ * sent again. A delivered in-app message also queues a push (push.ts) and a
+ * copy for each linked WhatsApp chat, which the api sends.
  */
 
 export const OWNER_FROM = { name: "Reme", email: "hello@remeai.co.uk" }
@@ -61,10 +63,26 @@ export type DeliveryMessage = { orgId: string; key: string } & (
       conversationId?: string
     }
   | PushDelivery
+  | WhatsAppDelivery
 )
+
+/**
+ * An in-app message's copy for one owner's linked WhatsApp chat, under
+ * `<in-app key>:whatsapp:<link id>`. The api holds the number's token, so this
+ * consumer hands it over on `AFTER_TURN` and the api's `sendUpdate` claims,
+ * sends and settles the row (apps/api/src/channels/whatsapp/templates.ts).
+ */
+type WhatsAppDelivery = {
+  channel: "whatsapp"
+  linkId: string
+  /** The first part of the in-app key, as a push's. */
+  kind: string
+  text: string
+}
 
 type SendEnv = { DELIVERIES: Queue<DeliveryMessage> }
 type BatchEnv = SendEnv & {
+  AFTER_TURN: Queue
   HYPERDRIVE: Hyperdrive
   /** Signs the push request; unset, a push fails as `push_unset`. */
   VAPID_PRIVATE_KEY?: string
@@ -191,6 +209,10 @@ async function attempt(
   env: BatchEnv,
   body: DeliveryMessage
 ): Promise<Outcome | null> {
+  if (body.channel === "whatsapp") {
+    await env.AFTER_TURN.send(body)
+    return null
+  }
   const { orgId, key } = body
   const claimed = await kit.withOrg({ orgId }, (db) =>
     db
@@ -220,6 +242,9 @@ async function attempt(
     const push = await pushFor(kit, body)
     if (push)
       await deliver(kit, env, { orgId, key: push.key, ...push.delivery })
+    for (const copy of await whatsAppFor(kit, body)) {
+      await deliver(kit, env, copy)
+    }
     return { state: "sent" }
   }
   if (posted === "none") return { state: "failed", error: "no_conversation" }
@@ -256,6 +281,41 @@ async function release(kit: Tenancy, { orgId, key }: DeliveryMessage) {
         sql`${deliveries.key} = ${key} and ${deliveries.state} = 'sending'`
       )
   )
+}
+
+/**
+ * A copy for each active owner's live WhatsApp chat with updates on. A
+ * `[quiet]` pass says nothing happened, so it has none, as with push.
+ */
+async function whatsAppFor(
+  kit: Tenancy,
+  {
+    orgId,
+    key,
+    message,
+  }: { orgId: string; key: string; message: Omit<ServerMessage, "id"> }
+): Promise<DeliveryMessage[]> {
+  if (message.text[0]?.startsWith("[quiet]")) return []
+  const links = await kit.withOrg({ orgId }, (db) =>
+    db
+      .select({ id: channelLinks.id })
+      .from(channelLinks)
+      .innerJoin(
+        memberships,
+        sql`${memberships.orgId} = ${channelLinks.orgId} and ${memberships.userId} = ${channelLinks.userId}`
+      )
+      .where(
+        sql`${channelLinks.revokedAt} is null and ${channelLinks.updates} and ${memberships.role} = 'owner' and ${memberships.status} = 'active'`
+      )
+  )
+  return links.map(({ id }) => ({
+    channel: "whatsapp",
+    orgId,
+    key: `${key}:whatsapp:${id}`,
+    linkId: id,
+    kind: key.split(":")[0] as string,
+    text: message.text.join("\n\n"),
+  }))
 }
 
 /**
