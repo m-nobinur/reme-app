@@ -394,6 +394,32 @@ describe("applying operations", () => {
     )
   })
 
+  it("refuses a batch that empties a store, unless it is one remove of the last entry", () => {
+    const run = (lines: ProfileLine[], ...ops: MemoryOperation[]) =>
+      applyOperations(lines, ops, "owner_said", AT)
+    expect(
+      run(
+        held,
+        { action: "remove", old_text: "4pm" },
+        { action: "remove", old_text: "Fridays" }
+      )
+    ).toMatchObject({ refusal: { code: "memory.would_empty" } })
+    expect(
+      run([line("Quotes go out on Fridays")], {
+        action: "remove",
+        old_text: "Fridays",
+      })
+    ).toMatchObject({ ok: true, lines: [] })
+    expect(
+      run(
+        held,
+        { action: "remove", old_text: "4pm" },
+        { action: "remove", old_text: "Fridays" },
+        add("Has a spaniel called Biscuit")
+      )
+    ).toMatchObject({ ok: true })
+  })
+
   it("lets short lines fill a store: no line cap binds before its characters do", () => {
     const short = Array.from({ length: 60 }, (_, i) => line(`Note ${i}`))
     expect(

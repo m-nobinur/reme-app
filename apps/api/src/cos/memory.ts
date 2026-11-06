@@ -350,6 +350,7 @@ export type Refusal = {
     | "memory.secret"
     | "memory.business_fact"
     | "memory.no_skill"
+    | "memory.would_empty"
   message: string
   closest?: string[]
 }
@@ -540,6 +541,20 @@ export function applyOperations(
       op.action === "add"
         ? [...held, { id: newId(), text, source, at }]
         : held.map((l) => (l.id === hit?.id ? { ...l, text, source, at } : l))
+  }
+  // After hermes-agent tools/memory_tool_store.py `would_empty` (MIT): a lone remove is the deliberate way to clear the last entry.
+  if (
+    lines.length > 0 &&
+    held.length === 0 &&
+    !(ops.length === 1 && ops[0]?.action === "remove")
+  ) {
+    return {
+      ok: false,
+      refusal: refusal(
+        "memory.would_empty",
+        "This batch would remove every entry. Keep at least one: merge overlapping entries into a shorter one. To delete the last entry on purpose, remove it alone in a batch of one. Nothing was written."
+      ),
+    }
   }
   const before = profileText(lines).length
   const after = profileText(held).length
