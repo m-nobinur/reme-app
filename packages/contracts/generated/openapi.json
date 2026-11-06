@@ -46084,7 +46084,8 @@
             "enum": [
               "in_app",
               "email",
-              "push"
+              "push",
+              "whatsapp"
             ]
           },
           "state": {

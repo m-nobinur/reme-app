@@ -12708,7 +12708,7 @@ export interface components {
       org_id: string
       key: string
       /** @enum {string} */
-      channel: "in_app" | "email" | "push"
+      channel: "in_app" | "email" | "push" | "whatsapp"
       /** @enum {string} */
       state:
         | "pending"
