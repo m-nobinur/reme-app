@@ -38,14 +38,14 @@ describe("the journey's item in the stack", () => {
     ["none", ["Choose your domain", "Connect now", "after"]],
     ["unknown", ["Choose your domain", "Connect now", "after"]],
     ["choosing", ["Choose your domain", "Connect now", "after"]],
-    ["put_off", ["Add your domain", "Connect now", "after"]],
+    ["put_off", ["Get found on Google", "Connect Search Console", "after"]],
     [
       "buying_elsewhere",
       ["Finished buying sparkleclean.co.uk?", "Connect it", "first"],
     ],
     ["bought", ["sparkleclean.co.uk is ready to connect", "Connect", "first"]],
     ["paying", null],
-    ["declined", null],
+    ["declined", ["Get found on Google", "Connect Search Console", "after"]],
     ["connecting", ["Get found on Google", "Connect Search Console", "after"]],
     ["live", ["Get found on Google", "Connect Search Console", "after"]],
   ] as const)("%s", (stage, item) => {
@@ -77,6 +77,25 @@ describe("the journey's item in the stack", () => {
     for (const google of ["connected", "declined"] as const) {
       expect(shown(journey("live", { google }))).toBeNull()
     }
+  })
+
+  it("keeps Google on the stack after the domain is put off, skipped or ignored, and the domain once Google is settled", () => {
+    for (const google of ["offerable", "put_off", "setting_up"] as const) {
+      expect(shown(journey("put_off", { google }))?.[0]).toBe(
+        "Get found on Google"
+      )
+    }
+    for (const google of ["connected", "declined"] as const) {
+      expect(shown(journey("put_off", { google }))?.[0]).toBe("Add your domain")
+      expect(shown(journey("declined", { google }))).toBeNull()
+    }
+    // No site to put on Google yet.
+    expect(
+      shown(
+        journey("put_off", { website: "building", google: "offerable" }),
+        false
+      )
+    ).toBeNull()
   })
 
   it("puts the address on a site only, but brings a bought name first anyway", () => {
