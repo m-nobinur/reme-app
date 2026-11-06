@@ -169,12 +169,26 @@ const parse = (data: unknown): unknown => {
 
 export class RelayDictationAdapter implements DictationAdapter {
   readonly notice = new Notice()
+  private settled: string[] = []
+
+  /**
+   * The phrases the last dictation settled, once, if it ended by being
+   * stopped: the words to tidy. A cancelled or failed dictation has none.
+   */
+  take(): string[] {
+    const phrases = this.settled
+    this.settled = []
+    return phrases
+  }
 
   constructor(private readonly parts: DictationParts = REAL) {}
 
   listen(): DictationAdapter.Session {
     const { notice, parts } = this
+    const adapter = this
+    adapter.settled = []
     notice.set(null)
+    const phrases: string[] = []
     const speechStart = new Set<() => void>()
     const speechEnd = new Set<(result: DictationAdapter.Result) => void>()
     const speech = new Set<(result: DictationAdapter.Result) => void>()
@@ -225,6 +239,7 @@ export class RelayDictationAdapter implements DictationAdapter {
       } catch {
         // Already closed.
       }
+      if (reason === "stopped") adapter.settled = phrases
       if (say) notice.set(say)
       session.status = { type: "ended", reason }
       for (const callback of speechEnd) {
@@ -261,6 +276,7 @@ export class RelayDictationAdapter implements DictationAdapter {
           if (!read.success) return
           if (read.data.type === "error") return fail(NOTICES.dropped)
           const { text, type } = read.data
+          if (type === "final") phrases.push(text)
           for (const callback of speech) {
             callback({ transcript: text, isFinal: type === "final" })
           }

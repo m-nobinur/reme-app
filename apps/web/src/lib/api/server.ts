@@ -5,6 +5,7 @@ import {
   ApprovalGrantSwitch,
   type ApprovalGrants,
   ChangeKind,
+  DictationTidyRequest,
   DomainName,
   type DomainPurchaseStatus,
   GOAL_MAX,
@@ -446,6 +447,14 @@ export const getDictationSocket = createServerFn({ method: "POST" }).handler(
     return await source.dictationSocket()
   }
 )
+
+/** The dictated words tidied; null keeps them as heard. */
+export const tidyDictation = createServerFn({ method: "POST" })
+  .validator((input: unknown) => DictationTidyRequest.parse(record(input)))
+  .handler(
+    async ({ data }): Promise<string | null> =>
+      await source.tidyDictation(data.text)
+  )
 
 /** The key a browser subscribes to push with; null where push is off. */
 export const getPushKey = createServerFn({ method: "GET" }).handler(

@@ -13,7 +13,10 @@ import {
   type CreateReminderRequest,
   DICTATION_PATH,
   DICTATION_TICKET_PATH,
+  DICTATION_TIDY_MS,
+  DICTATION_TIDY_PATH,
   DictationTicket,
+  DictationTidyResult,
   DomainCheckout,
   DomainName,
   DomainPurchaseStatus,
@@ -889,6 +892,17 @@ async function dictationSocket(): Promise<string | null> {
   return socket.toString()
 }
 
+/** The dictated words tidied, or null to keep them as heard: nothing to tidy, a refusal or a pass that failed. */
+async function tidyDictation(text: string): Promise<string | null> {
+  const response = await call(DICTATION_TIDY_PATH, {
+    method: "POST",
+    body: { text },
+    timeoutMs: DICTATION_TIDY_MS,
+  })
+  if (!response?.ok) return null
+  return DictationTidyResult.parse(await response.json()).text
+}
+
 async function pushKey(): Promise<string | null> {
   const body = await get("/push/config")
   return body === null ? null : PushConfig.parse(body).public_key
@@ -1054,6 +1068,7 @@ export const apiSource: OwnerDataSource = {
   setGrant,
   removeCorrection,
   dictationSocket,
+  tidyDictation,
   pushKey,
   subscribePush,
   unsubscribePush,

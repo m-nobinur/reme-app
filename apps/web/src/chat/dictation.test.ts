@@ -251,6 +251,29 @@ it("stops on a tap: the microphone off, the relay told, the last words kept, and
   expect(setup.adapter.notice.text).toBeNull()
 })
 
+it("hands over the phrases a stopped dictation settled, once, and none after a cancel or a failure", async () => {
+  const stopping = await running()
+  stopping.socket.say({ type: "final", text: "Book a clean." })
+  // A phrase still being spoken is not settled words.
+  stopping.socket.say({ type: "partial", text: "for" })
+  const stopped = stopping.session.stop()
+  stopping.socket.say({ type: "final", text: "For Friday." })
+  stopping.socket.fire("close", { code: 1000 })
+  await stopped
+  expect(stopping.adapter.take()).toEqual(["Book a clean.", "For Friday."])
+  expect(stopping.adapter.take()).toEqual([])
+
+  const cancelled = await running()
+  cancelled.socket.say({ type: "final", text: "Book a clean." })
+  cancelled.session.cancel()
+  expect(cancelled.adapter.take()).toEqual([])
+
+  const failed = await running()
+  failed.socket.say({ type: "final", text: "Book a clean." })
+  failed.socket.say({ type: "error" })
+  expect(failed.adapter.take()).toEqual([])
+})
+
 it("closes the socket itself when the relay never settles", async () => {
   vi.useFakeTimers()
   const setup = await running()

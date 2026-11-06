@@ -55,6 +55,7 @@ import {
 import { cosTools, liveKey, liveState, questionTitles } from "./cos-tools"
 import { saveDesignAnswer } from "./design"
 import { dictation } from "./dictation"
+import { DictationTidy } from "./dictation-tidy"
 import { domainPurchase } from "./domain-purchase"
 import { askedSend, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
@@ -248,6 +249,7 @@ export function ChatPage() {
   return (
     <AssistantRuntimeProvider config={config} runtime={runtime}>
       <ServerButtonUI />
+      <DictationTidy />
       <ChangeAskedUI />
       <BuildQuestionsUI />
       <MemoryChipUI />
