@@ -71,6 +71,10 @@ interface Env {
   WHATSAPP_ENABLED?: string
   /** 32 bytes, base64: seals each business's WhatsApp token (`channels/token.ts`). */
   CHANNEL_TOKEN_KEY?: string
+  /** Reme's Meta app: its id and secret, and the Embedded Signup configuration (Facebook Login for Business) the popup opens. */
+  WHATSAPP_APP_ID?: string
+  WHATSAPP_APP_SECRET?: string
+  WHATSAPP_SIGNUP_CONFIG_ID?: string
   /** Search Console's Google client id. Unset, `connect_google` answers that Google is not available. */
   GOOGLE_CLIENT_ID?: string
   /**

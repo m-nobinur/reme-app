@@ -21,6 +21,7 @@ import type { Owner } from "../changes.ts"
 import { isOrgOwner } from "../domain-buy.ts"
 import { failure, invalid, keyMissing, readBody } from "../http.ts"
 import { hashCode } from "./token.ts"
+import { signupRoute } from "./whatsapp/signup.ts"
 
 /**
  * The owner's side of messaging channels: what is linked, a one-time code to
@@ -56,7 +57,7 @@ const base64url = (bytes: Uint8Array) =>
 /** `GET /channels`, `POST /channels/whatsapp/link`, `PATCH` and `DELETE /channels/links/{id}`. */
 export async function channelsRoute(
   request: Request,
-  env: Pick<Env, "WHATSAPP_ENABLED">,
+  env: Parameters<typeof signupRoute>[1] & Pick<Env, "WHATSAPP_ENABLED">,
   kit: Tenancy,
   owner: Owner
 ): Promise<Response | null> {
@@ -71,11 +72,17 @@ export async function channelsRoute(
       ? "list"
       : pathname === "/channels/whatsapp/link" && method === "POST"
         ? "link"
-        : noun === "links" && id && (method === "PATCH" || method === "DELETE")
-          ? method
-          : null
+        : pathname === "/channels/whatsapp/signup" &&
+            (method === "GET" || method === "POST")
+          ? "signup"
+          : noun === "links" &&
+              id &&
+              (method === "PATCH" || method === "DELETE")
+            ? method
+            : null
   if (!route) return null
-  if (route !== "list" && !idempotencyKey(request)) return keyMissing()
+  const read = route === "list" || (route === "signup" && method === "GET")
+  if (!(read || idempotencyKey(request))) return keyMissing()
   if (!(await isOrgOwner(kit, owner))) {
     return refused(
       403,
@@ -83,6 +90,7 @@ export async function channelsRoute(
       "Only the owner can manage messaging channels."
     )
   }
+  if (route === "signup") return signupRoute(request, env, kit, owner)
   const ctx = {
     orgId: owner.orgId,
     workosUserId: owner.session.workosUserId,
