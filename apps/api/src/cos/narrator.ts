@@ -38,6 +38,7 @@ RULES:
 - Start with a present participle: Checking, Setting, Drafting, Looking, Working out, Comparing.
 - Be specific to this owner's request: name the person, day, page or thing from their message ("Setting Tuesday's reminder to call Mrs Patel"), never generic ("Thinking", "Processing your request", "Drafting a response").
 - Describe only what the reasoning or the tools show is happening now. Never claim something is done, sent, booked or saved. Never promise a result.
+- Say it in the owner's terms, about their business: never name a tool, a skill, a procedure or how the assistant works ("Checking the reminders skill" is wrong; "Setting Friday's invoice reminder" is right).
 - No "I", no "you", no quotes, no emoji, no full stop at the end.
 - British English.
 - If the newest line would say the same as your last status, write it differently or more specifically, never word for word again.
