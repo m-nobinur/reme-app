@@ -346,6 +346,72 @@ export async function resolveDomainClaim(
 }
 
 /**
+ * The org's WhatsApp account a webhook names by Meta's phone number id, for
+ * the webhook, which holds no session (migration 0035). Active accounts only.
+ */
+export async function whatsAppAccountByPhone(
+  kit: Tenancy,
+  phoneNumberId: string
+): Promise<{ accountId: string; orgId: string } | null> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const [row] = await tx.execute<{ account_id: string; org_id: string }>(
+      sql`select * from public.whatsapp_account_by_phone(${phoneNumberId})`
+    )
+    return row ? { accountId: row.account_id, orgId: row.org_id } : null
+  })
+}
+
+export type ChannelLinkRef = { linkId: string; orgId: string; userId: string }
+
+const linkRef = (row?: {
+  link_id: string
+  org_id: string
+  user_id: string
+}): ChannelLinkRef | null =>
+  row ? { linkId: row.link_id, orgId: row.org_id, userId: row.user_id } : null
+
+/** A sender's live link on an account (migration 0035), or null. */
+export async function channelLinkOf(
+  kit: Tenancy,
+  accountId: string,
+  externalId: string
+): Promise<ChannelLinkRef | null> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const [row] = await tx.execute<{
+      link_id: string
+      org_id: string
+      user_id: string
+    }>(
+      sql`select * from public.channel_link_of(${accountId}::uuid, ${externalId})`
+    )
+    return linkRef(row)
+  })
+}
+
+/**
+ * Spends a one-time code and links the sender (migration 0035). Null for a
+ * code that is unknown, used, expired, another org's, or a former member's.
+ */
+export async function redeemChannelCode(
+  kit: Tenancy,
+  input: { hash: string; accountId: string; externalId: string; label: string }
+): Promise<ChannelLinkRef | null> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const [row] = await tx.execute<{
+      link_id: string
+      org_id: string
+      user_id: string
+    }>(
+      sql`select * from public.redeem_channel_code(${input.hash}, ${input.accountId}::uuid, ${input.externalId}, ${input.label})`
+    )
+    return linkRef(row)
+  })
+}
+
+/**
  * Every org id, for a platform job that then opens each org's own `withOrg`:
  * the hourly retention sweep is the caller today, and nothing enforces that
  * it stays the only one. The function is SECURITY DEFINER (migration 0009)

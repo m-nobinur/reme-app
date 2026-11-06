@@ -67,6 +67,8 @@ interface Env {
    * `/webhooks/cloudflare` is not a route and the Workflow's own looks decide.
    */
   CF_WEBHOOK_SECRET?: string
+  /** 32 bytes, base64: seals each business's WhatsApp token (`channels/token.ts`). */
+  CHANNEL_TOKEN_KEY?: string
   /** Search Console's Google client id. Unset, `connect_google` answers that Google is not available. */
   GOOGLE_CLIENT_ID?: string
   /**

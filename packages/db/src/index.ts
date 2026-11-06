@@ -114,6 +114,7 @@ export {
   type TaskPlan,
 } from "./tasks.ts"
 export type {
+  ChannelLinkRef,
   Identity,
   OrgScopedDb,
   RecentDesign,
@@ -123,6 +124,7 @@ export type {
 // Named rather than a star, so what the tenancy kit exposes to the rest of the
 // repo is a decision someone makes rather than whatever happens to be exported.
 export {
+  channelLinkOf,
   claimDueJobs,
   failureCode,
   listOrgIds,
@@ -131,11 +133,13 @@ export {
   ORG_SETTING,
   pgCode,
   recentDesigns,
+  redeemChannelCode,
   resolveDomainClaim,
   resolveDomainHost,
   resolveOrg,
   resolveOrgBySlug,
   tenancy,
   USER_SETTING,
+  whatsAppAccountByPhone,
   withOrg,
 } from "./tenancy.ts"

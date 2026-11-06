@@ -10,7 +10,8 @@
     "test": "node ../../scripts/floor.mjs api-unit -- vitest run --dir test",
     "test:tenancy": "node ../../scripts/floor.mjs api-tenancy -- vitest run --dir tenancy",
     "size": "node ../../scripts/size.mjs api --forbid abandoned-head-element-child",
-    "prompt-size": "PROMPT_SIZE=1 vitest run test/cos-prompt-surface.test.ts --silent=false"
+    "prompt-size": "PROMPT_SIZE=1 vitest run test/cos-prompt-surface.test.ts --silent=false",
+    "whatsapp:dev-account": "node scripts/whatsapp-dev-account.ts"
   },
   "dependencies": {
     "@assistant-ui/generative-ui": "0.0.8",
