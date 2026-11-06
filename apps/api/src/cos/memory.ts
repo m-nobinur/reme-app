@@ -630,15 +630,24 @@ function check(
   return null
 }
 
+/** Every line of a stored value that parses, so a malformed line hides only itself. */
+const readable = (value: unknown): ProfileLine[] => {
+  const lines = (value as { lines?: unknown } | null)?.lines
+  return Array.isArray(lines)
+    ? lines.flatMap((l) => {
+        const line = StoreLines.shape.lines.element.safeParse(l)
+        return line.success ? [line.data as ProfileLine] : []
+      })
+    : []
+}
+
 /**
  * A store's lines from one stored value. One over its budget (a limit since
- * lowered) still reads line by line; a value with a malformed line reads as
- * empty.
+ * lowered) or holding a malformed line still reads line by line.
  */
 const linesOf = (value: unknown, store: Store = STORES.profile) =>
-  (store.schema.safeParse(value).data?.lines ??
-    StoreLines.safeParse(value).data?.lines ??
-    []) as ProfileLine[]
+  (store.schema.safeParse(value).data?.lines as ProfileLine[] | undefined) ??
+  readable(value)
 
 /** The current profile, or another whole store, and its version; none yet is version 0. */
 export async function readProfile(
@@ -659,10 +668,7 @@ export async function readProfile(
       version: row.version,
     })
   )
-  return {
-    version: row.version,
-    lines: (over.data?.lines ?? []) as ProfileLine[],
-  }
+  return { version: row.version, lines: readable(row.value) }
 }
 
 /** A layer's lines, and every line of its store, which a skill's write keeps beside its own. */

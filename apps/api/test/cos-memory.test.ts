@@ -773,6 +773,43 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
       await store({ lines: kept.lines })
     }
   })
+
+  it("reads every line that parses when one is malformed, so a save keeps the rest", async () => {
+    const turn = await turnOf()
+    const kept = await kit.withOrg({ orgId: me.orgId }, (db) => readProfile(db))
+    const good = [line("Prefers calls after 4pm"), line("Has a van")]
+    const store = (value: { lines: unknown[] }) =>
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        supersedePrivateFact(db, {
+          orgId: me.orgId,
+          key: OWNER_PROFILE_KEY,
+          factType: "owner",
+          value,
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      )
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined)
+    await store({ lines: [good[0], { text: "no id or source" }, good[1]] })
+    try {
+      expect(await lines()).toEqual(["Prefers calls after 4pm", "Has a van"])
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining("memory.profile_unreadable")
+      )
+      expect(await said(turn, add("Likes short replies"))).toMatchObject({
+        outcome: "saved",
+      })
+      expect(await lines()).toEqual([
+        "Prefers calls after 4pm",
+        "Has a van",
+        "Likes short replies",
+      ])
+    } finally {
+      logged.mockRestore()
+      await store({ lines: kept.lines })
+    }
+  })
 })
 
 /**
