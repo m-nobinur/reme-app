@@ -24,9 +24,7 @@ import {
   ErrorEnvelope,
   FactList,
   type GoogleResultRequest,
-  type MemoryLineEdit,
   type MemoryReviewAction,
-  type MemoryUndo,
   MemoryView,
   type MessageFeedback,
   Org,
@@ -780,45 +778,6 @@ async function memory(): Promise<MemoryView | null> {
   return body === null ? null : MemoryView.parse(body)
 }
 
-async function undoMemory(
-  undo: MemoryUndo
-): Promise<MemoryView | "stale" | null> {
-  const response = await call("/memory/undo", {
-    method: "POST",
-    body: undo,
-  })
-  if (!response || response.status === 401 || response.status === 403) {
-    return null
-  }
-  if (response.status === 409) return "stale"
-  if (!response.ok) {
-    throw new Error(`apps/api answered ${response.status} for /memory/undo`)
-  }
-  return MemoryView.parse(await response.json())
-}
-
-async function editMemoryLine(
-  edit: MemoryLineEdit
-): Promise<MemoryView | "stale" | { refused: string } | null> {
-  const response = await call("/memory/lines", { method: "POST", body: edit })
-  if (!response || response.status === 401 || response.status === 403) {
-    return null
-  }
-  if (response.status === 404) return "stale"
-  if (response.status === 409) {
-    const refusal = ErrorEnvelope.safeParse(await response.json())
-    return {
-      refused: refusal.success
-        ? refusal.data.message
-        : "That could not be saved. Nothing was changed.",
-    }
-  }
-  if (!response.ok) {
-    throw new Error(`apps/api answered ${response.status} for /memory/lines`)
-  }
-  return MemoryView.parse(await response.json())
-}
-
 async function reviewMemory(
   action: MemoryReviewAction
 ): Promise<MemoryView | "stale" | null> {
@@ -855,21 +814,6 @@ async function setGrant(
     throw new Error(`apps/api answered ${response.status} for /approval-grants`)
   }
   return ApprovalGrants.parse(await response.json())
-}
-
-async function removeCorrection(
-  id: string
-): Promise<MemoryView | "stale" | null> {
-  const path = `/memory/corrections/${id}`
-  const response = await call(path, { method: "DELETE" })
-  if (!response || response.status === 401 || response.status === 403) {
-    return null
-  }
-  if (response.status === 404) return "stale"
-  if (!response.ok) {
-    throw new Error(`apps/api answered ${response.status} for ${path}`)
-  }
-  return MemoryView.parse(await response.json())
 }
 
 /**
@@ -1061,12 +1005,9 @@ export const apiSource: OwnerDataSource = {
   completeReminder,
   deleteReminder,
   memory,
-  undoMemory,
-  editMemoryLine,
   reviewMemory,
   grants,
   setGrant,
-  removeCorrection,
   dictationSocket,
   tidyDictation,
   pushKey,

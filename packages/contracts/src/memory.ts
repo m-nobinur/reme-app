@@ -114,9 +114,6 @@ export const MemoryTarget = z
   .regex(/^(user|notes|skill:[a-z][a-z0-9]*(-[a-z0-9]+)*)$/)
   .describe("user, notes or skill:<name>")
 
-/** The stores the owner's page edits and undoes: every skill's notes are one store. */
-export const MemoryStoreName = z.enum(["user", "notes", "skills"])
-
 /**
  * A change reflection wants to make while "Ask me before saving" is on. It
  * waits on the owner's page: accepting it saves it as `owner_confirmed`.
@@ -252,8 +249,6 @@ export const ProfileVersion = z.strictObject({
       })
     )
     .max(40),
-  /** Whether undoing this change still applies to the current lines. */
-  undoable: z.boolean(),
 })
 
 /** One store as the owner's page shows it: its lines, its budget and the versions behind them. */
@@ -279,8 +274,8 @@ export const SkillNotesView = z.strictObject({
 /**
  * `GET /memory`: the profile's lines and the versions behind them, newest
  * first; the working notes and every skill's notes the same way; and the
- * owner's corrections for staff, each of which the owner may remove with
- * `DELETE /memory/corrections/{id}` (answered with this view).
+ * owner's corrections for staff. The page only shows them: the owner
+ * changes memory by telling the assistant.
  */
 export const MemoryView = z.strictObject({
   version: z.int().nonnegative(),
@@ -304,21 +299,6 @@ export const MemoryReviewAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("dismiss"), id: Uuid }),
 ])
 
-/** `POST /memory/undo`: undoes one version of a store, named so a stale page undoes nothing; no store is the profile. */
-export const MemoryUndo = z.strictObject({
-  version: z.int().positive(),
-  store: MemoryStoreName.optional(),
-})
-
-/** `POST /memory/lines`: the owner rewrites one line in their own words, or removes it when `text` is absent. */
-export const MemoryLineEdit = z.strictObject({
-  store: MemoryStoreName,
-  id: Uuid,
-  text: Text(PROFILE_LINE_MAX)
-    .regex(/^[^\r\n]+$/)
-    .optional(),
-})
-
 /** The `data-memory` part: "Saved to memory", shown once on the turn after a write. */
 export const MemoryChip = z.strictObject({
   version: z.int().positive(),
@@ -335,15 +315,12 @@ export type ProfileVersion = z.infer<typeof ProfileVersion>
 export type MemoryView = z.infer<typeof MemoryView>
 export type MemoryProposal = z.infer<typeof MemoryProposal>
 export type MemoryReviewAction = z.infer<typeof MemoryReviewAction>
-export type MemoryUndo = z.infer<typeof MemoryUndo>
 export type MemoryChip = z.infer<typeof MemoryChip>
 export type MemoryOperation = z.infer<typeof MemoryOperation>
 export type MemoryInput = z.infer<typeof MemoryInput>
 export type MemoryOutput = z.infer<typeof MemoryOutput>
 export type MemoryTarget = z.infer<typeof MemoryTarget>
-export type MemoryStoreName = z.infer<typeof MemoryStoreName>
 export type MemoryLayer = z.infer<typeof MemoryLayer>
-export type MemoryLineEdit = z.infer<typeof MemoryLineEdit>
 export type SkillNoteLine = z.infer<typeof SkillNoteLine>
 export type SkillNotes = z.infer<typeof SkillNotes>
 export type SkillNotesView = z.infer<typeof SkillNotesView>

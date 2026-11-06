@@ -1,27 +1,19 @@
+import { MemoryView, STAFF_CORRECTIONS_KEY } from "@workspace/contracts"
 import {
-  ErrorEnvelope,
-  MemoryView,
-  STAFF_CORRECTIONS_KEY,
-} from "@workspace/contracts"
-import {
-  eq,
-  memberships,
-  orgs,
   readCorrections,
   supersedePrivateFact,
   type Tenancy,
   tenancy,
-  users,
 } from "@workspace/db"
 import { skillsFor } from "@workspace/skills"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import worker from "../src/index.ts"
 import { type Owner, owner, stubOrchestrator } from "./owner-fixture.ts"
-import { cookieHeader, env, stubJwksFetch } from "./sealed-session.ts"
+import { stubJwksFetch } from "./sealed-session.ts"
 
 /**
  * The owner's corrections for the Developer on the Memory page: listed for
- * the org, removed by its owner only, gone from the next build's brief.
+ * the org and carried in the next build's brief. The page removes none: the
+ * owner changes them by telling the assistant.
  */
 
 const url = process.env.DATABASE_URL
@@ -69,51 +61,7 @@ describe.skipIf(!url)("the Developer's corrections on the Memory page", () => {
     await kit.close()
   })
 
-  /** A signed-in member of the org who is not its owner. */
-  async function asMember() {
-    const run = crypto.randomUUID().slice(0, 8)
-    const workosUserId = `user_probe_member_${run}`
-    const [org] = await kit.withOrg({ orgId: me.orgId }, (db) =>
-      db
-        .select({ workos: orgs.workosOrganizationId })
-        .from(orgs)
-        .where(eq(orgs.id, me.orgId))
-    )
-    await kit.withOrg({ orgId: me.orgId, workosUserId }, async (db) => {
-      await db
-        .insert(users)
-        .values({ workosUserId, email: `member-${run}@owner-probe.invalid` })
-      const [person] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.workosUserId, workosUserId))
-      await db.insert(memberships).values({
-        orgId: me.orgId,
-        userId: person?.id as string,
-        workosMembershipId: `om_member_${run}`,
-        role: "member",
-        status: "active",
-      })
-    })
-    return async (path: string, init: RequestInit = {}) =>
-      worker.fetch(
-        new Request(`http://api.invalid${path}`, {
-          ...init,
-          headers: await cookieHeader({
-            sub: workosUserId,
-            org_id: org?.workos as string,
-            role: "member",
-          }),
-        }),
-        {
-          ...env(url as string),
-          ORCHESTRATOR: stubOrchestrator(),
-        } as unknown as Env,
-        { waitUntil: () => undefined } as unknown as ExecutionContext
-      )
-  }
-
-  it("lists the saved sentence, refuses a member's remove, and the owner's remove drops it from the next brief", async () => {
+  it("lists the saved sentence, carries it in the next brief, and offers no remove", async () => {
     const page = await me.call(stubOrchestrator(), "/memory", {
       method: "GET",
     })
@@ -122,33 +70,12 @@ describe.skipIf(!url)("the Developer's corrections on the Memory page", () => {
     ])
     expect(await nextBrief()).toEqual([sentence])
 
-    const member = await asMember()
-    const refused = await member(`/memory/corrections/${id}`, {
-      method: "DELETE",
-    })
-    expect(refused.status).toBe(403)
-    expect(ErrorEnvelope.parse(await refused.json()).code).toBe(
-      "memory.not_owner"
-    )
-    expect(await nextBrief()).toEqual([sentence])
-
     const removed = await me.call(
       stubOrchestrator(),
       `/memory/corrections/${id}`,
       { method: "DELETE" }
     )
-    expect(removed.status).toBe(200)
-    expect(MemoryView.parse(await removed.json()).corrections).toEqual([])
-    expect(await nextBrief()).toEqual([])
-
-    const again = await me.call(
-      stubOrchestrator(),
-      `/memory/corrections/${id}`,
-      { method: "DELETE" }
-    )
-    expect(again.status).toBe(404)
-    expect(ErrorEnvelope.parse(await again.json()).code).toBe(
-      "memory.correction_not_found"
-    )
+    expect(removed.status).toBe(404)
+    expect(await nextBrief()).toEqual([sentence])
   })
 })

@@ -9,9 +9,7 @@ import {
   DomainName,
   type DomainPurchaseStatus,
   GOAL_MAX,
-  MemoryLineEdit,
   MemoryReviewAction,
-  MemoryUndo,
   type MemoryView,
   MessageFeedback,
   PushSubscribeRequest,
@@ -395,24 +393,6 @@ export const getMemory = createServerFn({ method: "GET" }).handler(
   async (): Promise<MemoryView | null> => await source.memory()
 )
 
-/** One remembered change taken back; "stale" when nothing is left of it to undo. */
-export const undoMemory = createServerFn({ method: "POST" })
-  .validator((input: unknown) => MemoryUndo.parse(record(input)))
-  .handler(
-    async ({ data }): Promise<MemoryView | "stale" | null> =>
-      await source.undoMemory(data)
-  )
-
-/** One line the owner rewrote or removed; "stale" when it is gone, `refused` with why when not saved. */
-export const editMemoryLine = createServerFn({ method: "POST" })
-  .validator((input: unknown) => MemoryLineEdit.parse(record(input)))
-  .handler(
-    async ({
-      data,
-    }): Promise<MemoryView | "stale" | { refused: string } | null> =>
-      await source.editMemoryLine(data)
-  )
-
 /** The owner's choice about being asked first, or their answer to one proposal. */
 export const reviewMemory = createServerFn({ method: "POST" })
   .validator((input: unknown) => MemoryReviewAction.parse(record(input)))
@@ -431,14 +411,6 @@ export const setGrant = createServerFn({ method: "POST" })
   .handler(
     async ({ data }): Promise<ApprovalGrants | null> =>
       await source.setGrant(data)
-  )
-
-/** One of the owner's corrections for staff removed; "stale" when it was already gone. */
-export const removeCorrection = createServerFn({ method: "POST" })
-  .validator((input: unknown) => ({ id: id(record(input).id) }))
-  .handler(
-    async ({ data }): Promise<MemoryView | "stale" | null> =>
-      await source.removeCorrection(data.id)
   )
 
 /** The dictation socket's address with a ticket on it; null with no session. */

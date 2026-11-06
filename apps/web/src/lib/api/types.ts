@@ -20,9 +20,7 @@ import type {
   FactRecord,
   FactValueKey,
   GoogleResultRequest,
-  MemoryLineEdit,
   MemoryReviewAction,
-  MemoryUndo,
   MemoryView,
   MessageFeedback,
   PushSubscribeRequest,
@@ -274,18 +272,6 @@ export type OwnerDataSource = {
   profile: () => Promise<BusinessProfile | null>
   /** What the Chief of Staff remembers of the owner, or null where the session has no organisation. */
   memory: () => Promise<MemoryView | null>
-  /**
-   * Undoes one remembered change. "stale" when it was already undone or
-   * edited since, so nothing is left to undo.
-   */
-  undoMemory: (undo: MemoryUndo) => Promise<MemoryView | "stale" | null>
-  /**
-   * The owner rewrites or removes one line. "stale" when the line is gone;
-   * `refused` says why the words were not saved, such as a code or a price.
-   */
-  editMemoryLine: (
-    edit: MemoryLineEdit
-  ) => Promise<MemoryView | "stale" | { refused: string } | null>
   /** The owner's choice about asking first, or their answer to one proposal. "stale" when it is gone. */
   reviewMemory: (
     action: MemoryReviewAction
@@ -294,8 +280,6 @@ export type OwnerDataSource = {
   grants: () => Promise<ApprovalGrants | null>
   /** The owner's switch for one kind, read on the assistant's next action. */
   setGrant: (change: ApprovalGrantSwitch) => Promise<ApprovalGrants | null>
-  /** Removes one of the owner's corrections for staff. "stale" when it was already gone. */
-  removeCorrection: (id: string) => Promise<MemoryView | "stale" | null>
   /** Reports and alerts from the last 30 days, newest first as listed. */
   activity: () => Promise<AttentionItem[]>
   /**

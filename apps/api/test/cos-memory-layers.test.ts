@@ -28,16 +28,13 @@ import {
 import {
   applyOperations,
   CONSOLIDATE_AT,
-  editLine,
   layerOf,
   memory,
   memoryView,
   readLayer,
   refusalOf,
-  STORES,
   sameFact,
   skillNotesText,
-  undoVersion,
 } from "../src/cos/memory.ts"
 import { recall } from "../src/cos/recall.ts"
 import { viewOf } from "../src/cos/skills.ts"
@@ -436,7 +433,7 @@ describe.skipIf(!url)("on a live connection", () => {
     })
   })
 
-  it("lets the owner edit, remove and undo a note, and shows every store on the page with stale skill notes marked", async () => {
+  it("shows every store on the page with stale skill notes marked", async () => {
     const { id } = await session(me, [
       "The spare keys are kept in the van glovebox.",
     ])
@@ -457,41 +454,6 @@ describe.skipIf(!url)("on a live connection", () => {
     expect(view.skills.notes).toMatchObject([
       { name: "quote-reply", title: "Quote reply", lines: [{ stale: false }] },
     ])
-    const target = view.notes.lines[0]?.id as string
-    expect(
-      await kit.withOrg({ orgId: me.orgId }, (db) =>
-        editLine(db, me.orgId, {
-          store: "notes",
-          id: target,
-          text: "The lockbox code is 4821",
-        })
-      )
-    ).toMatchObject({ code: "memory.secret" })
-    const edited = await kit.withOrg({ orgId: me.orgId }, (db) =>
-      editLine(db, me.orgId, {
-        store: "notes",
-        id: target,
-        text: "Spare keys are in the office drawer",
-      })
-    )
-    expect(edited).toHaveProperty("version")
-    const after = await kit.withOrg({ orgId: me.orgId }, (db) => memoryView(db))
-    expect(after.notes.lines).toMatchObject([
-      { text: "Spare keys are in the office drawer", source: "owner_said" },
-    ])
-    const undone = await kit.withOrg({ orgId: me.orgId }, (db) =>
-      undoVersion(db, me.orgId, after.notes.version, STORES.notes)
-    )
-    expect(undone).toEqual({ version: after.notes.version + 1 })
-    expect(
-      (await kit.withOrg({ orgId: me.orgId }, (db) => memoryView(db))).notes
-        .lines
-    ).toMatchObject([{ text: "Spare keys are kept in the van glovebox" }])
-    expect(
-      await kit.withOrg({ orgId: me.orgId }, (db) =>
-        editLine(db, me.orgId, { store: "notes", id: target })
-      )
-    ).toHaveProperty("version")
     // A note older than sixty days whose skill has not loaded since is shown as stale, never removed.
     await kit.withOrg({ orgId: me.orgId }, async (db) => {
       const { all } = await readLayer(db, layerOf("skill:quote-reply") as never)

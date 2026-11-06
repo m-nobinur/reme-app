@@ -2,12 +2,9 @@ import {
   type MemoryChip,
   type MemoryInput,
   type MemoryLayer,
-  MemoryLineEdit,
   type MemoryOperation,
   type MemoryOutput,
   MemoryReviewAction,
-  type MemoryStoreName,
-  MemoryUndo,
   MemoryView,
   NOTES_MAX_CHARS,
   OWNER_MEMORY_REVIEW_KEY,
@@ -23,8 +20,6 @@ import {
   type SkillNoteLine,
   SkillNotes,
   type SkillNotesView,
-  STAFF_CORRECTIONS_KEY,
-  Uuid,
   WORKING_NOTES_KEY,
   WorkingNotes,
 } from "@workspace/contracts"
@@ -40,7 +35,6 @@ import {
 } from "@workspace/db"
 import { PROCEDURES, procedure } from "@workspace/skills"
 import type { Owner } from "../changes.ts"
-import { isOrgOwner } from "../domain-buy.ts"
 import { failure, invalid, readBody } from "../http.ts"
 import type { ToolContext } from "./tools.ts"
 import type { Turn } from "./turns.ts"
@@ -49,8 +43,9 @@ import type { Turn } from "./turns.ts"
  * The Chief of Staff's memory (ADR-042), in three stores after Hermes's
  * MEMORY.md and USER.md: the owner profile, the working notes, and each
  * skill's notes for this business. Each is one fact of plain lines, every
- * change a version. The `memory` tool, the owner's page and reflection all
- * write through `applyOperations` and `saveLayer`, so a rule has one home.
+ * change a version. The `memory` tool, reflection and the proposals the
+ * owner accepts all write through `applyOperations` and `saveLayer`, so a
+ * rule has one home.
  */
 
 /** Refusals the same turn may get before `memory` stops answering (after hermes-agent tools/memory_tool_store.py, MIT). */
@@ -62,7 +57,7 @@ export const CONSOLIDATE_AT = 0.8
 /** A skill note whose skill has not loaded for this long is shown to the owner as stale (after Hermes's curator). */
 export const STALE_DAYS = 60
 
-/** One of the CoS's whole stores, as the owner's page and undo name it. */
+/** One of the CoS's whole stores. */
 export type Store = {
   key: string
   max: number
@@ -81,13 +76,6 @@ export const STORES = {
     schema: SkillNotes,
   },
 } as const satisfies Record<string, Store>
-
-/** The page's store names for the stores. */
-export const STORE_OF: Record<MemoryStoreName, Store> = {
-  user: STORES.profile,
-  notes: STORES.notes,
-  skills: STORES.skills,
-}
 
 /**
  * Where one `memory` write lands: a whole store, or one skill's lines of
@@ -900,51 +888,16 @@ export function diffLines(
   ]
 }
 
-/**
- * The inverse of `after`'s change against `before`, applied to `current`:
- * an added line goes, a removed one returns, an edited one is restored. A
- * part that no longer applies (the line was edited or removed since) is
- * left. Returns null when nothing is left to undo.
- */
-export function inverse<L extends ProfileLine>(
-  before: readonly L[],
-  after: readonly L[],
-  current: readonly L[]
-): L[] | null {
-  const was = new Map(before.map((l) => [l.id, l]))
-  const made = new Map(after.map((l) => [l.id, l]))
-  let held = [...current]
-  let changed = false
-  for (const line of after) {
-    const old = was.get(line.id)
-    if (old?.text === line.text) continue
-    const now = held.find((l) => l.id === line.id)
-    if (!now || now.text !== line.text) continue
-    changed = true
-    held = old
-      ? held.map((l) => (l.id === line.id ? old : l))
-      : held.filter((l) => l.id !== line.id)
-  }
-  for (const line of before) {
-    if (made.has(line.id) || held.some((l) => l.id === line.id)) continue
-    changed = true
-    held.push(line)
-  }
-  return changed ? held : null
-}
-
-/** A store's current lines and its newest versions, each with whether undo still applies. */
+/** A store's current lines and its newest versions. */
 async function layerView(db: OrgScopedDb, store: Store): Promise<MemoryLayer> {
   const rows = await factVersions(db, store.key, 51)
   const current = rows[0] ? linesOf(rows[0].value, store) : []
   const versions = rows.slice(0, 50).map((row, i): ProfileVersion => {
     const before = rows[i + 1] ? linesOf(rows[i + 1]?.value, store) : []
-    const after = linesOf(row.value, store)
     return {
       version: row.version,
       at: row.validFrom.toISOString(),
-      changes: diffLines(before, after),
-      undoable: inverse(before, after, current) !== null,
+      changes: diffLines(before, linesOf(row.value, store)),
     }
   })
   return {
@@ -993,7 +946,7 @@ async function skillNotesView(
   )
 }
 
-/** The page: every store's lines and versions, each with whether undo still applies. */
+/** The page: every store's lines and versions. */
 export async function memoryView(db: OrgScopedDb): Promise<MemoryView> {
   const [profile, notes, skills, notesBySkill, review, corrections] =
     await Promise.all([
@@ -1018,95 +971,6 @@ export async function memoryView(db: OrgScopedDb): Promise<MemoryView> {
     proposals: review.proposals,
     corrections: corrections.lines,
   }
-}
-
-/** Undoes one version's change of a store, as the next version. Null when it no longer applies. */
-export async function undoVersion(
-  db: OrgScopedDb,
-  orgId: string,
-  version: number,
-  store: Store = STORES.profile
-): Promise<{ version: number } | null> {
-  const rows = await factVersions(db, store.key, 51)
-  const index = rows.findIndex((r) => r.version === version)
-  const target = rows[index]
-  if (!target) return null
-  const before = rows[index + 1] ? linesOf(rows[index + 1]?.value, store) : []
-  await lockProfile(db, orgId, store.key)
-  const held = await readProfile(db, store)
-  const lines = inverse(before, linesOf(target.value, store), held.lines)
-  if (!lines) return null
-  const written = await saveProfile(db, orgId, lines, undefined, store)
-  // An undo the owner made is not a change to tell them about.
-  const shown = await readReview(db)
-  if (store === STORES.profile && shown.chip_through >= written - 1) {
-    await writeReview(db, orgId, { chip_through: written })
-  }
-  return { version: written }
-}
-
-/**
- * The owner rewrites one line in their own words, or removes it. Their
- * words need no quote gate, but a line is still a statement, never a
- * secret, and within its budget. Null when the line is gone; a refusal says
- * why nothing was saved.
- */
-export async function editLine(
-  db: OrgScopedDb,
-  orgId: string,
-  edit: MemoryLineEdit
-): Promise<{ version: number } | Refusal | null> {
-  const store = STORE_OF[edit.store]
-  await lockProfile(db, orgId, store.key)
-  const { lines } = await readProfile(db, store)
-  const line = lines.find((l) => l.id === edit.id)
-  if (!line) return null
-  if (edit.text === undefined) {
-    return {
-      version: await saveProfile(
-        db,
-        orgId,
-        lines.filter((l) => l.id !== edit.id),
-        undefined,
-        store
-      ),
-    }
-  }
-  const text = norm(edit.text)
-  const quote = quoteOf(text)
-  const why = refusalOf(quote ?? text)
-  if (why === "secret") return refusal("memory.secret", SECRET_TEXT)
-  // A quoted standing request may be an order: it is the owner's own sentence.
-  if (why === "attack" || (why === "order" && quote === null)) {
-    return refusal("memory.not_a_statement", STATEMENT)
-  }
-  if (quote === null && BUSINESS.test(text)) {
-    return refusal("memory.business_fact", BUSINESS_TEXT)
-  }
-  const next = lines.map((l) =>
-    l.id === edit.id
-      ? {
-          ...l,
-          text,
-          source: "owner_said" as const,
-          at: new Date().toISOString(),
-        }
-      : l
-  )
-  const skill = (line as Partial<SkillNoteLine>).skill
-  const mine = skill
-    ? (next as SkillNoteLine[]).filter((l) => l.skill === skill)
-    : next
-  if (
-    !store.schema.safeParse({ lines: next }).success ||
-    profileText(mine).length > store.max
-  ) {
-    return refusal(
-      "memory.invalid",
-      `That would pass the ${store.max.toLocaleString("en-GB")} characters this holds. Shorten it or remove another line first.`
-    )
-  }
-  return { version: await saveProfile(db, orgId, next, undefined, store) }
 }
 
 /** The review state; a row written before the choice existed reads as asking nothing. */
@@ -1140,9 +1004,8 @@ export async function writeReview(
 /**
  * What changed since the chat last looked, as one chip, or null. It is the
  * net difference between the profile as the chat last saw it and now, so a
- * change the owner took back before the chat showed it is never mentioned.
- * Reading it moves the mark, so a change is shown once; the owner's own
- * undos of a shown change move the mark themselves.
+ * change taken back before the chat showed it is never mentioned.
+ * Reading it moves the mark, so a change is shown once.
  */
 export async function takeChip(
   db: OrgScopedDb,
@@ -1228,32 +1091,9 @@ export async function reviewAction(
 }
 
 /**
- * Takes one of the owner's corrections for staff away, from the next run
- * on. False when it is not there.
- */
-export async function removeCorrection(
-  db: OrgScopedDb,
-  orgId: string,
-  id: string
-): Promise<boolean> {
-  await lockProfile(db, orgId, STAFF_CORRECTIONS_KEY)
-  const { lines } = await readCorrections(db)
-  const left = lines.filter((l) => l.id !== id)
-  if (left.length === lines.length) return false
-  await supersedePrivateFact(db, {
-    orgId,
-    key: STAFF_CORRECTIONS_KEY,
-    factType: "owner",
-    value: { lines: left },
-    provenance: { source: "owner_stated", confidence: 1 },
-  })
-  return true
-}
-
-/**
- * The owner's page: `GET /memory`, `POST /memory/undo`, `POST /memory/lines`,
- * `POST /memory/review` and `DELETE /memory/corrections/{id}`, which only
- * the org's owner may call.
+ * The owner's page: `GET /memory` and `POST /memory/review`, which only the
+ * org's owner may call. The page writes no memory: the owner changes it by
+ * telling the assistant.
  */
 export async function memoryRoute(
   request: Request,
@@ -1267,75 +1107,6 @@ export async function memoryRoute(
       MemoryView.parse(await kit.withOrg(at, (db) => memoryView(db)))
     )
   if (pathname === "/memory" && request.method === "GET") return view()
-  if (pathname === "/memory/undo" && request.method === "POST") {
-    const parsed = MemoryUndo.safeParse(await readBody(request))
-    if (!parsed.success) return invalid(parsed.error.issues)
-    const done = await kit.withOrg(at, (db) =>
-      undoVersion(
-        db,
-        owner.orgId,
-        parsed.data.version,
-        STORE_OF[parsed.data.store ?? "user"]
-      )
-    )
-    if (!done) {
-      return failure(409, {
-        class: "validation",
-        code: "memory.nothing_to_undo",
-        message:
-          "That change was already undone or has been edited since, so there is nothing left to undo.",
-        detail: {},
-      })
-    }
-    return view()
-  }
-  if (pathname === "/memory/lines" && request.method === "POST") {
-    const parsed = MemoryLineEdit.safeParse(await readBody(request))
-    if (!parsed.success) return invalid(parsed.error.issues)
-    const done = await kit.withOrg(at, (db) =>
-      editLine(db, owner.orgId, parsed.data)
-    )
-    if (!done) {
-      return failure(404, {
-        class: "resource",
-        code: "memory.line_not_found",
-        message: "That line was already removed or changed.",
-        detail: {},
-      })
-    }
-    if ("code" in done) {
-      return failure(409, {
-        class: "validation",
-        code: done.code,
-        message: done.message,
-        detail: {},
-      })
-    }
-    return view()
-  }
-  const [, , section, id = ""] = pathname.split("/")
-  if (section === "corrections" && request.method === "DELETE") {
-    if (!(await isOrgOwner(kit, owner))) {
-      return failure(403, {
-        class: "permission",
-        code: "memory.not_owner",
-        message: "Only the owner can remove how the website is worked on.",
-        detail: {},
-      })
-    }
-    const done =
-      Uuid.safeParse(id).success &&
-      (await kit.withOrg(at, (db) => removeCorrection(db, owner.orgId, id)))
-    if (!done) {
-      return failure(404, {
-        class: "resource",
-        code: "memory.correction_not_found",
-        message: "That instruction was already removed.",
-        detail: {},
-      })
-    }
-    return view()
-  }
   if (pathname === "/memory/review" && request.method === "POST") {
     const parsed = MemoryReviewAction.safeParse(await readBody(request))
     if (!parsed.success) return invalid(parsed.error.issues)

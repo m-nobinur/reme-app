@@ -52421,43 +52421,6 @@
         ],
         "additionalProperties": false
       },
-      "MemoryLineEdit": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "store": {
-            "type": "string",
-            "enum": [
-              "user",
-              "notes",
-              "skills"
-            ]
-          },
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-          },
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 300,
-            "allOf": [
-              {
-                "pattern": "\\S"
-              },
-              {
-                "pattern": "^[^\\r\\n]+$"
-              }
-            ]
-          }
-        },
-        "required": [
-          "store",
-          "id"
-        ],
-        "additionalProperties": false
-      },
       "MemoryOutput": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "oneOf": [
@@ -52715,29 +52678,6 @@
           }
         ]
       },
-      "MemoryUndo": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "version": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
-          },
-          "store": {
-            "type": "string",
-            "enum": [
-              "user",
-              "notes",
-              "skills"
-            ]
-          }
-        },
-        "required": [
-          "version"
-        ],
-        "additionalProperties": false
-      },
       "MemoryView": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -52845,16 +52785,12 @@
                     ],
                     "additionalProperties": false
                   }
-                },
-                "undoable": {
-                  "type": "boolean"
                 }
               },
               "required": [
                 "version",
                 "at",
-                "changes",
-                "undoable"
+                "changes"
               ],
               "additionalProperties": false
             }
@@ -52970,16 +52906,12 @@
                         ],
                         "additionalProperties": false
                       }
-                    },
-                    "undoable": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
                     "version",
                     "at",
-                    "changes",
-                    "undoable"
+                    "changes"
                   ],
                   "additionalProperties": false
                 }
@@ -53136,16 +53068,12 @@
                         ],
                         "additionalProperties": false
                       }
-                    },
-                    "undoable": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
                     "version",
                     "at",
-                    "changes",
-                    "undoable"
+                    "changes"
                   ],
                   "additionalProperties": false
                 }

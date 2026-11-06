@@ -212,7 +212,6 @@ const productCatalog: Entry[] = [
     render: () => (
       <div className="max-w-xl">
         <MemoryLines
-          busy={false}
           description="How you like this work done, used whenever your assistant drafts a quote reply."
           heading="h3"
           id="catalog-memory-lines"
@@ -230,8 +229,6 @@ const productCatalog: Entry[] = [
             },
           ]}
           max={600}
-          onRemove={() => undefined}
-          onSave={() => undefined}
           title="Quote reply"
           used={89}
         />

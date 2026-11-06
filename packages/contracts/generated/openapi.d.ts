@@ -14461,13 +14461,6 @@ export interface components {
         old_text?: string
       }[]
     }
-    MemoryLineEdit: {
-      /** @enum {string} */
-      store: "user" | "notes" | "skills"
-      /** Format: uuid */
-      id: string
-      text?: string & (unknown & unknown)
-    }
     MemoryOutput:
       | {
           /** @constant */
@@ -14539,11 +14532,6 @@ export interface components {
           /** Format: uuid */
           id: string
         }
-    MemoryUndo: {
-      version: number
-      /** @enum {string} */
-      store?: "user" | "notes" | "skills"
-    }
     MemoryView: {
       version: number
       lines: {
@@ -14566,7 +14554,6 @@ export interface components {
           /** @enum {string} */
           source: "owner_said" | "owner_confirmed" | "reflection"
         }[]
-        undoable: boolean
       }[]
       notes: {
         version: number
@@ -14591,7 +14578,6 @@ export interface components {
             /** @enum {string} */
             source: "owner_said" | "owner_confirmed" | "reflection"
           }[]
-          undoable: boolean
         }[]
       }
       skills: {
@@ -14622,7 +14608,6 @@ export interface components {
             /** @enum {string} */
             source: "owner_said" | "owner_confirmed" | "reflection"
           }[]
-          undoable: boolean
         }[]
       }
       ask_first: boolean

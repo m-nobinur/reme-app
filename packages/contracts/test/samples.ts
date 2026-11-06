@@ -1285,12 +1285,6 @@ export const samples: Record<ContractName, unknown> = {
       { kind: "added", text: "Prefers calls after 4pm", source: "owner_said" },
     ],
   },
-  MemoryUndo: { version: 3, store: "notes" },
-  MemoryLineEdit: {
-    store: "user",
-    id: CONVERSATION,
-    text: "Prefers calls after 5pm",
-  },
   MemoryInput: {
     target: "skill:quote-reply",
     operations: [
@@ -1348,7 +1342,6 @@ export const samples: Record<ContractName, unknown> = {
             source: "owner_said",
           },
         ],
-        undoable: true,
       },
     ],
     notes: {

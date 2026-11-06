@@ -26,14 +26,12 @@ import {
   FULL_REFUSALS,
   fullness,
   inOwnersWords,
-  inverse,
   memory,
   memoryView,
   quoteOf,
   readProfile,
   refusalOf,
   takeChip,
-  undoVersion,
 } from "../src/cos/memory.ts"
 import { getFacts, loadWorkspace, type ToolContext } from "../src/cos/tools.ts"
 import { type Owner, owner, stubOrchestrator } from "./owner-fixture.ts"
@@ -358,18 +356,6 @@ describe("undoing one change", () => {
       { kind: "removed", text: b.text, source: "owner_said" },
     ])
   })
-
-  it("takes an added line out, brings a removed one back and restores an edit", () => {
-    expect(inverse([a], [a, b], [a, b])).toEqual([a])
-    expect(inverse([a, b], [a], [a])).toEqual([a, b])
-    const edited = { ...a, text: "Prefers calls after 5pm" }
-    expect(inverse([a], [edited], [edited])).toEqual([a])
-  })
-
-  it("leaves a part that was edited since, and says so when nothing is left", () => {
-    const later = { ...b, text: "Quotes go out on Mondays" }
-    expect(inverse([a], [a, b], [a, later])).toBeNull()
-  })
 })
 
 const url = process.env.DATABASE_URL
@@ -574,47 +560,19 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     ).toMatchObject({ outcome: "saved" })
   })
 
-  it("lists the versions with what each changed, and undoes the newest as the next version", async () => {
-    const before = await kit.withOrg({ orgId: me.orgId }, (db) =>
-      memoryView(db)
-    )
-    const newest = before.versions[0]
-    expect(newest).toMatchObject({ undoable: true })
-    const done = await kit.withOrg({ orgId: me.orgId }, (db) =>
-      undoVersion(db, me.orgId, before.version)
-    )
-    expect(done).toEqual({ version: before.version + 1 })
-    const after = await kit.withOrg({ orgId: me.orgId }, (db) => memoryView(db))
-    // The prior version's lines are back, and the undo is a version of its own.
-    expect(after.lines.map((l) => l.text)).not.toContain("f".repeat(290))
-    expect(after.lines.map((l) => l.text)).toContain("b".repeat(290))
-    expect(after.version).toBe(before.version + 1)
-    // The same version cannot be undone twice.
-    expect(
-      await kit.withOrg({ orgId: me.orgId }, (db) =>
-        undoVersion(db, me.orgId, before.version)
-      )
-    ).toBeNull()
+  it("lists the versions with what each changed, newest first", async () => {
+    const view = await kit.withOrg({ orgId: me.orgId }, (db) => memoryView(db))
+    expect(view.versions[0]?.version).toBe(view.version)
+    expect(view.versions[0]?.changes.length).toBeGreaterThan(0)
+    expect(view.versions[0]).not.toHaveProperty("undoable")
   })
 
-  it("shows each change in the chat once, and never an undo the owner made", async () => {
+  it("shows each change in the chat once", async () => {
     const chip = await kit.withOrg({ orgId: me.orgId }, (db) =>
       takeChip(db, me.orgId)
     )
     expect(chip?.changes.length).toBeGreaterThan(0)
     expect(chip?.changes[0]).toHaveProperty("source")
-    expect(
-      await kit.withOrg({ orgId: me.orgId }, (db) => takeChip(db, me.orgId))
-    ).toBeNull()
-    const turn = await turnOf()
-    await said(turn, add("Has a spaniel called Biscuit"))
-    const version = (
-      await kit.withOrg({ orgId: me.orgId }, (db) => readProfile(db))
-    ).version
-    await kit.withOrg({ orgId: me.orgId }, (db) =>
-      undoVersion(db, me.orgId, version)
-    )
-    // The chat never saw the added line, so it is not told about its undo.
     expect(
       await kit.withOrg({ orgId: me.orgId }, (db) => takeChip(db, me.orgId))
     ).toBeNull()

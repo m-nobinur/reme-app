@@ -62,10 +62,9 @@ it("says what a saved memory call changed in its own turn", () => {
   )
 })
 
-it("lists a store's lines with how full it is, a stale line marked, and named edit and remove buttons", () => {
+it("lists a store's lines with how full it is and a stale line marked, with no way to change them", () => {
   const html = renderToStaticMarkup(
     createElement(MemoryLines, {
-      busy: false,
       id: "quote-reply",
       lines: [
         {
@@ -75,21 +74,16 @@ it("lists a store's lines with how full it is, a stale line marked, and named ed
           stale: true,
         },
       ],
-      max: 600,
-      onRemove: () => undefined,
-      onSave: () => undefined,
+      max: 800,
       title: "Quote reply",
       used: 30,
     })
   )
-  expect(html).toContain("30 of 600 characters")
+  expect(html).toContain("30 of 800 characters")
   expect(html).toContain("Not used for 60 days")
-  expect(html).toContain(
-    'aria-label="Edit &quot;City centre quotes add parking&quot;"'
-  )
-  expect(html).toContain(
-    'aria-label="Remove &quot;City centre quotes add parking&quot;"'
-  )
+  expect(html).toContain("You said it")
+  expect(html).not.toContain("<button")
+  expect(html).not.toContain("<input")
 })
 
 it("says what a saved remember call changed in its own turn, and nothing for one that was not saved", () => {

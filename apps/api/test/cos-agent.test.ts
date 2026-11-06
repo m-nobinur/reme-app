@@ -1748,7 +1748,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       expect(refused.sent).toHaveLength(2)
     })
 
-    it("recalls a preference twenty turns and one new conversation later, and undo restores the version before", async () => {
+    it("recalls a preference twenty turns and one new conversation later, and a removal through the tool takes the line out", async () => {
       const first = await conversation(me)
       const told = await tell(me, first, "I prefer calls after 4pm.", {
         action: "add",
@@ -1782,35 +1782,23 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         "OWNER PROFILE (who the owner is) [2%, 23/1,500 chars]\nPrefers calls after 4pm\n"
       )
 
-      // A second line, then undo: the prior version's lines come back.
+      // A second line, then the owner takes it back through the assistant.
       await tell(me, second, "Quotes go out on Fridays.", {
         action: "add",
         content: "Quotes go out on Fridays",
       })
+      await tell(me, second, "Scrap the Friday quotes line.", {
+        action: "remove",
+        old_text: "Quotes go out on Fridays",
+      })
       const view = await me.call(stubOrchestrator(), "/memory", {
         method: "GET",
       })
-      const before = (await view.json()) as {
-        version: number
-        lines: { text: string }[]
-      }
-      expect(before.lines.map((l) => l.text)).toEqual([
-        "Prefers calls after 4pm",
-        "Quotes go out on Fridays",
-      ])
-      const undone = await me.call(stubOrchestrator(), "/memory/undo", {
-        method: "POST",
-        body: JSON.stringify({ version: before.version }),
-      })
-      expect(undone.status).toBe(200)
-      const after = (await undone.json()) as {
-        version: number
-        lines: { text: string }[]
-      }
-      expect(after.version).toBe(before.version + 1)
-      expect(after.lines.map((l) => l.text)).toEqual([
-        "Prefers calls after 4pm",
-      ])
+      expect(
+        ((await view.json()) as { lines: { text: string }[] }).lines.map(
+          (l) => l.text
+        )
+      ).toEqual(["Prefers calls after 4pm"])
       const again = scripted(said("Fine."))
       await turn(me, typed(second, "And now?", "ask"), { model: again.model })
       expect(profileIn(again.sent)).toBe(
