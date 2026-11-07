@@ -14,6 +14,9 @@ import worker from "../src/index.ts"
 import audioFixture from "./fixtures/whatsapp/audio-message.json" with {
   type: "json",
 }
+import imageFixture from "./fixtures/whatsapp/image-message.json" with {
+  type: "json",
+}
 import statusFixture from "./fixtures/whatsapp/status.json" with {
   type: "json",
 }
@@ -47,6 +50,21 @@ function voiceDelivery(phone: string, from: string, id: string) {
     .replace("106540352242922", phone)
     .replaceAll("16505551234", from)
     .replace(message?.id as string, id)
+}
+
+/** The recorded photo with this number, sender and wamid; `media` swaps its media id. */
+function photoDelivery(
+  phone: string,
+  from: string,
+  id: string,
+  media?: string
+) {
+  const [message] = imageFixture.entry[0]?.changes[0]?.value.messages ?? []
+  return JSON.stringify(imageFixture)
+    .replace("106540352242922", phone)
+    .replaceAll("16505551234", from)
+    .replace(message?.id as string, id)
+    .replace("1003383421387999", media ?? "1003383421387999")
 }
 
 async function signature(raw: string, secret = SECRET) {
@@ -178,6 +196,7 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
   let b: Owner & { phone: string }
   let run = 0
   const speech: { model: string; contentType: string }[] = []
+  const stored: string[] = []
   let recognise: (model: string) => unknown = () => ({
     results: {
       channels: [
@@ -200,6 +219,10 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
           speech.push({ model, contentType: input.audio.contentType })
           return recognise(model)
         },
+      },
+      SITES: {
+        put: async (key: string) => void stored.push(key),
+        delete: async () => undefined,
       },
       ORCHESTRATOR: stubOrchestrator(),
       SITE_HOST_SUFFIX: SUFFIX,
@@ -315,13 +338,24 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
       init?: RequestInit
     ) => {
       const target = String(input instanceof Request ? input.url : input)
-      if (target.startsWith("https://lookaside.fbsbx.com/"))
+      if (target.startsWith("https://lookaside.fbsbx.com/")) {
+        if (target.endsWith("1003383421387999"))
+          return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2]))
+        if (target.endsWith("1003383421387998"))
+          return new Response("not a picture, just words")
         return new Response(new Uint8Array([79, 103, 103, 83]))
+      }
       if (target.endsWith("/1003383421387256"))
         return Response.json({
           url: "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1003383421387256",
           mime_type: "audio/ogg",
           file_size: 4,
+        })
+      if (/\/100338342138799[89]$/.test(target))
+        return Response.json({
+          url: `https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=${target.slice(-16)}`,
+          mime_type: "image/jpeg",
+          file_size: 6,
         })
       if (!target.startsWith("https://graph.facebook.com/"))
         return realFetch(input, init)
@@ -339,6 +373,7 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
     jobs.length = 0
     graph.length = 0
     speech.length = 0
+    stored.length = 0
   })
 
   afterAll(async () => {
@@ -583,6 +618,43 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
       "@cf/openai/whisper-large-v3-turbo",
     ])
     expect(prompts[0]).toContain("Cancel Tuesday.")
+  })
+
+  it("keeps a photo as an upload and tells the turn about it with its caption", async () => {
+    const from = sender()
+    await link(a, from)
+    graph.length = 0
+    expect((await post(photoDelivery(a.phone, from, wamid()))).status).toBe(200)
+    const { model, prompts } = scripted("Got it.")
+    expect(
+      await channelTurn(bindings(), kit, jobs[0] as ChannelJob, { model })
+    ).toBe("ran")
+    expect(stored).toHaveLength(1)
+    expect(stored[0]).toMatch(new RegExp(`^uploads/${a.orgId}/`))
+    expect(prompts[0]).toMatch(/The owner sent a photo: whatsapp-[\w-]+\.jpg/)
+    expect(prompts[0]).toContain("Use this for the gallery")
+    const [facts] = await admin`
+      select value from facts where org_id = ${a.orgId} and key = 'media.uploads' order by created_at desc limit 1`
+    expect(JSON.stringify(facts?.value)).toContain("image/jpeg")
+  })
+
+  it("refuses a photo that is not an image without a turn", async () => {
+    const from = sender()
+    await link(b, from)
+    graph.length = 0
+    expect(
+      (await post(photoDelivery(b.phone, from, wamid(), "1003383421387998")))
+        .status
+    ).toBe(200)
+    const { model, prompts } = scripted()
+    expect(
+      await channelTurn(bindings(), kit, jobs[0] as ChannelJob, { model })
+    ).toBe("idle")
+    expect(prompts).toHaveLength(0)
+    expect(stored).toHaveLength(0)
+    expect(sent()[0]?.body.text).toMatchObject({
+      body: expect.stringMatching(/couldn't keep that photo/),
+    })
   })
 
   it("asks for a retype when no speech model can hear the note", async () => {
