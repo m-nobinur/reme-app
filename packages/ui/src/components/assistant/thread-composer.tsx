@@ -6,7 +6,6 @@ import {
 } from "@assistant-ui/react"
 import {
   ArrowUpIcon,
-  CheckCircleIcon,
   MicrophoneIcon,
   PlusIcon,
   SquareIcon,
@@ -35,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
+import { STATE_MARKS } from "@workspace/ui/lib/status-icons"
 import { waitsOnTray } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import {
@@ -567,7 +567,7 @@ const ComposerListening: FC = () => {
           />
         }
       >
-        <CheckCircleIcon aria-hidden className="size-4.5" weight="bold" />
+        <STATE_MARKS.done.Icon aria-hidden className="size-4.5" weight="bold" />
       </ComposerPrimitive.StopDictation>
     </>
   )
