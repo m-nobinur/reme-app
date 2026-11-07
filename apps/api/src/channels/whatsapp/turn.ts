@@ -22,7 +22,7 @@ import { SessionBusy } from "../../cos/turns.ts"
 import { ownerStaffId } from "../../staff.ts"
 import { hashCode } from "../token.ts"
 import { type Graph, graphOf, markRead } from "./graph.ts"
-import { transcribe } from "./media.ts"
+import { PHOTO_REFUSED, savePhoto, transcribe } from "./media.ts"
 import {
   approvalMessage,
   choiceText,
@@ -59,6 +59,11 @@ const textOf = ({ body }: Waiting) =>
 const audioOf = ({ body }: Waiting) =>
   body.type === "audio"
     ? ((body.audio as { id?: unknown } | undefined)?.id as string | undefined)
+    : undefined
+
+const imageOf = ({ body }: Waiting) =>
+  body.type === "image"
+    ? (body.image as { id?: string; caption?: string } | undefined)
     : undefined
 
 const UNHEARD =
@@ -181,9 +186,29 @@ export async function channelTurn(
   async function run(step: Step): Promise<ChannelTurn> {
     const heard: string[] = []
     let unheard = false
+    let photoLost = false
     if (!step.tap) {
       const lines: string[] = []
       for (const row of step.rows) {
+        const image = imageOf(row)
+        if (image?.id) {
+          const asset = await savePhoto(
+            env,
+            kit,
+            owner,
+            graph,
+            image.id,
+            row.id
+          )
+          if (asset) {
+            lines.push(
+              [`The owner sent a photo: ${asset.name}`, image.caption?.trim()]
+                .filter(Boolean)
+                .join("\n")
+            )
+          } else photoLost = true
+          continue
+        }
         const mediaId = audioOf(row)
         if (!mediaId) {
           const typed = textOf(row)
@@ -197,6 +222,10 @@ export async function channelTurn(
         } else unheard = true
       }
       step.text = lines.join("\n\n")
+      if (photoLost && !step.text.trim()) {
+        await sendReply(graph, to, PHOTO_REFUSED, null, () => "")
+        return "idle"
+      }
       if (unheard && !step.text.trim()) {
         await sendReply(graph, to, UNHEARD, null, () => "")
         return "idle"
