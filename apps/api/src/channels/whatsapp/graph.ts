@@ -1,7 +1,7 @@
 import { type OrgScopedDb, whatsappAccounts } from "@workspace/db"
 import { openToken } from "../token.ts"
 
-export const GRAPH = "https://graph.facebook.com/v25.0"
+export const GRAPH = "https://graph.facebook.com/v27.0"
 
 /** Too many messages to one person in a short time: wait, then send again. */
 export const PAIR_RATE_LIMIT = 131056

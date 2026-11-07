@@ -77,6 +77,9 @@ interface Env {
   WHATSAPP_APP_SECRET?: string
   /** What Meta's verify handshake must send back. Unset, the handshake gets 503. */
   WHATSAPP_VERIFY_TOKEN?: string
+  /** Reme's Meta app id, and the Embedded Signup configuration (Facebook Login for Business) the popup opens. */
+  WHATSAPP_APP_ID?: string
+  WHATSAPP_SIGNUP_CONFIG_ID?: string
   /** Search Console's Google client id. Unset, `connect_google` answers that Google is not available. */
   GOOGLE_CLIENT_ID?: string
   /**

@@ -31,8 +31,11 @@ import type {
   RegistrantDetails,
   Reminder,
   SiteMedia,
+  WhatsAppAccount,
+  WhatsAppSignupComplete,
   WorkspaceStatus,
 } from "@workspace/contracts"
+import type { SignupConfig } from "@/lib/whatsapp-signup"
 
 /**
  * What the owner screens read, and the one interface behind them.
@@ -337,6 +340,13 @@ export type OwnerDataSource = {
   channels: () => Promise<ChannelsState | null>
   /** A fresh WhatsApp link with its one-time code in it, or null when the api refused it. */
   startWhatsAppLink: (key: string) => Promise<ChannelLinkStarted | null>
+  /** What Embedded Signup's popup opens with, or null where the api has no configuration for it. */
+  signupConfig: () => Promise<SignupConfig | null>
+  /** Hands the popup's result to the api, which connects the number. Null when the api refused it. */
+  completeWhatsAppSignup: (
+    input: WhatsAppSignupComplete,
+    key: string
+  ) => Promise<WhatsAppAccount | null>
   updateChannelLink: (
     id: string,
     patch: ChannelLinkPatch,

@@ -36,6 +36,14 @@ const STRIPE_SCRIPTS =
   "https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com"
 
 /**
+ * Meta's JavaScript SDK, which opens WhatsApp Embedded Signup (Settings,
+ * Messaging channels). The SDK script comes from connect.facebook.net; the
+ * popup and its helper frames talk to facebook.com.
+ */
+const FACEBOOK_SDK = "https://connect.facebook.net"
+const FACEBOOK_HOSTS = "https://*.facebook.com"
+
+/**
  * The api's own WebSocket origin, for voice dictation: the microphone streams
  * to it directly, since the session cookie does not reach that host and a
  * ticket does. Nothing else of the api's is reachable from the browser.
@@ -53,12 +61,12 @@ export function contentSecurityPolicy(
 ): string {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' ${STRIPE_SCRIPTS}`,
+    `script-src 'self' 'nonce-${nonce}' ${STRIPE_SCRIPTS} ${FACEBOOK_SDK}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: https://*.remeai.co.uk${dev ? " http://*.reme.localhost:*" : ""}`,
     "font-src 'self' data:",
-    `connect-src 'self' https://api.stripe.com https://checkout.stripe.com${dictationSocket(api)}`,
-    `frame-src ${STRIPE_SCRIPTS} https://hooks.stripe.com`,
+    `connect-src 'self' https://api.stripe.com https://checkout.stripe.com ${FACEBOOK_HOSTS}${dictationSocket(api)}`,
+    `frame-src ${STRIPE_SCRIPTS} https://hooks.stripe.com ${FACEBOOK_HOSTS}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

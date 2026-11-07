@@ -77,7 +77,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review|corrections\/[^/]+))?|approval-grants|dictation\/(ticket|tidy)|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(check|checkout|registrant|elsewhere|bought|not-yet))?|google\/(connect|disconnect|result)|time-zone|channels(\/whatsapp\/link|\/links\/[^/]+)?|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review|corrections\/[^/]+))?|approval-grants|dictation\/(ticket|tidy)|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(check|checkout|registrant|elsewhere|bought|not-yet))?|google\/(connect|disconnect|result)|time-zone|channels(\/whatsapp\/(link|signup)|\/links\/[^/]+)?|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()

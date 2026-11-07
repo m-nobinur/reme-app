@@ -22,6 +22,8 @@ import {
   SetTimeZoneRequest,
   Timestamp,
   Uuid,
+  type WhatsAppAccount,
+  WhatsAppSignupComplete,
 } from "@workspace/contracts"
 import type { CheckoutStart } from "@workspace/ui/components/assistant/buy-domain"
 import { PANEL_COOKIE, RAIL_COOKIE } from "@workspace/ui/lib/panel"
@@ -461,6 +463,19 @@ export const startWhatsAppLink = createServerFn({ method: "POST" }).handler(
   async (): Promise<ChannelLinkStarted | null> =>
     await source.startWhatsAppLink(crypto.randomUUID())
 )
+
+/** What Embedded Signup's popup opens with; null where the api has none. */
+export const getWhatsAppSignupConfig = createServerFn({
+  method: "GET",
+}).handler(async () => await source.signupConfig())
+
+/** The popup's result, handed to the api; the connected account, or null when refused. */
+export const completeWhatsAppSignup = createServerFn({ method: "POST" })
+  .validator((input: unknown) => WhatsAppSignupComplete.parse(record(input)))
+  .handler(
+    async ({ data }): Promise<WhatsAppAccount | null> =>
+      await source.completeWhatsAppSignup(data, crypto.randomUUID())
+  )
 
 export const setChannelUpdates = createServerFn({ method: "POST" })
   .validator((input: unknown) => {

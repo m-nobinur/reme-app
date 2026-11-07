@@ -62,9 +62,9 @@ describe("the update template on a business's WABA", () => {
     expect(graph.map((c) => [c.method, c.path])).toEqual([
       [
         "GET",
-        "/v25.0/102290129340398/message_templates?name=reme_update&fields=name",
+        "/v27.0/102290129340398/message_templates?name=reme_update&fields=name",
       ],
-      ["POST", "/v25.0/102290129340398/message_templates"],
+      ["POST", "/v27.0/102290129340398/message_templates"],
     ])
     expect(graph[1]?.body).toMatchObject({
       name: "reme_update",
