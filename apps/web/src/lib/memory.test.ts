@@ -54,6 +54,7 @@ it("says what a saved memory call changed in its own turn", () => {
         target: "notes",
         note: "Write saved.",
         fullness: "1%, 25/3,500 chars",
+        entry_count: 2,
       },
     })
   )
