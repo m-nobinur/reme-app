@@ -57,6 +57,18 @@ const day = (at: string, zone: string | null) =>
     timeZone: zone ?? "UTC",
   })
 
+/** Where the owner writes from when it is not the web. */
+export type Channel = "whatsapp"
+
+const CHANNEL_NOTES: Record<Channel, string> = {
+  whatsapp:
+    "The owner is writing from WhatsApp. Keep replies to a few plain sentences, with no tables or headings. Cards and anything long open in Reme on the web, so point to Reme for those instead of spelling them out. Don't start or suggest anything that needs Reme on the web, such as connecting Google or buying a domain, unless the owner asks for it; this holds over any line here that says to suggest it.",
+}
+
+/** The line that tells a turn where the owner is writing from, none for the web. */
+export const channelNote = (channel: Channel | undefined): string[] =>
+  channel ? [CHANNEL_NOTES[channel]] : []
+
 const UNKNOWN = "Whether they have a domain is unknown: ask, never guess."
 
 /** The skill part an open address's next step is in, by stage. */

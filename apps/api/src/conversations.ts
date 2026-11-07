@@ -206,6 +206,10 @@ function toConversationMessage(
         custom: {
           createdAt: row.createdAt.toISOString(),
           ...(partial && { partial }),
+          ...(role === "user" &&
+            row.id.startsWith("wa_") && {
+              source: "whatsapp" as const,
+            }),
         },
       },
     },

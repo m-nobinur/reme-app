@@ -12,7 +12,11 @@ import {
   useAui,
   useAuiState,
 } from "@assistant-ui/react"
-import { ThumbsDownIcon, ThumbsUpIcon } from "@phosphor-icons/react"
+import {
+  ThumbsDownIcon,
+  ThumbsUpIcon,
+  WhatsappLogoIcon,
+} from "@phosphor-icons/react"
 import { AskDesignInput, AskDesignOutput } from "@workspace/contracts"
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
 import { DesignReply } from "@workspace/ui/components/assistant/design-reply"
@@ -424,6 +428,20 @@ const MessageTime: FC = () => {
   )
 }
 
+const FromWhatsApp: FC = () => {
+  const from = useAuiState((s) => s.message.metadata.custom.source)
+  if (from !== "whatsapp") return null
+  return (
+    <span
+      data-slot="aui_user-message-source"
+      className="flex items-center gap-1 text-[0.6875rem]"
+    >
+      <WhatsappLogoIcon aria-hidden className="size-3" />
+      From WhatsApp
+    </span>
+  )
+}
+
 type Delivery = "sent" | "delivered" | "seen"
 
 /**
@@ -582,6 +600,7 @@ export const UserMessage: FC = () => {
             data-slot="aui_user-message-meta"
             className="ms-auto me-2 flex items-center gap-1 text-muted-foreground"
           >
+            <FromWhatsApp />
             <MessageTime />
             <DeliveryTick />
           </span>

@@ -16566,6 +16566,204 @@
         ],
         "additionalProperties": false
       },
+      "ChannelLink": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "whatsapp",
+              "telegram"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "\\S"
+          },
+          "connected_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "updates": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "connected_at",
+          "updates"
+        ],
+        "additionalProperties": false
+      },
+      "ChannelLinkPatch": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "updates": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "updates"
+        ],
+        "additionalProperties": false
+      },
+      "ChannelLinkStarted": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "whatsapp",
+              "telegram"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2000,
+            "pattern": "^https:\\/\\/\\S+$"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "required": [
+          "kind",
+          "url",
+          "expires_at"
+        ],
+        "additionalProperties": false
+      },
+      "ChannelsState": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "whatsapp": {
+            "type": "object",
+            "properties": {
+              "available": {
+                "type": "boolean"
+              },
+              "account": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "display_number": {
+                        "type": "string",
+                        "pattern": "^\\+[1-9]\\d{6,14}$"
+                      },
+                      "display_name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "\\S"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "connected",
+                          "purchased",
+                          "dev"
+                        ]
+                      },
+                      "coexistence": {
+                        "type": "boolean"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "pending",
+                          "active",
+                          "disabled"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "display_number",
+                      "display_name",
+                      "source",
+                      "coexistence",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "links": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "whatsapp",
+                        "telegram"
+                      ]
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40,
+                      "pattern": "\\S"
+                    },
+                    "connected_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "updates": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "label",
+                    "connected_at",
+                    "updates"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "available",
+              "account",
+              "links"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "whatsapp"
+        ],
+        "additionalProperties": false
+      },
       "ChatRequest": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -21089,7 +21287,7 @@
               "url": {
                 "type": "string",
                 "maxLength": 2048,
-                "pattern": "^https:\\/\\/\\S+$"
+                "pattern": "^(?:https:\\/\\/\\S+|http:\\/\\/(?:[a-z0-9-]+\\.)*localhost(?::\\d{1,5})?(?:[/?#]\\S*)?)$"
               }
             },
             "required": [
@@ -21310,6 +21508,13 @@
                             "partial": {
                               "type": "boolean",
                               "const": true
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "whatsapp",
+                                "telegram"
+                              ]
                             }
                           },
                           "required": [
@@ -21501,6 +21706,13 @@
                       "partial": {
                         "type": "boolean",
                         "const": true
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "whatsapp",
+                          "telegram"
+                        ]
                       }
                     },
                     "required": [
@@ -31753,7 +31965,7 @@
                       "url": {
                         "type": "string",
                         "maxLength": 2048,
-                        "pattern": "^https:\\/\\/\\S+$"
+                        "pattern": "^(?:https:\\/\\/\\S+|http:\\/\\/(?:[a-z0-9-]+\\.)*localhost(?::\\d{1,5})?(?:[/?#]\\S*)?)$"
                       }
                     },
                     "required": [
@@ -45927,7 +46139,8 @@
             "enum": [
               "in_app",
               "email",
-              "push"
+              "push",
+              "whatsapp"
             ]
           },
           "state": {
@@ -53331,6 +53544,123 @@
           "message_id",
           "rating"
         ],
+        "additionalProperties": false
+      },
+      "NumberOffer": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "phone_number": {
+            "type": "string",
+            "pattern": "^\\+[1-9]\\d{6,14}$"
+          },
+          "locality": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "phone_number",
+          "locality"
+        ],
+        "additionalProperties": false
+      },
+      "NumberPurchase": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "phone_number": {
+            "type": "string",
+            "pattern": "^\\+447\\d{9}$"
+          },
+          "business_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "address_line_1": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "address_line_2": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "city": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "pattern": "\\S"
+          },
+          "postcode": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{1,2}\\d[A-Za-z\\d]? ?\\d[A-Za-z]{2}$"
+          },
+          "contact_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+          }
+        },
+        "required": [
+          "phone_number",
+          "business_name",
+          "address_line_1",
+          "city",
+          "postcode",
+          "contact_name",
+          "email"
+        ],
+        "additionalProperties": false
+      },
+      "NumberPurchaseState": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending_review",
+              "approved",
+              "rejected",
+              "ready"
+            ]
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "NumberSearch": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "contains": {
+            "type": "string",
+            "pattern": "^\\d{1,8}$"
+          }
+        },
         "additionalProperties": false
       },
       "OfferChoicesInput": {
@@ -62899,6 +63229,74 @@
           "revision_id",
           "gates",
           "produced_at"
+        ],
+        "additionalProperties": false
+      },
+      "WhatsAppAccount": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display_number": {
+            "type": "string",
+            "pattern": "^\\+[1-9]\\d{6,14}$"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "connected",
+              "purchased",
+              "dev"
+            ]
+          },
+          "coexistence": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "disabled"
+            ]
+          }
+        },
+        "required": [
+          "display_number",
+          "display_name",
+          "source",
+          "coexistence",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "WhatsAppSignupComplete": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "waba_id": {
+            "type": "string",
+            "pattern": "^\\d{1,32}$"
+          },
+          "phone_number_id": {
+            "type": "string",
+            "pattern": "^\\d{1,32}$"
+          }
+        },
+        "required": [
+          "code",
+          "waba_id",
+          "phone_number_id"
         ],
         "additionalProperties": false
       },

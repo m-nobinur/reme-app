@@ -1,5 +1,8 @@
 import {
   appendEvent,
+  channelInbound,
+  channelLinkCodes,
+  channelLinks,
   eq,
   memberships,
   pushSubscriptions,
@@ -17,7 +20,7 @@ import type { Session } from "./session.ts"
  * Deleting an owner's account (ADR-035): the site goes offline, the email is
  * freed and the WorkOS identity removed, and the org's rows stay behind as an
  * org nobody can resolve until the §10.5 erasure job exists. The rows
- * deleted are each scheduled job and push subscription, so nothing runs or
+ * deleted are each scheduled job, push subscription and messaging channel link, so nothing runs or
  * reaches a browser for the org again; the org's R2 objects are deleted.
  */
 
@@ -131,6 +134,9 @@ export async function deleteAccount(
       await db
         .delete(pushSubscriptions)
         .where(eq(pushSubscriptions.orgId, orgId))
+      await db.delete(channelInbound).where(eq(channelInbound.orgId, orgId))
+      await db.delete(channelLinks).where(eq(channelLinks.orgId, orgId))
+      await db.delete(channelLinkCodes).where(eq(channelLinkCodes.orgId, orgId))
       return own
     })
     if (typeof checked === "string") return checked

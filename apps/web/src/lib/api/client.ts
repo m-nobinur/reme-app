@@ -7,6 +7,9 @@ import {
   BuildQuestions,
   CHAT_TURN_MS,
   type ChangeKind,
+  type ChannelLinkPatch,
+  ChannelLinkStarted,
+  ChannelsState,
   Conversation,
   ConversationHistory,
   ConversationList,
@@ -39,12 +42,16 @@ import {
   StaffDirectory,
   searchConsoleUrl,
   Uuid,
+  WhatsAppAccount,
+  type WhatsAppSignupComplete,
   WorkspaceStatus,
 } from "@workspace/contracts"
 import { WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { refusalText } from "@workspace/ui/lib/refusal"
+import { z } from "zod"
 import { stoppedLines } from "../stopped"
+import type { SignupConfig } from "../whatsapp-signup"
 import { apiFetch, COOKIE, forwardedSession } from "./transport"
 import {
   type AttentionItem,
@@ -873,6 +880,76 @@ async function unsubscribePush(id: string): Promise<WriteOutcome> {
   )
 }
 
+async function channels(): Promise<ChannelsState | null> {
+  const response = await call("/channels")
+  // The gate off is a 404 on every channel route: nothing to show, not a defect.
+  if (!response || [401, 403, 404].includes(response.status)) return null
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for /channels`)
+  }
+  return ChannelsState.parse(await response.json())
+}
+
+async function startWhatsAppLink(
+  key: string
+): Promise<ChannelLinkStarted | null> {
+  const response = await post("/channels/whatsapp/link", undefined, key)
+  if (response.ok) return ChannelLinkStarted.parse(await response.json())
+  if (response.status >= 400 && response.status < 500) return null
+  throw new Error(
+    `apps/api answered ${response.status} for /channels/whatsapp/link`
+  )
+}
+
+async function signupConfig(): Promise<SignupConfig | null> {
+  const response = await call("/channels/whatsapp/signup")
+  // Off, not configured yet (503) or not the owner: the row stays unavailable.
+  if (!response || [403, 404, 503].includes(response.status)) return null
+  if (!response.ok) {
+    throw new Error(
+      `apps/api answered ${response.status} for /channels/whatsapp/signup`
+    )
+  }
+  const { app_id, config_id } = z
+    .strictObject({ app_id: z.string(), config_id: z.string() })
+    .parse(await response.json())
+  return { appId: app_id, configId: config_id }
+}
+
+async function completeWhatsAppSignup(
+  input: WhatsAppSignupComplete,
+  key: string
+): Promise<WhatsAppAccount | null> {
+  const response = await post("/channels/whatsapp/signup", input, key)
+  if (response.ok) return WhatsAppAccount.parse(await response.json())
+  // A refusal (a number another business holds, 502 for Meta not finishing) is final for this popup.
+  if (
+    (response.status >= 400 && response.status < 500) ||
+    response.status === 502
+  )
+    return null
+  throw new Error(
+    `apps/api answered ${response.status} for /channels/whatsapp/signup`
+  )
+}
+
+async function updateChannelLink(
+  id: string,
+  patch: ChannelLinkPatch,
+  key: string
+): Promise<WriteOutcome> {
+  const path = `/channels/links/${segment(id)}`
+  return await outcome(await post(path, patch, key, "PATCH"), path)
+}
+
+async function disconnectChannelLink(id: string): Promise<WriteOutcome> {
+  const path = `/channels/links/${segment(id)}`
+  return await outcome(
+    await post(path, undefined, `disconnect:${id}`, "DELETE"),
+    path
+  )
+}
+
 async function setTimeZone(zone: string): Promise<void> {
   const response = await post(
     "/time-zone",
@@ -1013,6 +1090,12 @@ export const apiSource: OwnerDataSource = {
   pushKey,
   subscribePush,
   unsubscribePush,
+  channels,
+  startWhatsAppLink,
+  signupConfig,
+  completeWhatsAppSignup,
+  updateChannelLink,
+  disconnectChannelLink,
   setTimeZone,
   domainCheckout,
   domainCheck,

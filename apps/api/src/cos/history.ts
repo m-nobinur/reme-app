@@ -115,9 +115,12 @@ export type ContextPolicy = {
  * context into a snapshot the conversation's `cos.context` logs (`memory`),
  * sent as a system block after the instructions (after Hermes's frozen
  * memory snapshot).
+ * Version 28 adds a line to the context of a turn the owner wrote from
+ * WhatsApp, saying where they are writing from and that nothing needing the
+ * web is started or suggested there unless they ask.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "27",
+  version: "28",
   keepLast: 20,
   historyTokens: 128_000,
 }

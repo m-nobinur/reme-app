@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { ChannelKind } from "./channels.ts"
 import { JsonObject, Timestamp, Uuid } from "./common.ts"
 import { ADDRESS_ASK } from "./domain.ts"
 import { Enquiry } from "./enquiry.ts"
@@ -85,6 +86,8 @@ export const ConversationMessage = z.strictObject({
         createdAt: Timestamp,
         /** The turn hit its limit with work left; its continuation is queued. */
         partial: z.literal(true).optional(),
+        /** The chat the owner wrote from, when not the web. */
+        source: ChannelKind.optional(),
       }),
     }),
   }),

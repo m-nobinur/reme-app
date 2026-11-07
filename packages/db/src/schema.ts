@@ -1275,6 +1275,7 @@ export const deliveryChannel = pgEnum("delivery_channel", [
   "in_app",
   "email",
   "push",
+  "whatsapp",
 ])
 
 /** `Delivery.state`. */
@@ -1864,5 +1865,197 @@ export const approvalGrants = pgTable(
       sql`char_length(source_approval) between 1 and 255`
     ),
     orgIsolation("approval_grants"),
+  ]
+)
+
+/** Where an owner chats with their assistant besides the web. */
+export const channelKind = pgEnum("channel_kind", ["whatsapp", "telegram"])
+
+/** `WhatsAppAccount.source`. */
+export const whatsappAccountSource = pgEnum("whatsapp_account_source", [
+  "connected",
+  "purchased",
+  "dev",
+])
+
+/** `WhatsAppAccount.status`. */
+export const whatsappAccountStatus = pgEnum("whatsapp_account_status", [
+  "pending",
+  "active",
+  "disabled",
+])
+
+/**
+ * The business's own WhatsApp number, one per org. `phone_number_id` is unique
+ * across orgs because the webhook finds the org by it
+ * (`whatsapp_account_by_phone`). `token_ciphertext` is the business token
+ * sealed by `apps/api/src/channels/token.ts`, with the org id as its AAD.
+ */
+export const whatsappAccounts = pgTable(
+  "whatsapp_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .unique("whatsapp_accounts_org_key")
+      .references(() => orgs.id),
+    wabaId: text("waba_id").notNull(),
+    phoneNumberId: text("phone_number_id")
+      .notNull()
+      .unique("whatsapp_accounts_phone_number_key"),
+    displayNumber: text("display_number").notNull(),
+    displayName: text("display_name").notNull(),
+    /** `v1.<iv>.<ct>`. Never logged, never returned by an API. */
+    tokenCiphertext: text("token_ciphertext").notNull(),
+    source: whatsappAccountSource("source").notNull(),
+    coexistence: boolean("coexistence").notNull().default(false),
+    status: whatsappAccountStatus("status").notNull().default("pending"),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    unique("whatsapp_accounts_id_org_key").on(t.id, t.orgId),
+    check(
+      "whatsapp_accounts_meta_ids",
+      sql`waba_id ~ '^[0-9]{1,32}$' and phone_number_id ~ '^[0-9]{1,32}$'`
+    ),
+    check(
+      "whatsapp_accounts_display_number_e164",
+      sql`display_number ~ '^\\+[1-9][0-9]{6,14}$'`
+    ),
+    check(
+      "whatsapp_accounts_display_name_length",
+      sql`char_length(display_name) between 1 and 100`
+    ),
+    check(
+      "whatsapp_accounts_token_sealed",
+      sql`token_ciphertext ~ '^v1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'`
+    ),
+    orgIsolation("whatsapp_accounts"),
+  ]
+)
+
+/**
+ * An owner's personal WhatsApp linked to the org's number. The person is a
+ * member of the org by the composite key. `conversation_id` is where their
+ * messages go next; `last_inbound_at` opens Meta's 24-hour window. Revoking
+ * sets `revoked_at`, and a sender holds one live link per number.
+ */
+export const channelLinks = pgTable(
+  "channel_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid("user_id").notNull(),
+    accountId: uuid("account_id").notNull(),
+    /** The sender's `wa_id`. */
+    externalId: text("external_id").notNull(),
+    /** The masked number the web shows. */
+    label: text("label").notNull(),
+    conversationId: uuid("conversation_id"),
+    lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
+    updates: boolean("updates").notNull().default(true),
+    createdAt,
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique("channel_links_id_org_key").on(t.id, t.orgId),
+    foreignKey({
+      name: "channel_links_member_fk",
+      columns: [t.orgId, t.userId],
+      foreignColumns: [memberships.orgId, memberships.userId],
+    }),
+    foreignKey({
+      name: "channel_links_account_fk",
+      columns: [t.accountId, t.orgId],
+      foreignColumns: [whatsappAccounts.id, whatsappAccounts.orgId],
+    }),
+    foreignKey({
+      name: "channel_links_conversation_fk",
+      columns: [t.conversationId, t.orgId],
+      foreignColumns: [conversations.id, conversations.orgId],
+    }),
+    uniqueIndex("channel_links_live_sender")
+      .on(t.accountId, t.externalId)
+      .where(sql`revoked_at is null`),
+    check("channel_links_external_id", sql`external_id ~ '^[0-9]{1,32}$'`),
+    check(
+      "channel_links_label_length",
+      sql`char_length(label) between 1 and 40`
+    ),
+    orgIsolation("channel_links"),
+  ]
+)
+
+/**
+ * A one-time code an owner sends from their phone to link it. Only the hash is
+ * kept (`hashCode` in `apps/api/src/channels/token.ts`); `redeem_channel_code`
+ * spends one.
+ */
+export const channelLinkCodes = pgTable(
+  "channel_link_codes",
+  {
+    hash: text("hash").primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid("user_id").notNull(),
+    kind: channelKind("kind").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt,
+  },
+  (t) => [
+    foreignKey({
+      name: "channel_link_codes_member_fk",
+      columns: [t.orgId, t.userId],
+      foreignColumns: [memberships.orgId, memberships.userId],
+    }),
+    // A SHA-256 in unpadded base64url.
+    check("channel_link_codes_hash", sql`hash ~ '^[A-Za-z0-9_-]{43}$'`),
+    orgIsolation("channel_link_codes"),
+  ]
+)
+
+/**
+ * Messages from a linked sender: the dedupe on the platform's message id and
+ * the queue of what the next turn has not read. Unique per org, as
+ * `deliveries.key` is.
+ */
+export const channelInbound = pgTable(
+  "channel_inbound",
+  {
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    kind: channelKind("kind").notNull(),
+    externalMessageId: text("external_message_id").notNull(),
+    linkId: uuid("link_id").notNull(),
+    body: jsonb("body").$type<Record<string, unknown>>().notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({
+      name: "channel_inbound_pkey",
+      columns: [t.orgId, t.kind, t.externalMessageId],
+    }),
+    foreignKey({
+      name: "channel_inbound_link_fk",
+      columns: [t.linkId, t.orgId],
+      foreignColumns: [channelLinks.id, channelLinks.orgId],
+    }),
+    index("channel_inbound_waiting_idx")
+      .on(t.linkId, t.receivedAt)
+      .where(sql`processed_at is null`),
+    check(
+      "channel_inbound_external_message_id_length",
+      sql`char_length(external_message_id) between 1 and 200`
+    ),
+    orgIsolation("channel_inbound"),
   ]
 )

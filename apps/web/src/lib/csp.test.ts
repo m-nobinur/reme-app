@@ -44,14 +44,14 @@ describe("the content security policy header", () => {
     expect(header).toBe(contentSecurityPolicy(handed as string))
     expect(header?.split("; ")).toEqual([
       "default-src 'self'",
-      `script-src 'self' 'nonce-${handed}' https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com`,
+      `script-src 'self' 'nonce-${handed}' https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com https://connect.facebook.net`,
       "style-src 'self' 'unsafe-inline'",
       expect.stringContaining(
         "img-src 'self' data: blob: https://*.remeai.co.uk"
       ),
       "font-src 'self' data:",
-      "connect-src 'self' https://api.stripe.com https://checkout.stripe.com",
-      "frame-src https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com https://hooks.stripe.com",
+      "connect-src 'self' https://api.stripe.com https://checkout.stripe.com https://*.facebook.com",
+      "frame-src https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com https://hooks.stripe.com https://*.facebook.com",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -70,7 +70,7 @@ describe("the content security policy header", () => {
     const connect = (api: string | undefined) =>
       contentSecurityPolicy("n", false, api).match(/connect-src [^;]*/)?.[0]
     expect(connect("https://staging-api.remeai.co.uk")).toBe(
-      "connect-src 'self' https://api.stripe.com https://checkout.stripe.com wss://staging-api.remeai.co.uk"
+      "connect-src 'self' https://api.stripe.com https://checkout.stripe.com https://*.facebook.com wss://staging-api.remeai.co.uk"
     )
     expect(connect("http://localhost:8787")).toContain(" ws://localhost:8787")
     expect(connect(undefined)).not.toMatch(/wss?:/)

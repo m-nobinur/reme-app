@@ -6,6 +6,16 @@ import {
   sql,
   tenancy,
 } from "@workspace/db"
+import {
+  isWhatsAppUpdate,
+  sendUpdate,
+  type WhatsAppUpdate,
+} from "./channels/whatsapp/templates.ts"
+import {
+  type ChannelJob,
+  channelTurn,
+  isChannelJob,
+} from "./channels/whatsapp/turn.ts"
 import { cosModel } from "./chat.ts"
 import { type ContinueJob, continueTurn, isContinueJob } from "./continue.ts"
 import { LIMITS } from "./cos/agent.ts"
@@ -100,7 +110,9 @@ export async function onboardingWords(
  * queue.
  */
 export async function afterTurnBatch(
-  batch: MessageBatch<AfterTurn | LogoJob | ContinueJob | WakeJob>,
+  batch: MessageBatch<
+    AfterTurn | LogoJob | ContinueJob | WakeJob | ChannelJob | WhatsAppUpdate
+  >,
   env: Env
 ): Promise<void> {
   const kit = tenancy(env.HYPERDRIVE.connectionString)
@@ -136,6 +148,20 @@ export async function afterTurnBatch(
               continued,
             })
           )
+        } else if (isChannelJob(body)) {
+          const turned = await channelTurn(env, kit, body)
+          console.log(
+            JSON.stringify({
+              type: "whatsapp.turn",
+              link_id: body.linkId,
+              turned,
+            })
+          )
+        } else if (isWhatsAppUpdate(body)) {
+          const sent = await sendUpdate(env, kit, body)
+          console.log(
+            JSON.stringify({ type: "whatsapp.update", key: body.key, sent })
+          )
         } else if (isWakeJob(body)) {
           const woke = await wakeTurn(env, kit, body)
           console.log(
@@ -156,7 +182,11 @@ export async function afterTurnBatch(
             code: "after_turn.failed",
             ...(isContinueJob(body) || isWakeJob(body)
               ? { job_id: body.jobId }
-              : { turn_id: body.turnId }),
+              : isChannelJob(body)
+                ? { link_id: body.linkId }
+                : isWhatsAppUpdate(body)
+                  ? { key: body.key }
+                  : { turn_id: body.turnId }),
             attempts: message.attempts,
             error: error instanceof Error ? error.name : "unknown",
           })

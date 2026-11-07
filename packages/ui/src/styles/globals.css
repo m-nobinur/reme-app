@@ -59,6 +59,9 @@
 :root {
   --brand-tile: oklch(1 0 0);
   --brand-tile-foreground: oklch(0.45 0 0);
+  /* The dark modules of a QR code: near black on the white tile in both
+     themes, because a phone's camera needs the contrast. */
+  --qr-ink: oklch(0.145 0 0);
 }
 
 /* Sections rise into place as they scroll in. Pure CSS, so it costs no script
@@ -195,6 +198,7 @@
   --color-device: var(--device);
   --color-brand-tile: var(--brand-tile);
   --color-brand-tile-foreground: var(--brand-tile-foreground);
+  --color-qr-ink: var(--qr-ink);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);

@@ -74,6 +74,8 @@ describe("GoogleConnectRequest", () => {
 describe("connect_google", () => {
   it.each([
     ["a link", { url: "https://accounts.google.com/o/oauth2/v2/auth?x=1" }],
+    ["local dev's app", { url: "http://localhost:3000/api/google/start" }],
+    ["a .localhost app", { url: "http://app.reme.localhost:3000/api/google" }],
     ["a connected account", { connected: true, email: "a@b.example" }],
     ["the feature off", { available: false }],
   ])("accepts %s", (_name, output) => {
@@ -84,6 +86,12 @@ describe("connect_google", () => {
 
   it.each([
     ["a link that is not https", { url: "http://accounts.google.com/" }],
+    ["http on a host ending in localhost", { url: "http://evillocalhost/x" }],
+    [
+      "http on localhost as a subdomain",
+      { url: "http://localhost.evil.example/" },
+    ],
+    ["http with a user before localhost", { url: "http://a@localhost/x" }],
     [
       "a link with a field beside it",
       { url: "https://x.example/", extra: "t" },

@@ -36,6 +36,7 @@ import {
   startChange,
   stateFacts,
 } from "./changes.ts"
+import { channelsRoute } from "./channels/links.ts"
 import { chat } from "./chat.ts"
 import { conversationRoute } from "./conversations.ts"
 import { grantsRoute } from "./cos/grants.ts"
@@ -76,7 +77,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review|corrections\/[^/]+))?|approval-grants|dictation\/(ticket|tidy)|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(check|checkout|registrant|elsewhere|bought|not-yet))?|google\/(connect|disconnect|result)|time-zone|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review|corrections\/[^/]+))?|approval-grants|dictation\/(ticket|tidy)|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(check|checkout|registrant|elsewhere|bought|not-yet))?|google\/(connect|disconnect|result)|time-zone|channels(\/whatsapp\/(link|signup)|\/links\/[^/]+)?|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -346,6 +347,7 @@ export async function ownerRoute(
   if (noun === "memory") return memoryRoute(request, kit, owner)
   if (noun === "approval-grants") return grantsRoute(request, kit, owner)
   if (noun === "push") return pushRoute(request, env, kit, owner)
+  if (noun === "channels") return channelsRoute(request, env, kit, owner)
   if (noun === "dictation") {
     return (
       (await dictationTicket(request, env, owner)) ??

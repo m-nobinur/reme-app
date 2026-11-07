@@ -2,6 +2,7 @@ import {
   ArrowUpRightIcon,
   BrainIcon,
   BuildingsIcon,
+  ChatCircleTextIcon,
   GearSixIcon,
   GlobeIcon,
   GoogleLogoIcon,
@@ -28,6 +29,7 @@ import {
 } from "@workspace/ui/components/theme-toggle"
 import { Hint } from "@workspace/ui/components/tooltip"
 import type { ReactNode } from "react"
+import { MessagingChannels, useChannels } from "@/lib/messaging-channels"
 import { PushControl } from "@/lib/push-control"
 import { roleText } from "@/lib/tenant"
 import { useLiveWorkspace } from "@/lib/workspace"
@@ -94,6 +96,7 @@ export function OwnerSettings({
 }) {
   const ownerName = owner.name || owner.email
   const { workspace } = useLiveWorkspace()
+  const { channels, setChannels, refresh } = useChannels()
   const sections: SettingsSection[] = [
     {
       id: "general",
@@ -223,6 +226,22 @@ export function OwnerSettings({
         </>
       ),
     },
+    ...(channels?.whatsapp.available
+      ? [
+          {
+            id: "channels",
+            label: "Messaging channels",
+            icon: <ChatCircleTextIcon aria-hidden />,
+            content: (
+              <MessagingChannels
+                onState={setChannels}
+                refresh={refresh}
+                whatsapp={channels.whatsapp}
+              />
+            ),
+          },
+        ]
+      : []),
     {
       id: "help",
       label: "Help & support",

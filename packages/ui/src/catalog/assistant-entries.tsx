@@ -3984,6 +3984,23 @@ const assistantCatalog = [
     render: () => <OwnerThread height="h-[60rem]" messages={LONG_MESSAGES} />,
   },
   {
+    name: "ThreadFromWhatsApp",
+    render: () => (
+      <OwnerThread
+        height="h-[24rem]"
+        messages={[
+          on("07T09:12:00", {
+            ...reply("Can you remind me to chase the Patel quote?"),
+            metadata: {
+              custom: { createdAt: "2026-09-07T09:12:00Z", source: "whatsapp" },
+            },
+          }),
+          on("07T09:13:00", reply("Thanks, now from the web.")),
+        ]}
+      />
+    ),
+  },
+  {
     name: "ThreadEmpty",
     render: () => (
       <OwnerThread

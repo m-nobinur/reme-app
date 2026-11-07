@@ -186,6 +186,26 @@ describe.skipIf(!url)("connecting Google through the api", () => {
     expect(await connectGoogle({ env, kit, owner: as(me) }, {})).toEqual({
       url: `${WEB}/api/google/start`,
     })
+    // Local dev's app is plain http on localhost; a real host on http is a
+    // misconfigured environment, which offers no link rather than an http one.
+    const local = {
+      ...env,
+      WEB_ORIGIN: "http://localhost:3000",
+    } as unknown as Env
+    expect(await connectGoogle({ env: local, kit, owner: as(me) }, {})).toEqual(
+      {
+        url: "http://localhost:3000/api/google/start",
+      }
+    )
+    const plain = {
+      ...env,
+      WEB_ORIGIN: "http://staging.remeai.co.uk",
+    } as unknown as Env
+    expect(await connectGoogle({ env: plain, kit, owner: as(me) }, {})).toEqual(
+      {
+        available: false,
+      }
+    )
     expect(
       await connectGoogle({ env, kit, owner: as(member) }, {})
     ).toMatchObject({

@@ -4720,6 +4720,50 @@ export interface components {
       /** Format: date-time */
       requested_at: string
     }
+    ChannelLink: {
+      /** Format: uuid */
+      id: string
+      /** @enum {string} */
+      kind: "whatsapp" | "telegram"
+      label: string
+      /** Format: date-time */
+      connected_at: string
+      updates: boolean
+    }
+    ChannelLinkPatch: {
+      updates: boolean
+    }
+    ChannelLinkStarted: {
+      /** @enum {string} */
+      kind: "whatsapp" | "telegram"
+      url: string
+      /** Format: date-time */
+      expires_at: string
+    }
+    ChannelsState: {
+      whatsapp: {
+        available: boolean
+        account: {
+          display_number: string
+          display_name: string
+          /** @enum {string} */
+          source: "connected" | "purchased" | "dev"
+          coexistence: boolean
+          /** @enum {string} */
+          status: "pending" | "active" | "disabled"
+        } | null
+        links: {
+          /** Format: uuid */
+          id: string
+          /** @enum {string} */
+          kind: "whatsapp" | "telegram"
+          label: string
+          /** Format: date-time */
+          connected_at: string
+          updates: boolean
+        }[]
+      }
+    }
     ChatRequest: {
       /** Format: uuid */
       conversation_id: string
@@ -6040,6 +6084,8 @@ export interface components {
               createdAt: string
               /** @constant */
               partial?: true
+              /** @enum {string} */
+              source?: "whatsapp" | "telegram"
             }
           }
         }
@@ -6079,6 +6125,8 @@ export interface components {
             createdAt: string
             /** @constant */
             partial?: true
+            /** @enum {string} */
+            source?: "whatsapp" | "telegram"
           }
         }
       }
@@ -12667,7 +12715,7 @@ export interface components {
       org_id: string
       key: string
       /** @enum {string} */
-      channel: "in_app" | "email" | "push"
+      channel: "in_app" | "email" | "push" | "whatsapp"
       /** @enum {string} */
       state:
         | "pending"
@@ -14652,6 +14700,27 @@ export interface components {
       message_id: string
       /** @enum {string} */
       rating: "up" | "down"
+    }
+    NumberOffer: {
+      phone_number: string
+      locality: string | null
+    }
+    NumberPurchase: {
+      phone_number: string
+      business_name: string
+      address_line_1: string
+      address_line_2?: string
+      city: string
+      postcode: string
+      contact_name: string
+      email: string
+    }
+    NumberPurchaseState: {
+      /** @enum {string} */
+      state: "pending_review" | "approved" | "rejected" | "ready"
+    }
+    NumberSearch: {
+      contains?: string
     }
     OfferChoicesInput: {
       choices: {
@@ -17326,6 +17395,20 @@ export interface components {
       }[]
       /** Format: date-time */
       produced_at: string
+    }
+    WhatsAppAccount: {
+      display_number: string
+      display_name: string
+      /** @enum {string} */
+      source: "connected" | "purchased" | "dev"
+      coexistence: boolean
+      /** @enum {string} */
+      status: "pending" | "active" | "disabled"
+    }
+    WhatsAppSignupComplete: {
+      code: string
+      waba_id: string
+      phone_number_id: string
     }
     WorkspaceStatus: {
       site: {

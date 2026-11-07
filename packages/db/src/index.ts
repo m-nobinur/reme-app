@@ -2,7 +2,7 @@
 // dependency on drizzle-orm gets a second copy resolved under a different peer
 // set, and the two disagree about `SQL` in a way that only surfaces as a
 // typecheck error about a private property. Callers take the tag from here.
-export { asc, eq, type SQL, sql } from "drizzle-orm"
+export { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm"
 export { orgOpen, tombstone } from "./accounts.ts"
 export { openApprovals } from "./approvals.ts"
 export {
@@ -114,6 +114,7 @@ export {
   type TaskPlan,
 } from "./tasks.ts"
 export type {
+  ChannelLinkRef,
   Identity,
   OrgScopedDb,
   RecentDesign,
@@ -123,6 +124,7 @@ export type {
 // Named rather than a star, so what the tenancy kit exposes to the rest of the
 // repo is a decision someone makes rather than whatever happens to be exported.
 export {
+  channelLinkOf,
   claimDueJobs,
   failureCode,
   listOrgIds,
@@ -131,11 +133,13 @@ export {
   ORG_SETTING,
   pgCode,
   recentDesigns,
+  redeemChannelCode,
   resolveDomainClaim,
   resolveDomainHost,
   resolveOrg,
   resolveOrgBySlug,
   tenancy,
   USER_SETTING,
+  whatsAppAccountByPhone,
   withOrg,
 } from "./tenancy.ts"
