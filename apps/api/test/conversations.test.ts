@@ -313,6 +313,21 @@ describe.skipIf(!url)("the conversation routes, on a live connection", () => {
       ).toEqual([at.u_1?.toISOString(), at.a_1?.toISOString()])
     })
 
+    it("marks an owner message that came from WhatsApp", async () => {
+      const { body } = await create()
+      await seed(kit, who).messages(body.id, [
+        text("wa_1", "user", null),
+        text("wa_reply", "assistant", "wa_1"),
+        text("u_1", "user", "wa_reply"),
+      ])
+      const history = ConversationHistory.parse(
+        await (await call(`/conversations/${body.id}/messages`)).json()
+      )
+      expect(
+        history.messages.map((m) => m.content.metadata.custom.source)
+      ).toEqual(["whatsapp", undefined, undefined])
+    })
+
     it("marks a message whose continuation is queued", async () => {
       const { body } = await create()
       const waiting = text("a_1", "assistant", null)
