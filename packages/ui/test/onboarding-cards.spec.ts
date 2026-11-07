@@ -271,11 +271,15 @@ test("the ready cards with a step beside Publish fit a phone and pass axe", asyn
 }) => {
   await open(page, "SiteReady", 390)
   await axe(page, "SiteReady 390")
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth > window.innerWidth
+  // Right after axe, Linux Chromium can read a wider page for a moment with no
+  // element past the edge (#786); the layout at rest is what must fit.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth
+      )
     )
-  ).toBe(false)
+    .toBe(false)
   const card = page.locator('[data-slot="site-ready"]').nth(8)
   const box = await card.boundingBox()
   const connect = await card
