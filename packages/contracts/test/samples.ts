@@ -1297,6 +1297,7 @@ export const samples: Record<ContractName, unknown> = {
     target: "user",
     note: "Write saved. This update is complete; do not repeat it.",
     fullness: "1% (23/1,600 chars)",
+    entry_count: 1,
   },
   SkillNotes: {
     lines: [
