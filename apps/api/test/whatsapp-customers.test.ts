@@ -154,8 +154,8 @@ describe.skipIf(!url)("customers on a Reme-held number", () => {
     expect(queued).toHaveLength(1)
     expect(queued[0]?.message.text).toEqual([
       `A customer messaged your WhatsApp number from +${from}.`,
-      `"Are you free Friday?"`,
     ])
+    expect(JSON.stringify(queued)).not.toContain("Friday")
 
     expect((await post(held.phone, from, wamid(), "Hello?")).status).toBe(200)
     expect(replies()).toHaveLength(1)

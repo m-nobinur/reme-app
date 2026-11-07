@@ -2,9 +2,6 @@ import type { ServerMessage } from "@workspace/contracts"
 import { deliveries, type Tenancy, whatsappAccounts } from "@workspace/db"
 import { tell } from "./reply.ts"
 
-/** Customers' words are shown to the owner, so a long one is cut. */
-const TEXT_MAX = 1000
-
 /**
  * A customer on a Reme-held number (purchased or dev): the owner is told in
  * the app, and the customer gets one holding reply a day. A Coexistence
@@ -15,7 +12,7 @@ export async function holdCustomer(
   env: Env,
   kit: Tenancy,
   orgId: string,
-  message: { id: string; from: string; text?: { body: string }; type: string }
+  message: { id: string; from: string }
 ): Promise<void> {
   const day = new Date().toISOString().slice(0, 10)
   const held = await kit.withOrg({ orgId }, async (db) => {
@@ -23,15 +20,15 @@ export async function holdCustomer(
       .select({ coexistence: whatsappAccounts.coexistence })
       .from(whatsappAccounts)
     if (!account || account.coexistence) return null
-    const said = message.text?.body.trim().slice(0, TEXT_MAX)
     const notice = {
       orgId,
       key: `customer:${message.id}`,
       channel: "in_app" as const,
       message: {
+        // The model reads a notice as its own words, so the customer's text
+        // stays out until ServerMessage has a data field for it.
         text: [
           `A customer messaged your WhatsApp number from +${message.from}.`,
-          said ? `"${said}"` : `They sent a ${message.type} message.`,
         ],
         kind: "note",
       } satisfies Omit<ServerMessage, "id">,
