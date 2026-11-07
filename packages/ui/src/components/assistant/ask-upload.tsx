@@ -8,22 +8,16 @@ import {
 import type { UploadedAssets } from "@workspace/contracts"
 import {
   Docked,
+  skipOf,
   TrayFrame,
   TrayNote,
 } from "@workspace/ui/components/assistant/question-tray"
 import { Button } from "@workspace/ui/components/button"
+import { useChatService } from "@workspace/ui/lib/chat-services"
 import { askUploadView } from "@workspace/ui/lib/tool-state"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
-import {
-  createContext,
-  type DragEvent,
-  useContext,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react"
+import { type DragEvent, useEffect, useId, useRef, useState } from "react"
 
 /**
  * The photo step of onboarding, in the question tray: drop photos or choose
@@ -36,11 +30,6 @@ import {
 
 /** Stores the photos and answers what was stored, or throws a sentence for the owner. */
 export type UploadPhotos = (files: File[]) => Promise<UploadedAssets>
-
-const UploadContext = createContext<UploadPhotos | null>(null)
-
-/** Gives the upload card the app's way to store photos. */
-export const UploadPhotosProvider = UploadContext.Provider
 
 const NO_UPLOAD =
   "Photos cannot be uploaded here. Skip this and add them later."
@@ -57,7 +46,7 @@ type Picked = {
 
 const AskUpload: ToolCallMessagePartComponent = (props) => {
   const view = askUploadView(props)
-  const upload = useContext(UploadContext)
+  const upload = useChatService("uploadPhotos")
   const id = useId()
   const [collapsed, setCollapsed] = useState(false)
   const [picked, setPicked] = useState<Picked[]>([])
@@ -75,15 +64,8 @@ const AskUpload: ToolCallMessagePartComponent = (props) => {
     }
   }, [])
 
-  if (view.state === "answered" || view.state === "skipped") return null
-  if (view.state !== "pending") {
-    return (
-      <TrayNote
-        error={view.state === "error" ? view.message : null}
-        name="ask-upload"
-      />
-    )
-  }
+  if (view.state !== "pending")
+    return <TrayNote name="ask-upload" view={view} />
 
   const { input } = view
 
@@ -152,15 +134,7 @@ const AskUpload: ToolCallMessagePartComponent = (props) => {
         collapsed={collapsed}
         onCollapsedChange={setCollapsed}
         question="Add some photos of your work"
-        skip={
-          input.skippable
-            ? {
-                label: "Skip",
-                onSkip: () => props.addResult({ answer: "skipped" }),
-                disabled: sending,
-              }
-            : undefined
-        }
+        skip={skipOf(input.skippable, props.addResult, sending)}
         status={
           sending
             ? `Uploading ${picked.length === 1 ? "1 photo" : `${picked.length} photos`}`
@@ -186,7 +160,7 @@ const AskUpload: ToolCallMessagePartComponent = (props) => {
         <label
           className={cn(
             "flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-border border-dashed bg-card px-4 py-6 text-center transition-colors duration-150",
-            "hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
+            "hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring",
             over && "border-primary bg-primary/5",
             sending && "pointer-events-none opacity-60"
           )}

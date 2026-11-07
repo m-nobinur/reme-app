@@ -5,6 +5,9 @@ import {
   approvals,
   assignments,
   assignmentTransitions,
+  channelInbound,
+  channelLinkCodes,
+  channelLinks,
   conversationMessages,
   conversations,
   deliveries,
@@ -32,6 +35,7 @@ import {
   taskFollowups,
   taskSteps,
   users,
+  whatsappAccounts,
 } from "../src/schema.ts"
 import { GOLDEN_ORGS } from "./golden.ts"
 
@@ -134,6 +138,15 @@ export async function clearOrgs(
   }
   // A step cites its task, so the steps go first.
   for (const table of [taskSteps, taskFollowups, ownerTasks]) {
+    await tx.delete(table).where(inArray(table.orgId, ids))
+  }
+  // A message cites its link; a link its account, member and conversation.
+  for (const table of [
+    channelInbound,
+    channelLinks,
+    channelLinkCodes,
+    whatsappAccounts,
+  ]) {
     await tx.delete(table).where(inArray(table.orgId, ids))
   }
   // A domain cites its approval, so it goes before the approvals.

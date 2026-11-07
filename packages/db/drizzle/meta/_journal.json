@@ -246,6 +246,20 @@
       "when": 1793557990633,
       "tag": "0034_recent_designs_home",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794004233277,
+      "tag": "0035_channels",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794006024720,
+      "tag": "0036_delivery_whatsapp",
+      "breakpoints": true
     }
   ]
 }

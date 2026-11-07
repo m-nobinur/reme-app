@@ -10,7 +10,7 @@ import {
   Ulid,
   Uuid,
 } from "./common.ts"
-import { ConversationMessage, MessageRating } from "./conversation.ts"
+import { Choices, ConversationMessage, MessageRating } from "./conversation.ts"
 import {
   DnsRecord,
   DomainCheck,
@@ -24,7 +24,7 @@ import {
   NotRegisteredYet,
 } from "./domain.ts"
 import { ToolCallId } from "./ids.ts"
-import { RememberInput, RememberOutput } from "./memory.ts"
+import { MemoryInput, MemoryOutput, RememberOutput } from "./memory.ts"
 import {
   BUILD_ACTIVITY_MAX,
   BuildStopCause,
@@ -67,12 +67,14 @@ import {
 import {
   CORRECTION_MAX,
   CORRECTIONS_MAX,
-  ReadSkillInput,
   ReadSkillOutput,
   SaveCorrectionInput,
   SaveCorrectionOutput,
   ScheduleSkillInput,
   ScheduleSkillOutput,
+  SkillViewInput,
+  SkillViewOutput,
+  ViewedSkill,
 } from "./skills.ts"
 import { OwnerTask, TaskKind, TipKind } from "./task.ts"
 import { Text, ToolStep } from "./text.ts"
@@ -362,6 +364,7 @@ export const AskDeveloperInput = z.strictObject({
   question: Text(500),
   /** Routes to look at, when the owner named pages. */
   pages: z.array(z.string().min(1).max(120)).max(5).optional(),
+  step: ToolStep,
 })
 
 /**
@@ -401,6 +404,7 @@ export const ReadSiteInput = z.strictObject({
   page: PagePath.optional().describe(
     'A page\'s path from the outline, such as "about" or "services/deep-clean", for its sections and blocks in full. Leave it out for the outline.'
   ),
+  step: ToolStep,
 })
 
 /**
@@ -622,7 +626,10 @@ export const RecordReviewOutput = z.discriminatedUnion("outcome", [
  * Its output is `BoughtElsewhereOutput`: the connect's own once the registry
  * shows the name, else that it does not yet.
  */
-export const DomainBoughtInput = z.strictObject({ name: DomainName })
+export const DomainBoughtInput = z.strictObject({
+  name: DomainName,
+  step: ToolStep,
+})
 
 /** `inspect_domain`'s input: a name the owner says they have, not yet connected. */
 export const InspectDomainInput = z.strictObject({
@@ -795,18 +802,109 @@ const Empty = z.strictObject({})
 
 /**
  * `put_off`'s input: the offer the owner said not now to, and for how many
- * days (7 when left out); or a tip just given, which is never offered again.
+ * days (7 when left out), or `never` when they want none at all; or a tip
+ * just given, which is never offered again.
  */
 export const PutOffInput = z.strictObject({
   kind: z.enum([...TaskKind.options, ...TipKind.options]),
   days: z.int().min(1).max(60).optional(),
+  never: z.boolean().optional(),
 })
+
+/** `search_conversations`'s input, after Hermes's session search: words to find in earlier conversations. */
+export const SearchConversationsInput = z.strictObject({
+  query: Text(200),
+})
+
+/**
+ * `search_conversations`'s output: the best matches from this business's
+ * earlier conversations, newest and best first, each a short snippet of
+ * what the owner or the assistant wrote, with when and in which
+ * conversation. Tool results and emails are never searched.
+ */
+export const SearchConversationsOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("found"),
+    results: z
+      .array(
+        z.strictObject({
+          conversation: Uuid,
+          at: Timestamp,
+          by: z.enum(["owner", "assistant"]),
+          snippet: Text(400),
+        })
+      )
+      .min(1)
+      .max(8),
+  }),
+  z.strictObject({ outcome: z.literal("none") }),
+  Refused,
+])
 
 /** `put_off`'s output: when the offer may come back. */
 export const PutOffOutput = z.discriminatedUnion("outcome", [
   z.strictObject({ outcome: z.literal("put_off"), until: Timestamp }),
   Refused,
 ])
+
+/** `offer_choices`'s input: the quick replies to the question the reply ends on, the recommendation first. */
+export const OfferChoicesInput = z.strictObject({ choices: Choices })
+
+/** `offer_choices`'s output: the pills are on screen, and the turn ends. */
+export const OfferChoicesOutput = z.strictObject({
+  outcome: z.literal("offered"),
+})
+
+const Line = z.string()
+
+/**
+ * What `present` may draw (#741): a closed vocabulary, props only. The api
+ * builds the tool's schema from it, the chat draws it with house components,
+ * and any other `_type` is dropped. No maps, raw HTML, images or forms.
+ */
+export const PRESENT_COMPONENTS = {
+  Card: {
+    description: "A titled group for the other components.",
+    properties: z.object({ title: Line.optional() }),
+  },
+  Fact: {
+    description: "One label and its value.",
+    properties: z.object({ label: Line, value: Line }),
+  },
+  Table: {
+    description: "A comparison: up to 4 columns, 8 rows of cells.",
+    properties: z.object({
+      columns: z.array(Line).max(4),
+      rows: z.array(z.array(Line).max(4)).max(8),
+    }),
+  },
+  Steps: {
+    description: "Steps in order.",
+    properties: z.object({ steps: z.array(Line).max(8) }),
+  },
+  Checklist: {
+    description: "Items to tick off; done is true for one already done.",
+    properties: z.object({
+      items: z
+        .array(z.object({ label: Line, done: z.boolean().optional() }))
+        .max(10),
+    }),
+  },
+  Text: {
+    description: "A short plain sentence.",
+    properties: z.object({ text: Line }),
+  },
+} as const
+
+/** `present`'s input, a tree of `PRESENT_COMPONENTS`; each node's props are checked where it is drawn. */
+export const PresentInput = z
+  .looseObject({ _type: z.string().min(1) })
+  .refine((tree) => JSON.stringify(tree).length <= 8_000, "too large")
+
+/** `present`'s output: the tree is on screen, and the turn may end. */
+export const PresentOutput = z.strictObject({
+  outcome: z.literal("presented"),
+})
 
 /**
  * The kinds of action the owner may let the Chief of Staff do with no card,
@@ -872,12 +970,18 @@ export const COS_TOOLS = {
     output: GetSearchPerformanceOutput,
   },
   get_indexing: { input: GetIndexingInput, output: GetIndexingOutput },
-  remember: { input: RememberInput, output: RememberOutput },
+  memory: { input: MemoryInput, output: MemoryOutput },
+  search_conversations: {
+    input: SearchConversationsInput,
+    output: SearchConversationsOutput,
+  },
   put_off: { input: PutOffInput, output: PutOffOutput },
+  offer_choices: { input: OfferChoicesInput, output: OfferChoicesOutput },
+  present: { input: PresentInput, output: PresentOutput },
   inspect_domain: { input: InspectDomainInput, output: InspectDomainOutput },
   domain_bought: { input: DomainBoughtInput, output: BoughtElsewhereOutput },
   offer_grant: { input: OfferGrantInput, output: OfferGrantOutput },
-  read_skill: { input: ReadSkillInput, output: ReadSkillOutput },
+  skill_view: { input: SkillViewInput, output: SkillViewOutput },
   save_correction: { input: SaveCorrectionInput, output: SaveCorrectionOutput },
   schedule_skill: { input: ScheduleSkillInput, output: ScheduleSkillOutput },
   ask_developer: { input: AskDeveloperInput, output: AskDeveloperOutput },
@@ -891,7 +995,12 @@ export const CosToolName = z.enum(
 )
 
 /** A tool name in a logged payload: a current tool, or one retired since whose turns still replay. */
-const LoggedToolName = z.enum([...CosToolName.options, "get_preview"])
+const LoggedToolName = z.enum([
+  ...CosToolName.options,
+  "get_preview",
+  "read_skill",
+  "remember",
+])
 
 const Usage = z.strictObject({
   input_tokens: z.int().nonnegative(),
@@ -914,7 +1023,8 @@ const Ran = {
   usage: Usage,
   cost_usd: Usd,
   tools: z.array(LoggedToolName),
-  steps: z.int().min(0).max(6),
+  /** At most the run's step limit (`LIMITS.steps`), 6 on rows before it was 16. */
+  steps: z.int().min(0).max(16),
   /** Null when no model call was made. */
   first_chunk_ms: z.int().nonnegative().nullable(),
 }
@@ -929,6 +1039,16 @@ export const CosTurn = z.discriminatedUnion("outcome", [
   }),
   /** An onboarding turn the script answered from Jev's decision, its planner stopped. */
   z.strictObject({ outcome: z.literal("gated"), ...Ran }),
+  /**
+   * An onboarding turn whose every plan was refused after the owner read
+   * some of its message; code showed the waiting card again. `reasons` are
+   * the checks' findings.
+   */
+  z.strictObject({
+    outcome: z.literal("refused_after_stream"),
+    reasons: z.array(z.string().max(300)).max(8),
+    ...Ran,
+  }),
   z.strictObject({ outcome: z.literal("error"), ...Ran }),
   z.strictObject({ outcome: z.literal("integrity"), ...Ran }),
   /** Cut off by its time limit after content streamed; its message is kept, marked `stopped`. */
@@ -957,8 +1077,8 @@ export const CosPrefix = z.strictObject({
 
 /**
  * The `cos.context` payload, a turn's first. Labelled `untrusted_input` when
- * `text` holds owner text and `inferred` when it holds another agent's, such
- * as a question's `why`; both when it holds both.
+ * `text` or `memory` holds owner text and `inferred` when it holds another
+ * agent's, such as a question's `why`; both when it holds both.
  */
 export const CosContext = z.strictObject({
   turn_id: Ulid,
@@ -968,6 +1088,12 @@ export const CosContext = z.strictObject({
   active_tools: z.array(LoggedToolName),
   text: z.string().min(1),
   reserved_usd: Usd,
+  /**
+   * The owner profile and working notes as this turn froze them, empty when
+   * both were: every call of the conversation sends the latest one logged,
+   * byte for byte, until a turn takes a fresh one. Absent on the other turns.
+   */
+  memory: z.string().optional(),
 })
 
 const Content = ConversationMessage.shape.content.shape
@@ -1089,13 +1215,28 @@ export const CosToolResult = z.discriminatedUnion("tool", [
   }),
   z.strictObject({
     ...Called,
-    tool: z.literal("remember"),
-    output: COS_TOOLS.remember.output,
+    tool: z.literal("memory"),
+    output: COS_TOOLS.memory.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("search_conversations"),
+    output: COS_TOOLS.search_conversations.output,
   }),
   z.strictObject({
     ...Called,
     tool: z.literal("put_off"),
     output: COS_TOOLS.put_off.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("offer_choices"),
+    output: COS_TOOLS.offer_choices.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("present"),
+    output: COS_TOOLS.present.output,
   }),
   z.strictObject({
     ...Called,
@@ -1114,8 +1255,8 @@ export const CosToolResult = z.discriminatedUnion("tool", [
   }),
   z.strictObject({
     ...Called,
-    tool: z.literal("read_skill"),
-    output: COS_TOOLS.read_skill.output,
+    tool: z.literal("skill_view"),
+    output: COS_TOOLS.skill_view.output,
   }),
   z.strictObject({
     ...Called,
@@ -1146,6 +1287,16 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     ...Called,
     tool: z.literal("get_preview"),
     output: GetPreviewOutput,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("read_skill"),
+    output: ReadSkillOutput,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("remember"),
+    output: RememberOutput,
   }),
 ])
 
@@ -1216,10 +1367,11 @@ export const CosToolUnknown = z.strictObject({
  * The `cos.compaction` payload (§10.6): `summary` stands in for the events in
  * `replaced_range`, which stay in the log. `dropped_refs` are the ids of
  * events the summary does not carry. The summary is model-written, so the
- * event is labelled `inferred`.
+ * event is labelled `inferred`. Up to 48,000 characters: Hermes's
+ * 10,000-token ceiling at about four characters a token, with room.
  */
 export const CosCompaction = z.strictObject({
-  summary: Text(8000),
+  summary: Text(48_000),
   /** Positions in the session's stream, both included. */
   replaced_range: z.strictObject({
     from_seq: z.int().nonnegative(),
@@ -1232,18 +1384,48 @@ export const CosCompaction = z.strictObject({
  * The `cos.event` payload: something that happened away from the chat,
  * logged in the CoS session when it happened so the next turn reads it: a
  * staff result, a notice posted in the chat, a scheduled run's outcome, a
- * quote request from the business's website. A notice names the message it
+ * quote request from the business's website, or the hand-over from
+ * onboarding on the first CoS turn after it. A notice names the message it
  * posted. `wake` asks for a turn of its own. Labelled by the text `summary`
  * carries.
  */
 export const CosEvent = z.strictObject({
-  source: z.enum(["staff", "notice", "schedule", "enquiry"]),
+  source: z.enum(["staff", "notice", "schedule", "enquiry", "handover"]),
   summary: Text(1500),
   evidence: z.array(Evidence).max(4),
   wake: z.boolean(),
   message_id: ConversationMessage.shape.id.optional(),
 })
 
+/**
+ * What made code load a skill: the owner's first CoS turn after onboarding,
+ * a Connect button, an answer on the address card, I bought it or Not yet
+ * for a domain bought elsewhere, Connect Search Console, a scheduled run, or
+ * a typed message Jev reads as plainly about one skill.
+ */
+export const SkillTrigger = z.enum([
+  "handover",
+  "connect_address",
+  "address_yes",
+  "address_no",
+  "bought_elsewhere",
+  "address_skipped",
+  "connect_google",
+  "schedule",
+  "topic",
+])
+
+/**
+ * The `cos.skill` payload: a skill code loaded into the session's history on
+ * an explicit trigger, read back as a `skill_view` call and its result, so
+ * the model sees one form. Rows before skill_view hold only name and body.
+ */
+export const CosSkill = ViewedSkill.omit({ by: true })
+  .partial({ status: true })
+  .extend({ trigger: SkillTrigger.optional() })
+
+export type CosSkill = z.infer<typeof CosSkill>
+export type SkillTrigger = z.infer<typeof SkillTrigger>
 export type CosWorkspace = z.infer<typeof CosWorkspace>
 export type CosFacts = z.infer<typeof CosFacts>
 export type CosChangeRequest = z.infer<typeof CosChangeRequest>
@@ -1279,7 +1461,15 @@ export type DomainBoughtInput = z.infer<typeof DomainBoughtInput>
 export type InspectDomainInput = z.infer<typeof InspectDomainInput>
 export type InspectDomainOutput = z.infer<typeof InspectDomainOutput>
 export type PutOffInput = z.infer<typeof PutOffInput>
+export type SearchConversationsInput = z.infer<typeof SearchConversationsInput>
+export type SearchConversationsOutput = z.infer<
+  typeof SearchConversationsOutput
+>
 export type PutOffOutput = z.infer<typeof PutOffOutput>
+export type OfferChoicesInput = z.infer<typeof OfferChoicesInput>
+export type OfferChoicesOutput = z.infer<typeof OfferChoicesOutput>
+export type PresentInput = z.infer<typeof PresentInput>
+export type PresentOutput = z.infer<typeof PresentOutput>
 export type GrantKind = z.infer<typeof GrantKind>
 export type OfferGrantInput = z.infer<typeof OfferGrantInput>
 export type OfferGrantOutput = z.infer<typeof OfferGrantOutput>

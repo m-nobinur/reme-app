@@ -1285,7 +1285,43 @@ export const samples: Record<ContractName, unknown> = {
       { kind: "added", text: "Prefers calls after 4pm", source: "owner_said" },
     ],
   },
-  MemoryUndo: { version: 3 },
+  MemoryInput: {
+    target: "skill:quote-reply",
+    operations: [
+      { action: "add", content: "Quotes include parking costs" },
+      { action: "patch", old_text: "4pm", content: "5pm" },
+    ],
+  },
+  MemoryOutput: {
+    outcome: "saved",
+    target: "user",
+    note: "Write saved. This update is complete; do not repeat it.",
+    fullness: "1% (23/1,600 chars)",
+    entry_count: 1,
+  },
+  SkillNotes: {
+    lines: [
+      {
+        id: CONVERSATION,
+        skill: "quote-reply",
+        text: "Quotes include parking costs",
+        source: "owner_said",
+        at: NOW,
+      },
+    ],
+  },
+  SearchConversationsInput: { query: "parking" },
+  SearchConversationsOutput: {
+    outcome: "found",
+    results: [
+      {
+        conversation: CONVERSATION,
+        at: NOW,
+        by: "owner",
+        snippet: "Add parking to every quote in the city centre",
+      },
+    ],
+  },
   MemoryView: {
     version: 3,
     lines: [
@@ -1307,9 +1343,41 @@ export const samples: Record<ContractName, unknown> = {
             source: "owner_said",
           },
         ],
-        undoable: true,
       },
     ],
+    notes: {
+      version: 1,
+      lines: [
+        {
+          id: CONVERSATION,
+          text: "Keys are kept in the lockbox by the back door",
+          source: "owner_said",
+          at: NOW,
+        },
+      ],
+      max: 3500,
+      versions: [],
+    },
+    skills: {
+      version: 1,
+      notes: [
+        {
+          name: "quote-reply",
+          title: "Quote reply",
+          max: 800,
+          lines: [
+            {
+              id: CONVERSATION,
+              text: "Quotes include parking costs",
+              source: "owner_said",
+              at: NOW,
+              stale: false,
+            },
+          ],
+        },
+      ],
+      versions: [],
+    },
     ask_first: false,
     proposals: [],
     corrections: [
@@ -1366,13 +1434,23 @@ export const samples: Record<ContractName, unknown> = {
   ApprovalGrantSwitch: { kind: "record_review", on: false },
   PutOffInput: { kind: "google", days: 7 },
   PutOffOutput: { outcome: "put_off", until: "2026-11-03T08:00:00.000Z" },
+  OfferChoicesInput: {
+    choices: [
+      {
+        label: "Not yet",
+        send: "I haven't bought brightwaycleaning.co.uk yet",
+      },
+      { label: "Bought it", send: "I've bought brightwaycleaning.co.uk" },
+    ],
+  },
+  OfferChoicesOutput: { outcome: "offered" },
   RememberInput: {
     operations: [{ action: "add", text: "Prefers calls after 4pm" }],
   },
   RememberOutput: {
     outcome: "saved",
     note: "Saved. This update is complete; do not repeat it.",
-    fullness: "2%, 23/1,500 chars",
+    fullness: "1%, 23/1,600 chars",
   },
   OnboardingStatus: {
     on: { kind: "fact", key: "business.phone" },
@@ -1462,6 +1540,65 @@ export const samples: Record<ContractName, unknown> = {
       auth: "tBHItJI5svbpez7KI4CCXg",
     },
   },
+  ChannelLink: {
+    id: "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e",
+    kind: "whatsapp",
+    label: "+44 7•••• ••1234",
+    connected_at: LATER,
+    updates: true,
+  },
+  WhatsAppAccount: {
+    display_number: "+447700900123",
+    display_name: "Sparkle Cleaning",
+    source: "connected",
+    coexistence: true,
+    status: "active",
+  },
+  ChannelsState: {
+    whatsapp: {
+      available: true,
+      account: {
+        display_number: "+447700900123",
+        display_name: "Sparkle Cleaning",
+        source: "connected",
+        coexistence: true,
+        status: "active",
+      },
+      links: [
+        {
+          id: "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e",
+          kind: "whatsapp",
+          label: "+44 7•••• ••1234",
+          connected_at: LATER,
+          updates: true,
+        },
+      ],
+    },
+  },
+  ChannelLinkStarted: {
+    kind: "whatsapp",
+    url: "https://wa.me/447700900123?text=Connect%20Reme%20Jb3k9QwXz1mP0aRtYc7Vn5HgLd2UeSfI",
+    expires_at: LATER,
+  },
+  ChannelLinkPatch: { updates: false },
+  WhatsAppSignupComplete: {
+    code: "AQBx7mZ2kQ9",
+    waba_id: "102290129340398",
+    phone_number_id: "106540352242922",
+  },
+  NumberSearch: { contains: "123" },
+  NumberOffer: { phone_number: "+447700900456", locality: null },
+  NumberPurchase: {
+    phone_number: "+447700900456",
+    business_name: "Sparkle Cleaning",
+    address_line_1: "12 High Street",
+    address_line_2: "Unit 3",
+    city: "Leeds",
+    postcode: "LS1 4AP",
+    contact_name: "Sam Taylor",
+    email: "sam@sparkle.example",
+  },
+  NumberPurchaseState: { state: "pending_review" },
   PushSubscribed: { id: "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e" },
   PushConfig: { public_key: "BEl62iUYgUivxIkv69yViEuiBIa-Ib9" },
   OrgSchedule: {
@@ -1544,6 +1681,11 @@ export const samples: Record<ContractName, unknown> = {
       action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
     },
   },
+  ServerKindPart: { type: "data-kind", data: "note" },
+  ChoicesPart: {
+    type: "data-choices",
+    data: [{ label: "Try again", send: "Try building my website again." }],
+  },
   BuildQuestionsPart: {
     type: "data-build_questions",
     data: {
@@ -1578,6 +1720,7 @@ export const samples: Record<ContractName, unknown> = {
       label: "See the site",
       action: { kind: "open", url: "https://brightclean.example" },
     },
+    kind: "done",
   },
   SetTimeZoneRequest: { time_zone: "Asia/Dhaka" },
   SetFactsRequest: {

@@ -108,41 +108,7 @@ const hours = (pricing: Pricing | undefined): Rates[] => [
   ),
 ]
 
-/** Every block of rates, long-context tiers included. */
-const blocks = (pricing: Pricing | undefined): Rates[] => [
-  pricing ?? {},
-  ...(pricing?.overrides ?? []),
-]
-
 const rate = (key: string) => (r: Rates) => perMillion(r[key])
-
-/**
- * pi-ai's cost tiers for a model's long-context overrides, each at the factor
- * times the tier's rates, so a long request OpenRouter reports no cost for is
- * priced at the most it can be billed as well. pi-ai applies a tier to
- * requests whose input is above `inputTokensAbove`; an override applies from
- * `min_prompt_tokens`, so the threshold is one under it.
- */
-const longContextTiers = (pricing: Pricing | undefined) => {
-  const overrides = (pricing?.overrides ?? []).filter(
-    (o) => typeof o.min_prompt_tokens === "number"
-  )
-  const thresholds = [
-    ...new Set(overrides.map((o) => o.min_prompt_tokens as number)),
-  ].sort((a, b) => a - b)
-  return thresholds.map((from) => {
-    const at = overrides.filter((o) => o.min_prompt_tokens === from)
-    const capped = (key: string) =>
-      rounded(Math.max(...at.map(rate(key))) * ROUTING_CAP_FACTOR)
-    return {
-      inputTokensAbove: from - 1,
-      input: capped("prompt"),
-      output: capped("completion"),
-      cacheRead: capped("input_cache_read"),
-      cacheWrite: capped("input_cache_write"),
-    }
-  })
-}
 
 /**
  * A generated entry in Pi's `Model` shape, and how many distinct live
@@ -150,27 +116,27 @@ const longContextTiers = (pricing: Pricing | undefined) => {
  *
  * The cap is the factor times the list price, the day's hourly peak without
  * long-context tiers. OpenRouter compares a provider against it when a
- * request is made, so a provider under it at any hour can serve a call, and
- * the entry's cost is the cap: the most such a call can bill. A call is
- * logged at what OpenRouter billed (`billed` in `transport.ts`); the cap
- * prices only a call OpenRouter reports no cost for, and the CoS's
- * reservations, so both err high rather than low (§29.2).
- * Cache reads and writes are not capped by routing, so theirs are the
- * dearest any admitted provider charges; pi-ai takes written tokens out of
- * the input and prices them at `cacheWrite`, so a zero there would price an
+ * request is made, so a provider under it at any hour can serve a call.
+ * The entry's cost is OpenRouter's own listed price for the model (owner,
+ * 2026-11-06): its rates at the day's hourly peak, and its long-context
+ * tiers as listed. A call is logged at what OpenRouter billed
+ * (`billed` in `transport.ts`); the cost prices only a call OpenRouter
+ * reports no cost for, and the CoS's reservations. With no admitted
+ * provider it is the list price. pi-ai takes written tokens out of the
+ * input and prices them at `cacheWrite`, so a zero there would price an
  * Anthropic call's prompt under what it bills. The context and output limits are the smallest
  * any admitted provider serves, so a request fits whichever one is picked.
  */
 export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
   const listed = hours(model.pricing)
+  const peak = (key: string, from = listed) =>
+    Math.max(0, ...from.map(rate(key)))
   const cap = {
-    prompt: rounded(
-      Math.max(...listed.map(rate("prompt"))) * ROUTING_CAP_FACTOR
-    ),
-    completion: rounded(
-      Math.max(...listed.map(rate("completion"))) * ROUTING_CAP_FACTOR
-    ),
+    prompt: rounded(peak("prompt") * ROUTING_CAP_FACTOR),
+    completion: rounded(peak("completion") * ROUTING_CAP_FACTOR),
   }
+  const routable = (r: Rates) =>
+    rate("prompt")(r) <= cap.prompt && rate("completion")(r) <= cap.completion
   const ignore = [
     ...HOST_ROUTING.ignore,
     ...(NO_STRUCTURED_OUTPUTS[model.id] ?? []),
@@ -178,13 +144,31 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
   const admitted = endpoints.filter(
     (e) =>
       !ignore.includes(e.tag?.split("/")[0] ?? "") &&
-      hours(e.pricing).some(
-        (r) =>
-          rate("prompt")(r) <= cap.prompt &&
-          rate("completion")(r) <= cap.completion
-      )
+      hours(e.pricing).some(routable)
   )
-  const tiers = longContextTiers(model.pricing)
+  const costs = (from: Rates[]) => ({
+    input: rounded(peak("prompt", from)),
+    output: rounded(peak("completion", from)),
+    cacheRead: rounded(peak("input_cache_read", from)),
+    cacheWrite: rounded(peak("input_cache_write", from)),
+  })
+  // pi-ai applies a tier above `inputTokensAbove`; an override applies from
+  // `min_prompt_tokens`, so the threshold is one under it.
+  const thresholds = [
+    ...new Set(
+      (model.pricing?.overrides ?? []).flatMap((o) =>
+        typeof o.min_prompt_tokens === "number" ? [o.min_prompt_tokens] : []
+      )
+    ),
+  ].sort((a, b) => a - b)
+  const tiers = thresholds.map((from) => ({
+    inputTokensAbove: from - 1,
+    ...costs(
+      (model.pricing?.overrides ?? []).filter(
+        (o) => o.min_prompt_tokens === from
+      )
+    ),
+  }))
   const least = (values: (number | null | undefined)[]) => {
     const known = values.filter((v): v is number => typeof v === "number")
     return known.length > 0 ? Math.min(...known) : undefined
@@ -200,20 +184,7 @@ export function openrouterEntry(model: ListedModel, endpoints: Endpoint[]) {
       (mode) => mode === "text" || mode === "image"
     ),
     cost: {
-      input: cap.prompt,
-      output: cap.completion,
-      cacheRead: Math.max(
-        0,
-        ...admitted.flatMap((e) =>
-          blocks(e.pricing).map(rate("input_cache_read"))
-        )
-      ),
-      cacheWrite: Math.max(
-        0,
-        ...admitted.flatMap((e) =>
-          blocks(e.pricing).map(rate("input_cache_write"))
-        )
-      ),
+      ...costs(listed),
       ...(tiers.length > 0 ? { tiers } : {}),
     },
     contextWindow:

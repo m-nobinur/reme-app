@@ -426,7 +426,7 @@ export type RankFacts = {
 export type Ranked = { stem: string; score: number; why: string }
 
 /** The longest stem with a word added; past it a name is hard to say or type. */
-export const ADDED_MAX = 20
+export const ADDED_MAX = 22
 
 const LEGAL = /\b(ltd|limited|llp|plc|inc|co|company|services?|the)\b/g
 const slug = (s: string) =>
@@ -449,22 +449,43 @@ function brandOf(facts: RankFacts) {
   return { words, brand: words.join("").replace(/[^a-z0-9]/g, "") }
 }
 
+/** Words that end a trade's name but name no trade: "Cleaning company" is cleaning. */
+const GENERIC =
+  /(?:\s+(?:company|companies|services?|business|firm|specialists?|solutions|agency|contractors?|ltd))+$/i
+
+/**
+ * The trade as the words a name may use: its last one or two, the noun that
+ * names it ("Domestic and end of tenancy cleaning" is cleaning, "Dog
+ * grooming" stays dog grooming), never the industry's other words.
+ */
+const tradeOf = (trade: string | undefined) => {
+  const words = (trade ?? "").replace(GENERIC, "").trim().split(/\s+/)
+  return words.length === 2 ? words : words.slice(-1)
+}
+
+/** The people who do an "-ing" trade: cleaning is cleaners, grooming groomers. */
+const agentOf = (trade: string) =>
+  trade.length > 5 && trade.endsWith("ing") ? `${trade.slice(0, -3)}ers` : ""
+
 /**
  * The candidate stems for a business, best first: its brand, brand plus town,
- * brand plus trade (when the name does not already say it) and brand-town,
- * each with its own reason. A word the brand already holds is never added
- * again, and a stem with a word added stays within `ADDED_MAX`; the brand
- * alone is kept at any length so a long name still gets a row. A pure
- * function: no model, no network.
+ * brand plus trade (when the name does not already say it), the brand with
+ * the trade's people ("sparklecleaners"), brand-town, town plus trade and a
+ * UK form, each with its own reason. The trade is read from its last word,
+ * the noun that names it ("Domestic and end of tenancy cleaning" is
+ * cleaning), so no stem carries the industry's other words. A word the brand
+ * already holds is never added again, and a stem with a word added stays
+ * within `ADDED_MAX`; the brand alone is kept at any length so a long name
+ * still gets a row. A pure function: no model, no network.
  */
 export function candidates(facts: RankFacts): Ranked[] {
   const { words, brand } = brandOf(facts)
   if (!brand) return []
   const town = facts.town ? label(facts.town.split(",")[0] ?? "") : ""
   // The trade's last word names it: "Dog grooming" is grooming.
-  const trade = facts.trade
-    ? label(facts.trade.trim().split(/\s+/).at(-1) ?? "")
-    : ""
+  const named = tradeOf(facts.trade)
+  const trade = label(named.at(-1) ?? "")
+  const agent = agentOf(trade)
   // "Sparkle Clean" already says cleaning: a word and the trade share a stem.
   const said =
     !trade ||
@@ -486,6 +507,15 @@ export function candidates(facts: RankFacts): Ranked[] {
     stems.push([`${brand}-${town}`, 25, `${yours} and ${where}, with a dash`])
   }
   if (!said) stems.push([`${brand}${trade}`, 20, `${yours} plus ${trade}`])
+  if (agent) {
+    // "Sparkle Clean" becomes sparklecleaners: the word the trade grew from gives way.
+    const root = said
+      ? words.filter((w) => !(w.length >= 4 && trade.startsWith(w)))
+      : words
+    const stem = `${root.map(label).join("")}${agent}`
+    if (stem !== brand && !brand.includes(agent))
+      stems.push([stem, 22, `says what you do, ${agent}`])
+  }
   // A long name gets shorter forms of itself, since a word added to it would
   // pass `ADDED_MAX`: its first and last words, and its first word and town.
   if (words.length >= 3 && brand.length > 15) {
@@ -497,14 +527,16 @@ export function candidates(facts: RankFacts): Ranked[] {
     }
   }
   // Where and what, without the brand: what people type to find a trade.
-  const tradeWords = facts.trade
-    ? label(facts.trade.trim().split(/\s+/).slice(-2).join(""))
-    : ""
+  // Two words only when the trade is two words ("dog grooming").
+  const tradeWords = label(named.join(""))
   if (town && tradeWords && !brand.includes(town)) {
     stems.push([`${town}${tradeWords}`, 15, `${where} plus what you do`])
     if (trade && trade !== tradeWords)
       stems.push([`${town}${trade}`, 13, `${where} plus ${trade}`])
+    if (agent) stems.push([`${town}${agent}`, 14, `${where} plus ${agent}`])
   }
+  if (brand.length <= 14 && !brand.endsWith("uk"))
+    stems.push([`${brand}uk`, 12, `${yours} with uk, for a UK business`])
   return stems
     .filter(([s], i) => s.length <= (i === 0 ? 63 : ADDED_MAX))
     .map(([stem, points, why]) => ({
@@ -543,7 +575,8 @@ export function suggestions(facts: RankFacts, names: string[]): Ranked[] {
   const vocab = [
     ...words,
     facts.town?.split(",")[0] ?? "",
-    ...(facts.trade?.split(/\s+/) ?? []),
+    ...tradeOf(facts.trade),
+    agentOf(label(tradeOf(facts.trade).at(-1) ?? "")),
   ].map(label)
   return [...new Set(names.map((n) => n.slice(0, n.indexOf("."))))]
     .filter(

@@ -1,4 +1,3 @@
-import { factLabel } from "@workspace/ui/lib/facts"
 import { formatTime } from "@workspace/ui/lib/format"
 import { localMidnight } from "@workspace/ui/lib/zone"
 import type { OrgSummary, Workspace } from "./api/types"
@@ -6,16 +5,13 @@ import { factsNeeded, questionOf } from "./reminders"
 
 /**
  * What the empty conversation opens with: one line on where things stand, the
- * business and its site on the composer's chip, and up to four things to
- * ask. All of it is read from the workspace, never written by a model, so it
- * costs nothing and says nothing the rows do not.
+ * business and its site on the composer's chip. All of it is read from the
+ * workspace, never written by a model, so it costs nothing and says nothing
+ * the rows do not.
  */
-export type Briefing = {
-  line: string | null
-  suggestions: { prompt: string }[]
-}
+export type Briefing = { line: string | null }
 
-const NOTHING: Briefing = { line: null, suggestions: [] }
+const NOTHING: Briefing = { line: null }
 
 /**
  * `today at 3:00 PM`, `tomorrow at 9:00 AM`, in the browser's time zone: the
@@ -113,55 +109,5 @@ export function briefingOf(
     next = `${assistant} is working on your changes.`
   }
 
-  // What waits on the owner first, then the build, then what to do next.
-  // Only with no build at all is the business new: a paused or waiting build
-  // would be superseded by "Build my website".
-  const fresh = !live && !open && !approval
-  const suggestions: string[] = []
-  if (approval) {
-    suggestions.push(
-      live ? "What did you change?" : "What's on my new website?"
-    )
-  }
-  if (questions.length > 0) {
-    suggestions.push("What do you need from me?")
-  }
-  if (unpublished && !approval) {
-    suggestions.push("Why aren't my changes live yet?")
-  }
-  if (building) {
-    suggestions.push(
-      live
-        ? "How are my changes coming along?"
-        : "How's my website coming along?"
-    )
-  }
-  if (fresh) {
-    suggestions.push("Build my website")
-  }
-  if (facts) {
-    suggestions.push(
-      // Named only while it is short: a new business is missing six.
-      facts.keys.length > 2
-        ? "Add my business details"
-        : `Add my ${new Intl.ListFormat("en-GB").format(
-            facts.keys.map((key) => factLabel(key).toLowerCase())
-          )}`
-    )
-  }
-  if (fresh) {
-    suggestions.push("Let me tell you about my business")
-  }
-  if (live) {
-    suggestions.push(
-      "What's on my website now?",
-      "I want to change something on my website",
-      "Set a reminder for me"
-    )
-  }
-
-  return {
-    line: next ? `${site} ${next}` : site,
-    suggestions: suggestions.slice(0, 4).map((prompt) => ({ prompt })),
-  }
+  return { line: next ? `${site} ${next}` : site }
 }

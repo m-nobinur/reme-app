@@ -3,17 +3,18 @@ import {
   AgentNote,
   type BlockChange,
   Blueprint,
-  type BuildQuestion,
-  type BuildQuestions,
   type BuildStopCause,
   BuildSummary,
   buildFailure,
   CHANGE_CHECKED,
   CHANGE_REFUSED,
   ChangeChecked,
+  type Choices,
   CompletionReport,
   type GateName,
+  type Journey,
   PLANNED_PAGES,
+  type ServerMessageKind,
   TONES,
 } from "@workspace/contracts"
 import {
@@ -23,10 +24,13 @@ import {
   eq,
   events,
   failureCode,
+  journeyOf,
   type OrgScopedDb,
   type Posted,
   pgCode,
   postAssistantMessage,
+  queueWake,
+  readTasks,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -43,7 +47,6 @@ import {
   writeText,
 } from "./heartbeat-write.ts"
 import { PICK_LINES } from "./planner.ts"
-import { inputOf, refuseQuestion } from "./question.ts"
 import { QUICK_EDITED } from "./quick.ts"
 import { workKey } from "./sandbox.ts"
 import { type Ids, REPAIR_LIMIT, repairsSoFar } from "./state.ts"
@@ -86,17 +89,21 @@ export type Ended = {
   lane: string
   retry_of: string | null
   reason: string | null
-  /** Another site build is open: it speaks for itself. */
+  /** Another site build is open, and holds the site. */
   busy: boolean
 }
 
-/** Retry an owner's build or full rebuild once; say a retry's failure, or a quick change's. */
-export function decide(ended: Ended): "retry" | "stop" | "quiet" {
+/**
+ * Retry an owner's build or full rebuild once; say a retry's failure, or a
+ * quick change's. `busy`: another build holds the site, so neither a retry
+ * nor a note of ours may race its own, and the assistant tells the stop.
+ */
+export function decide(ended: Ended): "retry" | "stop" | "quiet" | "busy" {
   if (ended.origin !== "owner" || !ended.kind.startsWith("site.")) {
     return "quiet"
   }
   if (buildFailure(ended.reason).retry === null) return "quiet"
-  if (ended.busy) return "quiet"
+  if (ended.busy) return "busy"
   if (ended.retry_of) return "stop"
   return ended.kind === "site.build" || ended.lane === "full" ? "retry" : "stop"
 }
@@ -121,9 +128,20 @@ export function resumedText(kind: string): string {
   return `${subject(kind)} got stuck, so I restarted it from where it left off. Nothing for you to do: I'll say here when the draft is ready.`
 }
 
-/** A change to an unpublished draft failed, and the draft it started from is back. */
+/** A change to an unpublished draft stopped for good, and the draft it started from is back. */
 export const DRAFT_BACK =
-  "I couldn't make your change, so your earlier draft is still ready to publish. Nothing for you to do."
+  "I couldn't make your change, so your earlier draft is still ready to publish. Say try again, or tell me what to change."
+
+/** The stopped note's one quick reply: the try again its words ask for. */
+export const tryAgain = (kind: string): Choices => [
+  {
+    label: "Try again",
+    send:
+      kind === "site.revise"
+        ? "Try my website change again."
+        : "Try building my website again.",
+  },
+]
 
 export function stoppedText(kind: string, reason: string): string {
   if (reason === CHANGE_REFUSED) {
@@ -162,35 +180,65 @@ export type Change = {
 }
 
 const LINES_MAX = 4
-const quoted = (text: string) =>
-  `"${text.length > 60 ? `${text.slice(0, 57).trimEnd()}...` : text}"`
+const NAME_MAX = 80
+
+/**
+ * What a change list calls a line, whole and never cut: the line when it is
+ * short, else its label before a colon ("Send a quote request: Use the form
+ * to..."), else its first sentence; "" when none is short enough to quote.
+ */
+const nameOf = (text: string) =>
+  [
+    text,
+    /^([^:]{1,60}):\s/.exec(text)?.[1],
+    /^.+?[.!?](?=\s|$)/.exec(text)?.[0],
+  ].find((t) => t && t.length <= NAME_MAX) ?? ""
+
+/** A page as the owner reads it: Home, a page by its name, or a service's page by the service. */
+const pageName = (page: string) => {
+  const parts = page.split("/").filter(Boolean)
+  const last = (parts.at(-1) ?? "home").replace(/-/g, " ")
+  const name = `${last.charAt(0).toUpperCase()}${last.slice(1)}`
+  return parts.length > 1 ? `the ${name} page` : name
+}
+
+/** Where a change is: every page it touched, "on Home and About", or "on 3 pages" past two. */
 const onPage = (pages: readonly string[]) => {
-  const page = pages[0] ?? "/"
-  const name =
-    page === "/" ? "Home" : page.replace(/^\/|\/$/g, "").replace(/[-/]/g, " ")
-  return `on ${name.charAt(0).toUpperCase()}${name.slice(1)}`
+  const names = [...new Set((pages.length ? pages : ["/"]).map(pageName))]
+  return names.length > 2
+    ? `on ${names.length} pages`
+    : `on ${names.join(" and ")}`
 }
 
 type Pair = { before: string; after: string; pages: string[] }
 
-const pairLine = ({ before, after, pages }: Pair) =>
-  !before
-    ? `Added ${quoted(after)} ${onPage(pages)}`
-    : !after
-      ? `Took off ${quoted(before)} ${onPage(pages)}`
-      : `Changed ${quoted(before)} to ${quoted(after)} ${onPage(pages)}`
+function pairLine({ before, after, pages }: Pair): string {
+  const was = nameOf(before)
+  const now = nameOf(after)
+  const where = onPage(pages)
+  if (!before)
+    return now ? `Added "${now}" ${where}` : `Added new text ${where}`
+  if (!after)
+    return was ? `Took off "${was}" ${where}` : `Took off some text ${where}`
+  if (was && now && was !== now) return `Changed "${was}" to "${now}" ${where}`
+  return was || now
+    ? `Reworded "${was || now}" ${where}`
+    : `Reworded some text ${where}`
+}
 
-/** One block record in plain words: what was added, taken off, reworded or moved, and where. */
+/** One block record in plain words: what was added, taken off, reworded or moved, and where. A block with no words to name says nothing. */
 function blockLine(b: BlockChange): string | null {
   const pages = [routeOf(b.page)]
-  if (b.change === "moved")
-    return `Moved ${quoted(titleOf(b.after))} ${b.above ? `above ${quoted(b.above)}` : "to the end"} ${onPage(pages)}`
-  if (b.change !== "changed")
-    return pairLine({
-      before: titleOf(b.before),
-      after: titleOf(b.after),
-      pages,
-    })
+  if (b.change === "moved") {
+    const moved = nameOf(titleOf(b.after))
+    const above = b.above ? nameOf(b.above) : ""
+    return `Moved ${moved ? `"${moved}"` : "a section"} ${above ? `above "${above}"` : b.above ? "up" : "to the end"} ${onPage(pages)}`
+  }
+  if (b.change !== "changed") {
+    const before = titleOf(b.before)
+    const after = titleOf(b.after)
+    return before || after ? pairLine({ before, after, pages }) : null
+  }
   const was = b.before.split("\n").map(plainLine).filter(Boolean)
   const now = b.after.split("\n").map(plainLine).filter(Boolean)
   const before = was.find((l) => !now.includes(l)) ?? ""
@@ -296,57 +344,23 @@ export function readyText(
   ].join(" ")
 }
 
-/** A chat line to post, and with a ready line, what the build left out to offer. */
-export type Note = { key: string; text: string; questions?: BuildQuestions }
-
-/** Said above the offer, which is a card of skippable questions. */
-export const OFFER_LINE =
-  "I left out a few things I didn't know yet. Want me to add these?"
-
-/** Details the assistant asks for once its own work needs them, never beside a draft. */
-const LATER =
-  /^(?:hours\.|business\.prices$|business\.enquiries$|owner\.priorities$)/
-
 /**
- * What this build left out (`left_out` on its last report) as one stack of
- * skippable questions: each one `ask_chief` would take, about a fact that is
- * still missing and not one for `LATER`, once per fact. None when nothing is
- * left to offer.
+ * One line after the first draft while the journey offers Connect: nothing
+ * once the owner put the address off, said no, is paying or connecting, or
+ * it is live.
  */
-async function offerOf(
-  db: OrgScopedDb,
-  assignmentId: string
-): Promise<BuildQuestions | undefined> {
-  const [row] = await db
-    .select({ payload: events.payload })
-    .from(events)
-    .where(
-      sql`${events.assignmentId} = ${assignmentId} and ${events.type} = 'assignment.completion_reported'`
-    )
-    .orderBy(sql`${events.eventId} desc`)
-    .limit(1)
-  const items = CompletionReport.safeParse(row?.payload).data?.left_out ?? []
-  const questions: BuildQuestion[] = []
-  for (const item of items) {
-    if (questions.some((q) => q.field === item.field)) continue
-    if (
-      LATER.test(item.field) ||
-      refuseQuestion(item) ||
-      (await currentFact(db, item.field))
-    )
-      continue
-    questions.push({
-      id: crypto.randomUUID(),
-      text: item.question.trim(),
-      input: inputOf(item),
-      skippable: true,
-      field: item.field,
-    })
-  }
-  return questions.length > 0
-    ? { kind: "offer", assignment_id: assignmentId, questions }
-    : undefined
+export function addressLine({
+  offer,
+}: Pick<Journey["address"], "offer">): string {
+  if (offer === "connect_bought")
+    return "When you're ready to connect your new address, tap Connect on the card."
+  return offer === "connect"
+    ? "When you'd like to set up your own address, tap Connect on the card."
+    : ""
 }
+
+/** A chat line to post. */
+export type Note = { key: string; text: string; choices?: Choices }
 
 /** The change's label from its creation, its new words from the quick lane and whether its report says it was not made as asked, each absent when not recorded. */
 async function changeOf(db: OrgScopedDb, ids: Ids): Promise<Change> {
@@ -444,7 +458,7 @@ const NEXT_WORDS: Record<
   resumed:
     "You already restarted it from where it left off, and it is back at work. Nothing is needed from the owner, and you will tell them here when the draft is ready.",
   retrying:
-    "You have already started it again by yourself. The owner need do nothing, and you will say here when the draft is ready.",
+    "You have already started it again by yourself. Nothing is needed from the owner, and you will say here when the draft is ready.",
   stopped:
     "Nothing more happens until the owner says try again or tells you what to change.",
 }
@@ -542,6 +556,13 @@ export async function narrate(
   }
 }
 
+/** A note's kind, by its key: a draft ready is done, a stop or a draft given back is for the owner. */
+const NOTE_KINDS: Record<string, ServerMessageKind> = {
+  "site.ready": "done",
+  "site.stopped": "note",
+  "site.draft_back": "note",
+}
+
 /** A post the chat could not take yet throws, so the step's retries try again. */
 export async function postNote(
   kit: Tenancy,
@@ -551,9 +572,11 @@ export async function postNote(
   const posted = await postAssistantMessage(kit, {
     orgId,
     key: note.key,
-    message: note.questions
-      ? { text: [note.text, OFFER_LINE], questions: note.questions }
-      : { text: [note.text] },
+    message: {
+      text: [note.text],
+      ...(note.choices && { choices: note.choices }),
+      kind: NOTE_KINDS[note.key.split(":")[0] ?? ""] ?? "update",
+    },
   })
   if (posted === "busy" || posted === "waiting") {
     throw new Error(`build.note_${posted}`)
@@ -578,24 +601,27 @@ const reviewOpen = async (kit: Tenancy, ids: Ids) => {
 /**
  * The draft is ready: its `done` note and the ready line to post, while the
  * review it announces is still open. The line is the template, with no model
- * call in front of it: the owner is looking at the review already.
+ * call in front of it: the owner is looking at the review already. It asks
+ * nothing: what the build left out waits until asking is defined (O26).
  */
 export async function readyNote(kit: Tenancy, ids: Ids): Promise<Note | null> {
   const row = await reviewOpen(kit, ids)
   if (!row) return null
-  const { retry_of, offer, change } = await kit.withOrg(
+  const revise = row.kind === "site.revise"
+  const { retry_of, change, address } = await kit.withOrg(
     { orgId: ids.orgId },
     async (db) => ({
       ...(await creationChoices(db, ids)),
-      offer: await offerOf(db, ids.assignmentId),
-      change: row.kind === "site.revise" ? await changeOf(db, ids) : {},
+      change: revise ? await changeOf(db, ids) : {},
+      address: revise
+        ? ""
+        : addressLine(journeyOf({ tasks: await readTasks(db) }).address),
     })
   )
   const { named, each } = plannedPages(row.blueprint)
-  const pages =
-    row.kind === "site.revise"
-      ? []
-      : [...named, ...(each ? ["A page for each service"] : [])].slice(0, 12)
+  const pages = revise
+    ? []
+    : [...named, ...(each ? ["A page for each service"] : [])].slice(0, 12)
   const attempt = retry_of ? 2 : 1
   const note: AgentNote = {
     kind: "done",
@@ -611,8 +637,12 @@ export async function readyNote(kit: Tenancy, ids: Ids): Promise<Note | null> {
   await writeNote(kit, ids.orgId, note)
   return {
     key: note.key,
-    text: readyText(row.kind, row.blueprint, change, ids.assignmentId),
-    ...(offer && { questions: offer }),
+    text: [
+      readyText(row.kind, row.blueprint, change, ids.assignmentId),
+      address,
+    ]
+      .filter(Boolean)
+      .join(" "),
   }
 }
 
@@ -672,7 +702,7 @@ export async function noteResumed(
   return postAssistantMessage(kit, {
     orgId: ids.orgId,
     key: note.key,
-    message: { text: [text] },
+    message: { text: [text], kind: "update" },
   })
 }
 
@@ -708,14 +738,13 @@ export async function afterFailure(
     const choices = await creationChoices(db, ids)
     const reason = await failureReason(db, ids.assignmentId)
     const report = await lastReport(db, ids.assignmentId)
-    // This build's own retry, made by an earlier attempt of the step, is not another build.
-    const [open] = await db
+    // This build's own retry, made by an earlier attempt of the step, is not another build, and nor is the draft this change gave back.
+    const open = await db
       .select({ id: assignments.id })
       .from(assignments)
       .where(
         sql`${assignments.kind} like 'site.%' and ${assignments.state} not in ('published', 'failed', 'cancelled') and ${assignments.idempotencyKey} <> ${key}`
       )
-      .limit(1)
     const failed = (report?.gates ?? []).filter((g) => !g.passed)
     // The draft this change started from, given back with its review (state.ts).
     const [draft] = row?.revisionOfAssignmentId
@@ -731,7 +760,7 @@ export async function afterFailure(
       choices,
       reason,
       failed: [...new Set(failed.map((g) => g.gate))],
-      busy: Boolean(open),
+      busy: open.some((o) => o.id !== row?.revisionOfAssignmentId),
       draftBack: Boolean(draft),
     }
   })
@@ -765,24 +794,35 @@ export async function afterFailure(
     }
     await writeNote(kit, ids.orgId, note)
     if (next === "none") return { retry_id: null, note: null }
+    // The draft that is back is what the owner has: its line says so.
+    if (read.draftBack) {
+      return {
+        retry_id: null,
+        note: {
+          key: `site.draft_back:${ids.assignmentId}`,
+          text: DRAFT_BACK,
+          choices: tryAgain(row.kind),
+        },
+      }
+    }
     const text = stoppedText(row.kind, reason)
     return {
       retry_id: null,
       note: {
         key: note.key,
         text: await narrate(env, kit, ids.orgId, row.kind, note, text),
+        choices: tryAgain(row.kind),
       },
     }
   }
-  // The draft that is back is what the owner has: one line, and no retry.
-  if (read.draftBack) {
-    await stop("none")
-    return {
-      retry_id: null,
-      note: { key: `site.draft_back:${ids.assignmentId}`, text: DRAFT_BACK },
-    }
+  if (verdict === "busy") {
+    // The stop's handoff asked for no turn (`told`): ask for one now, so the
+    // assistant tells it once, in one voice, with the running build in view.
+    await kit.withOrg({ orgId: ids.orgId }, (db) => queueWake(db, ids.orgId))
+    return stop("none")
   }
-  if (verdict === "quiet") return stop("none")
+  if (verdict === "quiet")
+    return stop(read.draftBack ? "waiting_owner" : "none")
   if (verdict === "stop") return stop("waiting_owner")
   // A retry that carries on from the kept site keeps the photos placed in it.
   const kept = (await env.SITES.head(workKey(ids))) !== null
@@ -795,6 +835,8 @@ export async function afterFailure(
       lane: choices.lane,
       change_kind: choices.change_kind,
       ...(choices.brief ? { brief: choices.brief } : {}),
+      ...(choices.draft ? { draft: choices.draft } : {}),
+      ...(choices.label ? { label: choices.label } : {}),
       retry_of: {
         assignment_id: ids.assignmentId,
         blueprint: kept ? row.blueprint : redrawn(row.blueprint),

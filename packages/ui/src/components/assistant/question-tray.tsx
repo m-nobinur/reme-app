@@ -38,6 +38,7 @@ import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
 import {
   useFocusWhenIdle,
   useRevealWaiting,
+  useWordsRevealing,
 } from "@workspace/ui/hooks/use-reveal-waiting"
 import { trayItem, trayOthers } from "@workspace/ui/lib/activity-copy"
 import { OPTION, OPTION_TILE, PICKED_LINE } from "@workspace/ui/lib/card"
@@ -122,7 +123,7 @@ export function ShowFoldedQuestion({ className }: { className?: string }) {
   return (
     <button
       className={cn(
-        "rounded-sm text-foreground underline decoration-muted-foreground/60 underline-offset-3 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring",
+        "rounded-sm text-foreground underline decoration-muted-foreground/60 underline-offset-3 outline-none hover:decoration-foreground focus-visible:ring-1 focus-visible:ring-ring",
         className
       )}
       onClick={folded.open}
@@ -276,14 +277,14 @@ function Docked({
   children: ReactNode
 }) {
   const slot = useContext(SlotContext)
-  const running = useRevealWaiting(!settled)
+  const mark = useRef<HTMLSpanElement>(null)
+  const running = useRevealWaiting(!settled, useWordsRevealing(mark))
   const away = running && !settled
   // One that was there when the page loaded appears still; only one a turn
   // brought glides in.
   const brought = useRef<boolean>(false)
   if (running) brought.current = true
   const ref = useRef<HTMLDivElement>(null)
-  const mark = useRef<HTMLSpanElement>(null)
   const key = useId()
   const steps = useStacked(slot, key)
   useLayoutEffect(() => {
@@ -359,26 +360,52 @@ function useTabDraft<T>(id: string | null, empty: T) {
 }
 
 /**
- * Why an ask broke, where it stood in the thread. One a typed message
- * overtook leaves nothing: the owner's own message is right after it.
+ * What an ask that no longer waits leaves where it stood in the thread: why
+ * it broke, or nothing. Answered, skipped, or overtaken by a typed message,
+ * the owner's own message right after it says what happened.
  */
-function TrayNote({ name, error }: { name: string; error?: string | null }) {
-  if (!error) return null
+function TrayNote({
+  name,
+  view,
+}: {
+  name: string
+  view: { state: string; message?: string }
+}) {
+  if (view.state !== "error" || !view.message) return null
   return (
     <p className="my-3 text-destructive text-sm" data-slot={name}>
-      {error}
+      {view.message}
     </p>
   )
 }
 
+/** Skip on an ask's tray, when the call lets the owner skip it. */
+const skipOf = (
+  skippable: boolean,
+  addResult: (result: { answer: "skipped" }) => void,
+  disabled = false
+): TrayFrameProps["skip"] =>
+  skippable
+    ? {
+        label: "Skip",
+        onSkip: () => addResult({ answer: "skipped" }),
+        disabled,
+      }
+    : undefined
+
 /** An option tile in the tray, a label over a native radio or checkbox. */
-const TRAY_TILE = cn(OPTION, OPTION_TILE, "rounded-xl", PICKED_LINE)
+const TRAY_TILE = cn(
+  OPTION,
+  OPTION_TILE,
+  "rounded-xl hover:border-foreground/25",
+  PICKED_LINE
+)
 
 /** A tile that answers on a tap, its answer shown pressed: the tray tile as a button. */
 const QUICK_TILE = cn(
   OPTION,
   OPTION_TILE,
-  "rounded-xl text-left outline-hidden focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring",
+  "rounded-xl text-left outline-hidden focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring",
   "aria-pressed:border-foreground aria-pressed:outline-1 aria-pressed:outline-foreground aria-pressed:outline-solid aria-pressed:-outline-offset-2 aria-pressed:focus-visible:border-foreground"
 )
 
@@ -416,7 +443,7 @@ function DropTile({
     <label
       className={cn(
         "flex cursor-pointer items-center gap-3 rounded-xl border border-border border-dashed bg-card px-4 py-3 transition-colors duration-150",
-        "hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
+        "hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring",
         over && "border-primary bg-primary/5",
         className
       )}
@@ -543,7 +570,7 @@ function Summary({
 }) {
   return (
     <button
-      className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring"
+      className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
       onClick={onOpen}
       type="button"
     >
@@ -1190,22 +1217,51 @@ function TrayFrame({
     if (body)
       setMore(body.scrollHeight - body.scrollTop - body.clientHeight > 4)
   }
-  // The body is held at its content's height, so a new page eases to its own
-  // height instead of snapping; the frame's cap still shrinks it to scroll.
-  // The write waits a frame: the body is observed too, and resizing it in
-  // the observer's own callback would loop.
+  // The body takes its content's height at once, so a part of a page that
+  // opens or folds (its own ease) never leaves the tray at a stale height.
+  // Only a new page is eased: from the last page's height to its own, then
+  // let go. The observer reads the height and writes nothing, so it cannot loop.
+  const height = useRef(0)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only a new page eases
+  useLayoutEffect(() => {
+    const body = bodyRef.current
+    const from = height.current
+    if (
+      !body ||
+      !from ||
+      matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      return
+    const to = body.offsetHeight
+    if (from === to) return
+    const release = () => {
+      body.style.height = ""
+    }
+    const done = (event: TransitionEvent) => {
+      if (event.target === body && event.propertyName === "height") release()
+    }
+    body.style.height = `${from}px`
+    body.getBoundingClientRect()
+    body.style.height = `${to}px`
+    body.addEventListener("transitionend", done)
+    const fallback = setTimeout(release, 500)
+    return () => {
+      clearTimeout(fallback)
+      body.removeEventListener("transitionend", done)
+      release()
+    }
+  }, [page?.index])
+  // Whether the body hides content below its fold, and how tall it stands.
   // biome-ignore lint/correctness/useExhaustiveDependencies: measure again when the page or its state changes
   useEffect(() => {
     const body = bodyRef.current
     const content = contentRef.current
     if (!body || !content) return
     measure()
-    const watch = new ResizeObserver(() =>
-      requestAnimationFrame(() => {
-        body.style.height = `${content.offsetHeight}px`
-        measure()
-      })
-    )
+    const watch = new ResizeObserver(() => {
+      height.current = body.offsetHeight
+      measure()
+    })
     watch.observe(body)
     watch.observe(content)
     return () => watch.disconnect()
@@ -1272,7 +1328,7 @@ function TrayFrame({
       {collapsed ? (
         <button
           aria-expanded={false}
-          className="flex w-full items-center gap-3 rounded-[var(--composer-radius,var(--radius-4xl))] px-5 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring"
+          className="flex w-full items-center gap-3 rounded-[var(--composer-radius,var(--radius-4xl))] px-5 py-3 text-left outline-none focus-visible:ring-1 focus-visible:ring-ring"
           onClick={() => onCollapsedChange(false)}
           type="button"
         >
@@ -1902,7 +1958,7 @@ function QuestionTray({
       !allPairs &&
       shown.length < question.card.options.length ? (
         <button
-          className="self-start rounded-sm text-muted-foreground text-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
+          className="self-start rounded-sm text-muted-foreground text-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
           onClick={() => setAllPairs(true)}
           type="button"
         >
@@ -1969,6 +2025,7 @@ export {
   Summary,
   Swatches,
   sentence,
+  skipOf,
   TRAY_FIELD,
   TRAY_TILE,
   TrayFrame,

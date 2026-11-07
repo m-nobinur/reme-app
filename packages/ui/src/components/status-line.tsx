@@ -1,3 +1,9 @@
+import { CaretRightIcon } from "@phosphor-icons/react"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@workspace/ui/components/collapsible"
 import {
   type CopyContext,
   type Phase,
@@ -5,6 +11,7 @@ import {
   STILL_AFTER,
   type StatusKind,
   type ToolArgs,
+  toolKind,
   toolLine,
 } from "@workspace/ui/lib/activity-copy"
 import { duration } from "@workspace/ui/lib/format"
@@ -16,7 +23,9 @@ import {
 } from "@workspace/ui/lib/status-icons"
 import {
   CLOCK_AFTER_MS,
+  FADE_MS,
   holdFor,
+  REPLY_CLOCK_AFTER_MS,
   SHOW_DELAY_MS,
   type StatusState,
 } from "@workspace/ui/lib/status-line"
@@ -24,10 +33,12 @@ import { cn } from "@workspace/ui/lib/utils"
 import { type ComponentProps, useEffect, useRef, useState } from "react"
 
 /**
- * What the assistant is doing, in one line: the working dots while the work
- * runs, then a few words with a soft light sweeping across them, wiped in
- * from the left as they change; once it ends, the state's mark. Chat and
- * panel draw it the same way.
+ * What the assistant is doing, in one line: the working dots (or, for a tool
+ * at work, its kind's icon) while the work runs, then a few words with a soft
+ * light sweeping across them, the old words fading out as new ones fade in.
+ * Once the work is done the mark goes and the words stay, muted; a failure,
+ * a wait on the owner or a stop keeps its mark. Chat and panel draw it the
+ * same way.
  *
  * The mark sits beside the words, not in them: the shimmer masks everything
  * inside its host. Motion is on the mark and the words only while the state
@@ -136,6 +147,24 @@ function useSettled(next: Line, delay: number): Line | null {
   return shown
 }
 
+/** The words `label` replaced, for as long as they take to fade out. */
+function useOutgoing(label: string | undefined): string | null {
+  const [words, setWords] = useState({ label, outgoing: null as string | null })
+  if (label !== words.label) {
+    setWords({ label, outgoing: words.label ?? null })
+  }
+  const { outgoing } = words
+  useEffect(() => {
+    if (outgoing === null) return
+    const timer = setTimeout(
+      () => setWords((now) => ({ ...now, outgoing: null })),
+      FADE_MS
+    )
+    return () => clearTimeout(timer)
+  }, [outgoing])
+  return outgoing
+}
+
 /** Milliseconds since `since` (or since this ran), ticking while `active`. */
 function useClock(active: boolean, since: number | undefined) {
   const [now, setNow] = useState<number | null>(null)
@@ -159,6 +188,7 @@ function StatusLine({
   elapsed,
   delay = SHOW_DELAY_MS,
   announce = true,
+  kind,
   className,
   ...props
 }: Omit<ComponentProps<"span">, "children"> & {
@@ -177,10 +207,13 @@ function StatusLine({
   delay?: number
   /** Say the line in a polite live region. One per surface: the rest pass false. */
   announce?: boolean
+  /** A tool at work: its kind's icon moves in place of the working dots. */
+  kind?: StatusKind | undefined
 }) {
   const shown = useSettled({ state, label }, delay)
+  const outgoing = useOutgoing(shown?.label)
   // The words it mounted with: a line that loads finished, as a stored
-  // message's does, arrives still, and only a change wipes in.
+  // message's does, arrives still, and only a change fades in.
   const [first] = useState(label)
   const active = shown?.state === "working" || shown?.state === "waiting"
   const ticking = useClock(active && elapsed === undefined, since)
@@ -199,36 +232,55 @@ function StatusLine({
       data-state={shown.state}
       {...props}
     >
-      <StateIcon state={shown.state} />
-      {/* The words alone: the live region never reads the clock or the count. */}
-      <span
-        aria-live={announce ? "polite" : undefined}
-        className="inline-block"
-        data-slot="status-line-text"
-        role={announce ? "status" : undefined}
-      >
-        {/* The wipe holds its own mask, outside the one the shimmer sets. */}
+      {shown.state === "done" ? null : working && kind ? (
+        <StatusIcon kind={kind} />
+      ) : (
+        <StateIcon state={shown.state} />
+      )}
+      {/* Old and new words share one cell while they cross. */}
+      <span className="inline-grid">
+        {/* The words alone: the live region never reads the clock or the count. */}
         <span
-          className={cn(
-            "inline-block",
-            reveal && "motion-safe:animate-status-reveal"
-          )}
-          key={shown.label}
+          aria-live={announce ? "polite" : undefined}
+          className="col-start-1 row-start-1"
+          data-slot="status-line-text"
+          role={announce ? "status" : undefined}
         >
+          {/* The fade sits outside the mask the shimmer sets. */}
           <span
             className={cn(
               "inline-block",
-              working &&
-                "shimmer shimmer-color-foreground motion-reduce:animate-none"
+              reveal &&
+                "motion-safe:fade-in-0 motion-safe:animate-in motion-safe:duration-fast"
             )}
+            key={shown.label}
           >
-            {shown.label}
+            <span
+              className={cn(
+                "inline-block",
+                working &&
+                  "shimmer shimmer-color-foreground motion-reduce:animate-none"
+              )}
+            >
+              {shown.label}
+            </span>
           </span>
         </span>
+        {outgoing === null ? null : (
+          <span
+            aria-hidden
+            className="fade-out-0 col-start-1 row-start-1 animate-out fill-mode-forwards duration-fast motion-reduce:hidden"
+            data-slot="status-line-outgoing"
+          >
+            {outgoing}
+          </span>
+        )}
       </span>
       {count > 1 ? <span className="tabular-nums">×{count}</span> : null}
       {clock !== null && clockAfter !== null && clock >= clockAfter ? (
-        <span className="text-xs tabular-nums">{duration(clock)}</span>
+        <span className="shrink-0 whitespace-nowrap text-xs tabular-nums">
+          {duration(clock)}
+        </span>
       ) : null}
     </span>
   )
@@ -250,7 +302,8 @@ function useLongerThan(active: boolean, ms: number) {
  * A tool's line in the thread, in the copy table's words for that tool,
  * for its phase (`partPhase`). A working line that runs long says "Still".
  * A tool outside the table reads as its kind or "Working on it", never its
- * name. `copy` seeds the variant with the turn.
+ * name. `copy` seeds the variant with the turn. At work it moves its kind's
+ * icon, and an hourglass once it runs long.
  */
 function ToolStatus({
   tool,
@@ -268,6 +321,7 @@ function ToolStatus({
   const phase = still ? "still" : state
   return (
     <StatusLine
+      kind={still ? "still" : toolKind(tool)}
       label={toolLine(tool, phase, args, copy)}
       state={phaseState(phase)}
       {...props}
@@ -275,5 +329,58 @@ function ToolStatus({
   )
 }
 
+/**
+ * The reply's row before its words, like Claude's: the line, a clock from
+ * the turn's start once it passes `REPLY_CLOCK_AFTER_MS`, and a chevron that
+ * opens the turn's earlier lines, quiet and muted, closed by default. The
+ * line showing now is never listed under itself.
+ */
+function ReplyStatus({
+  label,
+  lines = [],
+  defaultOpen = false,
+  ...props
+}: Omit<ComponentProps<typeof StatusLine>, "clockAfter"> & {
+  /** The lines this turn has shown, oldest first. */
+  lines?: readonly string[]
+  defaultOpen?: boolean
+}) {
+  const earlier = lines.filter((line) => line !== label)
+  const status = (
+    <StatusLine clockAfter={REPLY_CLOCK_AFTER_MS} label={label} {...props} />
+  )
+  if (earlier.length === 0) return status
+  return (
+    <Collapsible
+      className="flex flex-col"
+      data-slot="reply-status"
+      defaultOpen={defaultOpen}
+    >
+      <span className="inline-flex items-center gap-1.5">
+        {status}
+        <CollapsibleTrigger
+          aria-label="Earlier steps"
+          className="group/trigger inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+          data-slot="reply-status-trigger"
+        >
+          <CaretRightIcon
+            aria-hidden
+            className="size-3 transition-transform duration-fast ease-standard group-data-panel-open/trigger:rotate-90 motion-reduce:transition-none"
+            weight="fill"
+          />
+        </CollapsibleTrigger>
+      </span>
+      <CollapsibleContent data-slot="reply-status-lines">
+        <ul className="mt-1 flex flex-col gap-1 ps-6 text-muted-foreground text-xs">
+          {earlier.map((line, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a line can come back, and the list only grows
+            <li key={i}>{line}</li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
 export type { StatusKind }
-export { StatusLine, ToolStatus }
+export { ReplyStatus, StatusLine, ToolStatus }

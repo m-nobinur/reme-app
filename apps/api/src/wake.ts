@@ -18,13 +18,14 @@ import {
 import { vouched } from "@workspace/gates/contacts"
 import type { LanguageModel } from "ai"
 import { settleCard } from "./build-questions.ts"
-import { cosModel } from "./chat.ts"
+import { cancelOpenCard, cosModel, turnNotes } from "./chat.ts"
 import { ownerOf, runOpened } from "./continue.ts"
 import {
   activeTools,
   contextOf,
   cosPrefix,
   LIMITS,
+  memorySnapshot,
   personaOf,
   reservation,
 } from "./cos/agent.ts"
@@ -173,11 +174,9 @@ export async function wakeTurn(
   if (!found) return "gone"
   const { owner, zone } = found
   const tools = { env, kit, owner, settleCard }
-  const [{ workspace, facts, profile }, prefix] = await Promise.all([
-    loadWorkspace(tools),
-    cosPrefix(),
-  ])
-  const persona = personaOf(facts, profile)
+  const [{ workspace, facts, profile, notes: working }, prefix] =
+    await Promise.all([loadWorkspace(tools), cosPrefix()])
+  const persona = personaOf(facts, profile, working)
   const day = today(zone)
   const cap = unpromptedKey(job.orgId, day)
   const trusted = [
@@ -262,6 +261,15 @@ export async function wakeTurn(
     const state = await sessionState(db, sessionId, prefix.sha256, null)
     if (state.frozen) return "frozen" as const
     if (!(await withinCap(db, job.orgId, reserved))) return "over_cap" as const
+    const notes = await turnNotes(
+      db,
+      sessionId,
+      workspace,
+      zone,
+      state.fresh,
+      null,
+      job.skill ?? null
+    )
     const context = contextOf(
       "ask",
       workspace,
@@ -273,12 +281,17 @@ export async function wakeTurn(
       null,
       facts,
       false,
-      job.skill ? { skill: job.skill } : "wake"
+      job.skill ? { skill: job.skill } : "wake",
+      [],
+      [],
+      notes.lines
     )
     const turn: Turn = { ...session, turnId: newUlid() }
     await beginTurn(db, turn, {
       prefix: state.prefixLogged ? null : prefix,
-      messages: [],
+      events: notes.events,
+      skills: notes.skills,
+      messages: await cancelOpenCard(db, sessionId),
       context: {
         turn_id: turn.turnId,
         prefix_sha256: prefix.sha256,
@@ -287,8 +300,9 @@ export async function wakeTurn(
         active_tools: activeTools("ask", true),
         text: context.text,
         reserved_usd: reserved,
+        ...(await memorySnapshot(db, sessionId, persona)),
       },
-      contextTaint: context.taint,
+      contextTaint: [...new Set([...context.taint, ...notes.taint])],
     })
     return {
       turn,
@@ -329,6 +343,8 @@ export async function wakeTurn(
         channel: "in_app",
         message: {
           text: [reply],
+          // A heartbeat asks after what waits on the owner; an event's turn tells news.
+          kind: heartbeat ? "note" : "update",
           ...(beat?.chip && {
             button: {
               label: beat.chip,

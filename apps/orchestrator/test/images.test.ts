@@ -1,6 +1,6 @@
 import { PALETTES } from "@workspace/contracts"
 import { describe, expect, it, vi } from "vitest"
-import { applyPhotos } from "../src/photo-step.ts"
+import { applyPhotos, photoTurn } from "../src/photo-step.ts"
 
 vi.mock("cloudflare:workers", () => ({
   WorkflowEntrypoint: class {},
@@ -86,6 +86,8 @@ function openrouter(
     refuse?: (body: Call["body"]) => boolean
     /** Answers 429, the way a provider out of quota does. */
     down?: (body: Call["body"]) => boolean
+    /** Answers 403, the way OpenRouter refuses a prompt its moderation flags. */
+    flag?: (body: Call["body"]) => boolean
     noPrompts?: boolean
     /** The defect check's answers in turn, a clean one once they run out; null answers 503. */
     verdicts?: (Record<string, unknown> | null)[]
@@ -127,6 +129,11 @@ function openrouter(
     }
     if (options.refuse?.(body)) return new Response("no", { status: 400 })
     if (options.down?.(body)) return new Response("quota", { status: 429 })
+    if (options.flag?.(body))
+      return Response.json(
+        { error: { code: 403, message: "Your input was flagged" } },
+        { status: 403 }
+      )
     return Response.json({
       data: [{ b64_json: PNG, media_type: "image/png" }],
       usage: { cost: 0.034 },
@@ -612,6 +619,113 @@ describe("the photo director", () => {
     expect(out[0]).toMatchObject({ status: "reused", cost_usd: 0 })
   })
 
+  it("keeps the plan's hero when a retry carries the first photos, so no slot is drawn again at 2K", async () => {
+    const sites = bucket()
+    const first = plan([
+      ["hero", "hero"],
+      ["extra", "hero"],
+    ]) as unknown as { images: Record<string, unknown>[] }
+    await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: sites },
+      orgId: ORG,
+      plan: first as never,
+      brief: BRIEF,
+      fetch: openrouter().fetcher,
+    })
+    const retry = {
+      ...first,
+      images: [
+        {
+          ...first.images[0],
+          asset_id: "10000001-0000-4000-8000-0000000000aa",
+        },
+        first.images[1],
+      ],
+    }
+    const second = openrouter()
+    const out = await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: sites },
+      orgId: ORG,
+      plan: retry as never,
+      brief: BRIEF,
+      fetch: second.fetcher,
+    })
+    expect(second.calls).toHaveLength(0)
+    expect(out.map((r) => [r.slot_id, r.status])).toEqual([["extra", "reused"]])
+  })
+
+  it("uses the pictures an earlier attempt drew even when the brief has changed, and draws only the rest", async () => {
+    const sites = bucket()
+    const input = {
+      env: { OPENROUTER_API_KEY: "k", SITES: sites },
+      orgId: ORG,
+      plan: plan([
+        ["hero", "hero"],
+        ["lawn", "service_cards"],
+        ["patio", "service_cards"],
+      ]),
+    }
+    const firstRun = await directPhotos({
+      ...input,
+      brief: BRIEF,
+      fetch: openrouter().fetcher,
+    })
+    const drawn = firstRun.filter((r) => r.slot_id !== "patio")
+    const again = openrouter()
+    const out = await directPhotos({
+      ...input,
+      brief: { ...BRIEF, palette: "a new palette" },
+      kept: drawn,
+      fetch: again.fetcher,
+    })
+    expect(out.map((r) => [r.slot_id, r.status, r.cost_usd])).toEqual([
+      ["hero", "reused", 0],
+      ["lawn", "reused", 0],
+      ["patio", "generated", expect.any(Number)],
+    ])
+    expect(images(again.calls)).toHaveLength(1)
+  })
+
+  it("draws a slot again when its kept picture is gone from the bucket, and never reuses a fallback", async () => {
+    const sites = bucket()
+    const { calls, fetcher } = openrouter()
+    const out = await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: sites },
+      orgId: ORG,
+      plan: plan([
+        ["hero", "hero"],
+        ["lawn", "service_cards"],
+      ]),
+      brief: BRIEF,
+      kept: [
+        {
+          slot_id: "hero",
+          status: "reused",
+          asset_id: "a",
+          key: `generated/${ORG}/a.png`,
+          content_type: "image/png",
+          cost_usd: 0,
+          reason: null,
+        },
+        {
+          slot_id: "lawn",
+          status: "fallback",
+          asset_id: null,
+          key: null,
+          content_type: null,
+          cost_usd: null,
+          reason: "http 403",
+        },
+      ],
+      fetch: fetcher,
+    })
+    expect(out.map((r) => [r.slot_id, r.status])).toEqual([
+      ["hero", "generated"],
+      ["lawn", "generated"],
+    ])
+    expect(images(calls)).toHaveLength(2)
+  })
+
   it("never draws a claim section, and falls back instead of failing on a refusal", async () => {
     const { calls, fetcher } = openrouter({ refuse: () => true })
     const out = await directPhotos({
@@ -635,6 +749,39 @@ describe("the photo director", () => {
     )
     expect(String(images(calls)[1]?.body.prompt)).toContain("a sunlit hero")
     expect(String(images(calls)[1]?.body.prompt)).not.toContain("with a plant")
+  })
+
+  it("takes a moderation refusal as the prompt's, so the next photo still draws", async () => {
+    const { calls, fetcher } = openrouter({
+      flag: (body) => String(body.prompt).includes("for hero"),
+    })
+    const log = vi.spyOn(console, "log").mockReturnValue(undefined)
+    await directPhotos({
+      env: { OPENROUTER_API_KEY: "k", SITES: bucket() },
+      orgId: ORG,
+      plan: plan([
+        ["hero", "hero"],
+        ["banner", "hero"],
+      ]),
+      brief: BRIEF,
+      fetch: fetcher,
+    })
+    const lines = log.mock.calls.map(([line]) => JSON.parse(String(line)))
+    log.mockRestore()
+    const draws = lines.filter((l) => l.type === "photos.draw")
+    expect(draws.find((l) => l.slot === "hero")).toMatchObject({
+      outcome: "refused",
+      status: 403,
+      reason: "http 403: Your input was flagged",
+    })
+    expect(draws.find((l) => l.slot === "banner")).toMatchObject({
+      model: FAST_MODELS[0]?.id,
+      outcome: "drawn",
+    })
+    expect(lines.find((l) => l.type === "photos.summary")?.models_down).toEqual(
+      []
+    )
+    expect(calls.length).toBeGreaterThan(0)
   })
 
   it("moves past a model out of quota and skips it for the rest of the build", async () => {
@@ -825,6 +972,29 @@ describe("the plan once its photos are made", () => {
           content_type: "image/png",
         },
       ],
+    })
+  })
+
+  it("costs the photos as one turn: every slot's draws, a thrown-away one too, and the models", () => {
+    expect(
+      photoTurn([
+        {
+          ...result("hero", "generated"),
+          cost_usd: 0.04,
+          model: "google/gemini-3.5-flash-image",
+        },
+        { ...result("kitchen", "fallback"), cost_usd: 0.02 },
+        {
+          ...result("about", "generated"),
+          cost_usd: 0.03,
+          model: "google/gemini-3.5-flash-image",
+        },
+      ])
+    ).toEqual({
+      role: "photos",
+      model: "google/gemini-3.5-flash-image",
+      slots: 3,
+      response: { usage: { cost: { total: 0.09 } } },
     })
   })
 })

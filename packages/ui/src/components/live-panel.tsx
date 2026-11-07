@@ -117,7 +117,7 @@ function PanelSection({
             <button
               aria-controls={`${id}-body`}
               aria-expanded={open}
-              className="-mx-1 flex min-h-6 items-center gap-1 rounded-md px-1 outline-none transition-colors hover:text-foreground/80 focus-visible:ring-3 focus-visible:ring-ring"
+              className="-mx-1 flex min-h-6 items-center gap-1 rounded-md px-1 outline-none transition-colors hover:text-foreground/80 focus-visible:ring-1 focus-visible:ring-ring"
               onClick={() => setOpen((was) => !was)}
               type="button"
             >
@@ -608,7 +608,7 @@ function PanelSegment({
             aria-controls={`${id}-steps`}
             aria-expanded={open}
             aria-label={open ? "Hide the steps" : "Show the steps"}
-            className="-m-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
+            className="-m-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
             onClick={() => setOpen((was) => !was)}
             type="button"
           >
@@ -954,12 +954,15 @@ function AnswerInputs({
   title,
   invalid,
   prefill = null,
+  text,
 }: {
   id: string
   spec: AnswerSpec
   title: string
   invalid: boolean
   prefill?: Record<string, unknown> | null
+  /** A text answer's own label and example, in place of "Your answer". */
+  text?: { label: string; placeholder: string }
 }) {
   // `min` steers the closing time's picker. The form is `noValidate`, so it
   // blocks nothing: `answerValue` refuses a closing time that is not after
@@ -996,9 +999,10 @@ function AnswerInputs({
         aria-invalid={invalid || undefined}
         autoComplete={spec.email ? "email" : "off"}
         id={`${id}-answer`}
-        label="Your answer"
+        label={text?.label ?? "Your answer"}
         maxLength={spec.maxLength}
         name="answer"
+        placeholder={text?.placeholder}
         required
         type={spec.email ? "email" : "text"}
       />
@@ -1428,7 +1432,7 @@ function ShotStack({
               <button
                 aria-label={slide.alt}
                 aria-pressed={at === front}
-                className="group/dot grid h-4 w-5 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group/dot grid h-4 w-5 place-items-center rounded-full outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 key={slide.picture}
                 onClick={() => setFront(at)}
                 type="button"
@@ -1967,7 +1971,7 @@ function WebAddress({ children }: { children: ReactNode }) {
       data-slot="web-address"
     >
       <p className="text-sm">
-        Web address
+        Domain
         <span className="text-muted-foreground"> · Not connected</span>
       </p>
       {children}

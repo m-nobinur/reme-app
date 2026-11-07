@@ -113,3 +113,83 @@ for (const width of [1024, 390]) {
     ).toEqual([])
   })
 }
+
+// Scrolled up to read, a tray that grows between pages leaves the view where
+// it is, as chat apps do. At the bottom it follows (measured on a long thread).
+test("a tray growing leaves a reader who scrolled up where they are", async ({
+  page,
+}) => {
+  const entry = "ThreadSendStreamed"
+  await open(page, entry, 390)
+  const root = page.locator(`[data-entry="${entry}"]`)
+  const viewport = root.locator('[data-slot="aui_thread-viewport"]')
+  // A box shorter than the conversation, so there is somewhere to read.
+  await viewport.evaluate((box) => {
+    box.style.height = "220px"
+    box.style.flex = "none"
+  })
+  await page.waitForTimeout(500)
+  await viewport.hover()
+  await page.mouse.wheel(0, -2000)
+  await page.waitForTimeout(500)
+  const top = await viewport.evaluate((box) => box.scrollTop)
+  expect(top, "the reader is scrolled up").toBeLessThan(
+    await viewport.evaluate((box) => box.scrollHeight - box.clientHeight)
+  )
+  await root.locator(".aui-thread-viewport-footer").evaluate((footer) => {
+    const grown = document.createElement("div")
+    grown.style.height = "160px"
+    footer.append(grown)
+  })
+  await page.waitForTimeout(800)
+  expect(await viewport.evaluate((box) => box.scrollTop)).toBe(top)
+})
+
+// With the list on screen and the reply below it, the button sat over the
+// sixth row's price line until the reader scrolled on.
+for (const theme of ["light", "dark"]) {
+  for (const width of [1024, 390]) {
+    test(`Scroll to bottom keeps clear of a picker row's text, ${theme} at ${width} px`, async ({
+      page,
+    }) => {
+      const entry = "FindDomain"
+      await open(page, entry, width, theme)
+      const root = page.locator(`[data-entry="${entry}"]`).first()
+      await root
+        .locator(".aui-thread-root")
+        .first()
+        .evaluate((thread) => {
+          ;(thread as HTMLElement).style.height = "24rem"
+        })
+      const viewport = root.locator('[data-slot="aui_thread-viewport"]').first()
+      const subs = root.locator('[data-slot="domain-picker"] [id$="-sub"]')
+      const count = await subs.count()
+      expect(count).toBeGreaterThan(1)
+      // Only the first of the entry's three threads is made short.
+      const button = root
+        .locator(".aui-thread-root")
+        .first()
+        .locator(".aui-thread-scroll-to-bottom:visible")
+      const text = new Set<string>()
+      // Each row in turn parked just above the composer, where the button floats.
+      for (let at = 0; at < count; at++) {
+        await subs.nth(at).scrollIntoViewIfNeeded()
+        await viewport.evaluate((box) => {
+          box.scrollTop -= 40
+        })
+        await expect(button).toBeVisible()
+        const shown = await button.boundingBox()
+        const line = await subs.nth(at).boundingBox()
+        expect(shown && line).toBeTruthy()
+        if (shown && line) {
+          expect(
+            shown.x >= line.x + line.width || shown.x + shown.width <= line.x,
+            `row ${at}: the button at x ${shown.x} to ${shown.x + shown.width} over text at ${line.x} to ${line.x + line.width}`
+          ).toBe(true)
+        }
+        text.add(await subs.nth(at).innerText())
+      }
+      expect(text.size).toBeGreaterThan(1)
+    })
+  }
+}

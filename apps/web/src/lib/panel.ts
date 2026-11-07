@@ -387,6 +387,36 @@ export function setupParts(segment: ActivitySegment): Part[] {
   })
 }
 
+/**
+ * The answer to the design tray is stored when the turn that started the
+ * build ends, so for a while the panel still read the look as waiting on the
+ * owner. A build under way means setting up is over.
+ */
+function settledOnBuild(activity: Activity): Activity {
+  if (
+    !activity.journey.some(
+      (segment) => segment.kind === "website" && segment.state !== "upcoming"
+    )
+  ) {
+    return activity
+  }
+  const open = (state: string) => state === "waiting" || state === "now"
+  return {
+    ...activity,
+    journey: activity.journey.map((segment) =>
+      segment.kind === "onboarding" && open(segment.state)
+        ? {
+            ...segment,
+            state: "done",
+            steps: segment.steps.map((step) =>
+              open(step.state) ? { ...step, state: "done" } : step
+            ),
+          }
+        : segment
+    ),
+  }
+}
+
 const running = (segment: ActivitySegment | undefined) =>
   segment?.state === "now" ||
   segment?.state === "waiting" ||
@@ -395,7 +425,7 @@ const running = (segment: ActivitySegment | undefined) =>
 export function panelFor(input: PanelInput): Panel | null {
   const { workspace, business, now, zone } = input
   const { live, host, builds, attention } = workspace
-  const activity = workspace.activity ?? NO_ACTIVITY
+  const activity = settledOnBuild(workspace.activity ?? NO_ACTIVITY)
   const onboarding = business
     ? onboardingFor(workspace, input.conversations)
     : null
@@ -707,17 +737,19 @@ export function panelFor(input: PanelInput): Panel | null {
     return { ...each, quiet: needed && each.state === "now" }
   }
   const parts = current?.kind === "onboarding" ? setupViews(current) : []
-  // The design tray's logo round, as its own row under setting up.
-  const logo: SegmentView[] = current?.logo
+  // The design tray's logo round, as its own row under setting up, and under
+  // the build when that began before a logo was picked.
+  const round = journey.find((segment) => segment.kind === "onboarding")?.logo
+  const logo: SegmentView[] = round
     ? [
         {
           id: "logo",
           kind: "onboarding",
-          state: current.logo.status === "drawing" ? "now" : "waiting",
-          icon: current.logo.status === "drawing" ? "polishing" : "waiting",
+          state: round.status === "drawing" ? "now" : "waiting",
+          icon: round.status === "drawing" ? "polishing" : "waiting",
           title: "Your logo",
           working: "Your logo",
-          line: logoLine(current.logo),
+          line: logoLine(round),
           status: null,
           quiet: true,
           steps: [],
@@ -729,11 +761,14 @@ export function panelFor(input: PanelInput): Panel | null {
   return {
     line,
     badge,
-    journey: current
-      ? current.kind === "onboarding"
-        ? [...parts.filter((part) => part.state !== "done"), ...logo]
-        : [shownView(current)]
-      : [],
+    journey: [
+      ...(current
+        ? current.kind === "onboarding"
+          ? parts.filter((part) => part.state !== "done")
+          : [shownView(current)]
+        : []),
+      ...logo,
+    ],
     finished: [
       ...parts.filter((part) => part.state === "done"),
       ...before.flatMap((segment) =>

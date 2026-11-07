@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { Timestamp, Uuid } from "./common.ts"
 import type { EnvelopeBody } from "./error.ts"
+import type { IndustryId } from "./onboarding.ts"
 import { E164 } from "./owner.ts"
 import { Hostname } from "./site.ts"
 import { Text } from "./text.ts"
@@ -149,12 +150,12 @@ export function ownDomain(email: string): string | null {
 }
 
 /**
- * The tray question "Do you already have a web address?" (`kind: "address"`)
+ * The tray question "Do you already have a domain?" (`kind: "address"`)
  * and its answers: one place for the sender, the answer handler and the card.
  * A Yes is followed by a text page for the name, which No and Skip for now close.
  */
 export const ADDRESS_ASK = {
-  have: "Do you already have a web address?",
+  have: "Do you already have a domain?",
   name: "What is it?",
   yes: "Yes, I have one",
   no: "No, help me get one",
@@ -170,6 +171,17 @@ export function addressReply(choice: string, name?: string): string | null {
   if (choice === ADDRESS_ASK.yes)
     return name ? `Yes, it's ${name}` : ADDRESS_ASK.yes
   return choice === ADDRESS_ASK.no ? ADDRESS_ASK.no : null
+}
+
+/** What the picker's Skip says as the owner; the free address choice after Not yet starts with it too. */
+export const SKIP_DOMAIN = "I'll skip the domain for now"
+
+/**
+ * The owner's words from I bought it and Not yet, for a domain they are
+ * buying themselves: one place for the buttons and the turn that reads them.
+ */
+export function boughtReply(name: string, bought: boolean): string {
+  return bought ? `I've bought ${name}` : `I haven't bought ${name} yet`
 }
 
 /** The endings Reme sells. */
@@ -551,10 +563,15 @@ const NOT_A_PLACE = new Set([
   "within",
 ])
 
-/** The town an area's text starts with: its first run of capitalised words, or none. */
-export function townOf(area: string | undefined): string | undefined {
+/** Words before the town in an area's text: "Based in Stockport", "Mostly Harrogate". */
+const LEAD_IN =
+  /^(?:(?:we're|we are|i'm|i am|based|located|mainly|mostly|covering|serving|in|around|across|from|all over)\s+)+/i
+
+/** The town an area's text starts with, past its lead-in: its first run of capitalised words, or none. */
+export function townOf(area: string | undefined | null): string | undefined {
   const town = area
     ?.trim()
+    .replace(LEAD_IN, "")
     .match(
       /^[A-Z][\p{L}'-]*(?:[ -](?:upon|on|under|le|in)?[ -]?[A-Z][\p{L}'-]*)*/u
     )?.[0]
@@ -570,22 +587,58 @@ export function tradeWords(trade: string | undefined): string | undefined {
   return words || undefined
 }
 
+/** The industry categories narrow enough to name the business by. */
+const CATEGORY_TRADE: Partial<Record<IndustryId, string>> = {
+  cleaning: "cleaning company",
+  chauffeur: "chauffeur service",
+}
+
+/**
+ * The business as a customer looks for it: "a cleaning company" from a
+ * narrow category, otherwise the owner's trade as a business, such as "a dog
+ * grooming business", or "an electrician" when their word names a person.
+ * The owner's words are kept whole, since cutting them
+ * at an "and" left "domestic" of "domestic and end of tenancy cleaning".
+ */
+export function tradeOf(
+  industry: { name?: string; category?: IndustryId | null } | undefined | null
+): string | undefined {
+  const known = industry?.category && CATEGORY_TRADE[industry.category]
+  const words =
+    known ||
+    industry?.name
+      ?.trim()
+      .replace(/[.!]+$/, "")
+      .toLowerCase()
+  if (!words) return undefined
+  const noun =
+    known ||
+    /\b(?:company|firm|business|services?|studio|salon|agency|practice|shop|clinic|hire)$|(?:er|or|ist|ian)$/.test(
+      words
+    )
+      ? words
+      : `${words} business`
+  return `${/^[aeiou]/.test(noun) ? "an" : "a"} ${noun}`
+}
+
 /**
  * The web address offer after the first build starts, word for word, built
- * from the facts and never by a model. The searched phrase is the trade and
- * the town, "near you" without a town, "a business like yours" without a trade.
+ * from the facts and never by a model. The searched phrase is the business
+ * and the town, "near you" without a town, "a business like yours" without
+ * a trade.
  */
 export function addressOfferText(facts: {
   trade?: string | undefined
+  category?: IndustryId | null | undefined
   area?: string | undefined
 }): string {
-  const trade = tradeWords(facts.trade)
+  const trade = tradeOf({ name: facts.trade, category: facts.category })
   const town = townOf(facts.area)
   const searched = trade
     ? `${trade} ${town ? `in ${town}` : "near you"}`
     : "a business like yours"
   return [
-    "Your website is coming along nicely. While it builds, let's sort out its address.",
+    "While it builds, let's sort out its address.",
     `I'd recommend your own domain. It looks more professional, is easier for customers to remember, and gives Google one address to show when people search for **${searched}**. The more people find you there, the stronger it gets.`,
   ].join("\n\n")
 }

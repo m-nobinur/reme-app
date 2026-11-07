@@ -113,6 +113,17 @@ const LEAKS = [
   /\bas an ai\b|\blanguage model\b/gi,
 ]
 
+/**
+ * Copy that says nothing about this business: a statement about the trade
+ * ("Most domestic cleaning is booked around a routine"), or a service the
+ * writer hedges into existence ("we may arrange a walk-through") because no
+ * fact says the business offers it.
+ */
+const GENERIC = [
+  /\b(?:most|many) (?:[a-z-]+ ){1,3}(?:is|are) (?:usually |typically |often )?(?:booked|done|carried out|worked|arranged|planned)\b/gi,
+  /\bwe (?:may|might|can sometimes|sometimes|usually|often|typically) (?:arrange|offer|provide|organi[sz]e|carry out)\b/gi,
+]
+
 /** Headings that fit any business: an eyebrow may say them, an h1 or h2 may not. */
 export const STOCK_HEADINGS = [
   "about",
@@ -177,6 +188,7 @@ export type CopyFinding = {
     | "leak"
     | "town"
     | "term"
+    | "generic"
     | "headline"
     | "missing"
     | "repeat"
@@ -394,6 +406,15 @@ function read(html: string): Read {
         const text = squash(textOf(child))
         if (text) out.eyebrows.push({ text, node: at })
       }
+      // The area card's line is decoration that reads like a heading, and said the area's heading again.
+      if (
+        main &&
+        tag === "p" &&
+        attr(child, "class")?.split(" ").includes("area-card-line")
+      ) {
+        const text = squash(textOf(child))
+        if (text) out.headings.push({ tag, text, node: at })
+      }
       if (kind) out.marks.add(kind)
       const own =
         shared ||
@@ -482,7 +503,9 @@ const singular = (word: string) =>
  * A word that is a slip for one of the business's terms, not another form of
  * it: one letter off before the last two (a different ending is another word,
  * "cleaned" for "cleaner"), or a long word sharing all but its ending with one
- * and within three edits ("conservative" for "conservatory").
+ * and within three edits ("conservative" for "conservatory"). A slip keeps
+ * the first letter: a different one makes another word, "getting" beside the
+ * facts' "letting".
  */
 const slipFor = (word: string, term: string) => {
   const a = singular(word)
@@ -491,7 +514,7 @@ const slipFor = (word: string, term: string) => {
   let shared = 0
   while (a[shared] && a[shared] === b[shared]) shared++
   const shorter = Math.min(a.length, b.length)
-  if (oneOff(a, b) && shared < shorter - 2) return true
+  if (oneOff(a, b) && shared > 0 && shared < shorter - 2) return true
   return shorter >= 10 && shared >= 8 && levenshtein(a, b) <= 3
 }
 
@@ -530,15 +553,19 @@ const WORK_KEYS = new Set(["business.offerings", "business.industry"])
 
 /**
  * What the copy may say: every word in the facts, those of them that name the
- * work, the stems of the service and trade names, and the headings the owner
- * gave in their own words (a `site.content` title), which may be stock labels.
+ * work, the stems of the service and trade names, the headings the owner
+ * gave in their own words (a `site.content` title), which may be stock
+ * labels, and the service names, which every page that lists them repeats.
  */
 export function factWords(facts: readonly FactRecord[]) {
   const known = new Set<string>()
   const terms = new Set<string>()
   const work = new Set<string>()
   const owned = new Set<string>()
+  const names = new Set<string>()
   for (const fact of facts) {
+    if (fact.key === "business.offerings")
+      for (const name of stringsOf(fact.value)) names.add(plainText(name))
     const content = FactValue.safeParse({ key: fact.key, value: fact.value })
     if (content.data?.key === "site.content")
       for (const { title } of content.data.value.items)
@@ -550,7 +577,7 @@ export function factWords(facts: readonly FactRecord[]) {
         work.add(word.slice(0, 5))
     }
   }
-  return { known, terms, work, owned }
+  return { known, terms, work, owned, names }
 }
 
 /**
@@ -566,6 +593,7 @@ export function copyFindings(
     terms: new Set(),
     work: new Set(),
     owned: new Set(),
+    names: new Set(),
   }
 ): CopyFinding[] {
   const found: CopyFinding[] = []
@@ -628,6 +656,24 @@ export function copyFindings(
       })
     }
 
+    for (const generic of GENERIC.flatMap((pattern) => [
+      ...page.said.matchAll(pattern),
+    ])) {
+      const phrase = generic[0].toLowerCase()
+      if (said.has(phrase)) continue
+      said.add(phrase)
+      found.push({
+        file,
+        node: "text",
+        problem: "generic",
+        text: page.said.slice(
+          Math.max(0, generic.index - 30),
+          generic.index + generic[0].length + 60
+        ),
+        detail: `the copy says "${generic[0]}", which is about the trade in general or promises something no fact says the business does; write only what this business does, for whom and where, from its facts, or leave the sentence out`,
+      })
+    }
+
     for (const [mark, field] of BLOCKS.find(([pattern]) =>
       pattern.test(file)
     )?.[1] ?? [])
@@ -655,7 +701,11 @@ export function copyFindings(
       })
 
     for (const { sentence, files } of repeats)
-      if (files[0] !== file && files.includes(file))
+      if (
+        files[0] !== file &&
+        files.includes(file) &&
+        !words.names.has(sentence)
+      )
         found.push({
           file,
           node: "text",
@@ -722,6 +772,7 @@ export function copyFindings(
         })
 
     for (const h of page.headings) {
+      const label = h.tag === "p" ? "area card line (areaCardLine)" : h.tag
       // "Leeds and around" is a place, not a headline: the h1 names the work.
       if (
         h.tag === "h1" &&
@@ -742,7 +793,7 @@ export function copyFindings(
           node: h.node,
           problem: "stock",
           text: h.text,
-          detail: `the ${h.tag} is a stock label; keep it as the eyebrow and write a heading that names this business's service or place`,
+          detail: `the ${label} is a stock label; keep it as the eyebrow and write a heading that names this business's service or place`,
         })
         continue
       }
@@ -752,7 +803,7 @@ export function copyFindings(
           node: h.node,
           problem: "repeat",
           text: h.text,
-          detail: `the ${h.tag} is service_area.text word for word, which the service area page already shows as the area's own words; write a heading that names the place in new words`,
+          detail: `the ${label} is service_area.text word for word, which the service area page already shows as the area's own words; write a heading that names the place in new words`,
         })
         continue
       }
@@ -766,8 +817,8 @@ export function copyFindings(
           text: h.text,
           detail:
             first.file === file
-              ? `the ${h.tag} repeats "${first.text}" on the same page`
-              : `the ${h.tag} repeats "${first.text}" from ${first.file}; write this page's own (each page has its own closing band, aboutCtaHeading and the rest, and each service page its own fields), or when one shared section sits on both pages, drop it from one page's layout entry`,
+              ? `the ${label} repeats "${first.text}" on the same page${h.tag === "p" ? "; say something the heading does not, such as the main town, or leave areaCardLine empty" : ""}`
+              : `the ${label} repeats "${first.text}" from ${first.file}; write this page's own (each page has its own closing band, aboutCtaHeading and the rest, and each service page its own fields), or when one shared section sits on both pages, drop it from one page's layout entry`,
         })
       } else headings.push({ file, text: h.text, stems })
     }
@@ -1109,7 +1160,8 @@ export function copyGateRules(): string[] {
   return [
     `- The copy gate runs after you, and each miss costs a repair round, so meet its numbers the first time. Every page title is ${TITLE_CHARS.min} to ${TITLE_CHARS.max} characters as the page shows it: a title that does not contain businessName exactly gets " | " and businessName after it, so either name the business exactly as businessName or leave room for it. Every meta description ${DESCRIPTION_CHARS.min} to ${DESCRIPTION_CHARS.max} characters; no two pages share either.`,
     `- Words per section: ${words.join("; ")}.`,
-    `- Headings: no h1 or h2 on the site repeats another or is a stock label, and an h2 is never the same as or close to its own page's h1: ${Math.round(NEAR * 100)} percent of the significant words shared, in any order, counts as the same ("Deep cleaning in Bristol" under "Bristol deep cleaning"). Give every h2 its own words. Each process step's body is its own: no two steps on the site share their words. The home h1 names a service or the trade from the facts, with the place as the supporting detail: "Leeds and around" fails.`,
+    `- Headings: no h1 or h2 on the site repeats another or is a stock label, and the area card's line (areaCardLine) never says again what its section's heading says, and an h2 is never the same as or close to its own page's h1: ${Math.round(NEAR * 100)} percent of the significant words shared, in any order, counts as the same ("Deep cleaning in Bristol" under "Bristol deep cleaning"). Give every h2 its own words. Each process step's body is its own: no two steps on the site share their words. The home h1 names a service or the trade from the facts, with the place as the supporting detail: "Leeds and around" fails.`,
+    `- Copy is about this business only: a sentence about the trade in general ("Most domestic cleaning is booked around a routine") or one that hedges a service no fact gives ("we may arrange a walk-through") fails.`,
   ]
 }
 

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { axe, open } from "./helpers"
+import { axe, open, settled } from "./helpers"
 
 /**
  * The question tray: a native radio group the keyboard walks, Enter for Next,
@@ -144,6 +144,92 @@ test("the logo question answers from the keyboard in one press, with no Next", a
   )
 })
 
+test("Yes draws nothing, and No starts the first round at once", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  const logo = state(page, "Logo, nothing chosen")
+  const designs = logo.getByRole("radiogroup", { name: "Logo designs" })
+  await logo.getByRole("button", { name: /Yes, I have my logo/ }).click()
+  // Longer than the fake api takes to draw and show a round started on load.
+  await page.waitForTimeout(4000)
+  await logo.getByRole("button", { name: "Previous question" }).click()
+  await logo.getByRole("button", { name: /No, create one for me/ }).click()
+  // Nothing was drawn behind Yes: the round starts now, with no design in yet.
+  await expect(logo.getByRole("heading")).toHaveText("Designing your logo")
+  await expect(designs.locator("img")).toHaveCount(0)
+  await expect(designs.getByRole("radio")).toHaveCount(3)
+})
+
+test("a design keeps its tile while the others land and the api lists them in another order", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  const designs = state(page, "Logo, designs listed in another order")
+    .getByRole("radiogroup", { name: "Logo designs" })
+    .locator("img")
+  await expect(designs).toHaveCount(1, { timeout: 8000 })
+  const first = await designs.first().getAttribute("src")
+  await expect(designs).toHaveCount(3, { timeout: 12_000 })
+  expect(await designs.first().getAttribute("src")).toBe(first)
+})
+
+test("a redesign's first design is picked as it lands, with Next and no ideas until all three show", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  const ideas = (logo: import("@playwright/test").Locator) =>
+    logo
+      .getByRole("group", { name: "Ideas for a redesign" })
+      .locator("xpath=ancestor::div[@inert]")
+  const drawing = state(page, "Logo, a redesign drawing")
+  await expect(
+    drawing
+      .getByRole("radiogroup", { name: "Logo designs" })
+      .getByRole("radio")
+      .first()
+  ).toBeChecked({ timeout: 8000 })
+  await expect(
+    drawing.getByRole("button", { name: "Next", exact: true })
+  ).toBeVisible()
+  await expect(drawing.getByRole("button", { name: /Redesign/ })).toHaveCount(0)
+  await page.waitForTimeout(3500)
+  await expect(ideas(drawing)).toHaveCount(1)
+
+  const landing = state(page, "Logo, a redesign landing")
+  const designs = landing.getByRole("radiogroup", { name: "Logo designs" })
+  await expect(designs.locator("img")).toHaveCount(3, { timeout: 12_000 })
+  await expect(designs.getByRole("radio").first()).toBeChecked()
+  await expect(ideas(landing)).toHaveCount(0, { timeout: 8000 })
+})
+
+test("a design tile's hover border is neutral, not the accent", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  const tile = state(page, "Logo, a design picked")
+    .getByRole("radiogroup", { name: "Logo designs" })
+    .getByRole("radio")
+    .nth(1)
+    .locator("xpath=ancestor::label")
+  await tile.hover()
+  await settled(page)
+  const [border, neutral] = await Promise.all([
+    tile.evaluate((label) => getComputedStyle(label).borderTopColor),
+    page.evaluate(() => {
+      const probe = document.createElement("div")
+      probe.style.border = "1px solid"
+      probe.style.borderColor =
+        "color-mix(in oklab, var(--foreground) 25%, transparent)"
+      document.body.append(probe)
+      const colour = getComputedStyle(probe).borderTopColor
+      probe.remove()
+      return colour
+    }),
+  ])
+  expect(border).toBe(neutral)
+})
+
 test("an idea for a redesign toggles from the keyboard, and Change the brief moves into What should change?", async ({
   page,
 }) => {
@@ -244,11 +330,11 @@ test("on an 807 px tall window the palette page is not cut off and ends with the
       palette.getByRole("button", { name: "Surprise me" })
     ).toBeVisible({ timeout: 4000 })
     const body = palette.locator("div.overflow-y-auto").first()
-    const [room, frame] = await Promise.all([
-      body.evaluate((box) => box.scrollHeight - box.clientHeight),
-      palette.boundingBox(),
-    ])
-    expect(room).toBeLessThanOrEqual(1)
+    // The logo's palettes land after the fixture's 1.2 s and reflow the page.
+    await expect
+      .poll(() => body.evaluate((box) => box.scrollHeight - box.clientHeight))
+      .toBeLessThanOrEqual(1)
+    const frame = await palette.boundingBox()
     expect(frame?.height).toBeLessThanOrEqual(0.7 * 807)
     // Palettes first, Surprise me under them, the picture last.
     const [tiles, surprise, picture] = await Promise.all([
@@ -342,13 +428,13 @@ test("a focused tile takes the shared ring and a picked one keeps its one line",
   await expect(tile).toBeChecked()
   const focused = await line()
   expect(focused.outline).toMatch(/^1px solid /)
-  expect(focused.ring).toContain("0px 0px 0px 3px")
+  expect(focused.ring).toContain("0px 0px 0px 1px")
   await tile.evaluate((input) => (input as HTMLElement).blur())
-  const resting = await line()
-  expect(resting.ring).toBe("none")
-  expect(focused.outline.split(" ").slice(2)).toEqual(
-    resting.outline.split(" ").slice(2)
-  )
+  expect((await line()).ring).toBe("none")
+  // The tile's colours ease for 150 ms after blur, so wait the change out.
+  await expect
+    .poll(async () => (await line()).outline.split(" ").slice(2))
+    .toEqual(focused.outline.split(" ").slice(2))
 })
 
 test("a focused field turns its border and draws no ring, as the shared Input does", async ({

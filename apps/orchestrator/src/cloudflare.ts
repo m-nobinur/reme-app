@@ -36,7 +36,7 @@ import {
   SANDBOX_UPDATING,
 } from "@workspace/facade"
 import { probeProof } from "@workspace/gates/preview"
-import { skillsFor } from "@workspace/skills"
+import { correctionsFor } from "@workspace/skills/registry"
 import { Hono } from "hono"
 import { Developer } from "./agents/developer.ts"
 import { type ConsoleEnv, noRoute, ownerRoutes } from "./app.ts"
@@ -539,10 +539,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             const choices = await creationChoices(db, ids)
             const snapshot = await takeSnapshot(db, ids, choices.withhold)
             const spec = await issueSpec(db, this.env, row, choices.model)
-            const corrections = skillsFor(
+            const corrections = correctionsFor(
               "developer",
               await readCorrections(db)
-            ).flatMap((s) => (s.kind === "correction" ? [s.body] : []))
+            ).map((s) => s.body)
             // A revise starts from what the site serves (ADR-032), or before
             // the site is live from the owner's draft it was asked on.
             const source =
@@ -632,7 +632,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           : await restoreAndMap(sandbox, this.env.SITES, brief.restore_key)
       } else {
         // A first build seeds an empty site; a warm disk's site would linger.
-        await sandbox.exec(`rm -rf ${SITE_ROOT}`)
+        await sandbox.exec(`rm -rf ${SITE_ROOT}`, { privileged: true })
       }
       if (change) {
         const listed = await sandbox.exec(

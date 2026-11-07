@@ -7,6 +7,7 @@ import { getGlobalStartContext } from "@tanstack/react-start"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { LoadingState } from "@workspace/ui/components/loading-state"
+import type { AskIntent } from "@workspace/ui/lib/activity-copy"
 import type { PanelPress } from "@workspace/ui/lib/panel"
 import { routeTree } from "./routeTree.gen"
 
@@ -112,6 +113,8 @@ declare module "@tanstack/react-router" {
     panel?: PanelPress
     /** Sent as the first message of the new chat `chat` starts. */
     ask?: string
+    /** The Connect button `ask` came from, which its message carries. */
+    intent?: AskIntent | undefined
     /**
      * Set fresh by the panel's Request changes: the chat's composer takes
      * the mode, once per `key`, and the owner's next send carries it.
@@ -121,7 +124,7 @@ declare module "@tanstack/react-router" {
      * Set fresh by a panel or page action: the conversation on screen sends
      * `text` as the owner's message, once per `key`, when its history is in.
      */
-    send?: { text: string; key: string }
+    send?: { text: string; key: string; intent?: AskIntent | undefined }
   }
   interface StaticDataRouteOption {
     /**

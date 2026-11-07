@@ -1,11 +1,6 @@
 import { useChat } from "@ai-sdk/react"
-import {
-  type FeedbackAdapter,
-  type ThreadSuggestion,
-  useAui,
-  useAuiState,
-} from "@assistant-ui/react"
-import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk"
+import { useAISDKRuntime } from "@assistant-ui/ai-sdk"
+import { type FeedbackAdapter, useAui, useAuiState } from "@assistant-ui/react"
 import { CARD_ANSWERED, type ChatRequest } from "@workspace/contracts"
 import {
   clearOnboardingStatus,
@@ -16,6 +11,7 @@ import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
 import { useEffect, useRef, useState } from "react"
 import { getConversationMessages, rateMessage } from "@/lib/api/server"
+import { dictation } from "./dictation"
 import { followThread, toUIMessage } from "./history"
 import {
   IN_FLIGHT_MS,
@@ -39,7 +35,7 @@ import {
 /**
  * One stored conversation's runtime: the AI SDK chat under assistant-ui,
  * assembled here rather than through `useChatRuntime`, which in
- * @assistant-ui/react-ai-sdk 1.4.13 does not pass `cancelPendingToolCallsOnSend`
+ * @assistant-ui/ai-sdk 0.0.16 does not pass `cancelPendingToolCallsOnSend`
  * through. That option, left on, turns a "not now" into "cancelled" on the
  * owner's next message while the stored row keeps "not now", so a reload
  * disagreed with what the owner had just seen. `cancelOvertaken` cancels what
@@ -61,7 +57,6 @@ function typedText(message: unknown): string {
 
 export function useConversationRuntime({
   onFinish,
-  suggestions,
   intent,
   onIntentSent,
   tail,
@@ -71,7 +66,6 @@ export function useConversationRuntime({
   onFinish: () => void
   /** Reads the panel's workspace now: a turn has written facts it shows. */
   refresh?: () => void
-  suggestions: ThreadSuggestion[]
   /**
    * The composer's mode, read when the owner sends: that send carries it
    * and `onIntentSent` ends it. A ref, since this hook renders apart from
@@ -328,6 +322,7 @@ export function useConversationRuntime({
       addToolOutput,
       sendMessage: (message, options) => {
         const carried = intent?.current
+        if (intent) intent.current = undefined
         // Typed while a proposed quote form waits: the words answer it, and
         // go out as the owner's reply.
         const changes = quoteChanges(
@@ -352,8 +347,7 @@ export function useConversationRuntime({
       // turns, so two assistant rows in a row are never one reply: a message
       // the assistant posted on its own is a message of its own.
       joinStrategy: "none",
-      suggestions,
-      adapters: { feedback },
+      adapters: { feedback, dictation },
     }
   )
   // The composer's words, kept in this tab by stored thread, so a reload, a

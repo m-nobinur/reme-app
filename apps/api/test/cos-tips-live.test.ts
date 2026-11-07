@@ -1,4 +1,5 @@
 import { COS_TOOLS, type CosToolName, CosWorkspace } from "@workspace/contracts"
+import { procedure } from "@workspace/skills"
 import { generateText, isStepCount, tool } from "ai"
 import { describe, expect, it } from "vitest"
 import {
@@ -76,6 +77,15 @@ async function turn(tips: ("business_email" | "local_phone")[], said: string) {
     },
     stopWhen: isStepCount(4),
     messages: [
+      // The tips live in web-address's tips part, as the model views it.
+      {
+        role: "user",
+        content: [
+          procedure("cos", "web-address")?.body,
+          procedure("cos", "web-address")?.parts.find((p) => p.name === "tips")
+            ?.body,
+        ].join("\n\n"),
+      },
       {
         role: "user",
         content: contextOf(

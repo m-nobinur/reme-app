@@ -1,12 +1,13 @@
-import type {
-  Activity,
-  ActivitySegment,
-  ActivityStep,
-  CosToolName,
-  MessageReading,
-  OnboardingStatus,
-  OnboardingStep,
-  PlanFactKey,
+import {
+  type Activity,
+  type ActivitySegment,
+  type ActivityStep,
+  boughtReply,
+  type CosToolName,
+  type MessageReading,
+  type OnboardingStatus,
+  type OnboardingStep,
+  type PlanFactKey,
 } from "@workspace/contracts"
 import type { StatusState } from "@workspace/ui/lib/status-line"
 
@@ -559,11 +560,17 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: ["Checked your pages on Google"],
     fail: ["check your pages on Google"],
   },
-  remember: {
+  memory: {
     kind: "thinking",
     working: ["Noting that down", "Making a note of that"],
     done: ["Noted that down"],
     fail: ["note that down"],
+  },
+  search_conversations: {
+    kind: "thinking",
+    working: ["Looking back through our chats", "Checking what we said before"],
+    done: ["Looked back through our chats"],
+    fail: ["look back through our chats"],
   },
   put_off: {
     kind: "thinking",
@@ -571,17 +578,29 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: ["Noted that for later"],
     fail: ["note that for later"],
   },
+  offer_choices: {
+    kind: "thinking",
+    working: ["Lining up your options"],
+    done: ["Lined up your options"],
+    fail: ["line up your options"],
+  },
+  present: {
+    kind: "thinking",
+    working: ["Organising that for you"],
+    done: ["Organised that for you"],
+    fail: ["organise that for you"],
+  },
   offer_grant: {
     kind: "thinking",
     working: ["Saving your choice"],
     done: ["Saved your choice"],
     fail: ["save your choice"],
   },
-  read_skill: {
+  skill_view: {
     kind: "thinking",
-    working: ["Going over how I do this", "Checking my notes on this"],
-    done: ["Checked my notes on this"],
-    fail: ["go over my notes"],
+    working: ["Drawing on my experience", "Utilising my skills on this"],
+    done: ["Used my experience"],
+    fail: ["draw on my experience"],
   },
   save_correction: {
     kind: "thinking",
@@ -597,9 +616,9 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
   },
   ask_developer: {
     kind: "checking",
-    working: ["Looking over your website", "Going over your website"],
-    done: ["Looked over your website"],
-    fail: ["look over your website"],
+    working: ["Checking your website's details", "Going over your website"],
+    done: ["Checked your website's details"],
+    fail: ["check your website's details"],
   },
   get_review: {
     kind: "checking",
@@ -610,7 +629,7 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
   read_site: {
     kind: "checking",
     working: ["Reading your website's pages"],
-    done: ["Looked over your website's pages"],
+    done: ["Reviewed your website's pages"],
     fail: ["read your website's pages"],
   },
 }
@@ -717,6 +736,9 @@ export const STEPPED: ReadonlySet<string> = new Set([
   "inspect_domain",
   "get_search_performance",
   "get_indexing",
+  "ask_developer",
+  "read_site",
+  "domain_bought",
 ])
 
 /** The line the model wrote for a call of `tool`, cleaned like any argument, or null. */
@@ -775,6 +797,10 @@ export const toolLine = (
   args: ToolArgs = {},
   ctx?: CopyContext
 ) => toolSay(tool, phase, args, ctx).text
+
+/** The kind of work a tool does, for its icon; one the table does not know is thinking. */
+export const toolKind = (tool: string): StatusKind =>
+  known(tool) ? TOOLS[tool].kind : "thinking"
 
 /** Every state the AI SDK gives a tool part. */
 export const PART_STATES = [
@@ -1035,12 +1061,13 @@ const READING_LINE: Record<MessageReading, string> = {
 }
 
 /**
- * A status's line. The planner's `doing` and a reasoning heading carry model
- * text, which is never shown: they read as the catalogue's own lines.
+ * A status's line. `doing` names what the turn is doing, built by the api
+ * from the step or the plan's own line through its filter, so it shows as
+ * sent. A reasoning heading is never shown: it reads as the catalogue's.
  */
 export const onboardingLine = (on: OnboardingStatus["on"]) =>
   on.kind === "doing"
-    ? NEXT_LINE.answer_only
+    ? on.text
     : on.kind === "thinking"
       ? reasoningLine(true)
       : on.kind === "step"
@@ -1149,7 +1176,7 @@ const JOBS: Record<JobKind, JobCopy> = {
     // Picking a name is the address; from the record on, it is connecting.
     title: (n) =>
       n.step === "find_out" || n.step === "choose" || !n.step
-        ? "Your web address"
+        ? "Your domain"
         : n.step === "purchase" && n.domain
           ? `Buying ${n.domain}`
           : "Connecting your domain",
@@ -1216,7 +1243,7 @@ const WAITING: Partial<Record<ActivitySegment["kind"], string>> = {
 /** What an owner task waits for, by the step that waits. */
 const STEP_WAITING: Readonly<Record<string, string>> = {
   find_out: "your answer",
-  choose: "your choice of web address",
+  choose: "your choice of domain",
   purchase: "your payment",
   records: "your domain setting",
   ownership: "your domain setting",
@@ -1433,7 +1460,7 @@ const addRecords = (segment: ActivitySegment, provider: string | null) => {
 /** What a waiting job's current step needs from the owner, after "{assistant} needs". */
 const NEEDS: Readonly<Record<string, string>> = {
   find_out: "your answer",
-  choose: "your pick of web address",
+  choose: "your choice of domain",
   purchase: "your payment",
   payment: "your payment",
   sign_in: "you to sign in to Google",
@@ -1543,7 +1570,7 @@ export type OwnerWait = {
 
 /** What the owner does, by the step that waits, as a heading. */
 const WAIT_TITLES: Readonly<Record<string, (d: string | null) => string>> = {
-  find_out: () => "Say which web address you want",
+  find_out: () => "Say which domain you want",
   choose: () => "Choose a name for your website",
   purchase: (d) => (d ? `Pay for ${d}` : "Pay for your domain"),
   payment: (d) => (d ? `Pay for ${d}` : "Pay for your domain"),
@@ -1654,7 +1681,7 @@ const STEP_LABELS: Partial<
     ready: "Ready to look at",
   },
   address: {
-    find_out: "Your web address",
+    find_out: "Your domain",
     choose: "Name",
     purchase: "Purchase",
     records: "Record at your provider",
@@ -1832,7 +1859,7 @@ const TRAY_ITEMS: Readonly<Record<string, string>> = {
   "ask-design": "your design questions",
   "build-questions": "your build's questions",
   "buy-domain": "your domain payment",
-  "site-ready-tray": "your website to publish",
+  "update-stack": "your updates",
   "approval-request": "an approval",
   "answer-question": "an answer to send",
   "create-reminder": "a reminder",
@@ -2060,17 +2087,36 @@ export function workLine(segment: ActivitySegment): string | null {
   )
 }
 
-export type PageActionKey = "own" | "dns" | "pay" | "google" | "failed"
+export type PageActionKey =
+  | "own"
+  | "dns"
+  | "pay"
+  | "google"
+  | "failed"
+  | "bought"
+  | "not_bought"
+
+/** The Connect buttons' intents, which `ChatRequest.intent` carries. */
+export type AskIntent = "connect_address" | "connect_google"
 
 /**
- * A row's one next action: the button, and what the owner says to the
- * assistant when they press it. `subject` is the domain, or "Google".
+ * A row's one next action: the button, what the owner says to the
+ * assistant when they press it, and for a Connect button the intent the
+ * message carries, so the api loads its skill by the press, not the words.
+ * `subject` is the domain, or "Google".
  */
-export function pageAction(key: PageActionKey, subject?: string | null) {
+export function pageAction(
+  key: PageActionKey,
+  subject?: string | null
+): { label: string; ask: string; intent?: AskIntent } {
   const what = cleanArg(subject, "text", 60) ?? "my domain"
   switch (key) {
     case "own":
-      return { label: "Connect", ask: "Help me connect my web address" }
+      return {
+        label: "Connect now",
+        ask: "Help me set up my domain",
+        intent: "connect_address",
+      }
     case "dns":
       return {
         label: "Show the change",
@@ -2082,8 +2128,16 @@ export function pageAction(key: PageActionKey, subject?: string | null) {
         ask: `Open the payment form for ${what}`,
       }
     case "google":
-      return { label: "Connect Google", ask: "Connect Google to my website" }
+      return {
+        label: "Connect Google",
+        ask: "Connect Google to my website",
+        intent: "connect_google",
+      }
     case "failed":
       return { label: "Ask what happened", ask: `What happened with ${what}?` }
+    case "bought":
+      return { label: "I bought it", ask: boughtReply(what, true) }
+    case "not_bought":
+      return { label: "Not yet", ask: boughtReply(what, false) }
   }
 }

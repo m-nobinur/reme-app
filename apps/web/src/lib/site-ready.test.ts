@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 import type { AttentionItem, Workspace } from "./api/types"
-import { awaitsReadyLine, readyCard, readyForReview } from "./site-ready"
+import {
+  awaitsReadyLine,
+  draftReview,
+  readyCard,
+  readyForReview,
+  readySlot,
+} from "./site-ready"
 
 const approval = (
   id: string,
@@ -151,4 +157,70 @@ describe("awaitsReadyLine", () => {
   ])("%s", (_case, reviewAt, saidAt, seenAt, now, waits) => {
     expect(awaitsReadyLine(reviewAt, saidAt, seenAt, now)).toBe(waits)
   })
+})
+
+const HELD = {
+  revision_id: "rev-a",
+  version: 1,
+  assignment_id: "build-a",
+  ready_at: "2026-10-01T09:00:00Z",
+}
+const updating = (held: object | undefined, live: number | null = null) =>
+  ({
+    attention: [],
+    live,
+    builds: [
+      { assignment_id: "change", created_at: "2026-10-01T09:30:00Z", held },
+    ],
+  }) as unknown as Workspace
+
+it("reads the draft an update is being made to from the workspace, so a reload keeps it", () => {
+  expect(draftReview(updating(HELD))).toEqual({
+    approvalId: null,
+    revisionId: "rev-a",
+    version: 1,
+    assignmentId: "build-a",
+    at: "2026-10-01T09:00:00Z",
+  })
+  // Before it was ready, the change's own start stands in.
+  expect(draftReview(updating({ ...HELD, ready_at: undefined }))?.at).toBe(
+    "2026-10-01T09:30:00Z"
+  )
+  // No update, or that version live: no card.
+  expect(draftReview(updating(undefined))).toBeNull()
+  expect(draftReview(updating(HELD, 1))).toBeNull()
+  expect(draftReview(null)).toBeNull()
+  // The update's own review replaces it.
+  const update = {
+    ...updating(HELD),
+    attention: [approval("b", 2, "2026-10-01T10:00:00Z")],
+  } as Workspace
+  expect(draftReview(update)?.approvalId).toBe("b")
+})
+
+it("offers beside Publish what the update stack offers, and nothing before the journey is known", () => {
+  const journeyed = (journey: object | undefined) =>
+    ({ journey }) as unknown as Workspace
+  expect(readySlot(null)).toBeNull()
+  expect(readySlot(journeyed(undefined))).toBeNull()
+  const at = (stage: string, google = "waiting_for_domain") =>
+    readySlot(
+      journeyed({
+        website: "draft_ready",
+        address: { stage, offer: stage === "unknown" ? "connect" : null },
+        google,
+      })
+    )
+  expect(at("unknown")).toEqual({
+    label: "Connect now",
+    ask: "Help me set up my domain",
+    intent: "connect_address",
+  })
+  expect(at("live", "offerable")).toEqual({
+    label: "Connect Search Console",
+    ask: "Help me connect Google Search Console",
+    intent: "connect_google",
+  })
+  expect(at("live", "connected")).toBeNull()
+  expect(at("put_off", "offerable")?.label).toBe("Connect now")
 })

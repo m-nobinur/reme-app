@@ -34,7 +34,6 @@ RUN apt-get update \
 
 # The helper `Files` in @cloudflare/sandbox runs for each file call. Its tag
 # must equal the @cloudflare/sandbox version in apps/orchestrator/package.json.
-COPY --from=docker.io/cloudflare/sandbox:1.0.1@sha256:e796e813de8213fb062bba279ddeddbf61277389a2cc7b3e4620075a9188843b /usr/local/bin/sandbox-shim /usr/local/bin/sandbox-shim
 
 # The Astro toolchain, installed once here so a site build never reaches the
 # registry. A site links /opt/astro/node_modules; astro/README.md says how,
@@ -45,16 +44,16 @@ RUN cd /opt/astro \
   && rm -rf /root/.local/share/pnpm /root/.cache \
   && chmod -R a+rX /opt/astro
 
-# Non-root: /workspace, /tmp and the home directory are the writable places
-# and everything else is root's. Under the `durable_object` policy the user
-# sets the owner of the files a command makes and no more: the platform gives
-# every process root's capabilities (ADR-031 amendment, 2026-10-19). The node
+# Non-root: the site and /tmp are the writable places and everything else is
+# root's for anyone who runs as reme. RemeSandbox runs every command as root
+# with every capability: the org's own container is the boundary. The node
 # base's own user holds uid 1000, which reme keeps from the 0.12 image.
 RUN userdel --remove node \
   && groupadd --gid 1000 reme \
   && useradd --uid 1000 --gid reme --create-home --shell /bin/bash reme \
-  && mkdir /workspace \
-  && chown reme:reme /workspace \
+  && mkdir -p /workspace/site /workspace/.reme \
+  && chown reme:reme /workspace/site \
+  && chown root:root /home/reme \
   && chmod -R go-w /opt /usr/local/lib/node_modules
 USER reme
 WORKDIR /workspace

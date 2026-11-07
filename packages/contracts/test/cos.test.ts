@@ -62,7 +62,7 @@ function walk(node: unknown, found: Found) {
 
 describe("COS_TOOLS", () => {
   // A tool added or dropped is a decision, so the list is written out.
-  it("has exactly the twenty-nine tools, in order", () => {
+  it("has exactly the thirty tools, in order", () => {
     const all = [
       "get_workspace",
       "get_facts",
@@ -82,12 +82,15 @@ describe("COS_TOOLS", () => {
       "connect_google",
       "get_search_performance",
       "get_indexing",
-      "remember",
+      "memory",
+      "search_conversations",
       "put_off",
+      "offer_choices",
+      "present",
       "inspect_domain",
       "domain_bought",
       "offer_grant",
-      "read_skill",
+      "skill_view",
       "save_correction",
       "schedule_skill",
       "ask_developer",
@@ -177,13 +180,15 @@ describe("AnswerQuestionInput", () => {
 
 describe("CosToolResult", () => {
   // The branches are written out, so each is checked against its tool.
-  it("has one branch per tool, each with that tool's output, then the retired get_preview", () => {
+  it("has one branch per tool, each with that tool's output, then the retired get_preview, read_skill and remember", () => {
     const branches = CosToolResult.options.map((o) => o.shape)
     expect(branches.map((b) => b.tool.value)).toStrictEqual([
       ...Object.keys(COS_TOOLS),
       "get_preview",
+      "read_skill",
+      "remember",
     ])
-    for (const b of branches.slice(0, -1)) {
+    for (const b of branches.slice(0, -3)) {
       expect(b.output).toBe(COS_TOOLS[b.tool.value as CosToolName].output)
     }
   })
@@ -191,6 +196,38 @@ describe("CosToolResult", () => {
   it("refuses one tool's output under another tool's name", () => {
     const crossed = { ...(samples.CosToolResult as object), tool: "get_facts" }
     expect(verdict("CosToolResult", CosToolResult, crossed)).toEqual(REFUSED)
+  })
+})
+
+describe("a turn logged before skill_view replaced read_skill", () => {
+  it("replays its read_skill result", () => {
+    const logged = {
+      turn_id: "01K6A0000000000000000000T1",
+      tool_call_id: "call_skill",
+      tool: "read_skill",
+      output: {
+        outcome: "skill",
+        name: "builds",
+        body: "Builds: what to say.",
+      },
+    }
+    expect(CosToolResult.parse(logged)).toEqual(logged)
+  })
+})
+
+describe("a turn logged before memory replaced remember", () => {
+  it("replays its remember result", () => {
+    const logged = {
+      turn_id: "01K6A0000000000000000000T1",
+      tool_call_id: "call_remember",
+      tool: "remember",
+      output: {
+        outcome: "saved",
+        note: "Saved. This update is complete; do not repeat it.",
+        fullness: "1%, 23/1,600 chars",
+      },
+    }
+    expect(CosToolResult.parse(logged)).toEqual(logged)
   })
 })
 
@@ -590,7 +627,7 @@ describe("CosTurn", () => {
       "an abandoned turn with no reservation",
       { outcome: "abandoned", turn_id, logged_usd: 0 },
     ],
-    ["more than six steps", { ...fallback, steps: 7 }],
+    ["more than sixteen steps", { ...fallback, steps: 17 }],
     ["a tool it does not have", { ...fallback, tools: ["publish"] }],
     ["a route the table does not have", { ...fallback, route: "router" }],
   ])("refuses %s", (_name, turn) => {

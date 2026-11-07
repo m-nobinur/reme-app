@@ -277,6 +277,25 @@ describe("change", () => {
     expect(at(build("implementing", { lane: "quick", activity: [] }))).toBe(
       expected.quick.p50
     )
+    // A quick section change is the Developer's, as update 4c15c3f6 was.
+    expect(
+      at(
+        build("implementing", {
+          lane: "quick",
+          change_kind: "section",
+          activity: [],
+        })
+      )
+    ).toBe(expected.section.p50)
+    expect(
+      at(
+        build("implementing", {
+          lane: "quick",
+          change_kind: "copy",
+          activity: [],
+        })
+      )
+    ).toBe(expected.quick.p50)
     expect(at(build("validating"))).toBe(expected.full.p50)
     expect(at(build("implementing"), NOT_LIVE)).toBe(expected.full.p50)
     expect(at(build("blocked_on_information", { activity: [] }))).toBe(

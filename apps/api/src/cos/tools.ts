@@ -51,7 +51,9 @@ import {
   InformationAnswer,
   type InspectDomainInput,
   type InspectDomainOutput,
+  type OfferChoicesOutput,
   OwnerAnswerText,
+  type PresentOutput,
   PreviewLink,
   type ProfileLine,
   type PutOffInput,
@@ -98,6 +100,7 @@ import {
 } from "@workspace/db"
 import { rangeText } from "@workspace/ui/lib/activity-copy"
 import type { ModelMessage } from "ai"
+import { timesFor } from "../activity.ts"
 import {
   type Bridged,
   bridge,
@@ -135,6 +138,7 @@ import {
   inOwnersWords,
   ownerWords,
   readProfile,
+  STORES,
 } from "./memory.ts"
 import { knownZone, wallToUtc, zonedIso } from "./time.ts"
 import { tipsDue } from "./tips.ts"
@@ -328,7 +332,10 @@ const rangeOf = (
  * owner's plan reviews, as the panel's does.
  */
 export function paceOf(
-  build: Pick<BuildSummary, "state" | "lane" | "created_at" | "review_ms">,
+  build: Pick<
+    BuildSummary,
+    "state" | "lane" | "change_kind" | "created_at" | "review_ms"
+  >,
   life: Life | undefined,
   expected: WorkspaceStatus["expected_seconds"],
   now: number
@@ -336,7 +343,7 @@ export function paceOf(
   if (!WORKING.has(build.state)) return {}
   const started = Date.parse(build.created_at)
   const ran = now - started - (build.review_ms ?? 0)
-  const lane = (expected ?? EXPECTED_SECONDS)[build.lane ?? "full"]
+  const lane = timesFor(expected ?? EXPECTED_SECONDS, build)
   const range = rangeText(lane.p50, lane.p95, Math.max(0, ran / 1000))
   return {
     timing: {
@@ -371,37 +378,48 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   facts: FactRecord[]
   /** What the owner told the CoS about themselves. */
   profile: ProfileLine[]
+  /** The CoS's working notes on how the business runs. */
+  notes: ProfileLine[]
 }> {
   const now = new Date()
-  const [read, rows, { lines: profile }, reports, repairs, lives, given] =
-    await kit.withOrg({ orgId: owner.orgId }, (db) =>
-      Promise.all([
-        statusWithFacts(db, env, now),
-        db
-          .select({
-            name: domains.name,
-            state: domains.state,
-            lastCheck: domains.lastCheck,
-          })
-          .from(domains)
-          .where(live)
-          .orderBy(sql`${domains.createdAt} desc`)
-          .limit(10),
-        readProfile(db),
-        // Each build's last check report from the day, for what a stopped one failed.
-        db.execute<{ assignment_id: string; gates: unknown }>(
-          sql`select distinct on (assignment_id) assignment_id, payload->'gates' as gates from events where type = 'assignment.validation_reported' and occurred_at > now() - interval '24 hours' order by assignment_id, event_id desc`
-        ),
-        db.execute<{ assignment_id: string; rounds: number }>(
-          sql`select assignment_id, count(*)::int as rounds from events where type = 'assignment.state_changed' and payload->>'to' = 'repairing' and occurred_at > now() - interval '24 hours' group by assignment_id`
-        ),
-        // Each open build's last logged work and last resume, for its pace.
-        db.execute<Life & { assignment_id: string }>(
-          sql`select e.assignment_id, (extract(epoch from max(e.occurred_at) filter (where e.type <> ${AGENT_NOTE})) * 1000)::float8 as work_ms, (extract(epoch from max(e.occurred_at) filter (where ${resumed})) * 1000)::float8 as resumed_ms, (array_agg(e.payload->>'cause' order by e.event_id desc) filter (where ${resumed}))[1] as cause from events e join assignments a on a.id = e.assignment_id where a.kind in ('site.build', 'site.revise') and a.state not in ${TERMINAL_STATES} group by e.assignment_id`
-        ),
-        readTipsGiven(db),
-      ])
-    )
+  const [
+    read,
+    rows,
+    { lines: profile },
+    reports,
+    repairs,
+    lives,
+    given,
+    { lines: notes },
+  ] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    Promise.all([
+      statusWithFacts(db, env, now),
+      db
+        .select({
+          name: domains.name,
+          state: domains.state,
+          lastCheck: domains.lastCheck,
+        })
+        .from(domains)
+        .where(live)
+        .orderBy(sql`${domains.createdAt} desc`)
+        .limit(10),
+      readProfile(db),
+      // Each build's last check report from the day, for what a stopped one failed.
+      db.execute<{ assignment_id: string; gates: unknown }>(
+        sql`select distinct on (assignment_id) assignment_id, payload->'gates' as gates from events where type = 'assignment.validation_reported' and occurred_at > now() - interval '24 hours' order by assignment_id, event_id desc`
+      ),
+      db.execute<{ assignment_id: string; rounds: number }>(
+        sql`select assignment_id, count(*)::int as rounds from events where type = 'assignment.state_changed' and payload->>'to' = 'repairing' and occurred_at > now() - interval '24 hours' group by assignment_id`
+      ),
+      // Each open build's last logged work and last resume, for its pace.
+      db.execute<Life & { assignment_id: string }>(
+        sql`select e.assignment_id, (extract(epoch from max(e.occurred_at) filter (where e.type <> ${AGENT_NOTE})) * 1000)::float8 as work_ms, (extract(epoch from max(e.occurred_at) filter (where ${resumed})) * 1000)::float8 as resumed_ms, (array_agg(e.payload->>'cause' order by e.event_id desc) filter (where ${resumed}))[1] as cause from events e join assignments a on a.id = e.assignment_id where a.kind in ('site.build', 'site.revise') and a.state not in ${TERMINAL_STATES} group by e.assignment_id`
+      ),
+      readTipsGiven(db),
+      readProfile(db, STORES.notes),
+    ])
+  )
   const { status, facts, tasks, waiting } = read
   const zone = status.time_zone ?? "UTC"
   const roundsOf = (assignmentId: string) =>
@@ -507,7 +525,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       full: rangeOf(status.expected_seconds, "full"),
     },
   })
-  return { workspace, facts, profile }
+  return { workspace, facts, profile, notes }
 }
 
 /**
@@ -1922,15 +1940,29 @@ const NEVER = "9999-12-31T00:00:00.000Z"
 const isTip = (kind: string): kind is TipKind => TipKind.safeParse(kind).success
 
 /**
+ * Quick replies for the decision a reply ends on. The chat draws them from
+ * the call; its result only closes it, so the history holds a whole call.
+ */
+export const offerChoices = async (): Promise<OfferChoicesOutput> => ({
+  outcome: "offered",
+})
+
+/** A tree for the chat to draw from `PRESENT_COMPONENTS`; nothing runs, so the turn need not wait (#741). */
+export const present = async (): Promise<PresentOutput> => ({
+  outcome: "presented",
+})
+
+/**
  * An offer the owner said not now to, asked again after `days` (a week when
  * left out). The kind's open task is made if the offer came before it, then
- * set to `later`, so the same row comes back as the offer it was. Only the
- * owner's words move it, and the owner can start it again whenever they ask.
- * A tip just given is remembered instead, and never comes back.
+ * set to `later`, so the same row comes back as the offer it was; with
+ * `never` it is declined and never offered again. Only the owner's words
+ * move it, and the owner can start it again whenever they ask. A tip just
+ * given is remembered instead, and never comes back.
  */
 export async function putOff(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
-  { kind, days = 7 }: PutOffInput
+  { kind, days = 7, never = false }: PutOffInput
 ): Promise<PutOffOutput> {
   const until = new Date(Date.now() + days * 86_400_000).toISOString()
   if (isTip(kind)) {
@@ -1941,11 +1973,15 @@ export async function putOff(
   }
   await kit.withOrg({ orgId: owner.orgId }, async (db) => {
     await openTask(db, owner.orgId, kind)
-    await db.execute(sql`
-      update owner_tasks set state = 'later', later_until = ${until}::timestamptz
-      where kind = ${kind}::task_kind and state in ('active', 'later')`)
+    await db.execute(
+      never
+        ? sql`update owner_tasks set state = 'declined', later_until = null
+            where kind = ${kind}::task_kind and state in ('active', 'later')`
+        : sql`update owner_tasks set state = 'later', later_until = ${until}::timestamptz
+            where kind = ${kind}::task_kind and state in ('active', 'later')`
+    )
   })
-  return { outcome: "put_off", until }
+  return { outcome: "put_off", until: never ? NEVER : until }
 }
 
 /** A connected domain taken off the site once the owner said yes, keyed by the approval. */

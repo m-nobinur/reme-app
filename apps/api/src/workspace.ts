@@ -12,11 +12,13 @@ import {
   type BuildStopCause,
   type BuildSummary,
   buildFailure,
+  ChangeKind,
   type DerivedReminder,
   type FactRecord,
   FactValue,
   FactValueKey,
   InformationRequest,
+  type Journey,
   type OwnerTask,
   PLANNED_PAGES,
   SiteFields,
@@ -32,6 +34,9 @@ import {
   currentFacts,
   domains,
   events,
+  type JourneyInput,
+  type JourneyState,
+  journeyOf,
   type OrgScopedDb,
   openApprovals,
   orgs,
@@ -72,15 +77,25 @@ const iso = (at: Date) => at.toISOString()
 
 /**
  * How long each lane takes, from the click to the draft, as the bounds of
- * the range the chat and the panel both quote ("6 to 10 minutes"): p50 is
- * the low end, p95 the high. The full lane is the local runs of 2026-10-24
- * and 25 (310 to 406 s, a repair round in some; the owner's top is 10
- * minutes for a slow provider); the quick lane is 34 to 65 s to the ready card.
- * shortcut: a few runs on one machine, until EV3's rolling p50 and p95 per lane exist; swap this one object for them.
+ * the range the chat and the panel both quote ("10 to 17 minutes"): p50 is
+ * the low end, p95 the high. The full lane is the staging build of
+ * 2026-11-04 on the Haiku developer (assignment a7436114, 990 s): planning
+ * 185 s, implementing 382 s and validating 17 s reach the draft in about 585
+ * s, and the repair round its gates sent it back for added 399 s and a second
+ * validation. The low end is the run without a repair, the high end the one
+ * with it. The quick lane's one-call change is 34 to 65 s to the ready card.
+ * A quick section change is the Developer's, with no plan: update 4c15c3f6
+ * on staging, 2026-11-04, took 384 s to the ready card (briefing and set-up
+ * 4 s, implementing 364 s over 13 turns, validating 16 s), and the local one of
+ * 2026-11-01 406 s. The low end is about their mean, 395 s; the high end
+ * adds one repair round as long as that run's implementing and validating,
+ * 395 + 364 + 16 = 775 s.
+ * shortcut: one staging run and a few local ones, until EV3's rolling p50 and p95 per lane exist; swap this one object for them.
  */
 export const EXPECTED_SECONDS = {
   quick: { p50: 45, p95: 90 },
-  full: { p50: 360, p95: 600 },
+  section: { p50: 395, p95: 775 },
+  full: { p50: 600, p95: 1000 },
 } as const
 
 /** What a full build is doing, finer than the stages the owner sees. */
@@ -466,6 +481,9 @@ export async function readBuilds(
       lane: sql<
         string | null
       >`(select e.payload->>'lane' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+      changeKind: sql<
+        string | null
+      >`(select e.payload->>'change_kind' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
       retryOf: sql<
         string | null
       >`(select e.payload->>'retry_of' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
@@ -482,6 +500,12 @@ export async function readBuilds(
       // Written out rather than interpolated: in a one-table select drizzle
       // drops the table name, and a bare `id` here would mean the revision's.
       revision: sql<RevisionRef | null>`(select json_build_object('revision_id', r.id, 'version', r.version) from site_revisions r where r.assignment_id = assignments.id and r.version is not null order by r.version desc limit 1)`,
+      // The draft a change holds paused (`holdDraft`), which the list leaves
+      // out, with when it became ready in epoch milliseconds.
+      held: sql<
+        | (RevisionRef & { assignment_id: string; ready_ms: number | null })
+        | null
+      >`(select json_build_object('revision_id', r.id, 'version', r.version, 'assignment_id', h.id, 'ready_ms', (select extract(epoch from max(e.occurred_at)) * 1000 from events e where e.assignment_id = h.id and e.type = 'assignment.state_changed' and e.payload->>'to' = 'preview_ready')) from assignments h join site_revisions r on r.assignment_id = h.id and r.version is not null where h.id = assignments.revision_of_assignment_id and h.state = 'paused' order by r.version desc limit 1)`,
       // ADR-038: the plan on the row, the round it is and the plan it
       // changed from the newest `blueprint.proposed`, by `events_assignment_type_idx`.
       blueprint: assignments.blueprint,
@@ -526,6 +550,7 @@ export async function readBuilds(
   const rows = await (limit === null ? query : query.limit(limit))
   return rows.map((row) => {
     const fellThrough = row.fell && row.lane === "quick"
+    const changeKind = ChangeKind.safeParse(row.changeKind).data
     const lane: BuildLane =
       row.lane === "quick" && !fellThrough ? "quick" : "full"
     const plan = Blueprint.safeParse(row.blueprint).data ?? null
@@ -538,6 +563,7 @@ export async function readBuilds(
       goal: row.goal,
       ...(row.label ? { label: row.label } : {}),
       lane,
+      ...(lane === "quick" && changeKind && { change_kind: changeKind }),
       ...(fellThrough ? { fell_through: true } : {}),
       ...(row.retryOf ? { retry: true as const } : {}),
       ...(row.restarted ? { restarted: true as const } : {}),
@@ -548,6 +574,16 @@ export async function readBuilds(
         step: row.step,
       }),
       revision: row.revision,
+      ...(row.held && {
+        held: {
+          revision_id: row.held.revision_id,
+          version: row.held.version,
+          assignment_id: row.held.assignment_id,
+          ...(row.held.ready_ms && {
+            ready_at: new Date(row.held.ready_ms).toISOString(),
+          }),
+        },
+      }),
       ...planOf(row),
       ...(progress.photos ? { photos: photosOf(plan, settled) } : {}),
       ...(row.reviewMs ? { review_ms: Math.round(row.reviewMs) } : {}),
@@ -1003,6 +1039,31 @@ export function deriveReminders(
   ]
 }
 
+/** The website as `journeyOf` reads it: live, a build under way, the drafts waiting on the owner. */
+export const websiteOf = (
+  site: WorkspaceStatus["site"],
+  builds: readonly BuildSummary[],
+  approvals: readonly Extract<AttentionItem, { kind: "approval" }>[]
+): JourneyInput["website"] => ({
+  live: site.live !== null,
+  building: builds.some((b) => b.state !== "awaiting_review"),
+  drafts: approvals.map(({ request }) => ({
+    id: request.approval_id,
+    at: request.requested_at,
+  })),
+})
+
+/** The journey every reader shares, without what only a turn reads. */
+const shared = ({ website, address, google }: JourneyState): Journey => ({
+  website,
+  address: {
+    stage: address.stage,
+    ...(address.name && { name: address.name }),
+    offer: address.offer,
+  },
+  google,
+})
+
 /** Reports and alerts stay in the panel for a day; `/activity` keeps 30. */
 const PANEL_HOURS = 24
 
@@ -1067,6 +1128,11 @@ export async function statusWithFacts(
     db.select({ zone: orgs.timeZone }).from(orgs).limit(1),
   ])
   const missing = missingFacts(current)
+  // Rows come newest first, so each kind's first is its latest, a finished
+  // one included: the assistant reads the address task's end to time Google.
+  const tasks = TaskKind.options.flatMap(
+    (kind) => rows.tasks.find((t) => t.kind === kind) ?? []
+  )
   const status = WorkspaceStatus.parse({
     site,
     builds,
@@ -1098,12 +1164,14 @@ export async function statusWithFacts(
       },
       now
     ),
+    journey: shared(
+      journeyOf({
+        tasks,
+        website: websiteOf(site, builds, approvalItems),
+        now,
+      })
+    ),
   })
-  // Rows come newest first, so each kind's first is its latest, a finished
-  // one included: the assistant reads the address task's end to time Google.
-  const tasks = TaskKind.options.flatMap(
-    (kind) => rows.tasks.find((t) => t.kind === kind) ?? []
-  )
   return {
     status,
     facts: current,

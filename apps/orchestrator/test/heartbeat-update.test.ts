@@ -29,10 +29,6 @@ import { announce, searchInstanceId } from "../src/search.ts"
 import { freshOrg, kit as pool } from "./fixture.ts"
 import { stubNet } from "./fixtures/domains.ts"
 
-vi.mock("@cloudflare/sandbox", () => ({
-  Sandbox: class {},
-  ContainerProxy: class {},
-}))
 vi.mock("../src/sandbox.ts", () => ({}))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 
@@ -273,7 +269,7 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
       (orgId) => `address.offer:${orgId}`
     )
     expect(offered.text).toMatch(
-      /^Your website is coming along nicely\. While it builds/
+      /^While it builds, let's sort out its address\./
     )
     expect(offered.asks).toBe(true)
     const tasks = await pool.withOrg({ orgId: offered.orgId }, readTasks)

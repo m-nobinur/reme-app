@@ -148,6 +148,12 @@ test("a reviewed quote form leaves only a broken one's note", async ({
   page,
 }) => {
   await open(page, "ReviewQuoteForm")
+  // The preview marks the phone optional, so the card says the same.
+  await expect(
+    page
+      .getByText("Name and email are always asked, phone is optional.")
+      .first()
+  ).toBeVisible()
   await expect(page.locator('[data-slot="aui_user-message-root"]')).toHaveText([
     /Looks good/,
     /Ask about luggage too/,
@@ -195,15 +201,16 @@ test("photos preview, can be taken out, and are sent only on Upload", async ({
   await card.getByRole("button", { name: "Remove van.png" }).click()
   await expect(card.getByRole("img")).toHaveCount(0)
   await expect(upload).toBeDisabled()
-  await card.locator('input[type="file"]').setInputFiles([PNG])
+  // The catalog's upload refuses a file named broken, which shows the
+  // failure state: a reason, and the photos kept for another try.
+  await card
+    .locator('input[type="file"]')
+    .setInputFiles([{ ...PNG, name: "broken.png" }])
   await upload.click()
   await expect(card.getByRole("status")).toHaveText("Uploading 1 photo")
-  // The catalog's runtime takes no tool results, so the answer fails here
-  // after the upload, which shows the failure state: a reason, and the
-  // photos kept for another try.
   await expect(card.getByRole("alert")).toBeVisible()
   await expect(upload).toBeEnabled()
-  await expect(card.getByRole("img", { name: "van.png" })).toBeVisible()
+  await expect(card.getByRole("img", { name: "broken.png" })).toBeVisible()
 })
 
 test("the ready card sits at the end of the thread and never claims an approval early", async ({
@@ -211,7 +218,7 @@ test("the ready card sits at the end of the thread and never claims an approval 
 }) => {
   await open(page, "SiteReady")
   const cards = page.locator('[data-slot="site-ready"]')
-  await expect(cards).toHaveCount(6)
+  await expect(cards).toHaveCount(9)
   const ready = cards.nth(0)
   await expect(
     ready.getByRole("heading", { name: "Brightclean website" })
@@ -231,13 +238,57 @@ test("the ready card sits at the end of the thread and never claims an approval 
   await expect(
     cards.nth(1).getByRole("button", { name: "Publishing" })
   ).toBeDisabled()
-  await expect(cards.nth(2).getByRole("alert")).toContainText("newer version")
-  await expect(cards.nth(3).getByRole("link")).toHaveCount(0)
+  await expect(cards.nth(2)).toContainText(
+    "Publishing waits until your update is ready."
+  )
+  await expect(cards.nth(3).getByRole("alert")).toContainText("newer version")
   await expect(cards.nth(4).getByRole("link")).toHaveCount(0)
-  await expect(cards.nth(5)).toHaveText("Approved, publishing your website")
+  await expect(cards.nth(5).getByRole("link")).toHaveCount(0)
+  await expect(cards.nth(6)).toHaveText("Approved, publishing your website")
+  // A step beside Publish, on the same row, for the web address and then Search Console.
+  for (const [at, label] of [
+    [7, "Connect now"],
+    [8, "Connect Search Console"],
+  ] as const) {
+    const publish = await cards
+      .nth(at)
+      .getByRole("button", { name: "Publish" })
+      .boundingBox()
+    const connect = cards
+      .nth(at)
+      .getByRole("button", { name: label, exact: true })
+    const beside = await connect.boundingBox()
+    expect(publish && beside && Math.abs(publish.y - beside.y) < 8).toBe(true)
+    expect(publish && beside && beside.x + beside.width <= publish.x).toBe(true)
+  }
+  await expect(
+    cards.nth(0).getByRole("button", { name: /^Connect/ })
+  ).toHaveCount(0)
 })
 
-test("a docked ready card is one row above the composer that opens in place", async ({
+test("the ready cards with a step beside Publish fit a phone and pass axe", async ({
+  page,
+}) => {
+  await open(page, "SiteReady", 390)
+  await axe(page, "SiteReady 390")
+  // Right after axe, Linux Chromium can read a wider page for a moment with no
+  // element past the edge (#786); the layout at rest is what must fit.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth
+      )
+    )
+    .toBe(false)
+  const card = page.locator('[data-slot="site-ready"]').nth(8)
+  const box = await card.boundingBox()
+  const connect = await card
+    .getByRole("button", { name: "Connect Search Console" })
+    .boundingBox()
+  expect(box && connect && connect.x >= box.x).toBe(true)
+})
+
+test("a docked ready card is one row above the composer, with no preview to open", async ({
   page,
 }) => {
   await open(page, "SiteReady")
@@ -246,38 +297,51 @@ test("a docked ready card is one row above the composer that opens in place", as
   await expect(
     docked.getByRole("button", { name: "Publish", exact: true })
   ).toBeEnabled()
+  await expect(
+    docked.getByRole("heading", { name: "Brightclean website" })
+  ).toBeVisible()
+  // The panel keeps the preview, so the row opens nothing.
+  await expect(
+    docked.getByRole("button", { name: /Brightclean website/ })
+  ).toHaveCount(0)
   await expect(docked.getByRole("img", { name: /home page/ })).toHaveCount(0)
-  const row = docked.getByRole("button", { name: /Brightclean website/ })
-  await expect(row).toHaveAttribute("aria-expanded", "false")
-  await row.click()
-  await expect(row).toHaveAttribute("aria-expanded", "true")
-  await expect(docked.getByRole("img", { name: /home page/ })).toBeVisible()
   await expect(
     docked.getByRole("button", { name: "Request changes" })
-  ).toBeEnabled()
+  ).toHaveCount(0)
 })
 
-test("a new chat's updates are a deck of three that steps with its arrows", async ({
+test("a conversation's updates are a deck of three that steps with its arrows", async ({
   page,
 }) => {
-  await open(page, "UpdateDeck")
-  const deck = page.getByRole("region", { name: "Updates" })
+  await open(page, "DockedUpdates")
+  const deck = page
+    .locator('[data-state="skipped"]')
+    .getByRole("region", { name: "Updates" })
   await expect(deck.getByText("1/3")).toBeVisible()
   await expect(
     deck.getByRole("button", { name: "Publish", exact: true })
   ).toBeVisible()
   // Only the front one is there to read or press.
-  await expect(deck.getByText("Which areas do you cover?")).toBeHidden()
+  await expect(deck.getByText("Add your domain")).toBeHidden()
   await deck.getByRole("button", { name: "Next update" }).click()
   await expect(deck.getByText("2/3")).toBeVisible()
-  await expect(deck.getByText("Which areas do you cover?")).toBeVisible()
+  await expect(deck.getByText("Add your domain")).toBeVisible()
   await expect(
     deck.getByRole("button", { name: "Publish", exact: true })
   ).toBeHidden()
+  // The card eases to the height of the row in front, not of the site card.
+  const front = deck.locator("[data-front]")
+  await expect
+    .poll(async () => {
+      const row = (await front.locator(":scope > *").boundingBox())?.height
+      const card = (await front.locator("..").boundingBox())?.height
+      return row === card
+    })
+    .toBe(true)
   await deck.getByRole("button", { name: "Previous update" }).click()
   await deck.getByRole("button", { name: "Previous update" }).click()
   await expect(deck.getByText("3/3")).toBeVisible()
-  await expect(deck.getByText("Call the window supplier")).toBeVisible()
+  await expect(deck.getByText("Get found on Google")).toBeVisible()
 })
 
 test("a choice pill opens its options and hint, and a cut label shows whole on hover", async ({
@@ -305,6 +369,15 @@ test("a choice pill opens its options and hint, and a cut label shows whole on h
   await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
     "Anything else we should know before we quote"
   )
+  // A choice pill is a button of its own, and its cut label still shows whole.
+  await page.mouse.move(0, 0)
+  await page
+    .getByRole("button", { name: /^Is there parking outside the property/ })
+    .first()
+    .hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+    "Is there parking outside the property for the driver to use"
+  )
 })
 
 test("a finished design tray reads back as chips: the logo, colours, a pair in its own face", async ({
@@ -327,6 +400,31 @@ test("a finished design tray reads back as chips: the logo, colours, a pair in i
   }
 })
 
+// A chip is a light tint of the bubble with a hairline edge, never a patch of
+// the page's own colour: dark holes in dark mode, white ones in light.
+for (const theme of ["light", "dark"]) {
+  test(`the design reply's chips tint the bubble, ${theme}`, async ({
+    page,
+  }) => {
+    await open(page, "DesignReply", 1024, theme)
+    const bubble = page.locator('[data-slot="aui_user-message-root"]')
+    const looks = await bubble
+      .locator(".rounded-full.border, img")
+      .evaluateAll((all) =>
+        all.map((each) => {
+          const style = getComputedStyle(each)
+          return [style.backgroundColor, style.borderTopColor]
+        })
+      )
+    expect(looks.length).toBeGreaterThan(4)
+    for (const [background, border] of looks) {
+      expect(background).toMatch(/ 0\.04\)$/)
+      if (border && !border.endsWith(" 0)")) expect(border).toMatch(/ 0\.1\)$/)
+    }
+    await axe(page, `DesignReply ${theme}`)
+  })
+}
+
 test("the quote form preview is the customers' form, live but never sent, and confirms like the card", async ({
   page,
 }) => {
@@ -336,7 +434,7 @@ test("the quote form preview is the customers' form, live but never sent, and co
   const modal = page.getByRole("dialog", { name: "Form preview" })
   await expect(modal).toBeVisible()
 
-  await expect(modal.getByRole("group")).toHaveCount(4)
+  await expect(modal.getByRole("group")).toHaveCount(5)
   await expect(modal.getByRole("group", { name: "Your details" })).toBeVisible()
   await expect(modal.getByRole("group", { name: "Your request" })).toBeVisible()
   for (const label of [
@@ -372,14 +470,36 @@ test("the quote form preview is the customers' form, live but never sent, and co
   )
   await expect(modal).toContainText("The minibus seats up to 16")
   await expect(modal).toContainText("A line is enough")
+  // A text field's hint sits between its label and the input, as on the site.
+  const summary = modal.getByLabel("What do you need doing", { exact: true })
+  await expect(summary).toHaveAccessibleDescription("A line is enough")
+  const [label, line, input] = await Promise.all([
+    modal.getByText("What do you need doing", { exact: true }).boundingBox(),
+    modal.getByText("A line is enough").boundingBox(),
+    summary.boundingBox(),
+  ])
+  expect(label && line && label.y + label.height <= line.y).toBe(true)
+  expect(line && input && line.y + line.height <= input.y).toBe(true)
+
+  // Three short options are buttons, with the hint under the label and above them.
+  const parking = modal.getByRole("group", {
+    name: "Is there parking outside the property for the driver to use",
+  })
+  await expect(parking.getByRole("radio")).toHaveCount(3)
+  await expect(modal.locator("select")).toHaveCount(1)
+  const hint = await parking.getByText("Permits are not needed").boundingBox()
+  const first = await parking.getByText("Off-street").boundingBox()
+  expect(hint && first && hint.y + hint.height <= first.y).toBe(true)
+  await parking.getByText("On-street").click()
+  await expect(parking.getByRole("radio", { name: "On-street" })).toBeChecked()
 
   await modal.getByLabel("Your name").fill("Sam")
   await expect(modal.getByLabel("Your name")).toHaveValue("Sam")
   await modal.getByLabel("Occasion optional").selectOption("Night out")
   await expect(modal.getByLabel("Occasion optional")).toHaveValue("Night out")
   const vehicle = modal.getByRole("group", { name: "Vehicle" })
-  await vehicle.getByRole("radio", { name: "Saloon" }).check()
-  await vehicle.getByRole("radio", { name: "Minibus" }).check()
+  await vehicle.getByText("Saloon", { exact: true }).click()
+  await vehicle.getByText("Minibus", { exact: true }).click()
   await expect(vehicle.getByRole("radio", { name: "Saloon" })).not.toBeChecked()
   const extras = modal.getByRole("group", { name: "Extras optional" })
   await extras.getByRole("checkbox", { name: "Child seat" }).check()
@@ -420,11 +540,14 @@ test("the quote form preview keeps focus inside, rises from the bottom on a phon
   await page.getByRole("button", { name: "Preview form" }).click()
   const modal = page.getByRole("dialog", { name: "Form preview" })
   await expect(modal).toBeVisible()
+  // The rise starts a frame after the open, after `settled` may have looked.
+  await expect
+    .poll(async () => {
+      const box = await modal.boundingBox()
+      return [box?.x, box?.width, (box?.y ?? 0) + (box?.height ?? 0)]
+    })
+    .toEqual([0, 390, 900])
   await settled(page)
-  const box = await modal.boundingBox()
-  expect(box?.x).toBe(0)
-  expect(box?.width).toBe(390)
-  expect((box?.y ?? 0) + (box?.height ?? 0)).toBe(900)
   for (let i = 0; i < 40; i++) {
     await page.keyboard.press("Tab")
     // Base UI's guards sit at both ends and hand focus back in a tick later.
@@ -445,6 +568,7 @@ test("the quote form preview keeps focus inside, rises from the bottom on a phon
   await open(page, "QuoteFormPreview", 1024, "dark")
   await page.getByRole("button", { name: "Preview form" }).click()
   await expect(page.getByRole("dialog", { name: "Form preview" })).toBeVisible()
+  await settled(page)
   await axe(page, "QuoteFormPreview dark")
 })
 
@@ -462,10 +586,10 @@ test("the card's Preview form shows the questions as the owner has left them, an
   await expect(modal.getByRole("group", { name: "Your details" })).toBeVisible()
   await expect(modal.getByLabel("Pick-up address")).toBeVisible()
   await expect(modal.getByLabel(/^Occasion/)).toHaveCount(0)
-  // The catalog's runtime takes no tool results, so reaching the card's own
-  // confirm shows as the error it throws.
-  const failed = page.waitForEvent("pageerror")
+  // The card's own confirm runs, and the catalog takes its answer quietly.
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
   await modal.getByRole("button", { name: "Looks good" }).click()
-  expect((await failed).message).toMatch(/does not support tool results/)
   await expect(modal).toHaveCount(0)
+  expect(errors).toEqual([])
 })

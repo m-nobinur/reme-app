@@ -1,7 +1,31 @@
-import { tenancy } from "@workspace/db"
+import {
+  conversationMessages,
+  conversations,
+  events,
+  type OrgScopedDb,
+  sql,
+  tenancy,
+} from "@workspace/db"
+import {
+  isWhatsAppUpdate,
+  sendUpdate,
+  type WhatsAppUpdate,
+} from "./channels/whatsapp/templates.ts"
+import {
+  type ChannelJob,
+  channelTurn,
+  isChannelJob,
+} from "./channels/whatsapp/turn.ts"
+import { cosModel } from "./chat.ts"
 import { type ContinueJob, continueTurn, isContinueJob } from "./continue.ts"
-import { LIMITS, openrouterModel } from "./cos/agent.ts"
-import { COMPACTION, compactAfterTurn } from "./cos/compaction.ts"
+import { LIMITS } from "./cos/agent.ts"
+import {
+  compactAfterTurn,
+  type Later,
+  scheduleCompaction,
+  THRESHOLDS,
+  thresholdsFor,
+} from "./cos/compaction.ts"
 import { REFLECTION, reflectAfterTurn } from "./cos/reflection.ts"
 import { GRACE_MS, SessionBusy } from "./cos/turns.ts"
 import { drawLogoMessage, isLogoJob, type LogoJob } from "./logo.ts"
@@ -16,6 +40,8 @@ export type AfterTurn = {
   turnId: string
   /** The copy sent to arrive after the conversation has been quiet, for reflection only. */
   idle?: boolean
+  /** The warm summary's copy (`scheduleCompaction`), for compaction only: when it was armed, in epoch ms. */
+  compact?: number
 }
 
 /**
@@ -52,14 +78,41 @@ export async function enqueueAfterTurn(
 }
 
 /**
- * The work after each closed turn: compaction, then reflection; and a
+ * What the owner typed in an onboarding conversation that the CoS never
+ * logged: onboarding's answers, oldest first, for reflection's first pass.
+ * Typed in the chat only: an emailed reply (`eml_`) is left out, as
+ * `ownerWords` leaves it out.
+ */
+export async function onboardingWords(
+  db: OrgScopedDb,
+  id: string
+): Promise<string[]> {
+  const rows = await db.execute<{ text: string | null }>(sql`
+    select p->>'text' as text
+    from ${conversationMessages} m
+    join ${conversations} c on c.id = m.conversation_id and c.kind = 'onboarding',
+      jsonb_array_elements(m.content->'parts') p
+    where m.conversation_id = ${id} and m.content->>'role' = 'user'
+      and m.id not like 'eml\_%'
+      and p->>'type' = 'text'
+      and not exists (select 1 from ${events} e where e.session_id = ${id}
+        and e.type = 'cos.message' and e.payload->'message'->>'id' = m.id)
+    order by m.seq`)
+  return rows.flatMap((r) => (r.text ? [r.text] : []))
+}
+
+/**
+ * The work after each closed turn: arming the warm summary, then
+ * reflection; the warm summary when its copy comes back; and a
  * continuation or a proactive turn the orchestrator handed over
  * (`continue.ts`, `wake.ts`). A message whose job threw is retried, after a
  * newer turn's longest life when it is open, then goes to the dead-letter
  * queue.
  */
 export async function afterTurnBatch(
-  batch: MessageBatch<AfterTurn | LogoJob | ContinueJob | WakeJob>,
+  batch: MessageBatch<
+    AfterTurn | LogoJob | ContinueJob | WakeJob | ChannelJob | WhatsAppUpdate
+  >,
   env: Env
 ): Promise<void> {
   const kit = tenancy(env.HYPERDRIVE.connectionString)
@@ -68,9 +121,19 @@ export async function afterTurnBatch(
   const logos = batch.messages
     .filter((m): m is Message<LogoJob> => isLogoJob(m.body))
     .map((m) => drawLogoMessage(env, kit, m))
-  const model = env.OPENROUTER_API_KEY
-    ? openrouterModel(env.OPENROUTER_API_KEY, COMPACTION.model)
-    : null
+  // The review and the summary run on the owner turn's model and route, so they read its cached prefix.
+  const cos = cosModel(env)
+  const reviewer =
+    cos.model && cos.price
+      ? { model: cos.model, modelId: cos.modelId, price: cos.price }
+      : null
+  // The warm summary's delays ride this queue, the platform's own delay.
+  const later: Later = async (job, delaySeconds) => {
+    await env.AFTER_TURN.send(job, { delaySeconds })
+  }
+  const thresholds = env.COMPACTION_WARM_TOKENS
+    ? thresholdsFor(Number(env.COMPACTION_WARM_TOKENS))
+    : THRESHOLDS
   try {
     for (const message of batch.messages) {
       const { body } = message
@@ -85,14 +148,32 @@ export async function afterTurnBatch(
               continued,
             })
           )
+        } else if (isChannelJob(body)) {
+          const turned = await channelTurn(env, kit, body)
+          console.log(
+            JSON.stringify({
+              type: "whatsapp.turn",
+              link_id: body.linkId,
+              turned,
+            })
+          )
+        } else if (isWhatsAppUpdate(body)) {
+          const sent = await sendUpdate(env, kit, body)
+          console.log(
+            JSON.stringify({ type: "whatsapp.update", key: body.key, sent })
+          )
         } else if (isWakeJob(body)) {
           const woke = await wakeTurn(env, kit, body)
           console.log(
             JSON.stringify({ type: "cos.woke", job_id: body.jobId, woke })
           )
+        } else if (body.compact !== undefined) {
+          await compactAfterTurn(kit, reviewer, body, later, thresholds)
         } else {
-          if (!body.idle) await compactAfterTurn(kit, model, body)
-          await reflectAfterTurn(kit, model, body)
+          if (!body.idle) {
+            await scheduleCompaction(kit, body, later, thresholds)
+          }
+          await reflectAfterTurn(kit, reviewer, body, onboardingWords)
         }
         message.ack()
       } catch (error) {
@@ -101,7 +182,11 @@ export async function afterTurnBatch(
             code: "after_turn.failed",
             ...(isContinueJob(body) || isWakeJob(body)
               ? { job_id: body.jobId }
-              : { turn_id: body.turnId }),
+              : isChannelJob(body)
+                ? { link_id: body.linkId }
+                : isWhatsAppUpdate(body)
+                  ? { key: body.key }
+                  : { turn_id: body.turnId }),
             attempts: message.attempts,
             error: error instanceof Error ? error.name : "unknown",
           })

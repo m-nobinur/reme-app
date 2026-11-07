@@ -99,6 +99,14 @@ describe("the quote form checks", () => {
 const CLEANER_FORM = {
   fields: [
     {
+      key: "property",
+      label: "Property",
+      type: "select",
+      required: true,
+      hint: null,
+      options: ["Flat", "House", "Office"],
+    },
+    {
       key: "extras",
       label: "Extras",
       type: "checkbox",
@@ -209,6 +217,49 @@ describe("a site built with the owner's own questions", () => {
       "checkbox",
       "checkbox",
     ])
+  })
+
+  test("draws a few short options as buttons over native radios, and a longer list as before", () => {
+    const options = (el: Page["elements"][number]) =>
+      el.tag === "div" && (el.attrs.class ?? "").includes("quote-options")
+    // Elements come in document order, so a group is the last one opened before its first radio.
+    const groupOf = (page: Page, key: string) =>
+      page.elements
+        .slice(
+          0,
+          page.elements.findIndex((el) => el.attrs.id === `quote-q-${key}-0`)
+        )
+        .findLast(options)
+    const cleanerPage = quotePage(cleaner)
+    const property = cleanerPage.elements.filter(
+      (el) => el.attrs.name === "property"
+    )
+    expect(
+      property.map((el) => [el.tag, el.attrs.type, el.attrs.value])
+    ).toEqual([
+      ["input", "radio", "Flat"],
+      ["input", "radio", "House"],
+      ["input", "radio", "Office"],
+    ])
+    for (const [i, radio] of property.entries()) {
+      expect("required" in radio.attrs).toBe(true)
+      expect(
+        cleanerPage.elements.some(
+          (el) => el.tag === "label" && el.attrs.for === `quote-q-property-${i}`
+        )
+      ).toBe(true)
+    }
+    expect(cleanerPage.texts).toContain("Property")
+    expect(groupOf(cleanerPage, "property")?.attrs.class).toContain(
+      "quote-buttons"
+    )
+    // Three short vehicles are buttons; four occasions stay a dropdown, and ticks stay chips.
+    const limo = quotePage(limousine)
+    expect(groupOf(limo, "vehicle")?.attrs.class).toContain("quote-buttons")
+    expect(
+      limo.elements.find((el) => el.attrs.id === "quote-q-occasion")?.tag
+    ).toBe("select")
+    expect(groupOf(cleanerPage, "extras")?.attrs.class).toBe("quote-options")
   })
 
   test("drops the starter's questions", () => {

@@ -1,15 +1,9 @@
 // @vitest-environment happy-dom
 import {
-  AssistantRuntimeProvider,
-  type ThreadMessageLike,
-  useExternalStoreRuntime,
-} from "@assistant-ui/react"
-import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
-import {
   PUBLISH_LATE_MS,
   SiteReady,
 } from "@workspace/ui/components/assistant/site-ready"
-import { act, createElement, type ReactNode } from "react"
+import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, expect, it, vi } from "vitest"
 
@@ -18,7 +12,7 @@ import { afterEach, expect, it, vi } from "vitest"
 ).IS_REACT_ACT_ENVIRONMENT = true
 
 /**
- * The ready card docks above the composer once the owner writes. It moves
+ * The ready card docks into its row of the update stack once the owner writes. It moves
  * there as the same node, so nothing in it is drawn again, and an opened
  * card closes on the owner's next message without a remount.
  */
@@ -27,62 +21,39 @@ afterEach(() => {
   document.body.innerHTML = ""
 })
 
-/** An empty thread, which the docked card's tray item reads. */
-function Runtime({ children }: { children: ReactNode }) {
-  const runtime = useExternalStoreRuntime({
-    messages: [] as ThreadMessageLike[],
-    convertMessage: (message: ThreadMessageLike) => message,
-    onNew: async () => undefined,
-  })
-  return createElement(AssistantRuntimeProvider, { runtime }, children)
-}
-
-it("moves into the tray as the same card and closes on a new message", async () => {
+it("moves into the tray as the same card, its first row alone", async () => {
   const tray = document.createElement("div")
   const chat = document.createElement("div")
   document.body.appendChild(chat)
   document.body.appendChild(tray)
   const root = createRoot(chat)
-  const draw = (docked: boolean, closeOn: string | null) =>
+  const draw = (docked: boolean) =>
     act(async () =>
       root.render(
-        createElement(
-          Runtime,
-          null,
-          createElement(
-            TraySlotProvider,
-            { value: tray },
-            createElement(SiteReady, {
-              closeOn,
-              docked,
-              meta: "Ready now",
-              onApprove: () => undefined,
-              onMakeChanges: () => undefined,
-              pictures: null,
-              preview: "loading",
-              title: "Sparkle website",
-            })
-          )
-        )
+        createElement(SiteReady, {
+          docked,
+          meta: "Ready now",
+          onApprove: () => undefined,
+          onMakeChanges: () => undefined,
+          pictures: null,
+          preview: "loading",
+          spot: tray,
+          title: "Sparkle website",
+        })
       )
     )
 
-  await draw(false, null)
+  await draw(false)
   const card = chat.querySelector("article")
   expect(card).not.toBeNull()
   expect(tray.querySelector("article")).toBeNull()
 
-  await draw(true, "2026-10-25T10:00:00Z")
+  await draw(true)
   expect(tray.querySelector("article")).toBe(card)
   expect(chat.querySelector("article")).toBeNull()
-
-  const row = tray.querySelector("button[aria-expanded]")
-  await act(async () => (row as HTMLButtonElement).click())
-  expect(row?.getAttribute("aria-expanded")).toBe("true")
-
-  await draw(true, "2026-10-25T10:05:00Z")
-  expect(tray.querySelector("article")).toBe(card)
-  expect(row?.getAttribute("aria-expanded")).toBe("false")
+  // The panel keeps the preview, so docked it never opens one.
+  expect(tray.querySelector("button[aria-expanded]")).toBeNull()
+  expect(tray.textContent).not.toContain("Request changes")
 
   await act(async () => root.unmount())
   expect(tray.childElementCount).toBe(0)
@@ -149,4 +120,35 @@ it("says a publish is slow to come online once the load check runs long, until i
   expect(line()).toBe("Published")
   await act(async () => root.unmount())
   vi.useRealTimers()
+})
+
+it("says why Publish waits while an update to the draft is being made", async () => {
+  const chat = document.createElement("div")
+  document.body.appendChild(chat)
+  const root = createRoot(chat)
+  const render = (held: boolean) =>
+    act(async () =>
+      root.render(
+        createElement(SiteReady, {
+          held,
+          meta: "Not published",
+          onApprove: () => undefined,
+          onMakeChanges: () => undefined,
+          pictures: null,
+          preview: "loading",
+          title: "Sparkle website",
+        })
+      )
+    )
+  await render(true)
+  const publish = [...chat.querySelectorAll("button")].find(
+    (b) => b.textContent?.trim() === "Publish"
+  )
+  expect(publish?.disabled).toBe(true)
+  expect(chat.textContent).toContain(
+    "Publishing waits until your update is ready."
+  )
+  await render(false)
+  expect(chat.textContent).not.toContain("Publishing waits")
+  await act(async () => root.unmount())
 })

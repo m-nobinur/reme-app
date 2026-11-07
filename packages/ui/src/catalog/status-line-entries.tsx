@@ -1,5 +1,7 @@
+import { Button } from "@workspace/ui/components/button"
 import { StepMark } from "@workspace/ui/components/live-panel"
 import {
+  ReplyStatus,
   StateIcon,
   StatusIcon,
   type StatusKind,
@@ -11,7 +13,7 @@ import {
   STATE_MARKS,
   type StateName,
 } from "@workspace/ui/lib/status-icons"
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 
 /**
  * Catalog entries for the status line: every kind of work while it runs, and
@@ -72,6 +74,36 @@ function IconList() {
         ))}
       </dl>
     </div>
+  )
+}
+
+/** A turn's words as its thinking moves on, as the chat draws them. */
+const THINKING = [
+  "Reme is reading your message",
+  "Working out the quietest morning",
+  "Checking Tuesday against your jobs",
+] as const
+
+/** One working line whose words change on a press, so a snapshot holds still. */
+function ChangingWords() {
+  const [at, setAt] = useState(0)
+  return (
+    <Stack>
+      <StatusLine
+        clockAfter={0}
+        delay={0}
+        elapsed={26_000}
+        label={THINKING[at % THINKING.length] as string}
+      />
+      <Button
+        className="self-start"
+        onClick={() => setAt((n) => n + 1)}
+        size="sm"
+        variant="outline"
+      >
+        Next words
+      </Button>
+    </Stack>
   )
 }
 
@@ -137,7 +169,23 @@ const statusLineCatalog: Entry[] = [
     name: "ToolStatus",
     render: () => (
       <Stack>
-        {(["working", "failed", "stopped"] as const).map((state) => (
+        {(
+          [
+            "get_workspace",
+            "check_domain",
+            "create_reminder",
+            "connect_google",
+          ] as const
+        ).map((tool) => (
+          <ToolStatus
+            announce={false}
+            delay={0}
+            key={tool}
+            state="working"
+            tool={tool}
+          />
+        ))}
+        {(["done", "waiting", "failed", "stopped"] as const).map((state) => (
           <ToolStatus
             announce={false}
             delay={0}
@@ -164,6 +212,7 @@ const statusLineCatalog: Entry[] = [
       </Stack>
     ),
   },
+  { name: "StatusLine changing words", render: () => <ChangingWords /> },
   {
     name: "StatusLine ended",
     render: () => (
@@ -221,6 +270,66 @@ const statusLineCatalog: Entry[] = [
       </Stack>
     ),
   },
+  {
+    name: "ReplyStatus",
+    render: () => <ReplyRow />,
+  },
+  {
+    name: "ReplyStatus open",
+    render: () => <ReplyRow open />,
+  },
+  { name: "ReplyStatus over a turn", render: () => <ReplyTurn /> },
 ]
+
+const PATEL = [
+  "Reme is reading your message",
+  "Looking for Mrs Patel's usual clean",
+  "Checking Tuesday's diary",
+  "Setting Tuesday's reminder to call Mrs Patel",
+]
+
+/** A turn's row as its lines come, its clock running from the turn's start. */
+function ReplyTurn() {
+  const [at, setAt] = useState(0)
+  const [since] = useState(() => Date.now())
+  return (
+    <Stack>
+      <ReplyStatus
+        announce={false}
+        delay={0}
+        label={PATEL[at] as string}
+        lines={PATEL.slice(1, at + 1)}
+        since={since}
+      />
+      <Button
+        className="self-start"
+        disabled={at === PATEL.length - 1}
+        onClick={() => setAt((n) => n + 1)}
+        size="sm"
+        variant="outline"
+      >
+        Next line
+      </Button>
+    </Stack>
+  )
+}
+
+/** The reply's row seven seconds into a turn, after a narrator line and a finished read. */
+const ReplyRow = ({ open = false }: { open?: boolean }) => (
+  <Stack>
+    <ReplyStatus
+      announce={false}
+      defaultOpen={open}
+      delay={0}
+      elapsed={7_000}
+      label="Setting Tuesday's reminder to call Mrs Patel"
+      lines={[
+        "Looking for Mrs Patel's usual clean",
+        "Checking Tuesday's diary",
+        "Setting Tuesday's reminder to call Mrs Patel",
+      ]}
+    />
+  </Stack>
+)
 
 export { statusLineCatalog }

@@ -19,6 +19,10 @@ vi.mock("cloudflare:workers", () => ({
 }))
 vi.mock("@workspace/facade/cloudflare", () => ({
   cloudflareSandbox: () => ({}),
+  createCloudflareTracing: () => ({
+    observe: () => undefined,
+    interceptor: (_o: unknown, _c: unknown, next: () => unknown) => next(),
+  }),
 }))
 vi.mock("../src/sandbox.ts", () => ({
   checkpoint: async () => undefined,
@@ -115,6 +119,52 @@ describe("a Developer submission that fails outside a turn", () => {
         payload: { kind: "start_failed", reason: expect.any(String) },
       },
     ])
+  })
+})
+
+// #610: Flue settled a submission whose every attempt was interrupted, and
+// nothing woke the build until the stall watchdog ten minutes later.
+describe("a Developer submission that runs out of attempts", () => {
+  const settled = (type: string) => ({
+    type: "submission_settled",
+    submissionId: "sub_2",
+    outcome: "failed",
+    error: { type },
+  })
+
+  it.each(["submission_retry_exhausted", "submission_interrupted"])(
+    "wakes the Workflow on %s with no session in this isolate",
+    async (type) => {
+      sent.length = 0
+      observed(settled(type) as never, { id: "restarted" } as never)
+      await vi.waitFor(() =>
+        expect(sent).toEqual([
+          {
+            type: "developer",
+            payload: {
+              kind: "interrupted",
+              reason: "sandbox.updating",
+              key: "sub_2",
+            },
+          },
+        ])
+      )
+    }
+  )
+
+  it("stays quiet for any other settlement", async () => {
+    sent.length = 0
+    observed(settled("submission_timeout") as never, { id: "d" } as never)
+    observed(
+      {
+        type: "submission_settled",
+        submissionId: "sub_3",
+        outcome: "completed",
+      } as never,
+      { id: "d" } as never
+    )
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(sent).toEqual([])
   })
 })
 

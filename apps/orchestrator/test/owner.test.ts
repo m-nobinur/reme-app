@@ -34,6 +34,7 @@ vi.mock("../src/container.ts", () => ({
 }))
 vi.mock("../src/sandbox.ts", () => ({
   NPM_REGISTRY_HOST: "registry.npmjs.org",
+  SANDBOX_CLASS: "custom-1vcpu-3gib",
   SLEEP_AFTER: "5m",
   PoolExhaustedError: class PoolExhaustedError extends Error {},
   endSandbox: async () => undefined,

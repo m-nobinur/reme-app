@@ -36,9 +36,11 @@ import {
   DRAW_DEADLINE_MS,
   DRAW_RESERVE_USD,
   drawLogos,
+  drawMark,
   drawRound,
   hasAlpha,
   LOGO_MODELS,
+  markKey,
   nextRoundAt,
   readLogos,
   roundView,
@@ -50,9 +52,12 @@ import {
 import { logoReference } from "../src/logo-references.ts"
 import {
   changesPrompt,
+  DIRECTOR_GUIDE,
   initialsOf,
   LOGO_STYLE_WORDS,
   logoPrompt,
+  markPrompt,
+  redesignPrompt,
   variantStyles,
 } from "../src/logo-style.ts"
 import { owner, stubOrchestrator } from "./owner-fixture.ts"
@@ -70,6 +75,14 @@ const brief = {
 const subject = { name: "Bright Homes", trade: "domestic cleaning" }
 
 describe("the logo prompt", () => {
+  it("asks a mark for the logo's symbol alone, on a transparent background", () => {
+    const prompt = markPrompt('The "Bright" Homes')
+    expect(prompt).toContain(
+      `Redraw the attached logo for "The 'Bright' Homes" as its app icon: the same symbol in the same colours and style, with the name and every other word left out.`
+    )
+    expect(prompt).toContain("fully transparent background")
+  })
+
   it("quotes the name, and binds each colour by name to a part", () => {
     const prompt = logoPrompt({
       subject,
@@ -190,24 +203,68 @@ describe("the logo prompt", () => {
     expect(prompt).toContain(`"The 'Best' Clean"`)
   })
 
-  it("asks a round of changes to change only what was asked", () => {
-    const prompt = changesPrompt({
-      subject,
-      brief,
-      style: "minimal",
-      changes: "Make the roof red",
-    })
-    expect(prompt).toContain("Make the roof red")
-    expect(prompt).toContain("Change only that.")
-    expect(prompt).toContain('"Bright Homes"')
+  it("asks a round of changes for the change, taken three clearly different ways", () => {
+    const takes = [0, 1, 2].map((take) =>
+      changesPrompt({
+        subject,
+        brief,
+        style: "minimal",
+        changes: "Make the roof red",
+        take,
+      })
+    )
+    for (const prompt of takes) {
+      expect(prompt).toContain("Make the roof red")
+      expect(prompt).toContain('"Bright Homes"')
+    }
+    expect(takes[0]).toContain("Change only that.")
+    expect(takes[1]).toMatch(/bolder[\s\S]*clearly different/)
+    expect(takes[2]).toMatch(/fresh take[\s\S]*clearly different/)
+    expect(new Set(takes).size).toBe(3)
     expect(
       changesPrompt({
         subject,
         brief: { ...brief, type: "icon" },
         style: "minimal",
         changes: "Bigger",
+        take: 0,
       })
     ).toContain("no lettering")
+  })
+
+  it("keeps a redesign's first take an edit and draws the others from the director's ideas", () => {
+    const ideas = ["a mop", "a red roof line", "a bucket and a roof"]
+    const takes = [0, 1, 2].map((take) =>
+      redesignPrompt({
+        subject,
+        brief,
+        style: "minimal",
+        changes: "Make the roof red",
+        take,
+        symbol: ideas[take] ?? null,
+      })
+    )
+    expect(takes.map((t) => t.fresh)).toEqual([false, true, true])
+    for (const { prompt } of takes)
+      expect(prompt).toContain("Make the roof red")
+    expect(takes[0]?.prompt).toContain("Change only that.")
+    expect(takes[1]?.prompt).toContain("Idea: a red roof line")
+    expect(takes[2]?.prompt).toContain("Idea: a bucket and a roof")
+    expect(new Set(takes.map((t) => t.prompt)).size).toBe(3)
+    // No idea, no fresh drawing: every take stays an edit of the picture.
+    const none = redesignPrompt({
+      subject,
+      brief,
+      style: "minimal",
+      changes: "Make the roof red",
+      take: 1,
+      symbol: null,
+    })
+    expect(none.fresh).toBe(false)
+    expect(none.prompt).toContain("bolder version")
+    expect(none.prompt).not.toContain("Idea:")
+    expect(DIRECTOR_GUIDE).toContain("data.changes")
+    expect(DIRECTOR_GUIDE).toContain("never one symbol in three versions")
   })
 
   it("takes the director's ideas that are words, at most one per variant", () => {
@@ -424,6 +481,37 @@ describe("drawing a round in the queue", () => {
     expect(stored?.type).toBe("image/png")
   })
 
+  it("asks the director under the planner's session, so its cache stays on one route", async () => {
+    const { env } = await setup()
+    const chats: Record<string, unknown>[] = []
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit) => {
+      if (input === JEV.url) return new Response("{}", { status: 503 })
+      const body = JSON.parse(String(init.body))
+      if (!body.messages)
+        return Response.json({
+          data: [{ b64_json: btoa(String.fromCharCode(...PNG)) }],
+          usage: { cost: 0.01 },
+        })
+      chats.push(body)
+      return Response.json({
+        id: "gen-1",
+        model: body.model,
+        created: 0,
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: '{"ideas":["a mop"]}' },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      })
+    })
+    await drawRound(env, ledger().kit, job).catch(() => undefined)
+    expect(chats).toHaveLength(1)
+    expect(chats[0]?.session_id).toBe(ORG)
+  })
+
   it("pays for nothing twice: a retry skips what is drawn, a finished round is left", async () => {
     const { sites, env, read } = await setup()
     const first = manifest().planned[0] as string
@@ -451,14 +539,39 @@ describe("drawing a round in the queue", () => {
     expect(none).toHaveLength(0)
   })
 
-  it("hands the picked variant to every call of a round of changes", async () => {
+  it("hands the picked variant to the first call of a round of changes, and a director's idea to the others", async () => {
     const base = "aaaaaaaa-0000-4000-8000-000000000000"
     const { sites, env } = await setup({ base, changes: "Make the roof red" })
     await sites.put(`generated/${ORG}/${base}.png`, PNG)
     const asked = images()
+    const seen: (string | undefined)[] = []
     await drawRound(env, ledger().kit, job, {
-      director: async () => ({ ideas: ["unused"] }),
+      director: async (_subject, _brief, _types, changes) => {
+        seen.push(changes)
+        return { ideas: ["a mop", "a red roof line", "a bucket and a roof"] }
+      },
     })
+    expect(seen).toEqual(["Make the roof red"])
+    expect(asked.every((a) => a.prompt.includes("Make the roof red"))).toBe(
+      true
+    )
+    const edit = asked.filter((a) => a.prompt.includes("Change only that."))
+    expect(edit).toHaveLength(1)
+    expect(edit[0]?.url).toBe(
+      `data:image/png;base64,${Buffer.from(PNG).toString("base64")}`
+    )
+    const fresh = asked.filter((a) => a.prompt.includes("Idea:"))
+    expect(fresh).toHaveLength(LOGO_VARIANTS - 1)
+    expect(new Set(fresh.map((a) => a.prompt)).size).toBe(fresh.length)
+    expect(fresh.every((a) => a.url !== edit[0]?.url)).toBe(true)
+  })
+
+  it("edits the picked variant in every take when the director gives nothing", async () => {
+    const base = "aaaaaaaa-0000-4000-8000-000000000000"
+    const { sites, env } = await setup({ base, changes: "Make the roof red" })
+    await sites.put(`generated/${ORG}/${base}.png`, PNG)
+    const asked = images()
+    await drawRound(env, ledger().kit, job, { director: null })
     expect(
       asked.every((a) => a.reference && a.prompt.includes("Make the roof red"))
     ).toBe(true)
@@ -878,12 +991,73 @@ describe.skipIf(!url)("POST /logos/:id/keep, on a live connection", () => {
   })
 
   type Who = Awaited<ReturnType<typeof owner>>
+  const queued: unknown[] = []
   const keep = (who: Who, sites: ReturnType<typeof bucket>, id: string) =>
     who.call(stubOrchestrator(), `/logos/${id}/keep`, {
       method: "POST",
       headers: { "idempotency-key": crypto.randomUUID() },
-      bindings: { SITES: sites },
+      bindings: {
+        SITES: sites,
+        AFTER_TURN: { send: async (sent: unknown) => void queued.push(sent) },
+      },
     })
+  const keptDrawn = async (who: Who, sites: ReturnType<typeof bucket>) => {
+    const id = crypto.randomUUID()
+    await sites.put(`generated/${who.orgId}/${id}.png`, PNG, {
+      httpMetadata: { contentType: "image/png" },
+      customMetadata: { use: "logo" },
+    })
+    expect((await keep(who, sites, id)).status).toBe(200)
+    return id
+  }
+  const drawEnv = (sites: ReturnType<typeof bucket>) =>
+    ({ SITES: sites, OPENROUTER_API_KEY: "test" }) as unknown as Env
+
+  it("queues a kept logo's mark, drawn once from the logo's picture and stored for the build", async () => {
+    const who = await owner(kit, url as string, "logo-mark")
+    const sites = bucket()
+    const id = await keptDrawn(who, sites)
+    const mark = { kind: "logo_mark" as const, orgId: who.orgId, logoId: id }
+    expect(queued).toContainEqual(mark)
+
+    const asked = images()
+    await drawMark(drawEnv(sites), kit, mark)
+    await drawMark(drawEnv(sites), kit, mark)
+    expect(asked).toHaveLength(1)
+    expect(asked[0]?.model).toBe(LOGO_MODELS[0].id)
+    expect(asked[0]?.prompt).toContain("as its app icon")
+    expect(asked[0]?.url).toBe(
+      `data:image/png;base64,${btoa(String.fromCharCode(...PNG))}`
+    )
+    expect(sites.objects.get(markKey(who.orgId, id))?.type).toBe("image/png")
+  })
+
+  it("stores no mark when every model fails, or for a logo the owner has replaced", async () => {
+    const who = await owner(kit, url as string, "logo-mark-none")
+    const sites = bucket()
+    const first = await keptDrawn(who, sites)
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    const asked = images(() => true)
+    await drawMark(drawEnv(sites), kit, {
+      kind: "logo_mark",
+      orgId: who.orgId,
+      logoId: first,
+    })
+    expect(asked).toHaveLength(LOGO_MODELS.length)
+    expect(sites.objects.has(markKey(who.orgId, first))).toBe(false)
+    quiet.mockRestore()
+
+    vi.unstubAllGlobals()
+    await keptDrawn(who, sites)
+    const later = images()
+    await drawMark(drawEnv(sites), kit, {
+      kind: "logo_mark",
+      orgId: who.orgId,
+      logoId: first,
+    })
+    expect(later).toHaveLength(0)
+    expect(sites.objects.has(markKey(who.orgId, first))).toBe(false)
+  })
   const uploads = async (who: Who) => {
     const facts = FactList.parse(
       await (await who.call(stubOrchestrator(), "/facts")).json()

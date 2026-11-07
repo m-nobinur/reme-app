@@ -155,6 +155,37 @@ describe("postAssistantMessage", () => {
     expect(await rows(o.orgId, archived)).toHaveLength(1)
   })
 
+  it("posts quick replies as a choices part, and tells the CoS what it offered", async () => {
+    const o = await org()
+    const id = await conversation(o, "assistant", new Date(2026, 0, 1), said)
+    const choices = [
+      { label: "Try again", send: "Try building my website again." },
+    ]
+    expect(
+      await postAssistantMessage(kit, {
+        orgId: o.orgId,
+        key: "site.stopped:a1",
+        message: { text, choices, kind: "note" },
+      })
+    ).toBe("posted")
+    const [, stored] = await rows(o.orgId, id)
+    expect(
+      (stored?.content as { parts: unknown[] } | undefined)?.parts.slice(-2)
+    ).toEqual([
+      { type: "data-choices", data: choices },
+      { type: "data-kind", data: "note" },
+    ])
+    const [event] = await withOrg({ orgId: o.orgId }, (db) =>
+      db.execute<{ summary: string }>(
+        sql`select payload->>'summary' as summary from events
+          where session_id = ${id} and type = 'cos.event'`
+      )
+    )
+    expect(event?.summary).toBe(
+      `${text[0]}\n\nI offered quick replies: Try again.`
+    )
+  })
+
   it("posts a quote request as a card, with the visitor's words as an untrusted event that wakes the CoS", async () => {
     const o = await org()
     const id = await conversation(o, "assistant", new Date(2026, 0, 1), said)

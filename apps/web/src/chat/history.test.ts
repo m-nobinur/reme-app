@@ -10,10 +10,10 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest"
 import type { TransportedMessage } from "../lib/api/types"
 import {
   type AISDKStorageFormat,
+  askedSend,
   conversationHistory,
   followThread,
   lastChat,
-  missingConversations,
   STORAGE_FORMAT,
   startsNewChat,
   tailOf,
@@ -29,11 +29,7 @@ import type { ChatMessage } from "./message"
  * format it names, and the decode the runtime runs on our rows.
  */
 const require = createRequire(import.meta.url)
-const aiSdk = dirname(
-  createRequire(require.resolve("@assistant-ui/react-ai-sdk")).resolve(
-    "@assistant-ui/ai-sdk"
-  )
-)
+const aiSdk = dirname(require.resolve("@assistant-ui/ai-sdk"))
 const ADAPTER_FILE = join(aiSdk, "adapters", "aiSDKFormatAdapter.js")
 const installed = async () =>
   (await import(pathToFileURL(ADAPTER_FILE).href))
@@ -211,17 +207,6 @@ it("starts a new chat only for a new New chat press", () => {
   expect(startsNewChat("a", "a")).toBe(false)
 })
 
-it("remembers a conversation the owner cannot open, and says so", () => {
-  const seen: boolean[] = []
-  const stop = missingConversations.subscribe(() =>
-    seen.push(missingConversations.has("conv-9"))
-  )
-  expect(missingConversations.has("conv-9")).toBe(false)
-  missingConversations.add("conv-9")
-  expect(seen).toEqual([true])
-  stop()
-})
-
 it("reads a rated reply back with its thumb, on both ways a row loads", async () => {
   const format = await installed()
   const rated = (feedback: "up" | "down" | null): TransportedMessage => ({
@@ -329,4 +314,23 @@ describe("following the open thread", () => {
     await follow("srv_1")
     expect(apply).toHaveBeenCalledWith(stored)
   })
+})
+
+it("sends a press's question once, into a new chat only, with the press's intent", () => {
+  const sent = new Set<string>()
+  const press = {
+    ask: "Help me connect my domain",
+    fresh: "p1",
+    intent: "connect_address" as const,
+  }
+  expect(askedSend(press, sent)).toEqual({
+    text: "Help me connect my domain",
+    intent: "connect_address",
+  })
+  expect(askedSend(press, sent)).toBeUndefined()
+  expect(askedSend({ ...press, fresh: "p2", id: "c1" }, sent)).toBeUndefined()
+  expect(askedSend({ ask: "Hello", fresh: "p3" }, sent)).toEqual({
+    text: "Hello",
+  })
+  expect(askedSend({ fresh: "p4" }, sent)).toBeUndefined()
 })

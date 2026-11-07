@@ -1,13 +1,16 @@
 import {
   CORRECTION_MAX,
   CORRECTIONS_MAX,
-  type ReadSkillInput,
-  type ReadSkillOutput,
   type SaveCorrectionInput,
   type SaveCorrectionOutput,
   type ScheduleSkillInput,
   type ScheduleSkillOutput,
+  SKILL_STATUS_MAX,
+  type SkillTrigger,
+  type SkillViewInput,
+  SkillViewOutput,
   STAFF_CORRECTIONS_KEY,
+  type ViewedSkill,
 } from "@workspace/contracts"
 import {
   eq,
@@ -18,8 +21,16 @@ import {
   scheduledJobs,
   supersedePrivateFact,
 } from "@workspace/db"
-import { procedure } from "@workspace/skills"
-import { lockProfile, ownerWords, quotedFrom, refusalOf } from "./memory.ts"
+import { PROCEDURES, type Procedure, procedure } from "@workspace/skills"
+import type { ModelMessage } from "ai"
+import { thoughtLine } from "../thinking.ts"
+import {
+  lockProfile,
+  ownerWords,
+  quotedFrom,
+  refusalOf,
+  skillNotesText,
+} from "./memory.ts"
 import type { ToolContext } from "./tools.ts"
 import type { Turn } from "./turns.ts"
 
@@ -28,18 +39,153 @@ const refused = (code: string, message: string) => ({
   error: { class: "validation" as const, code, message },
 })
 
-/** `read_skill`: one of the CoS's procedures, by name. */
-export async function readSkill(
-  _ctx: ToolContext,
-  input: ReadSkillInput
-): Promise<ReadSkillOutput> {
-  const found = procedure("cos", input.name)
-  return found
-    ? { outcome: "skill", name: found.name, body: found.body }
-    : refused(
-        "skill.unknown",
-        "No procedure has that name. Use one from read_skill's list."
-      )
+/** The skills this conversation already holds, as the model was sent them, oldest first. */
+export const viewedIn = (messages: readonly ModelMessage[]): ViewedSkill[] =>
+  messages.flatMap((m) =>
+    m.role === "tool"
+      ? m.content.flatMap((p) => {
+          if (p.type !== "tool-result" || p.toolName !== "skill_view") return []
+          const read = SkillViewOutput.safeParse(
+            p.output.type === "json" ? p.output.value : null
+          )
+          return read.success && read.data.outcome === "skill"
+            ? [read.data]
+            : []
+        })
+      : []
+  )
+
+/**
+ * The line the owner sees for a view: the model's `step` when it reads as
+ * a status line, else one of the skill's own, never the line shown last.
+ */
+export function statusOf(
+  skill: Pick<Procedure, "status">,
+  step: string | undefined,
+  last: string | undefined
+): string {
+  const line = thoughtLine(step ?? "")
+  if (
+    line &&
+    line.length <= SKILL_STATUS_MAX &&
+    line !== last &&
+    !/know-how/i.test(line)
+  )
+    return line
+  return skill.status.find((s) => s !== last) ?? (skill.status[0] as string)
+}
+
+/**
+ * The skill, or its part, as a view returns it, with the line to show. The
+ * core carries this business's notes for the skill, so they load only with
+ * it and a part never repeats them.
+ */
+export function viewOf(
+  skill: Procedure,
+  part: string | undefined,
+  status: string,
+  notes?: string
+): ViewedSkill | null {
+  if (!part) {
+    return {
+      name: skill.name,
+      body: skill.body,
+      ...(skill.parts.length > 0 && { parts: skill.parts.map((p) => p.name) }),
+      status,
+      ...(notes && { notes }),
+    }
+  }
+  const found = skill.parts.find((p) => p.name === part)
+  return found ? { name: skill.name, part, body: found.body, status } : null
+}
+
+/**
+ * One line per skill a turn views or code loads, for the turn logs: which,
+ * by whom, on what trigger and the line the owner saw.
+ */
+export const logView = (
+  turn: Turn,
+  view: { name: string; part?: string | undefined },
+  by: "model" | "code",
+  outcome: "skill" | "unchanged" | "refused",
+  status: string | null,
+  trigger: SkillTrigger | null = null
+) =>
+  console.log(
+    JSON.stringify({
+      code: "cos.skill_view",
+      turn_id: turn.turnId,
+      session_id: turn.sessionId,
+      name: view.name,
+      part: view.part ?? null,
+      by,
+      trigger,
+      outcome,
+      status,
+    })
+  )
+
+/**
+ * `skill_view`: one of the CoS's skills, or a part of one, by name. A view
+ * of text this conversation already holds unchanged returns a short note,
+ * as Hermes's dedup does; compaction or pruning drops the earlier result, so
+ * the next view returns the text again.
+ */
+export async function skillView(
+  ctx: ToolContext,
+  input: SkillViewInput,
+  _key: string,
+  turn: Turn,
+  _zone: string | null,
+  messages: readonly ModelMessage[]
+): Promise<SkillViewOutput> {
+  const skill = procedure("cos", input.name)
+  if (!skill) {
+    logView(turn, input, "model", "refused", null)
+    return refused(
+      "skill.unknown",
+      `No skill has that name. The skills are ${PROCEDURES.map((p) => p.name).join(", ")}.`
+    )
+  }
+  const held = viewedIn(messages)
+  const view = viewOf(
+    skill,
+    input.part,
+    statusOf(skill, input.step, held.at(-1)?.status),
+    input.part
+      ? undefined
+      : await ctx.kit.withOrg({ orgId: ctx.owner.orgId }, (db) =>
+          skillNotesText(db, skill.name)
+        )
+  )
+  if (!view) {
+    logView(turn, input, "model", "refused", null)
+    return refused(
+      "skill.no_part",
+      skill.parts.length > 0
+        ? `${skill.name} has no part by that name. Its parts are ${skill.parts.map((p) => p.name).join(", ")}.`
+        : `${skill.name} has no parts: its core is the whole skill.`
+    )
+  }
+  if (
+    held.some(
+      (h) =>
+        h.name === view.name &&
+        h.part === view.part &&
+        h.body === view.body &&
+        h.notes === view.notes
+    )
+  ) {
+    logView(turn, input, "model", "unchanged", null)
+    return {
+      outcome: "unchanged",
+      name: view.name,
+      ...(view.part && { part: view.part }),
+      note: "Already in this conversation, unchanged: follow it.",
+    }
+  }
+  logView(turn, input, "model", "skill", view.status)
+  return { outcome: "skill", ...view }
 }
 
 /**
@@ -123,7 +269,7 @@ export async function scheduleSkill(
   if (!schedule) {
     return refused(
       "skill.not_scheduled",
-      "That procedure has no schedule to turn on or off."
+      "That skill has no schedule to turn on or off."
     )
   }
   return kit.withOrg({ orgId: owner.orgId }, async (db) => {

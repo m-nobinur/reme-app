@@ -10,9 +10,16 @@ import { beforeEach, expect, it, vi } from "vitest"
 vi.mock("cloudflare:workers", () => ({ env: {} }))
 vi.mock("@tanstack/react-start", () => ({
   createServerFn: () => {
+    let check = (data: unknown) => data
     const builder = {
-      validator: () => builder,
-      handler: (run: () => unknown) => () => Promise.resolve().then(run),
+      validator: (fn: typeof check) => {
+        check = fn
+        return builder
+      },
+      handler:
+        (run: (input: { data: unknown }) => unknown) =>
+        (input?: { data: unknown }) =>
+          Promise.resolve().then(() => run({ data: check(input?.data) })),
     }
     return builder
   },
@@ -62,12 +69,15 @@ beforeEach(() => {
   createOrgForSession.mockResolvedValue(REFRESHED)
 })
 
-it("writes the organisation the signup asked for, and the session that carries it", async () => {
-  expect(await retryOrgWrite()).toBe(true)
+it("writes the organisation the signup asked for, with the browser's zone, and the session that carries it", async () => {
+  expect(await retryOrgWrite({ data: { timeZone: "Europe/London" } })).toBe(
+    true
+  )
   expect(createOrgForSession).toHaveBeenCalledWith({
     sealedSession: SEALED,
     workosUserId: "user_probe",
     name: "Sparkle Clean",
+    timeZone: "Europe/London",
   })
   expect(writeSession).toHaveBeenCalledWith(REFRESHED)
   expect(intent.clear).toHaveBeenCalledOnce()

@@ -38,6 +38,26 @@ test("on a phone nothing scrolls sideways", async ({ page }) => {
   expect(composer.right).toBeLessThanOrEqual(390)
 })
 
+for (const theme of ["light", "dark"]) {
+  test(`on a phone the floating pill sits under the page, ${theme}`, async ({
+    page,
+  }) => {
+    await open(page, "WorkspaceShell floating", 390, theme)
+    const bottoms = await page.evaluate(() => ({
+      page: document.querySelector("#main")?.getBoundingClientRect().bottom,
+      pill: document.querySelector("#workspace-panel")?.getBoundingClientRect()
+        .top,
+    }))
+    expect(bottoms.pill).toBeGreaterThanOrEqual(bottoms.page ?? Infinity)
+    await page.locator("#workspace-panel").screenshot({
+      path: test.info().outputPath(`floating-pill-390-${theme}.png`),
+    })
+    await page.screenshot({
+      path: test.info().outputPath(`floating-shell-390-${theme}.png`),
+    })
+  })
+}
+
 for (const width of [390, 1440]) {
   test(`at ${width} wide the floating pill keeps no room and fits`, async ({
     page,
@@ -56,5 +76,30 @@ for (const width of [390, 1440]) {
         () => document.documentElement.scrollWidth > window.innerWidth
       )
     ).toBe(false)
+  })
+}
+
+for (const width of [390, 500]) {
+  test(`at ${width} wide the folded pill ends above the thread, however tall its line grows`, async ({
+    page,
+  }) => {
+    await open(page, "Conversation", width)
+    const gap = () =>
+      page.evaluate(() => {
+        const pill = document.querySelector("#workspace-panel")
+        const thread = document.querySelector(
+          '[data-slot="aui_thread-viewport"]'
+        )
+        if (!pill || !thread) throw new Error("no panel or thread")
+        return (
+          thread.getBoundingClientRect().top -
+          pill.getBoundingClientRect().bottom
+        )
+      })
+    expect(await gap()).toBeGreaterThanOrEqual(0)
+    await page.addStyleTag({
+      content: "#workspace-panel > button { min-height: 5rem }",
+    })
+    await expect.poll(gap).toBeGreaterThanOrEqual(0)
   })
 }

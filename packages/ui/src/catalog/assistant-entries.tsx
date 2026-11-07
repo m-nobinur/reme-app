@@ -1,10 +1,13 @@
 import {
   AssistantRuntimeProvider,
+  AuiConfig,
+  type DictationAdapter,
   type ThreadMessageLike,
-  type ThreadSuggestion,
+  Tools,
+  useAui,
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
-import { CopyIcon } from "@phosphor-icons/react"
+import { CopyIcon, GlobeIcon, GoogleLogoIcon } from "@phosphor-icons/react"
 import {
   ADDRESS_ASK,
   type AskChoiceInput,
@@ -15,6 +18,7 @@ import {
   PALETTES,
   PRONOUNS,
   type QuoteField,
+  type ServerMessageKind,
   TEMPLATES,
   TONES,
   TOOL_CALL_CANCELLED,
@@ -24,19 +28,13 @@ import {
 } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { ChoiceForm } from "@workspace/ui/components/assistant/ask-choice"
-import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
-import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
-import {
-  AnswerBuildQuestionProvider,
-  BuildQuestionsUI,
-} from "@workspace/ui/components/assistant/build-questions"
+import { BuildQuestionsUI } from "@workspace/ui/components/assistant/build-questions"
 import {
   type DomainPurchase,
-  DomainPurchaseProvider,
+  SKIP_DOMAIN,
 } from "@workspace/ui/components/assistant/buy-domain"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
-import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
-import { AlwaysAllowProvider } from "@workspace/ui/components/assistant/decision"
+import { ChipRow } from "@workspace/ui/components/assistant/chip-row"
 import { makeEnquiryCardUI } from "@workspace/ui/components/assistant/enquiry-card"
 import { ConnectGoogleRow } from "@workspace/ui/components/assistant/google"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
@@ -44,22 +42,29 @@ import { PayDialog } from "@workspace/ui/components/assistant/pay-dialog"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
 import { QuoteFormPreview } from "@workspace/ui/components/assistant/quote-form-preview"
+import { ReplyPill } from "@workspace/ui/components/assistant/reply-pill"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
   OWNER_QUICK_ACTIONS,
   SITE_CHANGE_MODE,
   Thread,
+  type ThreadDictation,
   type ThreadProps,
 } from "@workspace/ui/components/assistant/thread"
 import {
+  NewChatPending,
   ThreadHistorySkeleton,
   ThreadPending,
+  ThreadWelcomeView,
 } from "@workspace/ui/components/assistant/thread-pending"
+import { ownerToolkit } from "@workspace/ui/components/assistant/toolkit"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
-import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
 import {
+  DockedUpdates,
+  type Update,
   UpdateDeck,
+  UpdateIcon,
   UpdateKindIcon,
   UpdateRow,
 } from "@workspace/ui/components/assistant/update-deck"
@@ -79,8 +84,15 @@ import {
 } from "@workspace/ui/components/tooltip"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import { BROKEN, designText } from "@workspace/ui/lib/tool-state"
-import { type ReactNode, useState } from "react"
+import {
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react"
 import { ICON } from "./panel-entries"
 import {
   INPUT as ASK_DESIGN_INPUT,
@@ -113,6 +125,9 @@ import {
 // under load because a slow paint changes which entries are painted while off
 // screen. `catalog.spec.ts` now asserts no scroll-to-bottom button is visible,
 // so a height that is too tight fails with that message rather than flaking.
+/** The cards a thread draws, registered as the app registers them. */
+const TOOLKIT = AuiConfig({ tools: Tools({ toolkit: ownerToolkit }) })
+
 /** A fixed zone, so the catalog reads the same on every machine, and the one open question. */
 const COS_TOOLS_FIXTURE = {
   zone: "Europe/London",
@@ -131,11 +146,17 @@ const REMEMBER_CALL: ThreadMessageLike[] = [
     content: [
       {
         args: {
-          operations: [{ action: "add", text: "Prefers calls after 4pm" }],
+          target: "user",
+          operations: [{ action: "add", content: "Prefers calls after 4pm" }],
         },
-        result: { outcome: "saved", note: "Saved.", fullness: "3 of 40" },
-        toolCallId: "call_remember",
-        toolName: "remember",
+        result: {
+          outcome: "saved",
+          target: "user",
+          note: "Saved.",
+          fullness: "1%, 23/1,600 chars",
+        },
+        toolCallId: "call_memory",
+        toolName: "memory",
         type: "tool-call",
       },
       { text: "Got it, after 4pm from now on.", type: "text" },
@@ -148,15 +169,17 @@ function FixtureThread({
   height = "h-[48rem]",
   messages,
   settings,
-  suggestions,
   isDisabled = true,
   isRunning = false,
   isLoading = false,
   bare = false,
   rates = false,
   stored,
+  dictation,
   children,
 }: {
+  /** What the mic listens through; without one the mic is disabled. */
+  dictation?: DictationAdapter
   /** Mounted beside the thread, as the app mounts what registers a part's card. */
   children?: ReactNode
   /** The thread is this stored conversation, as at `/app/c/$id`. */
@@ -168,7 +191,6 @@ function FixtureThread({
   bare?: boolean
   messages: ThreadMessageLike[]
   settings?: Omit<ThreadProps, "components" | "autoFocus">
-  suggestions?: ThreadSuggestion[]
   isDisabled?: boolean
   isRunning?: boolean
   isLoading?: boolean
@@ -185,9 +207,11 @@ function FixtureThread({
     isRunning,
     messages,
     onNew: noop,
-    suggestions,
+    // A card's answer goes nowhere in a fixture, which is not an error.
+    onAddToolResult: noop,
     adapters: {
       ...(rates ? { feedback: { submit: noop } } : {}),
+      ...(dictation ? { dictation } : {}),
       ...(stored
         ? {
             threadList: {
@@ -207,7 +231,7 @@ function FixtureThread({
   })
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
+    <AssistantRuntimeProvider config={TOOLKIT} runtime={runtime}>
       {children}
       <div
         className={
@@ -216,13 +240,13 @@ function FixtureThread({
             : `${height} overflow-hidden rounded-3xl border border-border`
         }
       >
-        <CosToolsProvider value={COS_TOOLS_FIXTURE}>
+        <ChatServicesProvider value={{ cosTools: COS_TOOLS_FIXTURE }}>
           <Thread
             autoFocus={false}
             components={{ ToolFallback: Approval }}
             {...settings}
           />
-        </CosToolsProvider>
+        </ChatServicesProvider>
       </div>
     </AssistantRuntimeProvider>
   )
@@ -262,12 +286,87 @@ function TrayStates({
   )
 }
 
-/** The composer's surroundings as the owner app sets them: the "+" starters. */
-const SUGGESTIONS: ThreadSuggestion[] = [
-  { prompt: "What changed in the new version?" },
-  { prompt: "What do you need from me?" },
-  { prompt: "What is on my website now?" },
+const HEARD = "Please book a clean for Friday morning"
+
+/**
+ * A running dictation that, unless `quiet`, has heard the start of a
+ * sentence; its cancel ends it as the app's adapter does.
+ */
+function listening(quiet = false): DictationAdapter & ThreadDictation {
+  let current: DictationAdapter.Session | undefined
+  return {
+    listen: () => {
+      const ended = new Set<(result: DictationAdapter.Result) => void>()
+      const session: DictationAdapter.Session = {
+        status: { type: "running" },
+        stop: async () => undefined,
+        cancel: () => {
+          session.status = { type: "ended", reason: "cancelled" }
+          for (const callback of ended) callback({ transcript: "" })
+        },
+        onSpeechStart: () => () => undefined,
+        onSpeechEnd: (callback) => {
+          ended.add(callback)
+          return () => void ended.delete(callback)
+        },
+        onSpeech: (callback) => {
+          if (!quiet) {
+            queueMicrotask(() =>
+              callback({ transcript: HEARD, isFinal: false })
+            )
+          }
+          return () => undefined
+        },
+      }
+      current = session
+      return session
+    },
+    cancel: () => current?.cancel(),
+    onLevel: (listener) => {
+      if (!quiet) listener(0.7)
+      return () => undefined
+    },
+  }
+}
+
+const LISTENING = listening()
+const QUIET = listening(true)
+
+/** Starts the dictation as the owner's tap on the mic would. */
+function StartDictating() {
+  const aui = useAui()
+  useEffect(() => {
+    aui.composer().startDictation()
+  }, [aui])
+  return null
+}
+
+/** More than a phone's width holds, as the owner's follow-ups can be. */
+const LONG_SUGGESTIONS = [
+  { prompt: "Draft three onboarding prompts" },
+  { prompt: "Turn this into a checklist" },
+  { prompt: "Write copy for the welcome screen" },
+  { prompt: "Summarise this week's enquiries" },
 ]
+
+/** A row of chips on a phone, scrolled in from both edges so both fades show. */
+function ScrolledChips() {
+  const box = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    box.current
+      ?.querySelector('[data-slot="chip-row"]')
+      ?.scrollTo({ left: 120 })
+  }, [])
+  return (
+    <div className="w-[390px] px-4" ref={box}>
+      <ChipRow aria-label="Suggestions" role="group">
+        {LONG_SUGGESTIONS.map(({ prompt }) => (
+          <ReplyPill key={prompt}>{prompt}</ReplyPill>
+        ))}
+      </ChipRow>
+    </div>
+  )
+}
 
 /** A thread as the app mounts it for the owner: its composer settings, and thumbs on every reply with words. */
 function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
@@ -307,7 +406,9 @@ function SiteChangeThread() {
 /** Stored messages carry the day they were written; the runtime's own date is render time. */
 const on = (at: string, message: ThreadMessageLike): ThreadMessageLike => ({
   ...message,
-  metadata: { custom: { createdAt: `2026-09-${at}Z` } },
+  metadata: {
+    custom: { ...message.metadata?.custom, createdAt: `2026-09-${at}Z` },
+  },
 })
 
 const noop = async () => undefined
@@ -321,6 +422,56 @@ const ask = (text: string): ThreadMessageLike => ({
   content: [{ text, type: "text" }],
   role: "user",
 })
+
+/** A comparison the owner asked for, drawn with every `present` component; the Image is outside the vocabulary, so it is dropped. */
+const PRESENTED: ThreadMessageLike[] = [
+  ask("Should I offer weekly or fortnightly cleans?"),
+  {
+    content: [
+      {
+        text: "Weekly suits your busier homes; here's how the two compare.",
+        type: "text",
+      },
+      {
+        args: {
+          _type: "Card",
+          title: "Weekly or fortnightly",
+          children: [
+            {
+              _type: "Table",
+              columns: ["", "Weekly", "Fortnightly"],
+              rows: [
+                ["Price per visit", "£60", "£70"],
+                ["Visits a month", "4", "2"],
+                ["Best for", "Families, pets", "Flats, couples"],
+              ],
+            },
+            { _type: "Fact", label: "Your area", value: "Bristol and Bath" },
+            { _type: "Image", src: "https://example.com/x.png", alt: "x" },
+            { _type: "Text", text: "Most cleaners in Bristol offer both." },
+            {
+              _type: "Steps",
+              steps: ["Add both to your prices", "Show them on the quote form"],
+            },
+            {
+              _type: "Checklist",
+              items: [
+                { label: "Prices set", done: true },
+                { label: "Days you work" },
+              ],
+            },
+          ],
+        },
+        result: { outcome: "presented" },
+        toolCallId: "call_present",
+        toolName: "present",
+        type: "tool-call",
+      },
+    ],
+    role: "assistant",
+    status: { reason: "stop", type: "complete" },
+  },
+]
 
 const PUBLISH_TARGET = {
   changes: 3,
@@ -1012,6 +1163,16 @@ const quoteField = (
   options: extra.options ?? null,
 })
 
+const PARKING = quoteField(
+  "parking",
+  "Is there parking outside the property for the driver to use",
+  "select",
+  {
+    hint: "Permits are not needed",
+    options: ["Off-street", "On-street", "None"],
+  }
+)
+
 const LIMOUSINE_QUESTIONS = [
   quoteField("pickup", "Pick-up address", "text", { hint: "Street and town" }),
   quoteField("dropoff", "Drop-off address", "text"),
@@ -1025,6 +1186,7 @@ const LIMOUSINE_QUESTIONS = [
     required: false,
     options: ["Wedding", "Airport transfer", "Night out", "Business"],
   }),
+  PARKING,
   quoteField(
     "notes",
     "Anything else we should know before we quote",
@@ -1046,8 +1208,9 @@ const EVERY_TYPE_QUESTIONS = [
   quoteField("journey_time", "Date and time of the journey", "datetime"),
   quoteField("occasion", "Occasion", "select", {
     required: false,
-    options: ["Wedding", "Airport transfer", "Night out"],
+    options: ["Wedding", "Airport transfer", "Night out", "Birthday"],
   }),
+  PARKING,
   quoteField("vehicle", "Vehicle", "radio", {
     hint: "The minibus seats up to 16",
     options: ["Saloon", "Stretch limousine", "Minibus"],
@@ -1200,6 +1363,10 @@ const REVIEW_QUOTE_OPEN: ThreadMessageLike[] = [
 /** Stands in for the web's upload: a moment's wait, then the one photo stored. */
 const fakeUpload = async (files: File[]) => {
   await new Promise((resolve) => setTimeout(resolve, 600))
+  // A way to see the card's failure state: a file named broken never goes up.
+  if (files.some((file) => file.name.startsWith("broken"))) {
+    throw new Error("The upload failed.")
+  }
   return {
     assets: files.map((file, index) => ({
       ...PHOTO,
@@ -1840,7 +2007,7 @@ const CONNECT_STEPS_PAUSED: ThreadMessageLike[] = [
 ]
 
 // What find_domain answers: a search still running, a refusal with none
-// free, then six names with buying here off, the tray docked for them.
+// free, then six names with buying here off, in the message.
 const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
   ask("No, help me get one"),
   cosCall(
@@ -1856,7 +2023,16 @@ const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
   cosCall("find_domain", "find_found", { args: {}, result: PRUNING_ROWS }),
 ]
 
-/** The same names with buying here on: Reme's price, and Continue to Your details. */
+/** Skipped, then asked again: the first list gives way to the fresh one. */
+const FIND_DOMAIN_AGAIN: ThreadMessageLike[] = [
+  ask("No, help me get one"),
+  cosCall("find_domain", "find_first", { args: {}, result: PRUNING_ROWS }),
+  ask(SKIP_DOMAIN),
+  ask("Can you show me some domains again?"),
+  cosCall("find_domain", "find_again", { args: {}, result: PRUNING_ROWS }),
+]
+
+/** The same names with buying here on: Reme's price, and Buy for it once chosen. */
 const FIND_DOMAIN_BUY_HERE: ThreadMessageLike[] = [
   ask("I don't have a website address. Can you sort one?"),
   cosCall("find_domain", "find_found_here", {
@@ -1941,7 +2117,6 @@ const CATALOG_PURCHASE: DomainPurchase = {
     missing: ["street", "city", "postal_code", "country_code"],
   }),
   elsewhere: async () => undefined,
-  bought: async (name) => ({ outcome: "not_registered_yet", name }),
   checkout: async () => ({
     outcome: "refused",
     code: "domain.buy_unavailable",
@@ -2215,6 +2390,36 @@ const answerSlowly = () =>
   new Promise<null>((done) => setTimeout(() => done(null), 400))
 
 /** Messages the assistant posted on its own, each with the button it can carry. */
+/** A decision the CoS ended its reply on, with the pills it offered. */
+const DECISION: ThreadMessageLike[] = [
+  ask("Hi, any news?"),
+  {
+    content: [
+      {
+        text: "Your website is ready to go live. Did you manage to buy brightwaycleaning.co.uk?",
+        type: "text",
+      },
+      {
+        args: {
+          choices: [
+            { label: "Bought it", send: "I've bought brightwaycleaning.co.uk" },
+            {
+              label: "Not yet",
+              send: "I haven't bought brightwaycleaning.co.uk yet",
+            },
+          ],
+        },
+        result: { outcome: "offered" },
+        toolCallId: "call_choices",
+        toolName: "offer_choices",
+        type: "tool-call",
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
 const POSTED: ThreadMessageLike[] = [
   ask("Is my domain connected?"),
   {
@@ -2634,6 +2839,60 @@ const NEW_SINCE: ThreadMessageLike[] = [
   }),
 ]
 
+/** One posted message of a kind, as the app stores it: words, then its kind. */
+const posted = (
+  at: string,
+  id: string,
+  text: string,
+  kind?: ServerMessageKind
+): ThreadMessageLike =>
+  on(at, {
+    content: [
+      { text, type: "text" },
+      ...(kind ? [{ type: "data" as const, name: "kind", data: kind }] : []),
+    ],
+    id,
+    role: "assistant",
+    status: DONE,
+  })
+
+/**
+ * Every kind of message the app posts: a reply reads as any reply, and the
+ * rest carry their label and mark, the newest in the primary colour.
+ */
+const KINDS: ThreadMessageLike[] = [
+  on("29T13:04:00.000", { ...ask("Skip for now"), id: "skip" }),
+  posted(
+    "29T13:04:02.000",
+    "srv_reply",
+    "No problem. Your site can go live on its free address, and you can add your own domain whenever you like. Next, I can connect Google Search Console, so people nearby searching for what you do can find you.",
+    "reply"
+  ),
+  posted(
+    "29T13:09:00.000",
+    "srv_update",
+    "Your website build hit a problem, so I'm starting it again. Nothing for you to do: I'll say here when the draft is ready."
+  ),
+  posted(
+    "29T13:10:00.000",
+    "srv_note",
+    "Your website build stopped again: a service it relies on kept failing. Say try again, or tell me what to change.",
+    "note"
+  ),
+  posted(
+    "29T13:31:00.000",
+    "srv_done",
+    "Your draft is ready, with Home, Services, About and Contact pages. Have a look below.",
+    "done"
+  ),
+  posted(
+    "29T15:00:00.000",
+    "srv_reminder",
+    "Reminder: “call Sam about Friday”",
+    "reminder"
+  ),
+]
+
 /**
  * The "New" rule and the update labels. The mark moves as the thread shows
  * messages, as the app's does; Open again is the next visit, with none new.
@@ -2682,6 +2941,7 @@ function SendingThread({ streamed }: { streamed: boolean }) {
     }),
     isRunning,
     messages,
+    onAddToolResult: noop,
     onNew: async (message) => {
       const sent = message.content.find((part) => part.type === "text")
       const turn = messages.length
@@ -2714,7 +2974,7 @@ function SendingThread({ streamed }: { streamed: boolean }) {
     },
   })
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
+    <AssistantRuntimeProvider config={TOOLKIT} runtime={runtime}>
       <div className="h-[44rem] overflow-hidden rounded-3xl border border-border">
         <Thread autoFocus={false} components={{ ToolFallback: Approval }} />
       </div>
@@ -2751,7 +3011,6 @@ function ConversationSample({ stored }: { stored?: string }) {
           briefing:
             "Your website is live. Your latest changes are ready to publish.",
         }}
-        suggestions={SUGGESTIONS}
       />
     </WorkspaceShell>
   )
@@ -2761,7 +3020,7 @@ function CollapsibleSample() {
   const [open, setOpen] = useState(true)
   return (
     <Collapsible className="max-w-md" onOpenChange={setOpen} open={open}>
-      <CollapsibleTrigger className="rounded-lg px-1 py-1.5 text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring">
+      <CollapsibleTrigger className="rounded-lg px-1 py-1.5 text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring">
         What changed in this revision
       </CollapsibleTrigger>
       <CollapsibleContent className="px-1 pt-1 text-sm">
@@ -2801,6 +3060,186 @@ const READY = {
   onApprove: noop,
   onMakeChanges: noop,
 }
+
+/** A question as the stack shows it. */
+const questionRow = (id: string, title: string) => ({
+  id,
+  content: (
+    <UpdateRow
+      action={
+        <Button size="sm" variant="outline">
+          Answer
+        </Button>
+      }
+      icon={<UpdateKindIcon kind="question" />}
+      meta="Sam asked"
+      title={title}
+    />
+  ),
+})
+
+/** A new chat's six updates, most pressing first. */
+const NEW_CHAT_UPDATES: Update[] = [
+  {
+    id: "site",
+    content: (
+      <SiteReady
+        meta="Not published · Today, 4:05 pm"
+        onApprove={noop}
+        onMakeChanges={noop}
+        pictures={{
+          laptop: KITCHEN,
+          "laptop-2": KITCHEN,
+          phone: KITCHEN,
+          icon: ICON,
+        }}
+        preview="loading"
+        row
+        title="Brightclean website"
+      />
+    ),
+  },
+  questionRow("areas", "Which areas do you cover?"),
+  questionRow("hours", "Do you work on Saturdays?"),
+  questionRow("prices", "What do you charge for an end of tenancy clean?"),
+  {
+    id: "reminder",
+    content: (
+      <UpdateRow
+        icon={<UpdateKindIcon kind="reminder" />}
+        meta="Reminder"
+        title="Call the window supplier"
+      />
+    ),
+  },
+  questionRow("photos", "Can you send photos of your team?"),
+]
+
+/** A new chat with its updates under the composer; `open` spreads them as a tap does. */
+function NewChatDeck({ open = false }: { open?: boolean }) {
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    box.current
+      ?.querySelector('[data-slot="update-deck"]')
+      ?.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" })
+      )
+  }, [open])
+  return (
+    <div className="contents" ref={box}>
+      <FixtureThread
+        messages={[]}
+        settings={{
+          briefing: "Your website is ready to go live.",
+          updates: <UpdateDeck updates={NEW_CHAT_UPDATES} />,
+        }}
+      />
+    </div>
+  )
+}
+
+/** The journey's row in the update stack, as the app draws it. */
+const journeyRow = (title: string, label: string, google = false) => ({
+  id: google ? "google" : "address",
+  content: (
+    <UpdateRow
+      action={
+        <Button size="sm" variant="outline">
+          {label}
+        </Button>
+      }
+      icon={<UpdateIcon icon={google ? GoogleLogoIcon : GlobeIcon} />}
+      title={title}
+    />
+  ),
+})
+
+/**
+ * A conversation's update stack above the composer, in one journey state:
+ * the ready card docked as one of its items (`site`), the journey's rows
+ * before it (`lead`) or after it (`tail`).
+ */
+function StackedReady({
+  lead = [],
+  tail = [],
+  site = true,
+}: {
+  lead?: Update[]
+  tail?: Update[]
+  site?: boolean
+}) {
+  const [spot, setSpot] = useState<HTMLElement | null>(null)
+  const card = {
+    id: "site",
+    content: <div className="flex min-w-0 flex-1" ref={setSpot} />,
+  }
+  return (
+    <>
+      {site ? <SiteReady {...READY} docked spot={spot} /> : null}
+      <DockedUpdates updates={[...lead, ...(site ? [card] : []), ...tail]} />
+    </>
+  )
+}
+
+/** Each state of the stack in a conversation, from the journey (`journeyItem` in apps/web). */
+const STACK_STATES: [string, ReactNode, ThreadMessageLike[]?][] = [
+  [
+    "never-answered",
+    <StackedReady
+      key="never-answered"
+      tail={[journeyRow("Choose your domain", "Connect now")]}
+    />,
+  ],
+  [
+    "skipped",
+    <StackedReady
+      key="skipped"
+      tail={[
+        journeyRow("Add your domain", "Connect now"),
+        journeyRow("Get found on Google", "Connect Search Console", true),
+      ]}
+    />,
+  ],
+  [
+    "buying-elsewhere",
+    <StackedReady
+      key="buying-elsewhere"
+      lead={[journeyRow("Finished buying sparkleclean.co.uk?", "Connect it")]}
+    />,
+  ],
+  [
+    "bought",
+    <StackedReady
+      key="bought"
+      lead={[journeyRow("sparkleclean.co.uk is ready to connect", "Connect")]}
+    />,
+  ],
+  [
+    "google",
+    <StackedReady
+      key="google"
+      tail={[journeyRow("Get found on Google", "Connect Search Console", true)]}
+    />,
+  ],
+  ["google-done", <StackedReady key="google-done" />],
+  [
+    "question-open",
+    <StackedReady
+      key="question-open"
+      tail={[journeyRow("Choose your domain", "Connect now")]}
+    />,
+    ASK_FACT_OPEN.slice(0, 1),
+  ],
+  [
+    "pills-open",
+    <StackedReady
+      key="pills-open"
+      lead={[journeyRow("Finished buying sparkleclean.co.uk?", "Connect it")]}
+    />,
+    DECISION,
+  ],
+]
 
 /** The payment dialog behind its button, with test values. */
 function PayDialogSample() {
@@ -2983,25 +3422,23 @@ const assistantCatalog = [
   })),
   { name: "QuoteFormPreview", render: () => <QuotePreviewSample /> },
   // The upload card and the provider that gives it the app's upload.
-  ...(["AskUpload", "UploadPhotosProvider"] as const).map((name) => ({
+  ...(["AskUpload"] as const).map((name) => ({
     name,
     render: () => (
-      <UploadPhotosProvider value={fakeUpload}>
+      <ChatServicesProvider value={{ uploadPhotos: fakeUpload }}>
         <TrayStates
           height="h-[48rem]"
           open={ASK_UPLOAD_OPEN}
           settled={ASK_UPLOAD_STATES}
         />
-      </UploadPhotosProvider>
+      </ChatServicesProvider>
     ),
   })),
   // The design tray as a thread docks it, and the providers it reads.
-  ...(
-    ["AskDesign", "SaveDesignAnswerProvider", "TraySlotProvider"] as const
-  ).map((name) => ({
+  ...(["AskDesign", "TraySlotProvider"] as const).map((name) => ({
     name,
     render: () => (
-      <SaveDesignAnswerProvider value={async () => undefined}>
+      <ChatServicesProvider value={{ saveDesignAnswer: async () => undefined }}>
         <FixtureThread
           height="h-[44rem]"
           isDisabled={false}
@@ -3024,14 +3461,14 @@ const assistantCatalog = [
             },
           ]}
         />
-      </SaveDesignAnswerProvider>
+      </ChatServicesProvider>
     ),
   })),
   {
     // The owner's reply to a finished design tray, as chips.
     name: "DesignReply",
     render: () => (
-      <TrayServicesProvider value={TRAY_SERVICES}>
+      <ChatServicesProvider value={{ tray: TRAY_SERVICES }}>
         <FixtureThread
           height="h-[22rem]"
           messages={[
@@ -3052,7 +3489,7 @@ const assistantCatalog = [
             reply(designText(ASK_DESIGN_INPUT, DESIGN_ANSWERS)),
           ]}
         />
-      </TrayServicesProvider>
+      </ChatServicesProvider>
     ),
   },
   {
@@ -3110,10 +3547,11 @@ const assistantCatalog = [
         <FixtureThread
           height="h-[34rem]"
           messages={[ask("Hi")]}
-          settings={{ after: <SiteReady {...READY} docked /> }}
+          settings={{ after: <StackedReady /> }}
         />
         <div className="flex max-w-xl flex-col gap-6">
           <SiteReady {...READY} pending />
+          <SiteReady {...READY} held />
           <SiteReady
             {...READY}
             error="A newer version replaced that one. Check the latest before you decide."
@@ -3121,6 +3559,14 @@ const assistantCatalog = [
           <SiteReady {...READY} preview="error" />
           <SiteReady {...READY} pictures={null} preview="loading" />
           <SiteReady {...READY} approved />
+          <SiteReady
+            {...READY}
+            connect={{ label: "Connect now", onClick: noop }}
+          />
+          <SiteReady
+            {...READY}
+            connect={{ label: "Connect Search Console", onClick: noop }}
+          />
         </div>
       </div>
     ),
@@ -3134,70 +3580,44 @@ const assistantCatalog = [
       </div>
     ),
   })),
-  // A new chat's updates: the site to publish, a question and a reminder,
-  // one in front with the other two as edges under it, each a row of its own.
-  ...(["UpdateDeck", "UpdateRow", "UpdateKindIcon"] as const).map((name) => ({
+  // A conversation's update stack above the composer, the front card with
+  // its pager, one thread per journey state; with a question open, the
+  // question takes the slot. The thread tells the stack when quick replies
+  // show.
+  ...(
+    [
+      "DockedUpdates",
+      "UpdatePager",
+      "UpdateIcon",
+      "PillsShownProvider",
+    ] as const
+  ).map((name) => ({
     name,
     render: () => (
-      <FixtureThread
-        height="h-[34rem]"
-        messages={[]}
-        settings={{
-          briefing: "Your website is ready to go live.",
-          updates: (
-            <UpdateDeck
-              updates={[
-                {
-                  id: "site",
-                  content: (
-                    <SiteReady
-                      meta="Not published · Today, 4:05 pm"
-                      onApprove={noop}
-                      onMakeChanges={noop}
-                      pictures={{
-                        laptop: KITCHEN,
-                        "laptop-2": KITCHEN,
-                        phone: KITCHEN,
-                        icon: ICON,
-                      }}
-                      preview="loading"
-                      row
-                      title="Brightclean website"
-                    />
-                  ),
-                },
-                {
-                  id: "question",
-                  content: (
-                    <UpdateRow
-                      action={
-                        <Button size="sm" variant="outline">
-                          Answer
-                        </Button>
-                      }
-                      icon={<UpdateKindIcon kind="question" />}
-                      meta="Sam asked"
-                      title="Which areas do you cover?"
-                    />
-                  ),
-                },
-                {
-                  id: "reminder",
-                  content: (
-                    <UpdateRow
-                      icon={<UpdateKindIcon kind="reminder" />}
-                      meta="Reminder"
-                      title="Call the window supplier"
-                    />
-                  ),
-                },
-              ]}
+      <div className="flex flex-col gap-6">
+        {STACK_STATES.map(([state, stack, messages]) => (
+          <div data-state={state} key={state}>
+            <FixtureThread
+              height={messages ? "h-[40rem]" : "h-[22rem]"}
+              // An open question docks as it does in the app.
+              isDisabled={!messages}
+              messages={messages ?? [ask("Hi")]}
+              settings={{ after: stack }}
             />
-          ),
-        }}
-      />
+          </div>
+        ))}
+      </div>
     ),
   })),
+  // A new chat's updates, under the composer: the site to publish in front,
+  // questions and reminders behind it as edges.
+  ...(["UpdateDeck", "UpdateRow", "UpdateKindIcon"] as const).map((name) => ({
+    name,
+    render: () => <NewChatDeck />,
+  })),
+  // The same stack spread out, as a tap leaves it: four cards in view, the
+  // rest scrolling inside it.
+  { name: "UpdateDeck open", render: () => <NewChatDeck open /> },
   {
     name: "RequestChange",
     render: () => (
@@ -3206,9 +3626,7 @@ const assistantCatalog = [
   },
   // The card the three tools share, its outcome lines and its provider, on
   // a waiting card, a done one and a refused one.
-  ...(
-    ["Decision", "Done", "Problem", "TrayApproval", "CosToolsProvider"] as const
-  ).map((name) => ({
+  ...(["Decision", "Done", "Problem", "TrayApproval"] as const).map((name) => ({
     name,
     render: () => (
       <FixtureThread
@@ -3223,16 +3641,16 @@ const assistantCatalog = [
   })),
   // A waiting card with the app's tap behind it, so Always allow shows.
   {
-    name: "AlwaysAllowProvider",
+    name: "ChatServicesProvider",
     render: () => (
-      <AlwaysAllowProvider value={() => undefined}>
+      <ChatServicesProvider value={{ alwaysAllow: () => undefined }}>
         <FixtureThread
           height="h-[14rem]"
           messages={[CREATE_REMINDER_STATES[2]].filter(
             (message) => message !== undefined
           )}
         />
-      </AlwaysAllowProvider>
+      </ChatServicesProvider>
     ),
   },
   {
@@ -3285,9 +3703,9 @@ const assistantCatalog = [
     render: () => (
       <div className="flex flex-col gap-4">
         <FixtureThread height="h-[44rem]" messages={CONNECT_STEPS_NOW} />
-        <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+        <ChatServicesProvider value={{ domainPurchase: CATALOG_PURCHASE }}>
           <FixtureThread height="h-[56rem]" messages={CONNECT_STEPS_PAUSED} />
-        </DomainPurchaseProvider>
+        </ChatServicesProvider>
       </div>
     ),
   },
@@ -3306,25 +3724,24 @@ const assistantCatalog = [
   {
     name: "FindDomain",
     render: () => (
-      <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+      <ChatServicesProvider value={{ domainPurchase: CATALOG_PURCHASE }}>
         <div className="flex flex-col gap-4">
           <FixtureThread height="h-[64rem]" messages={FIND_DOMAIN_STATES} />
           <FixtureThread height="h-[48rem]" messages={FIND_DOMAIN_BUY_HERE} />
+          <FixtureThread height="h-[56rem]" messages={FIND_DOMAIN_AGAIN} />
         </div>
-      </DomainPurchaseProvider>
+      </ChatServicesProvider>
     ),
   },
   // The purchase card, its tray and the provider that gives it the app's checkout.
-  ...(["BuyDomain", "BuyTray", "DomainPurchaseProvider"] as const).map(
-    (name) => ({
-      name,
-      render: () => (
-        <DomainPurchaseProvider value={CATALOG_PURCHASE}>
-          <FixtureThread height="h-[260rem]" messages={BUY_DOMAIN_STATES} />
-        </DomainPurchaseProvider>
-      ),
-    })
-  ),
+  ...(["BuyDomain", "BuyTray"] as const).map((name) => ({
+    name,
+    render: () => (
+      <ChatServicesProvider value={{ domainPurchase: CATALOG_PURCHASE }}>
+        <FixtureThread height="h-[260rem]" messages={BUY_DOMAIN_STATES} />
+      </ChatServicesProvider>
+    ),
+  })),
   // Opened from its button: Stripe.js cannot start here, so the payment side
   // shows its "did not load" line beside the order summary.
   { name: "PayDialog", render: () => <PayDialogSample /> },
@@ -3361,7 +3778,7 @@ const assistantCatalog = [
     (name) => ({
       name,
       render: () => (
-        <AnswerBuildQuestionProvider value={answerSlowly}>
+        <ChatServicesProvider value={{ answerBuildQuestion: answerSlowly }}>
           <OwnerThread
             height="h-[32rem]"
             messages={ADDRESS_QUESTIONS}
@@ -3369,27 +3786,39 @@ const assistantCatalog = [
           >
             <BuildQuestionsUI />
           </OwnerThread>
-        </AnswerBuildQuestionProvider>
+        </ChatServicesProvider>
       ),
     })
   ),
+  // A comparison the model composed, on a phone.
+  {
+    name: "Present",
+    render: () => (
+      <div className="w-[390px]">
+        <OwnerThread height="h-[44rem]" messages={PRESENTED} />
+      </div>
+    ),
+  },
+  // The newest decision's quick replies, the recommendation first.
+  {
+    name: "DecisionPills",
+    render: () => <OwnerThread height="h-[32rem]" messages={DECISION} />,
+  },
   // The question stack and the provider that gives it the app's answer call.
-  ...(["BuildQuestionsUI", "AnswerBuildQuestionProvider"] as const).map(
-    (name) => ({
-      name,
-      render: () => (
-        <AnswerBuildQuestionProvider value={answerSlowly}>
-          <OwnerThread
-            height="h-[40rem]"
-            messages={BUILD_QUESTIONS}
-            stored="00000000-0000-4000-8000-0000000000a1"
-          >
-            <BuildQuestionsUI />
-          </OwnerThread>
-        </AnswerBuildQuestionProvider>
-      ),
-    })
-  ),
+  ...(["BuildQuestionsUI"] as const).map((name) => ({
+    name,
+    render: () => (
+      <ChatServicesProvider value={{ answerBuildQuestion: answerSlowly }}>
+        <OwnerThread
+          height="h-[40rem]"
+          messages={BUILD_QUESTIONS}
+          stored="00000000-0000-4000-8000-0000000000a1"
+        >
+          <BuildQuestionsUI />
+        </OwnerThread>
+      </ChatServicesProvider>
+    ),
+  })),
   {
     name: "ChangeAskedUI",
     render: () => (
@@ -3447,13 +3876,131 @@ const assistantCatalog = [
       </div>
     ),
   },
-  {
-    name: "Thread",
+  // The thread and the parts its own files share between them.
+  ...(
+    [
+      "Thread",
+      "Composer",
+      "SkipThisOne",
+      "RecapReplies",
+      "LatestChoices",
+      "ThreadComponentsContext",
+      "ThreadSettingsContext",
+      "ThreadRevealContext",
+      "NewSinceContext",
+      "DateDivider",
+      "NewDivider",
+      "UpdateLabel",
+      "AssistantMessage",
+      "UserMessage",
+      "KeepTurnAnchor",
+      "FollowBottom",
+      "ThreadScrollToBottom",
+    ] as const
+  ).map((name) => ({
+    name,
     render: () => <OwnerThread height="h-[56rem]" messages={CONVERSATION} />,
+  })),
+  { name: "ChipRow", render: () => <ScrolledChips /> },
+  {
+    // On a phone, mid-sentence: the words so far in the field, the mic now a stop.
+    name: "ThreadDictating",
+    render: () => (
+      <div className="w-[390px]">
+        <OwnerThread
+          dictation={LISTENING}
+          height="h-[32rem]"
+          isDisabled={false}
+          messages={DECISION}
+          settings={{ dictation: LISTENING }}
+        >
+          <StartDictating />
+        </OwnerThread>
+      </div>
+    ),
+  },
+  {
+    // Listening before a word is heard: the dots still and dim, the field waiting.
+    name: "ThreadListening",
+    render: () => (
+      <div className="w-[390px]">
+        <OwnerThread
+          dictation={QUIET}
+          height="h-[32rem]"
+          isDisabled={false}
+          messages={[]}
+          settings={{ dictation: QUIET }}
+        >
+          <StartDictating />
+        </OwnerThread>
+      </div>
+    ),
+  },
+  {
+    // The mic would not open: a few words under the field, typed text left alone.
+    name: "ThreadDictationNotice",
+    render: () => (
+      <div className="w-[390px]">
+        <OwnerThread
+          dictation={LISTENING}
+          height="h-[32rem]"
+          isDisabled={false}
+          messages={DECISION}
+          settings={{
+            dictationNotice:
+              "Microphone access is off. Allow it in your browser to dictate.",
+          }}
+        />
+      </div>
+    ),
+  },
+  {
+    // The new chat on a phone, its mic ready: tap it, or hold Space in the field.
+    name: "ThreadEmptyPhone",
+    render: () => (
+      <div className="w-[390px]">
+        <OwnerThread
+          dictation={LISTENING}
+          height="h-[32rem]"
+          isDisabled={false}
+          messages={[]}
+          settings={{ dictation: LISTENING }}
+        />
+      </div>
+    ),
+  },
+  {
+    // The new chat greets with the face the owner picked for their assistant.
+    name: "ThreadEmptyAvatar",
+    render: () => (
+      <OwnerThread
+        height="h-[32rem]"
+        isDisabled={false}
+        messages={[]}
+        settings={{ assistant: "Sam", avatar: "she_1" }}
+      />
+    ),
   },
   {
     name: "ThreadLongMessage",
     render: () => <OwnerThread height="h-[60rem]" messages={LONG_MESSAGES} />,
+  },
+  {
+    name: "ThreadFromWhatsApp",
+    render: () => (
+      <OwnerThread
+        height="h-[24rem]"
+        messages={[
+          on("07T09:12:00", {
+            ...reply("Can you remind me to chase the Patel quote?"),
+            metadata: {
+              custom: { createdAt: "2026-09-07T09:12:00Z", source: "whatsapp" },
+            },
+          }),
+          on("07T09:13:00", reply("Thanks, now from the web.")),
+        ]}
+      />
+    ),
   },
   {
     name: "ThreadEmpty",
@@ -3466,7 +4013,6 @@ const assistantCatalog = [
           briefing:
             "Your website is live. Your latest changes are ready to publish.",
         }}
-        suggestions={SUGGESTIONS}
       />
     ),
   },
@@ -3483,6 +4029,10 @@ const assistantCatalog = [
   { name: "ThreadReveal", render: () => <RevealSample /> },
   { name: "ThreadNewSince", render: () => <NewSinceSample /> },
   {
+    name: "ThreadMessageKinds",
+    render: () => <OwnerThread height="h-[40rem]" messages={KINDS} />,
+  },
+  {
     name: "ThreadLoading",
     render: () => (
       <OwnerThread
@@ -3490,6 +4040,7 @@ const assistantCatalog = [
         isDisabled={false}
         isLoading
         messages={[]}
+        stored="stored-loading"
       />
     ),
   },
@@ -3511,6 +4062,28 @@ const assistantCatalog = [
     ),
   },
   {
+    // What the server sends for a new chat before the chat chunk loads.
+    name: "NewChatPending",
+    render: () => (
+      <div className="h-128">
+        <NewChatPending
+          avatar={null}
+          briefing="Your website is ready to go live."
+          updates={3}
+        />
+      </div>
+    ),
+  },
+  {
+    name: "ThreadWelcomeView",
+    render: () => (
+      <ThreadWelcomeView
+        avatar={null}
+        briefing="Your website is ready to go live."
+      />
+    ),
+  },
+  {
     name: "ThreadRunning",
     render: () => (
       <OwnerThread
@@ -3523,7 +4096,7 @@ const assistantCatalog = [
   },
   { name: "Conversation", render: () => <ConversationSample /> },
   // A stored conversation with nothing in it yet, as onboarding opens: the
-  // same welcome and suggestions, composer in the middle.
+  // same welcome, composer in the middle.
   {
     name: "Conversation stored and empty",
     render: () => <ConversationSample stored="stored-1" />,

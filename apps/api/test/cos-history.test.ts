@@ -3,6 +3,7 @@ import { convertToModelMessages, tool, validateUIMessages } from "ai"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   CONTEXT_POLICY,
+  continuable,
   deriveCosMessages,
   type SessionEvent,
   sha256,
@@ -189,10 +190,7 @@ const tools = {
  * The eval replay derives an old turn with its logged version, so a version's
  * numbers never change: a new policy is a new row and a new version.
  */
-const RELEASED: Record<
-  string,
-  { turns: number; toolTurns: number; historyTokens?: number }
-> = {
+const RELEASED: Record<string, Record<string, number>> = {
   "1": { turns: 12, toolTurns: 2 },
   "2": { turns: 12, toolTurns: 2 },
   "3": { turns: 12, toolTurns: 2 },
@@ -211,6 +209,15 @@ const RELEASED: Record<
   "17": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "18": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "19": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "20": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "21": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "22": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "23": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "24": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "25": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
+  "26": { keepLast: 20, historyTokens: 128_000 },
+  "27": { keepLast: 20, historyTokens: 128_000 },
+  "28": { keepLast: 20, historyTokens: 128_000 },
 }
 
 describe("CONTEXT_POLICY", () => {
@@ -304,7 +311,7 @@ describe("deriveCosMessages", () => {
     expect(first).toMatch(/^[0-9a-f]{64}$/)
   })
 
-  it("keeps the newest turns, and tool calls only in the newest two", () => {
+  it("keeps every turn with its tool calls under the cap, as Hermes keeps them", () => {
     const rows: Row[] = []
     for (let i = 0; i < 14; i++) {
       rows.push(said(TURN_1, `m${i}`, `Question ${i}`))
@@ -326,21 +333,15 @@ describe("deriveCosMessages", () => {
       )
     }
     rows.push(context(TURN_1))
-    const { messages } = deriveCosMessages(session(...rows), {
-      ...CONTEXT_POLICY,
-      turns: 12,
-      toolTurns: 2,
-    })
+    const { messages } = deriveCosMessages(session(...rows), CONTEXT_POLICY)
     const ids = messages.map((m) => m.id)
-    // Turns 0 and 1 are gone; turn 5's reply held only a tool call.
-    expect(ids.slice(0, 4)).toEqual(["m2", "a2", "m3", "a3"])
-    expect(ids).not.toContain("a5")
-    expect(ids).toContain("m5")
+    expect(ids.slice(0, 4)).toEqual(["m0", "a0", "m1", "a1"])
+    expect(ids).toContain("a5")
     const calls = (id: string) =>
       messages
         .find((m) => m.id === id)
         ?.parts.filter((p) => p.type.startsWith("tool-")).length
-    expect(calls("a11")).toBe(0)
+    expect(calls("a0")).toBe(1)
     expect(calls("a12")).toBe(1)
     expect(calls("a13")).toBe(1)
     expect(messages.at(-3)?.id).toBe(`context-${TURN_1}`)
@@ -569,10 +570,147 @@ describe("deriveCosMessages", () => {
     )
     expect(deriveCosMessages(events, CONTEXT_POLICY).steps).toHaveLength(1)
   })
+})
 
-  it("refuses a policy that keeps no turns", () => {
-    expect(() =>
-      deriveCosMessages(twoTurns(), { ...CONTEXT_POLICY, turns: 0 })
-    ).toThrow(/at least one turn/)
+describe("skill views in the history", () => {
+  const T = [
+    "01K6A0000000000000000000S1",
+    "01K6A0000000000000000000S2",
+    "01K6A0000000000000000000S3",
+    "01K6A0000000000000000000S4",
+  ] as const
+  const viewed = (type: string) => ({
+    type,
+    toolCallId: `call_${type}`,
+    state: "output-available",
+    input: { name: "builds" },
+    output: {
+      outcome: "skill",
+      name: "builds",
+      body: "# Builds",
+      status: "Using my web development experience",
+    },
+  })
+
+  it("reads read_skill in an older turn as skill_view, its other calls kept", () => {
+    const { messages } = deriveCosMessages(
+      session(
+        context(T[0]),
+        said(T[0], "u1", "How is the build?"),
+        replied(T[0], "a1", [
+          { type: "step-start" },
+          viewed("tool-read_skill"),
+          {
+            type: "tool-get_workspace",
+            toolCallId: "call_ws",
+            state: "output-available",
+            input: {},
+            output: workspace,
+          },
+          { type: "text", text: "Three of seven pages.", state: "done" },
+        ]),
+        ...T.slice(1).flatMap((t, i) => [
+          context(t),
+          said(t, `u${i + 2}`, "And?"),
+          replied(t, `a${i + 2}`, [
+            { type: "text", text: "Yes.", state: "done" },
+          ]),
+        ])
+      ),
+      CONTEXT_POLICY
+    )
+    expect(
+      messages.find((m) => m.id === "a1")?.parts.map((p) => p.type)
+    ).toEqual(["step-start", "tool-skill_view", "tool-get_workspace", "text"])
+  })
+
+  it("reads a logged remember call as memory, so a conversation from before the rename replays", () => {
+    const { messages } = deriveCosMessages(
+      session(
+        context(T[0]),
+        said(T[0], "u1", "I prefer calls after 4pm"),
+        replied(T[0], "a1", [
+          { type: "step-start" },
+          {
+            type: "tool-remember",
+            toolCallId: "call_r",
+            state: "output-available",
+            input: {
+              operations: [{ action: "add", text: "Prefers calls after 4pm" }],
+            },
+            output: {
+              outcome: "saved",
+              note: "Saved. This update is complete; do not repeat it.",
+              fullness: "1%, 23/1,600 chars",
+            },
+          },
+          { type: "text", text: "Noted.", state: "done" },
+        ])
+      ),
+      CONTEXT_POLICY
+    )
+    expect(messages.find((m) => m.id === "a1")?.parts[1]).toMatchObject({
+      type: "tool-memory",
+      output: { outcome: "saved" },
+    })
+  })
+
+  // A code load is the last message of its turn; continued, the reply took
+  // its "event:" id, which no message id may hold, and the close failed.
+  it("never offers a code load as the message a reply continues", () => {
+    const { messages } = deriveCosMessages(
+      session(
+        context(T[0]),
+        said(T[0], "u1", "Help me connect my web address"),
+        [
+          "cos.skill",
+          {
+            name: "web-address",
+            body: "# Web address",
+            status: "Using my domain expertise to set up your address",
+            trigger: "connect_address",
+          },
+        ]
+      ),
+      CONTEXT_POLICY
+    )
+    expect(messages.at(-1)?.id).toMatch(/^event:/)
+    expect(continuable(messages).at(-1)?.id).toBe("u1")
+  })
+
+  it("names the skills a summary replaced, so they are viewed again", () => {
+    const { messages } = deriveCosMessages(
+      session(
+        context(T[0]),
+        said(T[0], "u1", "Help me get a domain"),
+        [
+          "cos.skill",
+          {
+            name: "web-address",
+            body: "# Web address",
+            status: "Drawing on my domain expertise to find a name",
+            trigger: "address_no",
+          },
+        ],
+        replied(T[0], "a1", [
+          { type: "step-start" },
+          viewed("tool-skill_view"),
+        ]),
+        [
+          "cos.compaction",
+          {
+            summary: "They want a domain.",
+            replaced_range: { from_seq: 1, to_seq: 3 },
+            dropped_refs: [],
+          },
+        ],
+        context(T[1]),
+        said(T[1], "u2", "Go on")
+      ),
+      CONTEXT_POLICY
+    )
+    expect(JSON.stringify(messages)).toContain(
+      "reload them first: skill_view(name='web-address'); skill_view(name='builds')."
+    )
   })
 })

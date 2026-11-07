@@ -9,6 +9,18 @@ import {
 } from "./assignment.ts"
 import { AgentNote } from "./build-notes.ts"
 import {
+  ChannelLink,
+  ChannelLinkPatch,
+  ChannelLinkStarted,
+  ChannelsState,
+  NumberOffer,
+  NumberPurchase,
+  NumberPurchaseState,
+  NumberSearch,
+  WhatsAppAccount,
+  WhatsAppSignupComplete,
+} from "./channels.ts"
+import {
   AskChoiceInput,
   AskChoiceOutput,
   AskDesignInput,
@@ -28,6 +40,7 @@ import {
 } from "./chat.ts"
 import {
   BuildQuestionsPart,
+  ChoicesPart,
   Conversation,
   ConversationHistory,
   ConversationList,
@@ -36,6 +49,7 @@ import {
   MessageFeedback,
   QuestionReply,
   ServerButtonPart,
+  ServerKindPart,
   ServerMessage,
 } from "./conversation.ts"
 import {
@@ -81,6 +95,8 @@ import {
   GetReviewOutput,
   InspectDomainInput,
   InspectDomainOutput,
+  OfferChoicesInput,
+  OfferChoicesOutput,
   OfferGrantInput,
   OfferGrantOutput,
   PutOffInput,
@@ -89,6 +105,8 @@ import {
   RecordReviewOutput,
   RemoveDomainInput,
   RemoveDomainOutput,
+  SearchConversationsInput,
+  SearchConversationsOutput,
   SetTimeZoneInput,
   SetTimeZoneOutput,
   UpdateReminderInput,
@@ -120,15 +138,17 @@ import { EventEnvelope } from "./event.ts"
 import { FactRecord, FactSnapshot } from "./fact.ts"
 import {
   MemoryChip,
+  MemoryInput,
+  MemoryOutput,
   MemoryProposal,
   MemoryReviewAction,
-  MemoryUndo,
   MemoryView,
   OwnerMemoryReview,
   OwnerProfile,
   ProfileLine,
   RememberInput,
   RememberOutput,
+  SkillNotes,
 } from "./memory.ts"
 import {
   Asset,
@@ -212,6 +232,16 @@ import {
  * Schema, gets no OpenAPI component, and no test.
  */
 export const contracts = {
+  ChannelLink,
+  ChannelLinkPatch,
+  ChannelLinkStarted,
+  ChannelsState,
+  NumberOffer,
+  NumberPurchase,
+  NumberPurchaseState,
+  NumberSearch,
+  WhatsAppAccount,
+  WhatsAppSignupComplete,
   AgentNote,
   Activity,
   ActivityFeed,
@@ -329,15 +359,17 @@ export const contracts = {
   JobRun,
   MessageFeedback,
   MemoryChip,
+  MemoryInput,
+  MemoryOutput,
   MemoryProposal,
   MemoryReviewAction,
-  MemoryUndo,
   MemoryView,
   OwnerMemoryReview,
   OwnerProfile,
   ProfileLine,
   RememberInput,
   RememberOutput,
+  SkillNotes,
   OnboardingStatus,
   Org,
   OrgSchedule,
@@ -357,9 +389,13 @@ export const contracts = {
   ApprovalGrantSwitch,
   PutOffInput,
   PutOffOutput,
+  OfferChoicesInput,
+  OfferChoicesOutput,
   QuoteField,
   RecordReviewInput,
   RecordReviewOutput,
+  SearchConversationsInput,
+  SearchConversationsOutput,
   RedirectPointer,
   HoldingPointer,
   RemoveDomainInput,
@@ -369,6 +405,8 @@ export const contracts = {
   ReviewQuoteFormOutput,
   RuntimeSpec,
   ServerButtonPart,
+  ServerKindPart,
+  ChoicesPart,
   ServerMessage,
   BuildQuestionsPart,
   QuestionReply,

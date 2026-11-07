@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card"
 import { DefinitionList } from "@workspace/ui/components/definition-list"
+import { MemoryLines } from "@workspace/ui/components/memory-lines"
 import { OrgTree } from "@workspace/ui/components/org-tree"
 import {
   Table,
@@ -205,6 +206,35 @@ function TargetSample() {
 }
 
 const productCatalog: Entry[] = [
+  {
+    // One skill's notes for the business: one line in use, one stale.
+    name: "MemoryLines",
+    render: () => (
+      <div className="max-w-xl">
+        <MemoryLines
+          description="How you like this work done, used whenever your assistant drafts a quote reply."
+          heading="h3"
+          id="catalog-memory-lines"
+          lines={[
+            {
+              id: "1",
+              text: "City centre quotes add the parking costs",
+              source: "You said it",
+            },
+            {
+              id: "2",
+              text: "Prefers quotes rounded to the nearest five pounds",
+              source: "Learned from chat",
+              stale: true,
+            },
+          ]}
+          max={800}
+          title="Quote reply"
+          used={89}
+        />
+      </div>
+    ),
+  },
   {
     name: "Badge",
     render: () => (

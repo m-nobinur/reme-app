@@ -1,12 +1,15 @@
 import { useAuiState } from "@assistant-ui/react"
+import { ChipRow } from "@workspace/ui/components/assistant/chip-row"
 import { Button } from "@workspace/ui/components/button"
-import { composerIdle } from "@workspace/ui/hooks/use-reveal-waiting"
+import { useFocusWhenIdle } from "@workspace/ui/hooks/use-reveal-waiting"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
   createContext,
+  type Dispatch,
   type ReactNode,
   type RefObject,
+  type SetStateAction,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -21,6 +24,17 @@ const INTO_COMPOSER_MS = 200
 type Into = (pill: HTMLElement, then: () => unknown) => void
 
 const IntoComposer = createContext<Into | null>(null)
+
+/** How many rows of quick replies the thread shows above its composer, and the way to count one. */
+type Shown = { rows: number; set: Dispatch<SetStateAction<number>> }
+
+const PillsShown = createContext<Shown | null>(null)
+
+/** Lets a thread's rows of quick replies be counted, so what sits above its composer can make way for them. */
+export const PillsShownProvider = PillsShown.Provider
+
+/** Whether a row of quick replies is up in this thread, so the update stack gives way to it. */
+export const usePillsShown = () => (useContext(PillsShown)?.rows ?? 0) > 0
 
 /**
  * A quick reply: one tap sends it, and the owner's message reads its label
@@ -118,6 +132,8 @@ type Row = {
    * it acts, and the row fades out while the composer holds words.
    */
   composer?: boolean
+  /** A row above the composer on its way out: it fades and takes no taps. */
+  gone?: boolean
   /** Whether the first pill takes the focus as the row shows. */
   takesFocus?: boolean
 }
@@ -131,8 +147,8 @@ export function ReplyPills({ composer = false, ...row }: Row) {
   return composer ? <ComposerPills {...row} /> : <Pills {...row} />
 }
 
-/** Away while the composer holds words or a tapped pill is on its way, and back once it is empty again. */
-function ComposerPills(row: Row) {
+/** Away while the composer holds words, a tapped pill is on its way or the row is gone, and back once it is empty again. */
+function ComposerPills({ gone = false, ...row }: Row) {
   const typed = useAuiState((s) => !s.thread.composer.isEmpty)
   const [leaving, setLeaving] = useState(false)
   const into: Into = (pill, then) => {
@@ -140,7 +156,13 @@ function ComposerPills(row: Row) {
     setLeaving(true)
     void slide(pill, then).finally(() => setLeaving(false))
   }
-  const away = typed || leaving
+  const away = typed || leaving || gone
+  const counted = useContext(PillsShown)?.set
+  useEffect(() => {
+    if (gone || !counted) return
+    counted((rows) => rows + 1)
+    return () => counted((rows) => rows - 1)
+  }, [gone, counted])
   return (
     <IntoComposer.Provider value={into}>
       <div
@@ -160,25 +182,15 @@ function ComposerPills(row: Row) {
 function Pills({ label, children, takesFocus = true }: Row) {
   const ref = useRef<HTMLFieldSetElement>(null)
   const words = useWordsIn(ref)
-  useEffect(() => {
-    if (!words || !takesFocus) return
-    // A task on: the composer refocuses itself as a run ends.
-    const timer = setTimeout(() => {
-      if (!composerIdle()) return
-      ref.current
-        ?.querySelector<HTMLElement>("button:not(:disabled)")
-        ?.focus({ preventScroll: true })
-    })
-    return () => clearTimeout(timer)
-  }, [words, takesFocus])
+  useFocusWhenIdle(!!words && takesFocus, false, ref, "button:not(:disabled)")
   return (
     <fieldset
-      className={cn("flex min-w-0 flex-wrap gap-2", pillsIn(words))}
+      className={cn("min-w-0", pillsIn(words))}
       data-slot="reply-pills"
       ref={ref}
     >
       <legend className="sr-only">{label}</legend>
-      {children}
+      <ChipRow>{children}</ChipRow>
     </fieldset>
   )
 }

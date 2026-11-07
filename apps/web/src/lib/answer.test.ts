@@ -74,7 +74,7 @@ it("names the input a fact's answer failed on", () => {
   expect(
     answerValue({ kind: "fact", key: "business.phone" }, form({ e164: "soon" }))
   ).toEqual({
-    error: "Enter a valid number customers can ring.",
+    error: "Enter a valid phone number.",
   })
   // A UK number one digit short passes E.164 but not the UK shape.
   expect(
@@ -89,7 +89,7 @@ it("names the input a fact's answer failed on", () => {
       form({ e164: "0161 496" })
     )
   ).toEqual({
-    error: "Enter a valid number customers can ring.",
+    error: "Enter a valid phone number.",
   })
   // 00 is the international prefix: +1 with too few digits, never +44 0195.
   expect(
@@ -98,7 +98,7 @@ it("names the input a fact's answer failed on", () => {
       form({ e164: "00195 899933" })
     )
   ).toEqual({
-    error: "Enter a valid number customers can ring.",
+    error: "Enter a valid phone number.",
   })
 })
 

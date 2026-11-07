@@ -7,7 +7,9 @@ import {
   events,
   jobRuns,
   newUlid,
+  openTask,
   orgs,
+  putOff,
   reminders,
   scheduledJobs,
   searchConnections,
@@ -17,6 +19,7 @@ import {
   staff,
   supersedePrivateFact,
   surfacedKey,
+  taskFollowups,
   unpromptedKey,
 } from "@workspace/db"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
@@ -309,6 +312,34 @@ describe.skipIf(!url)("the heartbeat", () => {
       expect(JSON.stringify(now)).not.toMatch(
         /ago|hours?|minutes?|today|tomorrow/i
       )
+    })
+
+    it("follows a task the owner put off once its date passes, once for that date", async () => {
+      const laterKeys = () =>
+        kit.withOrg({ orgId }, async (db) =>
+          (await digest(db, NOON)).flatMap((i) =>
+            i.key.includes(":later:") ? [i.key] : []
+          )
+        )
+      const task = await kit.withOrg({ orgId }, async (db) => {
+        const id = await openTask(db, orgId, "address")
+        await putOff(db, id, 7)
+        return id
+      })
+      expect(await laterKeys()).toEqual([])
+      await kit.withOrg({ orgId }, (db) =>
+        db.execute(
+          sql`update owner_tasks set later_until = ${later(NOON, -1).toISOString()}::timestamptz where id = ${task}`
+        )
+      )
+      const [due] = await laterKeys()
+      expect(due).toMatch(new RegExp(`^task:${task}:later:`))
+      await kit.withOrg({ orgId }, (db) =>
+        db
+          .insert(taskFollowups)
+          .values({ orgId, fingerprint: due as string, sentAt: NOON })
+      )
+      expect(await laterKeys()).toEqual([])
     })
 
     it("surfaces a moved reminder again, since its key carries the new time", async () => {

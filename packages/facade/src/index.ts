@@ -22,7 +22,6 @@ export type {
   TurnGateOptions,
 } from "./hooks.ts"
 export {
-  bashRefusal,
   boundResult,
   createMutationQueue,
   createTurnGate,
@@ -30,7 +29,6 @@ export {
   guardedTools,
   HOOK_TIMEOUT_MS,
   observer,
-  pathRefusal,
   REPEATED_FAILURES,
   REPEATING_FAILURE,
   SANDBOX_UPDATING,

@@ -106,6 +106,7 @@ export const signUp = createServerFn({ method: "POST" })
       // itself, so nothing a caller sends here selects a tenant. 120 is the
       // contract's bound.
       businessName: text(data.businessName, 120),
+      timeZone: text(data.timeZone, 64) || undefined,
     }
   })
   .handler(async ({ data }): Promise<AuthOutcome> => {
@@ -142,7 +143,11 @@ export const signUp = createServerFn({ method: "POST" })
           password: data.password,
           ...sessionOptions(),
         }),
-      { email: data.email, orgName: data.businessName }
+      {
+        email: data.email,
+        orgName: data.businessName,
+        timeZone: data.timeZone,
+      }
     )
   })
 
@@ -475,8 +480,12 @@ export const chooseOrganization = createServerFn({ method: "POST" })
  * the session now carries it, so the page reads again under it; otherwise the
  * name stays recorded for the next visit.
  */
-export const retryOrgWrite = createServerFn({ method: "POST" }).handler(
-  async (): Promise<boolean> => {
+export const retryOrgWrite = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({
+    // The browser's zone, as at signup, so the opener greets by the time of day.
+    timeZone: text(record(input).timeZone, 64) || undefined,
+  }))
+  .handler(async ({ data }): Promise<boolean> => {
     const intent = await readOrgIntent()
     const auth = getAuthKitContextOrNull()?.auth()
     if (
@@ -494,6 +503,7 @@ export const retryOrgWrite = createServerFn({ method: "POST" }).handler(
         sealedSession,
         workosUserId: intent.userId,
         name: intent.orgName,
+        timeZone: data.timeZone,
       })
       if (next === sealedSession) return false
       await writeSession(next)
@@ -509,8 +519,7 @@ export const retryOrgWrite = createServerFn({ method: "POST" }).handler(
       )
       return false
     }
-  }
-)
+  })
 
 // --- a business for an account that has none --------------------------------
 
@@ -525,6 +534,7 @@ export const nameBusiness = createServerFn({ method: "POST" })
     // A display name, as on /sign-up: the api makes the organization itself.
     return {
       businessName: text(data.businessName, 120),
+      timeZone: text(data.timeZone, 64) || undefined,
       returnTo: data.returnTo,
     }
   })
@@ -557,6 +567,7 @@ export const nameBusiness = createServerFn({ method: "POST" })
           sealedSession,
           workosUserId: auth.user.id,
           name: data.businessName,
+          timeZone: data.timeZone,
         }).catch((error: unknown) => {
           // The message only, as at signup (R9).
           console.error(

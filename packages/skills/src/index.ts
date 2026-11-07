@@ -1,71 +1,102 @@
-import type {
-  CorrectedStaff,
-  JobKind,
-  StaffCorrections,
-} from "@workspace/contracts"
-import { quoteReply } from "./procedures/quote-reply.ts"
-import { reviewReply } from "./procedures/review-reply.ts"
-import { siteChange } from "./procedures/site-change.ts"
-import { weeklyReview } from "./procedures/weekly-review.ts"
+/// <reference path="./markdown.d.ts" />
+import type { StaffCorrections } from "@workspace/contracts"
+import builds from "../cos/builds/SKILL.md"
+import googleConnect from "../cos/google-search/references/connect.md"
+import googlePerformance from "../cos/google-search/references/performance.md"
+import googleSearch from "../cos/google-search/SKILL.md"
+import quoteReply from "../cos/quote-reply/SKILL.md"
+import quotesAndPrices from "../cos/quotes-and-prices/SKILL.md"
+import remindersAndTime from "../cos/reminders-and-time/SKILL.md"
+import reviewReply from "../cos/review-reply/SKILL.md"
+import reviews from "../cos/reviews/SKILL.md"
+import soul from "../cos/SOUL.md"
+import questions from "../cos/site-change/references/questions.md"
+import siteChange from "../cos/site-change/SKILL.md"
+import boughtElsewhere from "../cos/web-address/references/bought-elsewhere.md"
+import buyNew from "../cos/web-address/references/buy-new.md"
+import connectOwn from "../cos/web-address/references/connect-own.md"
+import tips from "../cos/web-address/references/tips.md"
+import webAddress from "../cos/web-address/SKILL.md"
+import weeklyReview from "../cos/weekly-review/SKILL.md"
+import {
+  correctionsFor,
+  SCHEDULES,
+  type Scope,
+  type Skill,
+} from "./registry.ts"
+import { type Part, readSkillFile } from "./skill-file.ts"
 
-/** Whose prompt a skill is for: the CoS, or a staff role. */
-export type Scope = "cos" | CorrectedStaff
+export * from "./registry.ts"
 
-/**
- * One entry the loader returns (architecture §23). A `procedure` is ours and
- * the same for every org; a `correction` is the owner's sentence, per org.
- */
-export type Skill = {
-  name: string
-  /** One line, at most 60 characters, which the index shows. */
-  description: string
-  scope: Scope
-  kind: "procedure" | "correction"
-  body: string
-  /** The job kind that runs it and its cron rule, read in the org's zone. */
-  schedule?: { kind: JobKind; rule: string }
+export { type Part, readSkillFile, type SkillFile } from "./skill-file.ts"
+
+export type Procedure = Skill & {
+  kind: "procedure"
+  expertise: string
+  status: readonly string[]
+  parts: readonly Part[]
 }
 
-export type Procedure = Skill & { kind: "procedure" }
+const cos = (text: string, references?: Record<string, string>): Procedure => {
+  const file = readSkillFile(text, references)
+  const schedule = SCHEDULES[file.name]
+  return {
+    ...file,
+    ...(schedule && { schedule }),
+    scope: "cos",
+    kind: "procedure",
+  }
+}
 
 export const PROCEDURES: readonly Procedure[] = [
-  weeklyReview,
-  reviewReply,
-  quoteReply,
-  siteChange,
+  cos(webAddress, {
+    "connect-own": connectOwn,
+    "buy-new": buyNew,
+    "bought-elsewhere": boughtElsewhere,
+    tips,
+  }),
+  cos(googleSearch, { connect: googleConnect, performance: googlePerformance }),
+  cos(siteChange, { questions }),
+  cos(builds),
+  cos(reviews),
+  cos(remindersAndTime),
+  cos(quotesAndPrices),
+  cos(quoteReply),
+  cos(reviewReply),
+  cos(weeklyReview),
 ]
 
-/**
- * The one loader: the procedures for `scope`, then the owner's corrections
- * for it, as `readCorrections` reads them. Corrections are per org, so a
- * prompt shared across orgs is built with none.
- */
-export function skillsFor(
+/** The one loader: the procedures for `scope`, then the owner's corrections for it. */
+export const skillsFor = (
   scope: Scope,
   corrections: StaffCorrections = { lines: [] }
-): Skill[] {
-  return [
-    ...PROCEDURES.filter((p) => p.scope === scope),
-    ...corrections.lines
-      .filter((l) => l.staff === scope)
-      .map((l, i) => ({
-        name: `correction-${i + 1}`,
-        description: l.text.slice(0, 60),
-        scope,
-        kind: "correction" as const,
-        body: l.text,
-      })),
-  ]
-}
+): Skill[] => [
+  ...PROCEDURES.filter((p) => p.scope === scope),
+  ...correctionsFor(scope, corrections),
+]
 
-/** The index a prompt lists, one `name: description` line each. */
+/** The index a prompt lists, one `- name (expertise): description` line each. */
 export const indexOf = (skills: readonly Skill[]) =>
-  skills.map((s) => `${s.name}: ${s.description}`)
+  skills.map(
+    (s) =>
+      `- ${s.name}${"expertise" in s ? ` (${s.expertise})` : ""}: ${s.description}`
+  )
+
+/**
+ * Size budgets in characters, measured 2026-11-05 (index 1,136 for 11
+ * skills, largest core 4,392, largest part 2,851). They are review triggers,
+ * not limits (`SKILL_BODY_MAX` is the hard one): past one, split the skill
+ * into parts, or raise the budget in the same commit with the reason.
+ */
+export const SKILL_BUDGET = { core: 5_000, part: 4_000, index: 2_000 }
+
+/**
+ * The assistant's identity and character (after Hermes's SOUL.md): the first
+ * block of the CoS's core and the onboarding planner's, the same for every
+ * business so the cached prefix holds and the owner meets one character.
+ */
+export const SOUL = soul.trim()
 
 /** A procedure by name, within its scope. */
 export const procedure = (scope: Scope, name: string) =>
   PROCEDURES.find((p) => p.scope === scope && p.name === name) ?? null
-
-/** The procedure a scheduled job kind runs. */
-export const scheduledBy = (kind: JobKind) =>
-  PROCEDURES.find((p) => p.schedule?.kind === kind) ?? null

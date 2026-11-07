@@ -26,6 +26,7 @@ import {
 // critic.ts reaches brief.ts, which names the registry host from sandbox.ts.
 vi.mock("../src/sandbox.ts", () => ({
   NPM_REGISTRY_HOST: "registry.npmjs.org",
+  SANDBOX_CLASS: "custom-1vcpu-3gib",
 }))
 
 const fix = (section: string, page = "home"): Fix => ({
@@ -61,6 +62,17 @@ describe("the critic's prompt", () => {
     expect(user).toContain('"direction":"x"')
     expect(user).toContain("- 390 px wide: 0 pieces")
     expect(user).not.toContain("on the build before this one")
+  })
+
+  it("shows the owner's facts and tells the critic they are real, whatever they look like", () => {
+    const { system, user } = criticPrompt({
+      blueprint: {},
+      facts: ['- business.email: {"address":"don+sites@gmail.com"}'],
+    })
+    expect(user).toContain("don+sites@gmail.com")
+    expect(system).toContain("An email with a + in it")
+    expect(system).toContain("Never call such a detail made up, test-style")
+    expect(criticPrompt({ blueprint: {} }).user).toContain("- (none)")
   })
 
   it("tells the critic how many pieces of each width it is shown", () => {

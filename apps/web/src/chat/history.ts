@@ -15,7 +15,7 @@ import type { ChatMessage } from "./message"
  */
 
 /**
- * The storage format `@assistant-ui/ai-sdk` 0.0.2 reads and writes. It
+ * The storage format `@assistant-ui/ai-sdk` 0.0.16 reads and writes. It
  * declares this type and the adapter but exports neither, so it is restated
  * here from its declaration: a `UIMessage` without its id.
  */
@@ -205,24 +205,15 @@ export const lastChat = (conversations: Conversation[] | null) =>
 export const asked = new Set<string>()
 
 /**
- * Conversations the owner opened by address and cannot have: another
- * account's, or an id that was never stored. The chat shows an empty state
- * for them rather than a thread nobody asked for.
+ * What a press that carries a question sends as a new chat's first message:
+ * once per press, never into a stored conversation, with the press's intent.
  */
-export const missingConversations = (() => {
-  const ids = new Set<string>()
-  const listeners = new Set<() => void>()
-  return {
-    has: (id: string) => ids.has(id),
-    add(id: string) {
-      ids.add(id)
-      for (const listener of listeners) listener()
-    },
-    subscribe(listener: () => void) {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-  }
-})()
+export function askedSend<I>(
+  press: { id?: string; ask?: string; fresh?: string; intent?: I },
+  sent: Set<string> = asked
+): { text: string; intent?: I } | undefined {
+  const { id, ask, fresh, intent } = press
+  if (id || !ask || !fresh || sent.has(fresh)) return undefined
+  sent.add(fresh)
+  return { text: ask, ...(intent !== undefined && { intent }) }
+}

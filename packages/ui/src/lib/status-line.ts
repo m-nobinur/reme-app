@@ -9,8 +9,14 @@ export const SHOW_DELAY_MS = 200
 /** Once a working line shows, its words stay at least this long. */
 export const MIN_SHOWN_MS = 2000
 
+/** The old words fade out as the new fade in, over `duration-fast`. */
+export const FADE_MS = 150
+
 /** In chat the elapsed time appears after this long; the panel shows it at once. */
 export const CLOCK_AFTER_MS = 15_000
+
+/** The reply's row counts from the turn's start, so its clock shows sooner, as Claude's does. */
+export const REPLY_CLOCK_AFTER_MS = 3_000
 
 export type StatusState = "working" | "waiting" | "done" | "failed" | "stopped"
 

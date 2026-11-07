@@ -20,7 +20,7 @@ describe("the generated OpenRouter models", () => {
     }
   })
 
-  it("route only to providers at or under the rate the log charges", () => {
+  it("price every call, and route under a cap at or over that price", () => {
     for (const id of OPENROUTER_IDS) {
       const model = openrouterModels().find((m) => m.id === id)
       // A model the catalog has no price for would ceil at zero, which no
@@ -29,14 +29,11 @@ describe("the generated OpenRouter models", () => {
       // assertion that a regenerated catalog has to get past.
       expect(model?.cost.input, id).toBeGreaterThan(0)
       expect(model?.cost.output, id).toBeGreaterThan(0)
-      expect(model?.compat, id).toMatchObject({
-        openRouterRouting: {
-          max_price: {
-            prompt: model?.cost.input,
-            completion: model?.cost.output,
-          },
-        },
-      })
+      const cap = model?.compat?.openRouterRouting?.max_price
+      expect(cap?.prompt, id).toBeGreaterThanOrEqual(model?.cost.input ?? 0)
+      expect(cap?.completion, id).toBeGreaterThanOrEqual(
+        model?.cost.output ?? 0
+      )
     }
   })
 

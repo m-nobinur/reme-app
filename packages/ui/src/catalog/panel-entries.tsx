@@ -98,7 +98,7 @@ const STEP = buttonVariants({ variant: "outline", size: "sm" })
 /** Connect, as `apps/web` draws it: a message to the assistant. */
 const connectButton = (
   <a className={STEP} href="#connect">
-    Connect
+    Connect now
   </a>
 )
 
@@ -426,7 +426,7 @@ const reminderNote = (props: Note, extra = {}) => (
 /** A panel item a reminder can point at, as `apps/web` wraps them. */
 const target = (id: string, item: ReactNode) => (
   <div
-    className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
+    className="rounded-md outline-none focus-visible:ring-1 focus-visible:ring-ring"
     id={id}
     tabIndex={-1}
   >

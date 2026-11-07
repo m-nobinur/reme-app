@@ -134,8 +134,10 @@ export const SearchSitemap = z.strictObject({
 export const ConnectGoogleInput = z.strictObject({})
 
 /**
- * `connect_google`'s output: Google's consent link for the owner to open, the
- * account already connected, or that the feature is off. The link is a plain
+ * `connect_google`'s output: the app's link that starts Google's consent, the
+ * account already connected, or that the feature is off. The link is https,
+ * or plain http on a `localhost` or `.localhost` host, which never leaves the
+ * machine (RFC 6761), as `SiteLink` allows for local dev. It is a plain
  * string, not a `uri`, so a tool output shows the model no format. Refused
  * with `forbidden` for a member who is not the owner.
  */
@@ -144,7 +146,9 @@ export const ConnectGoogleOutput = z.union([
     url: z
       .string()
       .max(2048)
-      .regex(/^https:\/\/\S+$/),
+      .regex(
+        /^(?:https:\/\/\S+|http:\/\/(?:[a-z0-9-]+\.)*localhost(?::\d{1,5})?(?:[/?#]\S*)?)$/
+      ),
   }),
   z.strictObject({ connected: z.literal(true), email: z.email().max(320) }),
   z.strictObject({ available: z.literal(false) }),

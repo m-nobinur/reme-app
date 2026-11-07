@@ -21,10 +21,8 @@ import {
   type QuestionTrayStart,
   ShowFoldedQuestion,
 } from "@workspace/ui/components/assistant/question-tray"
-import {
-  type TrayServices,
-  TrayServicesProvider,
-} from "@workspace/ui/components/assistant/tray-services"
+import type { TrayServices } from "@workspace/ui/components/assistant/tray-services"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import type { CatalogEntry } from "./entries"
 
 /**
@@ -403,6 +401,19 @@ const PHOTOS = 5
 const PAGES_ASKED = 6
 const PHONE = "max-w-[22.5rem]"
 const SECOND: LogoRound = { ...ROUND, round: 2 }
+/** A redesign round with its first design in, and then all three. */
+const REDESIGN_DRAWING: LogoRound = {
+  ...ROUND,
+  round: 2,
+  status: "drawing",
+  started_at: new Date().toISOString(),
+  variants: [variant(3)],
+}
+const REDESIGN_READY: LogoRound = {
+  ...REDESIGN_DRAWING,
+  status: "ready",
+  variants: [3, 4, 5].map(variant),
+}
 
 type State = {
   title: string
@@ -416,8 +427,39 @@ type State = {
 }
 
 const STATES: State[] = [
-  // No start: designs draw behind the question; No shows them, the first picked.
+  // No start: nothing draws until No, which starts the first round.
   { title: "Logo, nothing chosen" },
+  {
+    title: "Logo, a redesign landing",
+    start: {
+      index: DESIGNS,
+      answers: { logo: { logo: KEPT } },
+      logo: { path: "create", brief: PICKED },
+    },
+    services: reads(
+      [ROUND, REDESIGN_DRAWING],
+      [ROUND, REDESIGN_DRAWING],
+      [ROUND, REDESIGN_READY]
+    ),
+  },
+  {
+    title: "Logo, a redesign drawing",
+    start: {
+      index: DESIGNS,
+      answers: { logo: { logo: KEPT } },
+      logo: { path: "create", brief: PICKED },
+    },
+    services: reads([ROUND, REDESIGN_DRAWING]),
+  },
+  {
+    title: "Logo, designs listed in another order",
+    start: { logo: { path: "create", brief: PICKED } },
+    services: reads(
+      [{ ...ROUND, status: "drawing", variants: [variant(1)] }],
+      [{ ...ROUND, status: "drawing", variants: [variant(1)] }],
+      [{ ...ROUND, variants: [variant(0), variant(1), variant(2)] }]
+    ),
+  },
   {
     title: "Logo, back on the question, No picked",
     start: { index: LOGO, logo: { path: "create", brief: PICKED } },
@@ -697,7 +739,7 @@ function States({ name, states }: { name: string; states: readonly State[] }) {
         >
           <h3 className="font-medium text-muted-foreground text-xs">{title}</h3>
           <div className="flex flex-col gap-2">
-            <TrayServicesProvider value={fakes(rounds, services)}>
+            <ChatServicesProvider value={{ tray: fakes(rounds, services) }}>
               <QuestionTray
                 businessName="Mop & Pail Cleaning"
                 input={input ?? INPUT}
@@ -707,7 +749,7 @@ function States({ name, states }: { name: string; states: readonly State[] }) {
                 // One call per state, so each keeps its own logo brief.
                 toolCallId={`catalog:${name}:${title}`}
               />
-            </TrayServicesProvider>
+            </ChatServicesProvider>
             <div className="rounded-4xl border border-border bg-card px-5 py-4 text-muted-foreground text-sm">
               Tell Sam what to do instead…
             </div>
@@ -729,15 +771,7 @@ const trayCatalog: CatalogEntry[] = [
   })),
   // The logo page's parts, and the services it draws designs with.
   ...(
-    [
-      "TrayLogo",
-      "TrayServicesProvider",
-      "Ways",
-      "Fold",
-      "Summary",
-      "DropTile",
-      "RadioTile",
-    ] as const
+    ["TrayLogo", "Ways", "Fold", "Summary", "DropTile", "RadioTile"] as const
   ).map((name) => ({
     name,
     render: () => (

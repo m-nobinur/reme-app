@@ -1,5 +1,6 @@
 import {
   CreateOrgRequest,
+  DICTATION_PATH,
   idempotencyKey,
   QUOTE_PATH,
   REQUEST_FAILED,
@@ -13,6 +14,8 @@ import {
 } from "./account.ts"
 import { type AfterTurn, afterTurnBatch } from "./after-turn.ts"
 import { bridge, type Owner } from "./changes.ts"
+import { WEBHOOK_PATH, whatsAppWebhook } from "./channels/whatsapp/webhook.ts"
+import { dictate } from "./dictation.ts"
 import { stripeWebhook } from "./domain-buy.ts"
 import { certificateWebhook } from "./domain-certificate.ts"
 import { receiveQuote } from "./enquiry.ts"
@@ -156,6 +159,7 @@ async function signup(
       workosUserId: session.workosUserId,
       email: session.email,
       displayName: session.name,
+      timeZone: parsed.data.time_zone,
     })
     // The owner reads the opener next: the planner's prompt is cached by
     // the time they answer it.
@@ -285,6 +289,17 @@ async function route(
   // A visitor's quote request from a published website, through the router.
   if (pathname === QUOTE_PATH && method === "POST") {
     return receiveQuote(request, env, kit, env.QUOTE_LIMIT)
+  }
+
+  // Meta's, signed with the app secret: no session, no write limit.
+  if (pathname === WEBHOOK_PATH) {
+    const answered = await whatsAppWebhook(request, env, kit, waitUntil)
+    if (answered) return answered
+  }
+
+  // A microphone's socket, from the page's ticket: it has no cookie to read.
+  if (pathname === DICTATION_PATH && method === "GET") {
+    return dictate(request, env)
   }
 
   const session = await readSession(request, env)

@@ -59,11 +59,43 @@ function added<T>(first: T, later: T): T {
   return later ?? first
 }
 
+/**
+ * The words a promise of work or of news is made with: I'll, I'm, we're,
+ * let me, will, going to, on it, or a sentence opening on a verb in -ing
+ * ("Checking now."). A reply's end with none of them makes no promise, so it
+ * ends at once instead of waiting about half a second on the reading. Recall
+ * first: a word that only may promise is read.
+ */
+export const MAY_PROMISE =
+  /\b(?:i|we)(?:['’](?:ll|m|re|d)| will| shall| am| are)\b|\blet(?:['’]s| me)\b|\b(?:will|shall|going to|gonna|about to|on it)\b|(?:^|[.!?]\s+)[a-z]+ing\b/im
+
 /** The promise check: `promised` true runs the model again with `NUDGE`. */
 export const promiseGate =
-  (promised: (said: string) => Promise<boolean>): Check =>
-  async (said) =>
-    (await promised(said)) ? NUDGE : null
+  (promised: (said: string, prompt: Prompt) => Promise<boolean>): Check =>
+  async (said, prompt) =>
+    MAY_PROMISE.test(said.slice(-1_000)) && (await promised(said, prompt))
+      ? NUDGE
+      : null
+
+/** Whether a memory or save_correction call since the owner's latest message saved. */
+export function savedIn(prompt: Prompt): boolean {
+  const owner = prompt.map((m) => m.role).lastIndexOf("user")
+  return prompt
+    .slice(owner + 1)
+    .some(
+      (message) =>
+        message.role === "tool" &&
+        message.content.some(
+          (part) =>
+            part.type === "tool-result" &&
+            (part.toolName === "memory" ||
+              part.toolName === "save_correction") &&
+            part.output.type === "json" &&
+            (part.output.value as { outcome?: unknown } | null)?.outcome ===
+              "saved"
+        )
+    )
+}
 
 /**
  * The checks read the text a call ended on in order, and the first note

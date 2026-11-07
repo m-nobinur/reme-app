@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
-import { Approval } from "@workspace/ui/components/assistant/approval"
 import { ConnectGoogleRow } from "@workspace/ui/components/assistant/google"
-import { type LiveCards, LiveCardsProvider } from "@workspace/ui/lib/live-cards"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
+import type { LiveCards } from "@workspace/ui/lib/live-cards"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { expect, it, vi } from "vitest"
+import { ToolCard } from "./fixtures/tool-card"
 
 ;(
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -35,7 +36,7 @@ vi.mock("@assistant-ui/react", async (original) => ({
 async function draw(props: Record<string, unknown>, live?: LiveCards) {
   const container = document.createElement("div")
   const root = createRoot(container)
-  const card = createElement(Approval, {
+  const card = createElement(ToolCard, {
     toolName: "connect_google",
     toolCallId: "call-1",
     args: {},
@@ -44,7 +45,13 @@ async function draw(props: Record<string, unknown>, live?: LiveCards) {
   } as never)
   await act(async () =>
     root.render(
-      live ? createElement(LiveCardsProvider, { value: live }, card) : card
+      live
+        ? createElement(
+            ChatServicesProvider,
+            { value: { liveCards: live } },
+            card
+          )
+        : card
     )
   )
   const view = {
@@ -130,6 +137,7 @@ it("keeps a call that has no result quiet, and an unreadable one honest", async 
 const connected = (googleConnected: boolean | null): LiveCards => ({
   googleConnected,
   domainLive: () => false,
+  published: null,
 })
 
 it("says connected, with nothing to press, on an offer from before the owner signed in", async () => {
@@ -154,8 +162,8 @@ it("turns a posted Connect Google row into the connected line once signed in", a
   await act(async () =>
     root.render(
       createElement(
-        LiveCardsProvider,
-        { value: connected(true) },
+        ChatServicesProvider,
+        { value: { liveCards: connected(true) } },
         createElement(ConnectGoogleRow)
       )
     )

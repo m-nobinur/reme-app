@@ -1,5 +1,7 @@
+import type { AskIntent } from "@workspace/ui/lib/activity-copy"
 import type { Workspace } from "./api/types"
 import { dueLine } from "./reminders"
+import { journeyItem } from "./update-stack"
 
 /**
  * The chat's "your website is ready" card, from the polled workspace. It is
@@ -9,7 +11,8 @@ import { dueLine } from "./reminders"
 
 /** A version waiting for the owner's review, bound to its revision. */
 export type ReadyReview = {
-  approvalId: string
+  /** Null while an update to it is being made: its review comes back with the update's. */
+  approvalId: string | null
   revisionId: string
   version: number
   /** The build that made it, whose preview the card opens. */
@@ -37,6 +40,32 @@ export function readyForReview(
     }
   }
   return newest
+}
+
+/**
+ * The draft the card shows: the newest review, else the latest unpublished
+ * version an update is being made to. Asking for changes pauses the draft's
+ * build and takes its approval away until the update lands with a new one;
+ * the update's build names that draft (`held`), so the card stays in the
+ * chat meanwhile, through a reload too. It goes once the update ends or
+ * that version is live.
+ */
+export function draftReview(workspace: Workspace | null): ReadyReview | null {
+  const ready = readyForReview(workspace)
+  if (ready || !workspace) return ready
+  const update = workspace.builds.find(
+    (build) => (build.held?.version ?? 0) > (workspace.live ?? 0)
+  )
+  const held = update?.held
+  return update && held
+    ? {
+        approvalId: null,
+        revisionId: held.revision_id,
+        version: held.version,
+        assignmentId: held.assignment_id,
+        at: held.ready_at ?? update.created_at,
+      }
+    : null
 }
 
 /** How long a new review's card waits for the ready line, from when this tab first saw the review. */
@@ -113,4 +142,16 @@ export function readyCard(
       ? published
       : saidAt !== null && Date.parse(saidAt) > Date.parse(approvedHere.at)
   return gone ? null : { kind: "approved", version, published }
+}
+
+/**
+ * The ready card's one extra step beside Publish, off the chat (the chat's
+ * update stack carries it there): the journey's first item, so the Website
+ * page offers what the stack does, and nothing while the api has not said.
+ */
+export function readySlot(
+  workspace: Workspace | null
+): { label: string; ask: string; intent: AskIntent } | null {
+  const [item] = journeyItem(workspace?.journey, true)
+  return item ? { label: item.label, ask: item.ask, intent: item.intent } : null
 }

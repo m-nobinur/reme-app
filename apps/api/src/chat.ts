@@ -1,6 +1,5 @@
 import {
   ADDRESS_ASK,
-  type AskOpenInput,
   type BuildQuestions,
   BuildQuestionsPart,
   BuildSummary,
@@ -8,9 +7,12 @@ import {
   ChatRequest,
   type ChatResult,
   CosChangeRequest,
+  type CosEvent,
   type CosRoute,
+  type CosSkill,
   type CosToolName,
   type CosTurn,
+  type CosWorkspace,
   ErrorEnvelope,
   type FactRecord,
   GrantKind,
@@ -19,30 +21,37 @@ import {
   ONBOARDING_STATUS,
   OnboardingPlan,
   type OnboardingStatus,
-  OnboardingStep,
   PERSONA_CARD,
   type PersonaCard,
   RequestChangeOutput,
   SKIP_REPLY,
+  type TaintLabel,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import {
+  addressStage,
   chiefStaffId,
   conversationMessages,
   conversations,
+  deliveries,
   eq,
   events,
+  journeyOf,
+  latchKey,
   lowerNextDue,
   newUlid,
   type OrgScopedDb,
+  openApprovals,
   openTask,
   orgs,
   putOff,
   readTasks,
+  recordLatches,
   setStep,
   sql,
   type Tenancy,
 } from "@workspace/db"
+import { procedure, skillsFor } from "@workspace/skills"
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -65,6 +74,7 @@ import {
   cosPrefix,
   FALLBACK_MODEL,
   LIMITS,
+  memorySnapshot,
   messageTaint,
   NotRun,
   newRunState,
@@ -86,7 +96,21 @@ import {
   readSession,
   sha256,
 } from "./cos/history.ts"
-import { takeChip } from "./cos/memory.ts"
+import { skillNotesText, takeChip } from "./cos/memory.ts"
+import { type Ask, openrouterAsk } from "./cos/narrator.ts"
+import {
+  type AddressCard,
+  type Channel,
+  cardState,
+  channelNote,
+  handoverNote,
+  openItems,
+  sessionNote,
+  skillsDue,
+  skipsDomain,
+  TRIGGER_LINES,
+  websiteFrom,
+} from "./cos/notes.ts"
 import { retrying } from "./cos/retry.ts"
 import {
   closeTurn,
@@ -97,6 +121,7 @@ import {
   streamTurn,
   writtenAt,
 } from "./cos/run.ts"
+import { statusOf, viewOf } from "./cos/skills.ts"
 import { knownZone } from "./cos/time.ts"
 import { loadWorkspace, startOwnerChange } from "./cos/tools.ts"
 import {
@@ -124,11 +149,13 @@ import {
   withoutProviderData,
 } from "./http.ts"
 import {
+  JEV,
   type JevDecision,
   jev,
   jevApproval,
   jevAsksGoogle,
   jevReading,
+  jevTopic,
   matched,
   readReply,
   type Verdict,
@@ -155,7 +182,6 @@ import {
   progressOf,
   type ScriptRow,
   ended as scriptEnded,
-  stepOf,
   text as textPart,
   trayLogoPath,
   trayOption,
@@ -181,10 +207,12 @@ import {
   planReservation,
   planTurn,
   turnData,
+  turnLine,
   typedOverForm,
 } from "./onboarding-agent.ts"
 import { notStarted } from "./onboarding-copy.ts"
 import { prepare, readPrepared } from "./onboarding-prepare.ts"
+import { onboardingSteps } from "./onboarding-progress.ts"
 import { type Pace, pace } from "./pacing.ts"
 import { ownerStaffId } from "./staff.ts"
 import { rememberZone, zoneFromArea } from "./time-zone.ts"
@@ -222,8 +250,7 @@ import { readFacts } from "./workspace.ts"
 export { ONBOARDING_GOAL }
 
 /** Ask mode's one line when the Chief of Staff cannot answer: the script's, or the fallback's. */
-export const ASK_REPLY =
-  "I can't answer right now. Try again in a moment, or switch to Act and tell me what to change on your site."
+export const ASK_REPLY = "I can't answer right now. Try again in a moment."
 
 /** The one line, in either mode, when the model was asked and failed: never a card it did not propose. */
 export const NO_ANSWER =
@@ -473,14 +500,33 @@ async function read(
     .from(conversations)
     .where(eq(conversations.id, id))
   if (!conversation) return notFound()
-  const [turn] = await db.execute<{ locked: boolean }>(
-    sql`select pg_try_advisory_xact_lock(2, hashtext(${id}::text)) as locked`
-  )
-  if (!turn?.locked) return busy()
+  if (!(await tryTurnLock(db, id))) return busy()
   return {
     kind: conversation.kind,
     tail: await readTail(db, id),
     card: await readCard(db, id, named),
+  }
+}
+
+/** How long a turn waits out a writer that holds the lock for a few milliseconds. */
+const LOCK_TRIES = 4
+const LOCK_WAIT_MS = 50
+
+/**
+ * The turn lock, tried and then tried again a few times: a summary written
+ * beside the turn (`writeCompaction`) holds it for milliseconds, which is no
+ * reason to tell the owner the last message is still being worked on. A
+ * holder that stays (a yes running) still answers `chat.busy` within
+ * `LOCK_TRIES * LOCK_WAIT_MS`.
+ */
+async function tryTurnLock(db: OrgScopedDb, id: string): Promise<boolean> {
+  for (let tried = 1; ; tried++) {
+    const [turn] = await db.execute<{ locked: boolean }>(
+      sql`select pg_try_advisory_xact_lock(2, hashtext(${id}::text)) as locked`
+    )
+    if (turn?.locked) return true
+    if (tried === LOCK_TRIES) return false
+    await new Promise((resolve) => setTimeout(resolve, LOCK_WAIT_MS))
   }
 }
 
@@ -676,6 +722,8 @@ export type ChatDeps = {
    * the planner's model at medium effort when the api holds a key.
    */
   prepare?: LanguageModel | null
+  /** The status narrator's model: left out, OpenRouter's when the api holds a key. Tests pass one. */
+  narrate?: Ask | null
   /**
    * The gate on a typed reply to one open reminder or change card that no
    * exact phrase read: left out, Jev on OpenRouter when the api holds a
@@ -694,6 +742,13 @@ export type ChatDeps = {
    * OpenRouter when the api holds a key. Tests pass one.
    */
   googleFirst?: ((said: string) => Promise<boolean>) | null
+  /**
+   * The one skill a typed message is plainly about, loaded before the first
+   * step: left out, Jev on OpenRouter when the api holds a key. Tests pass one.
+   */
+  topic?: ((said: string) => Promise<string | null>) | null
+  /** Where the owner is writing from, when not the web: the turn's context says so. */
+  channel?: Channel
 }
 
 /** What a turn is, read before its lock: whether onboarding runs, and the card it waits on. */
@@ -901,6 +956,26 @@ export async function chat(
       ? readingOf(ahead.card && ahead.asked ? ahead.asked : null, turn.text)
       : null
   reading?.catch(() => undefined)
+  const topicOf =
+    deps.topic !== undefined
+      ? deps.topic
+      : env.OPENROUTER_API_KEY
+        ? (said: string) =>
+            jevTopic(
+              env.OPENROUTER_API_KEY as string,
+              said,
+              skillsFor("cos"),
+              (loaded?.workspace.builds.length ?? 0) > 0,
+              fetch,
+              JEV.topicMs
+            )
+        : null
+  // Read beside the turn's start and waited for only when its notes are
+  // written, so most of Jev's time overlaps the turn's own reads.
+  const topic =
+    turn.kind === "message" && topicOf
+      ? topicOf(turn.text).catch(() => null)
+      : Promise.resolve(null)
   // An owner asking for Google is told why the address comes first while no
   // domain of the site's own is live, and gets the button at once when one
   // is; Jev reads the ask here, beside the turn.
@@ -912,9 +987,13 @@ export async function chat(
             jevAsksGoogle(env.OPENROUTER_API_KEY as string, said)
         : null
   const domainLive =
-    loaded?.workspace.domains?.some((d) =>
+    (loaded?.workspace.domains?.some((d) =>
       ["awaiting_dns", "verifying", "active"].includes(d.state)
-    ) ?? false
+    ) ??
+      false) ||
+    ["put_off", "declined"].includes(
+      addressStage(loaded?.workspace.tasks ?? []).stage
+    )
   const google: Promise<"first" | "now" | null> =
     turn.kind === "message" && googleFirstOf && loaded
       ? googleFirstOf(turn.text).then(
@@ -1109,16 +1188,32 @@ export async function chat(
       )
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
-      const { workspace, facts, profile } =
-        loaded ?? (await loadWorkspace(tools))
+      const {
+        workspace,
+        facts,
+        profile,
+        notes: working,
+      } = loaded ?? (await loadWorkspace(tools))
       const granted = await grantedKinds(db)
+      const persona = personaOf(facts, profile, working)
+      const notes = await turnNotes(
+        db,
+        id,
+        workspace,
+        zone ?? null,
+        log.fresh,
+        turn.kind === "message" ? turn.text : null,
+        null,
+        turn.kind === "message" ? parsed.data.intent : null,
+        await topic
+      )
       const context = contextOf(
         mode,
         workspace,
         zone ?? null,
         new Date(),
         turn.kind === "message" ? parsed.data.intent : undefined,
-        personaOf(facts, profile),
+        persona,
         turn.kind === "message" && log.fresh,
         // Not waited for: the prompt's own Google rule holds without Jev's line.
         await Promise.race([google, null]),
@@ -1126,10 +1221,13 @@ export async function chat(
         turn.kind === "message" && SETS_RULE.test(turn.text),
         null,
         granted,
-        await offerable(db, granted)
+        await offerable(db, granted),
+        [...notes.lines, ...channelNote(deps.channel)]
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
+        events: notes.events,
+        skills: notes.skills,
         messages: opening.messages,
         context: {
           turn_id: cosTurn.turnId,
@@ -1139,8 +1237,9 @@ export async function chat(
           active_tools: activeTools(mode),
           text: context.text,
           reserved_usd: fallback ? 0 : reserve,
+          ...(await memorySnapshot(db, id, persona)),
         },
-        contextTaint: context.taint,
+        contextTaint: [...new Set([...context.taint, ...notes.taint])],
       })
       if (turn.kind === "message") {
         await putRow(db, owner, id, {
@@ -1163,6 +1262,7 @@ export async function chat(
           !fallback && turn.kind === "message"
             ? await takeChip(db, owner.orgId)
             : null,
+        skillLine: notes.skillLine,
       }
     })
   } catch (error) {
@@ -1218,6 +1318,12 @@ export async function chat(
     waitUntil,
     how,
     reading,
+    narrate:
+      deps.narrate !== undefined
+        ? deps.narrate
+        : env.OPENROUTER_API_KEY
+          ? openrouterAsk(env.OPENROUTER_API_KEY)
+          : null,
   })
 }
 
@@ -1252,6 +1358,8 @@ type Opened = {
   typed: Typed | null
   log: LoggedEvent[]
   chip: MemoryChip | null
+  /** The waiting line for the skills code loaded this turn. */
+  skillLine: string | null
 }
 
 /** A typed reply read as the answer to the open card `callId`, with the line that says so. */
@@ -1688,6 +1796,7 @@ type Answering = {
   /** What paces a reply the script writes in the model's place. */
   how: Pace
   reading: Promise<MessageReading | null> | null
+  narrate: Ask | null
 }
 
 /**
@@ -1769,8 +1878,11 @@ async function startModel(
     newMessageId: a.newId,
     lead: tail ? settledLead(messages, tail.id) : answeredChunk(a.opened.typed),
     chip: a.opened.chip,
+    skillLine: a.opened.skillLine,
     reading: a.reading,
     rows,
+    narrate: a.narrate,
+    since: a.how.since,
     // The stream's reader ends after `closeRun`, so the turn is closed here.
     waitUntil: (reading) =>
       a.waitUntil(reading.then(() => enqueueAfterTurn(a.env, run.turn))),
@@ -1872,19 +1984,273 @@ async function unloggedPosts(db: OrgScopedDb, id: string) {
     role: row.role,
     parts: row.parts.flatMap((p): Part[] => {
       if (p.type === "step-start" || p.type === "text") return [p]
-      // A card's questions, as the words the owner read, so a typed answer is recognised.
-      const asked = BuildQuestionsPart.safeParse(p).data?.data.questions
-      return asked
-        ? [
-            {
-              type: "text",
-              text: `On a card I asked: ${asked.map((q) => q.text).join(" ")}`,
-              state: "done",
-            },
-          ]
-        : []
+      // A card's questions, as the words the owner read, so a typed answer
+      // is recognised, and the option they picked: one of ours, never their text.
+      const stack = BuildQuestionsPart.safeParse(p).data?.data
+      if (!stack) return []
+      const picked = stack.questions.flatMap((q) =>
+        q.input.kind === "choice" &&
+        q.answer?.kind === "value" &&
+        q.input.options.includes(String(q.answer.value))
+          ? [String(q.answer.value)]
+          : []
+      )
+      return [
+        {
+          type: "text",
+          text: [
+            `On a card I asked: ${stack.questions.map((q) => q.text).join(" ")}`,
+            ...(picked.length > 0
+              ? [`The owner picked: ${picked.join(", ")}.`]
+              : []),
+          ].join(" "),
+          state: "done",
+        },
+      ]
     }),
   }))
+}
+
+/**
+ * The org's newest address card as `cardState` reads it, here since the
+ * CoS's code never reads the conversation's messages. Null when none was
+ * ever shown.
+ */
+async function addressCardOf(
+  db: OrgScopedDb,
+  id: string
+): Promise<AddressCard | null> {
+  const [row] = await db.execute<{
+    here: boolean
+    data: unknown
+    at: string
+  }>(sql`
+    select m.conversation_id = ${id} as here, p->'data' as data, m.created_at as at
+    from ${conversationMessages} m
+    cross join lateral jsonb_array_elements(m.content->'parts') p
+    where m.content->'parts' @> '[{"type":"data-build_questions","data":{"kind":"address"}}]'::jsonb
+      and p->>'type' = 'data-build_questions'
+    order by m.seq desc
+    limit 1`)
+  const stack = BuildQuestionsPart.shape.data.safeParse(row?.data).data
+  return row && stack
+    ? {
+        ...cardState(stack, row.here),
+        shown_at: new Date(row.at).toISOString(),
+      }
+    : null
+}
+
+/**
+ * What `journeyOf` reads beyond the workspace for a turn the owner typed:
+ * the drafts waiting with when each opened, the owner's earlier messages for
+ * the sitting, the journey's latches from the ledger and what the newest
+ * draft left out.
+ */
+async function journeyRows(db: OrgScopedDb, id: string, byOwner: boolean) {
+  const [drafts, recent, latches] = await Promise.all([
+    openApprovals(db),
+    byOwner
+      ? db.execute<{ at: string; conversation: string }>(sql`
+          select created_at as at, conversation_id as conversation
+          from ${conversationMessages}
+          where content->>'role' = 'user'
+          order by seq desc limit 50`)
+      : [],
+    byOwner
+      ? db.execute<{ key: string; at: string }>(sql`
+          select substr(key, length(${latchKey("")}) + 1) as key, created_at as at
+          from ${deliveries}
+          where key like ${latchKey("%")}
+          order by created_at desc limit 100`)
+      : [],
+  ])
+  const iso = (at: string) => new Date(at).toISOString()
+  const newest = drafts.reduce<(typeof drafts)[number]["row"] | undefined>(
+    (a, { row }) => (!a || row.requestedAt > a.requestedAt ? row : a),
+    undefined
+  )
+  // What the newest draft's build left out, once per fact and only while the
+  // fact is missing; hours, prices, enquiries and priorities the assistant
+  // asks for once its own work needs them, never beside a draft.
+  const leftOut =
+    byOwner && newest
+      ? await db.execute<{ question: string }>(sql`
+          select distinct on (q->>'field') q->>'question' as question
+          from ${events} e, jsonb_array_elements(e.payload->'left_out') with ordinality as l(q, n)
+          where e.event_id = (select max(x.event_id) from ${events} x
+              where x.assignment_id = ${newest.assignmentId} and x.type = 'assignment.completion_reported')
+            and q->>'field' !~ '^(hours\\.|business\\.(prices|enquiries)$|owner\\.priorities$)'
+            and not exists (select 1 from facts f where f.key = q->>'field' and f.valid_to is null)
+          order by q->>'field', n`)
+      : []
+  return {
+    drafts: drafts.map(({ row }) => ({
+      id: row.id,
+      at: row.requestedAt.toISOString(),
+      ...(row === newest && { left_out: [...leftOut].map((q) => q.question) }),
+    })),
+    visit: byOwner
+      ? {
+          conversation: id,
+          recent: [...recent].map((m) => ({
+            at: iso(m.at),
+            conversation: m.conversation,
+          })),
+        }
+      : null,
+    latches: [...latches].map((l) => ({ key: l.key, at: iso(l.at) })),
+  }
+}
+
+/**
+ * The skills, and parts, this session holds since its last compaction, as
+ * `name/part`: loaded by code (`cos.skill`) or viewed by the model (its
+ * `skill_view` result), since a view stays in the history until then.
+ */
+export async function recentSkills(
+  db: OrgScopedDb,
+  id: string
+): Promise<string[]> {
+  const rows = await db.execute<{ key: string }>(sql`
+    select distinct coalesce(s.payload->>'name', s.payload->'output'->>'name') || '/'
+      || coalesce(s.payload->>'part', s.payload->'output'->>'part', '') as key
+    from ${events} s
+    where s.session_id = ${id}
+      and (s.type = 'cos.skill' or (s.type = 'cos.tool_result'
+        and s.payload->>'tool' = 'skill_view' and s.payload->'output'->>'outcome' = 'skill'))
+      and s.seq > coalesce((select (k.payload->'replaced_range'->>'to_seq')::bigint
+        from ${events} k where k.session_id = ${id} and k.type = 'cos.compaction'
+        order by k.seq desc limit 1), -1)`)
+  return rows.map((r) => r.key)
+}
+
+/**
+ * What code tells a CoS turn about where things stand (`notes.ts`): the open
+ * items every turn; on the CoS's first turn of an onboarding conversation the
+ * hand-over, as the `cos.event` the turn logs, and of a new one the session
+ * note (`sessionNote`); and the skills an explicit trigger loads
+ * (`skillsDue`), as `cos.skill`s, each once until the next compaction, with
+ * the waiting line they show.
+ */
+export async function turnNotes(
+  db: OrgScopedDb,
+  id: string,
+  workspace: CosWorkspace,
+  zone: string | null,
+  fresh: boolean,
+  /** The owner's typed message, or null for a turn they did not type. */
+  said: string | null = null,
+  /** The skill a schedule started this turn for. */
+  scheduled: string | null = null,
+  /** The Connect button the owner pressed before this message, if any. */
+  intent: ChatRequest["intent"] | null = null,
+  /** The skill a typed message is plainly about (`jevTopic`), if any. */
+  topic: string | null = null
+): Promise<{
+  lines: string[]
+  events: CosEvent[]
+  skills: CosSkill[]
+  /** The waiting line for the skills loaded, or null when none were. */
+  skillLine: string | null
+  taint: TaintLabel[]
+}> {
+  const card = await addressCardOf(db, id)
+  const now = new Date()
+  const { drafts, visit, latches } = await journeyRows(db, id, said !== null)
+  const journey = journeyOf({
+    tasks: workspace.tasks ?? [],
+    website: websiteFrom(workspace, drafts),
+    card: card && { ...card, shown_at: card.shown_at ?? now.toISOString() },
+    visit,
+    latches,
+    now,
+  })
+  const lines = openItems(workspace, card, now, zone, journey)
+  const google =
+    journey.google === "waiting_for_domain" || journey.google === "offerable"
+  const skipped = skipsDomain(said) && google
+  await recordLatches(
+    db,
+    [
+      ...journey.record,
+      ...(skipped ? [`google_offer:${now.toISOString()}`] : []),
+    ],
+    now
+  )
+  const [kind] = fresh
+    ? await db
+        .select({ kind: conversations.kind })
+        .from(conversations)
+        .where(eq(conversations.id, id))
+    : []
+  const handover = kind?.kind === "onboarding"
+  const loaded = await recentSkills(db, id)
+  let last: string | undefined
+  const due = skillsDue({
+    handover,
+    intent: intent === "site_change" ? null : intent,
+    card,
+    said,
+    scheduled,
+    topic,
+    google,
+  }).filter(({ name, part }) => !loaded.includes(`${name}/${part ?? ""}`))
+  const skills: CosSkill[] = []
+  for (const { name, part, trigger } of due) {
+    const found = procedure("cos", name)
+    if (!found) continue
+    const line =
+      trigger === "schedule" || trigger === "topic"
+        ? (found.status[0] as string)
+        : TRIGGER_LINES[trigger]
+    const view = viewOf(
+      found,
+      part,
+      statusOf(found, line, last),
+      part ? undefined : await skillNotesText(db, name)
+    )
+    if (!view) continue
+    last = view.status
+    skills.push({ ...view, trigger })
+  }
+  const skillLine = skills[0]?.status ?? null
+  if (kind && !handover) {
+    // shortcut: a conversation too short to compact leaves no summary; persist one at its end if that loses too much.
+    const [previous] = await db.execute<{ summary: string }>(sql`
+      select payload->>'summary' as summary from ${events}
+      where type = 'cos.compaction' and session_id <> ${id}
+      order by seq desc limit 1`)
+    return {
+      lines: [...lines, ...sessionNote(previous?.summary ?? null)],
+      events: [],
+      skills,
+      skillLine,
+      taint: previous ? ["inferred", "untrusted_input"] : [],
+    }
+  }
+  if (!handover) return { lines, events: [], skills, skillLine, taint: [] }
+  const [progress, facts] = await Promise.all([
+    readScript(db, id),
+    readFacts(db),
+  ])
+  const summary = handoverNote(
+    onboardingSteps({
+      ...progress,
+      orgId: "",
+      facts,
+      orgName: "",
+      ownerName: "",
+    }),
+    card
+  )
+  return {
+    lines,
+    events: [{ source: "handover", summary, evidence: [], wake: false }],
+    skills,
+    skillLine,
+    taint: [],
+  }
 }
 
 /** A message id is written once. A retried send is refused, never merged. */
@@ -1974,6 +2340,23 @@ async function cancelPending(
   }
   if (!(await swapTail(db, id, tail, content))) throw new Refusal(stale())
   return content
+}
+
+/**
+ * A turn the owner did not start cancels the card still open, as a typed
+ * message does: the row, and the logged message the model's history ends
+ * the call in, so it holds no call without a result.
+ */
+export async function cancelOpenCard(
+  db: OrgScopedDb,
+  id: string
+): Promise<Opening["messages"]> {
+  const card = await readCard(db, id, null)
+  if (!(await cancelPending(db, id, card)) || !card) return []
+  const logged = await loggedMessage(db, id, card.id)
+  if (!logged) return []
+  const message = { ...logged, parts: cancelParts(logged.parts) }
+  return [{ message, taint: messageTaint(message) }]
 }
 
 /**
@@ -2112,22 +2495,29 @@ async function advance(
   if (reply?.kind === "facts" || reply?.kind === "design") {
     const source =
       reply.kind === "facts" && reply.chose ? "inferred" : "owner_stated"
+    const kept = reply.kind === "facts" ? (reply.suggested ?? []) : []
+    const state = async (on: OrgScopedDb, current?: FactRecord[]) => {
+      await stateFacts(
+        on,
+        owner,
+        reply.facts.filter((f) => !kept.includes(f.key)),
+        current,
+        source
+      )
+      const left = reply.facts.filter((f) => kept.includes(f.key))
+      if (left.length > 0)
+        await stateFacts(on, owner, left, current, "inferred")
+    }
     // The build's orchestrator reads the facts over its own connection, so
     // an answer that starts it is committed first, in a transaction of its
     // own; a retry finds it held and writes nothing.
     if (build) {
       await kit.withOrg(
         { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
-        (own) => stateFacts(own, owner, reply.facts, undefined, source)
+        (own) => state(own)
       )
     } else {
-      await stateFacts(
-        db,
-        owner,
-        reply.facts,
-        onboarding.facts as FactRecord[],
-        source
-      )
+      await state(db, onboarding.facts as FactRecord[])
     }
   }
   // What the assistant picked leads the reply, a build's outcome included.
@@ -2680,9 +3070,15 @@ async function callEvents(turn: Turn, calls: PlanCall[]) {
 
 type PlanEnded = "answered" | "fallback" | "gated" | "error"
 
+/** As `CosTurn` bounds them. */
+const REASONS_MAX = 8
+const REASON_MAX = 300
+
 /**
  * The planner turn's `cos.turn`: `fallback` when the script answered it,
- * `gated` when it answered with Jev's decision and the planner was stopped.
+ * `gated` when it answered with Jev's decision and the planner was stopped,
+ * `refused_after_stream` when every plan was refused after words showed and
+ * code showed the waiting card again.
  */
 function planEnd(
   turn: Turn,
@@ -2694,7 +3090,12 @@ function planEnd(
     outcome.calls.reduce((total, c) => total + pick(c), 0)
   const ran = {
     turn_id: turn.turnId,
-    model: modelId,
+    // The model that answered, which OpenRouter's fallback can change.
+    model:
+      outcome.calls
+        .map((c) => c.model)
+        .filter(Boolean)
+        .at(-1) ?? modelId,
     usage: {
       input_tokens: sum((c) => c.usage.input_tokens),
       cached_input_tokens: sum((c) => c.usage.cached_input_tokens),
@@ -2711,9 +3112,19 @@ function planEnd(
         ? outcome.calls.reduce((total, c) => total + c.ms, 0)
         : null),
   }
-  return ended === "fallback"
-    ? { ...ran, outcome: "fallback", reason: "provider" }
-    : { ...ran, outcome: ended }
+  if (ended === "fallback") {
+    return { ...ran, outcome: "fallback", reason: "provider" }
+  }
+  if (ended === "answered" && outcome.ok && outcome.refused) {
+    return {
+      ...ran,
+      outcome: "refused_after_stream",
+      reasons: outcome.refused
+        .slice(0, REASONS_MAX)
+        .map((r) => r.slice(0, REASON_MAX)),
+    }
+  }
+  return { ...ran, outcome: ended }
 }
 
 /** The words of an error chunk the owner sees when a planned turn fails after it began. */
@@ -2783,24 +3194,6 @@ function planned(job: PlanJob, p: Planning): Response {
   })
 }
 
-/**
- * The step a planned turn is on, for the waiting line before the planner
- * writes: the card just answered. Null for a typed message, whose step a
- * card in view only guesses, and for a step no line names.
- */
-export function stepStatus(s: PlanState): OnboardingStatus | null {
-  if (s.input.kind !== "card") return null
-  const { card } = s.input
-  const about =
-    card.type === "tool-ask_open" ? (card.input as AskOpenInput).about : null
-  const on = OnboardingStep.safeParse(
-    about === "quote.form" ? "quote_form" : (about ?? stepOf(card))
-  )
-  return on.success
-    ? { on: { kind: "step", step: on.data, answered: true }, facts: [] }
-    : null
-}
-
 async function plannedTurn(
   job: PlanJob,
   p: Planning,
@@ -2812,12 +3205,11 @@ async function plannedTurn(
   const continued =
     turn.kind === "results" && !turn.reply ? (job.tail?.id ?? null) : null
   write({ type: "start", messageId: continued ?? p.rowId })
-  // The waiting line names an answered card's step at once; the plan's own
-  // lines follow.
+  // The waiting line names what the turn is doing at once, from its step;
+  // the plan's own lines follow.
   const status = (data: OnboardingStatus) =>
     write({ type: ONBOARDING_STATUS, data, transient: true })
-  const on = stepStatus(job.state)
-  if (on) status(on)
+  status({ on: { kind: "doing", text: turnLine(job.state) }, facts: [] })
   let stepOpen = false
   let textOpen = false
   // A plan's line or word has shown: a general line would be a step back.
@@ -2835,8 +3227,9 @@ async function plannedTurn(
   // has shown, or the planner is done, Jev is ignored.
   const stop = new AbortController()
   let planning = true
+  // A plain answer adds nothing to the step's own line.
   void p.reading?.then((about) => {
-    if (about && planning && !real) {
+    if (about && about !== "answer" && planning && !real) {
       status({ on: { kind: "reading", about }, facts: [] })
     }
   })
@@ -2888,7 +3281,8 @@ async function plannedTurn(
             }
             return planFacts(db, held, job, checked.plan, p)
           })
-          return written?.keys ?? []
+          if (!written) return []
+          return written.ok ? written.keys : { errors: written.errors }
         } catch (error) {
           console.error(
             JSON.stringify({
@@ -2903,7 +3297,13 @@ async function plannedTurn(
     }
   )
   planning = false
-  if (textOpen) write({ type: "text-end", id: "text" })
+  // The words arrive in one burst once the facts commit; ended only after
+  // the turn's rows, the client first sees them still streaming and reveals
+  // them at its pace instead of drawing them whole (2026-11-04).
+  const endText = () => {
+    if (textOpen) write({ type: "text-end", id: "text" })
+    textOpen = false
+  }
   console.log(
     JSON.stringify({
       code: "onboarding.plan",
@@ -2913,8 +3313,17 @@ async function plannedTurn(
       calls: outcome.calls.length,
       ms: outcome.calls.reduce((total, c) => total + c.ms, 0),
       first_chunk_ms: outcome.firstChunkMs,
+      max_gap_ms: outcome.maxGapMs,
       shown_chars: outcome.shown.length,
       cost_usd: outcome.calls.reduce((total, c) => total + c.costUsd, 0),
+      input_tokens: outcome.calls.reduce(
+        (total, c) => total + c.usage.input_tokens,
+        0
+      ),
+      cached_tokens: outcome.calls.reduce(
+        (total, c) => total + c.usage.cached_input_tokens,
+        0
+      ),
     })
   )
   // A planner that failed on its own leaves the script to answer, and Jev's
@@ -2978,6 +3387,7 @@ async function plannedTurn(
       return done
     })
     logged = true
+    endText()
     if (!(staged instanceof Response) || staged.ok) p.committed()
     if (staged instanceof Response) {
       if (!staged.ok) {
@@ -3004,6 +3414,7 @@ async function plannedTurn(
       : staged.step
     await finish(step, staged.lead)
   } catch (error) {
+    endText()
     await p.kit
       .withOrg(scope, (db) => close(db, "error"))
       .catch(() => undefined)
@@ -3115,11 +3526,11 @@ async function startPlannedBuild(
  * answers) when it no longer holds.
  */
 /**
- * A plan's facts and a card answer's, written as the owner's, with the
- * state the plan was checked again against and the keys written. Null when
- * the plan no longer fits. Its message is not checked again: `planTurn`
- * checked it against the turn's state, and facts this function wrote
- * earlier in the turn would make a correction read as no change.
+ * A plan's facts and a card answer's, written as the owner's, with the keys
+ * written, or the errors of the plan checked again. It is checked against
+ * the facts as the turn began, with the card's answer (`job.state`): facts
+ * this function wrote earlier in the turn would make a correction read as
+ * no change (2026-11-04). Its message is not checked again.
  */
 async function planFacts(
   db: OrgScopedDb,
@@ -3134,29 +3545,37 @@ async function planFacts(
   const answered =
     turn.kind === "results" ? answerOf(held, turn, onboarding) : null
   if (turn.kind === "results" && !answered) throw new Refusal(stale())
-  const state: PlanState = {
-    ...job.state,
-    onboarding: answered ? withAnswer(onboarding, answered.meant) : onboarding,
-  }
-  const rechecked = checkPlan(plan, state, false)
-  if (!rechecked.ok) return null
+  const rechecked = checkPlan(plan, job.state, false)
+  if (!rechecked.ok) return rechecked
   const c = rechecked.checked
   const card = answered?.meant.kind === "facts" ? answered.meant.facts : []
   const byKey = new Map(
     [...card, ...c.stated].map((fact) => [fact.key, fact] as const)
   )
+  // A card value the owner left as suggested stays the assistant's, unless the plan stated that key.
+  const kept =
+    answered?.meant.kind === "facts" ? (answered.meant.suggested ?? []) : []
+  const suggested = card.filter(
+    (f) => kept.includes(f.key) && !c.stated.some((s) => s.key === f.key)
+  )
   await stateFacts(
     db,
     p.owner,
-    [...byKey.values()],
+    [...byKey.values()].filter((f) => !suggested.includes(f)),
     onboarding.facts as FactRecord[]
   )
-  if (c.chosen.length > 0) {
-    await stateFacts(db, p.owner, c.chosen, undefined, "inferred")
+  if (c.chosen.length + suggested.length > 0) {
+    await stateFacts(
+      db,
+      p.owner,
+      [...suggested, ...c.chosen],
+      undefined,
+      "inferred"
+    )
   }
   return {
+    ok: true as const,
     answered,
-    state,
     c,
     keys: [...byKey.keys(), ...c.chosen.map((f) => f.key)],
   }
@@ -3170,11 +3589,9 @@ async function commitPlan(
   p: Planning
 ): Promise<Staged | null> {
   const facts = await planFacts(db, held, job, outcome.checked.plan, p)
-  if (!facts) return null
+  if (!facts.ok) return null
   const { answered, c } = facts
   const { turn } = p.request
-  // The turn's own start, not `state`: facts written mid-stream are already
-  // in that read, which would hide what this turn changed.
   const parts = planParts(c, job.state, p.newId)
   // A build's message goes after its outcome, unless it already streamed.
   const step =
@@ -3263,18 +3680,29 @@ async function commitPlan(
  * opener, then the script's first step for the facts the org holds.
  */
 export function firstMessage(
-  org: { orgId: string; orgName: string; ownerName: string },
+  {
+    zone = null,
+    ...org
+  }: {
+    orgId: string
+    orgName: string
+    ownerName: string
+    zone?: string | null
+  },
   current: FactRecord[],
   newId: () => string
 ) {
-  const step = openingParts({
-    ...org,
-    facts: current,
-    passed: [],
-    closed: [],
-    offered: false,
-    builder: null,
-  })
+  const step = openingParts(
+    {
+      ...org,
+      facts: current,
+      passed: [],
+      closed: [],
+      offered: false,
+      builder: null,
+    },
+    zone
+  )
   return {
     id: newId(),
     parentId: null,

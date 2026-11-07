@@ -121,7 +121,7 @@ function RailToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
         aria-controls="workspace-rail"
         aria-expanded={open}
         aria-label={label}
-        className="group/toggle relative flex size-10 shrink-0 items-center justify-center rounded-xl text-foreground outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
+        className="group/toggle relative flex size-10 shrink-0 items-center justify-center rounded-xl text-foreground outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none"
         onClick={onClick}
         type="button"
       >
@@ -222,6 +222,26 @@ function WorkspaceShell({
   placed.current = floating
   const hasPanel = panel !== null && panel !== undefined
   const docked = hasPanel && !floating
+  // On a phone the pill sits over the top of the page, which starts below it
+  // by the pill's own height, so a line that grows never covers the thread.
+  useEffect(() => {
+    const button = head.current
+    const card = aside.current
+    const column = card?.parentElement
+    if (!docked || !button || !card || !column) return
+    const measure = () =>
+      column.style.setProperty(
+        "--pill",
+        `${button.offsetHeight + card.offsetHeight - card.clientHeight}px`
+      )
+    measure()
+    const watch = new ResizeObserver(measure)
+    watch.observe(button)
+    return () => {
+      watch.disconnect()
+      column.style.removeProperty("--pill")
+    }
+  }, [docked])
   // Tailwind's `md`, the width the sheet hands the rail back to the layout.
   useCloseAt(
     "(min-width: 48rem)",
@@ -312,7 +332,7 @@ function WorkspaceShell({
       data-slot="workspace-shell"
     >
       <a
-        className="sr-only z-10 rounded-lg bg-background px-3 py-2 font-medium text-sm ring-3 ring-ring focus:not-sr-only focus:absolute focus:m-2"
+        className="sr-only z-10 rounded-lg bg-background px-3 py-2 font-medium text-sm ring-1 ring-ring focus:not-sr-only focus:absolute focus:m-2"
         href="#main"
       >
         Skip to content
@@ -385,8 +405,11 @@ function WorkspaceShell({
           className={cn(
             "min-h-0 flex-1 overflow-y-auto",
             docked &&
-              "max-md:pt-14 lg:[--panel-inset:calc(22rem+var(--gap)+0.5rem)]",
-            floating && "pb-16"
+              "max-md:pt-[calc(var(--pill,2.625rem)+var(--gap)+0.5rem)] lg:[--panel-inset:calc(22rem+var(--gap)+0.5rem)]",
+            // On a phone the pill has a strip of its own under the page, so
+            // text never scrolls beneath it.
+            floating &&
+              "pb-16 max-md:mb-[calc(2.625rem+var(--gap)*2)] max-md:pb-0"
           )}
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.
@@ -422,7 +445,7 @@ function WorkspaceShell({
               aria-controls={panelId}
               aria-expanded={expanded}
               className={cn(
-                "flex min-h-10 w-full min-w-0 shrink-0 items-center gap-2.5 px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset motion-reduce:transition-none",
+                "flex min-h-10 w-full min-w-0 shrink-0 items-center gap-2.5 px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none",
                 floating
                   ? "rounded-b-[inherit] group-data-[state=closed]/panel:rounded-t-[inherit]"
                   : "rounded-t-[inherit] group-data-[state=closed]/panel:rounded-b-[inherit]"

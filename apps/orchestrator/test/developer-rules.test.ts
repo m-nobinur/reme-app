@@ -509,10 +509,26 @@ describe("the owner's onboarding choices in the rules", () => {
       expect(rules, specific).toContain(specific)
     }
     expect(rules).toContain(
-      "When the facts are thin, write from the trade's usual practice, never from invention"
-    )
-    expect(rules).toContain(
       "what this business itself does (its supplies, access, pets, insurance, timing, rebooking) it says only as a fact says it"
+    )
+  })
+
+  it("keeps the copy to the owner's facts: no assumed process, no sentence about the trade, no hedged service, no fragment", () => {
+    const rules = text(false)
+    for (const rule of [
+      "You know nothing about this business beyond the facts below",
+      "a walk-through, a call, a survey, a deposit",
+      'A hedge does not make an invention safe: "we may arrange"',
+      "Never a sentence about the trade, the market or what most customers or companies do",
+      '"your home or let" is not English',
+      "A stage no fact states",
+      "Reach the range with those facts and nothing else",
+      "Every sentence carries a fact from the brief: one that only restates the service",
+      "it adds the main town, or stays empty",
+    ])
+      expect(rules, rule).toContain(rule)
+    expect(rules).not.toContain(
+      "how such work usually goes for these customers"
     )
   })
 

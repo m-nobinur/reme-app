@@ -33,6 +33,11 @@ interface Env {
   VAPID_PUBLIC_KEY?: string
   /** The Chief of Staff's key (ADR-034). Unset, every CoS turn takes the fallback. */
   OPENROUTER_API_KEY?: string
+  /**
+   * The warm summary's threshold in history tokens, when not Hermes's 64,000:
+   * a local test hook (`.dev.vars`) to watch a summary happen on a short chat.
+   */
+  COMPACTION_WARM_TOKENS?: string
   /** The CoS's model id, when not `DEFAULT_MODEL`. It must be in the facade's price table. */
   COS_MODEL?: string
   /**
@@ -62,6 +67,19 @@ interface Env {
    * `/webhooks/cloudflare` is not a route and the Workflow's own looks decide.
    */
   CF_WEBHOOK_SECRET?: string
+  /** `1` turns the messaging channel routes on; anything else is a 404 on them. */
+  WHATSAPP_ENABLED?: string
+  /** 32 bytes, base64: seals each business's WhatsApp token (`channels/token.ts`). */
+  CHANNEL_TOKEN_KEY?: string
+  /** `1` turns the WhatsApp channel on; off on staging and production until Meta approves. */
+  WHATSAPP_ENABLED?: string
+  /** The Meta app's secret, which signs every webhook delivery. Unset, deliveries get 503. */
+  WHATSAPP_APP_SECRET?: string
+  /** What Meta's verify handshake must send back. Unset, the handshake gets 503. */
+  WHATSAPP_VERIFY_TOKEN?: string
+  /** Reme's Meta app id, and the Embedded Signup configuration (Facebook Login for Business) the popup opens. */
+  WHATSAPP_APP_ID?: string
+  WHATSAPP_SIGNUP_CONFIG_ID?: string
   /** Search Console's Google client id. Unset, `connect_google` answers that Google is not available. */
   GOOGLE_CLIENT_ID?: string
   /**

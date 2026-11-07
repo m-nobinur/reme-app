@@ -6,6 +6,9 @@ import {
   approvals,
   assignments,
   assignmentTransitions,
+  channelInbound,
+  channelLinkCodes,
+  channelLinks,
   conversationMessages,
   conversations,
   deliveries,
@@ -33,6 +36,7 @@ import {
   taskFollowups,
   taskSteps,
   users,
+  whatsappAccounts,
 } from "../src/schema.ts"
 
 /**
@@ -79,6 +83,15 @@ export const SEARCH_URL_OF = {
   a: "https://tenancy-probe-a.example.com/",
   b: "https://tenancy-probe-b.example.com/",
 } as const
+
+/**
+ * Each org's WhatsApp account and its owner's live link, by the ids the
+ * webhook resolvers take. Org A also holds a revoked link from another sender.
+ */
+export const ACCOUNT_OF = { a: per("a", 22), b: per("b", 22) } as const
+export const PHONE_OF = { a: "100000000000001", b: "100000000000002" } as const
+export const SENDER_OF = { a: "447700900101", b: "447700900102" } as const
+export const SENDER_REVOKED = "447700900199"
 
 /**
  * One person per org, in the platform `users` table. Exported because the
@@ -369,6 +382,43 @@ export async function seedTwoOrgs() {
       kind: "record_review",
       grantedByStaffId: per(tag, 4),
     })
+    // Its WhatsApp number, the owner's chat linked to it, a code already
+    // spent, and a message waiting for the next turn.
+    await db.insert(whatsappAccounts).values({
+      id: ACCOUNT_OF[tag],
+      orgId: org,
+      wabaId: tag === "a" ? "200000000000001" : "200000000000002",
+      phoneNumberId: PHONE_OF[tag],
+      displayNumber: tag === "a" ? "+447700900001" : "+447700900002",
+      displayName: `Tenancy Probe ${tag.toUpperCase()}`,
+      tokenCiphertext: "v1.iv.ct",
+      source: "dev",
+      status: "active",
+    })
+    await db.insert(channelLinks).values({
+      id: per(tag, 23),
+      orgId: org,
+      userId: USER_OF[tag],
+      accountId: ACCOUNT_OF[tag],
+      externalId: SENDER_OF[tag],
+      label: "•••• 0101",
+      conversationId: per(tag, 15),
+    })
+    await db.insert(channelLinkCodes).values({
+      hash: `tenancy_probe_code_${tag}`.padEnd(43, "x"),
+      orgId: org,
+      userId: USER_OF[tag],
+      kind: "whatsapp",
+      expiresAt: new Date(Date.now() + 600_000),
+      usedAt: new Date(),
+    })
+    await db.insert(channelInbound).values({
+      orgId: org,
+      kind: "whatsapp",
+      externalMessageId: `wamid.tenancy_${tag}`,
+      linkId: per(tag, 23),
+      body: { text: "Probe" },
+    })
     // The org's connected domain: live, served on its apex (org A on `www.`).
     await db.insert(domains).values({
       id: per(tag, 17),
@@ -440,6 +490,15 @@ export async function seedTwoOrgs() {
       fingerprint: `task:${per(tag, 21)}:loads:done`,
     })
   }
+  // A sender org A unlinked: the link resolver must not answer for it.
+  await db.insert(channelLinks).values({
+    orgId: ORG_A,
+    userId: USER_OF.a,
+    accountId: ACCOUNT_OF.a,
+    externalId: SENDER_REVOKED,
+    label: "•••• 0199",
+    revokedAt: new Date(),
+  })
   // A connect still waiting on DNS: the definer must not answer for it.
   await db.insert(domains).values({
     id: per("a", 18),

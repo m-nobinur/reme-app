@@ -147,6 +147,8 @@ export type PhotoResult = {
   key: string | null
   content_type: string | null
   cost_usd: number | null
+  /** The image model that drew it, when one did. */
+  model?: string
   /** Why a slot fell back, for the log. */
   reason: string | null
   /** What the drawn photo shows, from its defect check or its final subject: the slot's alt and caption. Unset when reused or not drawn. */
@@ -321,7 +323,7 @@ type Drawn =
   /** `down`: the model, not the prompt, failed (quota, outage, timeout), so the build skips it. */
   | { ok: false; reason: string; down: boolean; status: number | null }
 
-/** One image, or the reason there is none. A refusal is a 400 or an answer without a picture. */
+/** One image, or the reason there is none. A refusal is a 4xx the model did not cause, or an answer without a picture. */
 async function draw(
   { key, fetch }: Deps,
   { id: model, sized }: PhotoModel,
@@ -356,13 +358,28 @@ async function draw(
           : {}),
       }),
     })
-    if (!response.ok)
+    if (!response.ok) {
+      const said = await response
+        .json()
+        .then((b) =>
+          String((b as { error?: { message?: unknown } }).error?.message ?? "")
+        )
+        .catch(() => "")
+      const status = response.status
       return {
         ok: false,
-        reason: `http ${response.status}`,
-        down: response.status !== 400,
-        status: response.status,
+        reason: `http ${status}${said ? `: ${said.slice(0, 160)}` : ""}`,
+        // A moderation or guardrail 403 refuses this prompt, not the model
+        // (OpenRouter's errors page); one flagged hero once took every model
+        // down for the build's other photos.
+        down:
+          status === 402 ||
+          status === 429 ||
+          status >= 500 ||
+          (status === 403 && /limit|budget|credit/i.test(said)),
+        status,
       }
+    }
     const body = (await response.json()) as {
       data?: { b64_json?: string; media_type?: string }[]
       usage?: { cost?: number }
@@ -590,6 +607,8 @@ export async function directPhotos(input: {
   siblings?: string[]
   /** Makes the hash, so the picture, new: "Try another" passes its assignment id. */
   variation?: string
+  /** Pictures this build, or the one it retries, already drew for these slots: used as they are while still stored, never hashed or drawn again. */
+  kept?: readonly PhotoResult[]
   /** Told as each slot settles, for the build's per-photo progress; a throw is ignored. */
   onSlot?: (result: PhotoResult) => unknown
   fetch?: typeof fetch
@@ -614,12 +633,29 @@ export async function directPhotos(input: {
   const wanted = plan.images.filter(
     (s): s is Slot => s.source === "generated" && !s.asset_id
   )
-  const hero = wanted.find((s) => s.section === "hero") ?? wanted[0]
-  const ordered = [...(hero ? [hero] : []), ...wanted.filter((s) => s !== hero)]
+  // The plan's hero, not the first slot left to draw: a retry that keeps the first
+  // photos must not turn another slot into the hero (2K, so another hash) and draw it again.
+  const generated = plan.images.filter(
+    (s): s is Slot => s.source === "generated"
+  )
+  const hero = generated.find((s) => s.section === "hero") ?? generated[0]
+  const ordered = [
+    ...wanted.filter((s) => s === hero),
+    ...wanted.filter((s) => s !== hero),
+  ]
+  const kept = new Map<string, PhotoResult>()
+  for (const k of input.kept ?? []) {
+    if (!k.key || k.status === "fallback") continue
+    const found = await env.SITES.list({ prefix: k.key })
+    if (found.objects.some((o) => o.key === k.key)) kept.set(k.slot_id, k)
+  }
   const planned: Planned[] = []
   for (const slot of ordered) {
+    const again = kept.get(slot.id)
     if (claims.has(slot.id)) {
       settle(slot.id, fallback(slot.id, "claim section"))
+    } else if (again) {
+      settle(slot.id, { ...again, status: "reused", cost_usd: 0, reason: null })
     } else if (planned.length >= MAX_PER_BUILD) {
       settle(slot.id, fallback(slot.id, "build cap"))
     } else {
@@ -770,7 +806,11 @@ export async function directPhotos(input: {
         )
       }
       if (!drawn.ok) {
-        settle(p.slot.id, fallback(p.slot.id, drawn.reason))
+        // Draws a defect threw away were still paid for.
+        settle(p.slot.id, {
+          ...fallback(p.slot.id, drawn.reason),
+          cost_usd: spent > 0 ? spent : null,
+        })
         return null
       }
       const objectKey = `${generatedKey(orgId, p.assetId)}.${extension(drawn.contentType)}`
@@ -797,6 +837,7 @@ export async function directPhotos(input: {
         key: objectKey,
         content_type: drawn.contentType,
         cost_usd: drawn.cost === null ? null : spent,
+        model: drawn.model,
         reason: null,
         alt: (shows || simplified(subject)).slice(0, 200),
       })

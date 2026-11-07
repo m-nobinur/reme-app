@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { Timestamp, Uuid } from "./common.ts"
+import { Timestamp, TimeZone, Uuid } from "./common.ts"
 
 /**
  * The two read shapes the app needs before it can render anything: the org the
@@ -14,7 +14,8 @@ import { Timestamp, Uuid } from "./common.ts"
 /**
  * What signup posts to the Core API to bring an org into existence (ADR-029).
  *
- * The name and nothing else. There is no organisation id in it, in any spelling:
+ * The name, and the browser's zone for the opener's greeting. There is no
+ * organisation id in it, in any spelling:
  * the WorkOS organization is created by the API, from this name, so the id that
  * the tenant is later resolved by never travels over this boundary and cannot
  * be chosen by a caller. The slug is derived from the name for the same reason,
@@ -27,6 +28,8 @@ import { Timestamp, Uuid } from "./common.ts"
  */
 export const CreateOrgRequest = z.strictObject({
   name: z.string().min(1).max(120),
+  /** A zone that does not parse is dropped rather than refusing the signup. */
+  time_zone: TimeZone.optional().catch(undefined),
 })
 
 /** §5.2. The tenant root, as a screen shows it. */

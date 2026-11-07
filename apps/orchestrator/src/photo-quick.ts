@@ -1,8 +1,9 @@
 import { ImageSlot } from "@workspace/contracts"
-import { events, sql, type Tenancy } from "@workspace/db"
+import { appendEvent, events, sql, type Tenancy } from "@workspace/db"
 import { z } from "zod"
 import { directPhotos, type PhotoBucket, placeGenerated } from "./images.ts"
 import { GENERATED_DIR, generatedPath } from "./photo-files.ts"
+import { photoTurn } from "./photo-step.ts"
 import { SITE_ROOT } from "./revise.ts"
 
 const CONFIG = "src/site-config.ts"
@@ -141,6 +142,16 @@ export async function regenerateSlot(input: {
     variation: input.assignmentId,
     ...(input.fetch ? { fetch: input.fetch } : {}),
   })
+  if (result && result.cost_usd !== null)
+    await kit.withOrg({ orgId }, (db) =>
+      appendEvent(db, {
+        orgId,
+        assignmentId: input.assignmentId,
+        staffId: null,
+        type: "runtime.turn",
+        payload: photoTurn([result]),
+      })
+    )
   if (!result || result.status === "fallback" || !result.asset_id) {
     throw new PhotoFell(`photo: ${result?.reason ?? "no result"}`)
   }

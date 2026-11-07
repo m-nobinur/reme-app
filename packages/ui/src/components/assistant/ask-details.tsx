@@ -48,7 +48,12 @@ import { type FocusEvent, type FormEvent, useId, useRef, useState } from "react"
  * what they gave.
  */
 
-type Answer = { answer: "stated"; facts: FactValue[]; skip_all?: boolean }
+type Answer = {
+  answer: "stated"
+  facts: FactValue[]
+  skip_all?: boolean
+  changed: string[]
+}
 
 const PICKS = {
   "assistant.pronouns": {
@@ -77,13 +82,12 @@ const isPick = (key: string): key is PickKey => key in PICKS
 
 /** A line under a field that says what happens to the answer. */
 const HINT: Partial<Record<string, string>> = {
-  "business.phone": "A UK number. We add the +44 for you.",
   "business.email":
     "Shown on your website. Use a business address if you have one.",
 }
 
 const CHIP =
-  "h-7 max-w-full truncate rounded-full border border-border bg-card px-3 text-xs transition-colors hover:border-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+  "h-7 max-w-full truncate rounded-full border border-border bg-card px-3 text-xs transition-colors hover:border-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 
 /** The names written for this business, or the house ones without them. */
 const nameIdeas = (written: readonly string[] | undefined) =>
@@ -374,6 +378,25 @@ function DetailsTray({
     setProblem("error" in result ? result.error : null)
   }
 
+  // An error shown stays only while the field is wrong: typing a valid value clears it.
+  const clearWhenValid = (event: FormEvent<HTMLFormElement>) => {
+    if (!problem || !(event.target instanceof HTMLInputElement)) return
+    if (isPick(key) || event.target.closest("[hidden]")) return
+    if (!("error" in read(key, values()))) setProblem(null)
+  }
+
+  /** The keys whose field in `set` holds something other than the card offered. */
+  const changedIn = (set: Record<string, string>) =>
+    keys.filter((each) => {
+      const offered = prefilled(input, each)
+      return isPick(each)
+        ? (set[each] ?? "") !== "" && set[each] !== String(offered?.id ?? "")
+        : FACT_INPUTS[each].fields.some(
+            (field) =>
+              (set[field.name] ?? "").trim() !== "" &&
+              set[field.name] !== String(offered?.[field.name] ?? "")
+          )
+    })
   /** Every key's fact from `held`, else the page of the first one wrong. */
   const send = (held: Record<string, string>, picked = false) => {
     const facts: FactValue[] = []
@@ -383,7 +406,12 @@ function DetailsTray({
       facts.push(result.fact)
     }
     // The draft stays: a refused answer reopens the card with it.
-    onAnswer({ answer: "stated", facts, ...(picked && { skip_all: true }) })
+    onAnswer({
+      answer: "stated",
+      facts,
+      changed: changedIn(picked ? values() : held),
+      ...(picked && { skip_all: true }),
+    })
   }
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -447,6 +475,7 @@ function DetailsTray({
         id={`${id}-form`}
         noValidate
         onBlur={checkOnLeave}
+        onInput={clearWhenValid}
         onChange={(event) => {
           // Stored only, not state: the fields already hold what is typed.
           save({ page, values: values() })
@@ -555,17 +584,8 @@ function DetailsTray({
 
 const AskDetails: ToolCallMessagePartComponent = (props) => {
   const view = askDetailsView(props)
-  if (view.state === "answered" || view.state === "skipped") {
-    return null
-  }
-  if (view.state !== "pending") {
-    return (
-      <TrayNote
-        error={view.state === "error" ? view.message : null}
-        name="ask-details"
-      />
-    )
-  }
+  if (view.state !== "pending")
+    return <TrayNote name="ask-details" view={view} />
   return (
     <Docked name="ask-details">
       <DetailsTray

@@ -24,6 +24,8 @@ import {
   ServerMessage,
   searchConsoleUrl,
   sellableTld,
+  townOf,
+  tradeOf,
 } from "../src/index.ts"
 import { HoldingPointer, RedirectPointer, SitePointer } from "../src/site.ts"
 import { ACCEPTED, REFUSED, verdict } from "./json-schema.ts"
@@ -396,36 +398,86 @@ describe("addressReply", () => {
 
 describe("addressOfferText", () => {
   const offer = (searched: string) =>
-    `Your website is coming along nicely. While it builds, let's sort out its address.\n\nI'd recommend your own domain. It looks more professional, is easier for customers to remember, and gives Google one address to show when people search for **${searched}**. The more people find you there, the stronger it gets.`
+    `While it builds, let's sort out its address.\n\nI'd recommend your own domain. It looks more professional, is easier for customers to remember, and gives Google one address to show when people search for **${searched}**. The more people find you there, the stronger it gets.`
 
-  it("names the trade in the owner's words and the town they are based in", () => {
+  it("names the business from a narrow category and the town past its lead-in", () => {
+    expect(
+      addressOfferText({
+        trade: "domestic and end of tenancy cleaning",
+        category: "cleaning",
+        area: "Based in Stockport",
+      })
+    ).toBe(offer("a cleaning company in Stockport"))
+  })
+
+  it("names the business from the owner's whole trade outside a narrow category", () => {
     expect(
       addressOfferText({
         trade: "Tree surgery and garden care",
+        category: "trades",
         area: "Leeds and about 20 miles out, including Bradford",
       })
-    ).toBe(offer("tree surgery in Leeds"))
+    ).toBe(offer("a tree surgery and garden care business in Leeds"))
     expect(
-      addressOfferText({ trade: "Cleaning", area: "Stoke-on-Trent" })
-    ).toBe(offer("cleaning in Stoke-on-Trent"))
+      addressOfferText({ trade: "Removals firm", area: "Stoke-on-Trent" })
+    ).toBe(offer("a removals firm in Stoke-on-Trent"))
   })
 
   it("says near you without a town, and a business like yours without a trade", () => {
-    expect(addressOfferText({ trade: "Tree surgery" })).toBe(
-      offer("tree surgery near you")
+    expect(addressOfferText({ trade: "Mobile dog grooming" })).toBe(
+      offer("a mobile dog grooming business near you")
     )
     expect(
       addressOfferText({ trade: "Dog grooming", area: "within 10 miles" })
-    ).toBe(offer("dog grooming near you"))
+    ).toBe(offer("a dog grooming business near you"))
     expect(
       addressOfferText({
         trade: "Dog grooming",
         area: "Within 10 miles of York",
       })
-    ).toBe(offer("dog grooming near you"))
+    ).toBe(offer("a dog grooming business near you"))
     expect(addressOfferText({ area: "Leeds" })).toBe(
       offer("a business like yours")
     )
+  })
+})
+
+describe("the business and town an offer names", () => {
+  it("reads the town past a lead-in, and none from words that name no place", () => {
+    expect(townOf("Based in Stockport")).toBe("Stockport")
+    expect(townOf("We're based in Leeds and cover 15 miles")).toBe("Leeds")
+    expect(townOf("Mostly Harrogate and the villages round it")).toBe(
+      "Harrogate"
+    )
+    expect(townOf("Milton Keynes, Bedford and Luton")).toBe("Milton Keynes")
+    expect(townOf("Newcastle upon Tyne 10 miles")).toBe("Newcastle upon Tyne")
+    expect(townOf("Bristol.")).toBe("Bristol")
+    expect(townOf("anywhere in Yorkshire")).toBeUndefined()
+    expect(townOf("Within 20 miles of Leeds")).toBeUndefined()
+    expect(townOf(null)).toBeUndefined()
+  })
+
+  it("names a cleaner, a dog groomer and a removals firm the way a customer looks for them", () => {
+    expect(
+      tradeOf({
+        name: "Domestic and end of tenancy cleaning",
+        category: "cleaning",
+      })
+    ).toBe("a cleaning company")
+    expect(tradeOf({ name: "Dog grooming", category: null })).toBe(
+      "a dog grooming business"
+    )
+    expect(tradeOf({ name: "Removals", category: "trades" })).toBe(
+      "a removals business"
+    )
+    expect(tradeOf({ name: "Removals company" })).toBe("a removals company")
+    expect(tradeOf({ name: "Interior design" })).toBe(
+      "an interior design business"
+    )
+    expect(tradeOf({ name: "Electrician" })).toBe("an electrician")
+    expect(tradeOf({ name: "Mobile dog groomer" })).toBe("a mobile dog groomer")
+    expect(tradeOf({ name: " " })).toBeUndefined()
+    expect(tradeOf(null)).toBeUndefined()
   })
 })
 

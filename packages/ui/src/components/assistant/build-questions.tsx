@@ -1,8 +1,10 @@
-import { makeAssistantDataUI, useAui, useAuiState } from "@assistant-ui/react"
+import { makeAssistantDataUI, useAuiState } from "@assistant-ui/react"
 import {
+  ADDRESS_ASK,
   addressReply,
   type BuildQuestion,
   type BuildQuestions,
+  DomainName,
   type QuestionAnswer,
   type QuestionReply,
   SKIP_REPLY,
@@ -19,16 +21,12 @@ import {
 } from "@workspace/ui/components/assistant/reply-pill"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
+import { useReply } from "@workspace/ui/hooks/use-thread-reply"
 import { answerValue } from "@workspace/ui/lib/answer"
 import { FIELD_ERROR } from "@workspace/ui/lib/card"
+import { useChatService } from "@workspace/ui/lib/chat-services"
 import { factText } from "@workspace/ui/lib/facts"
-import {
-  createContext,
-  type FormEvent,
-  useContext,
-  useId,
-  useState,
-} from "react"
+import { type FormEvent, useId, useState } from "react"
 
 /**
  * What the assistant asks the owner for their website
@@ -51,6 +49,36 @@ export type AnswerBuildQuestion = (answer: {
   reply: QuestionReply
 }) => Promise<BuildQuestions | string | null>
 
+/** The address card's own field, in place of the generic "Your answer". */
+const ADDRESS_FIELD = {
+  label: "Web address",
+  placeholder: "yourbusiness.co.uk",
+}
+
+/** The domain in what the owner typed, with any https://, www. or path taken off; null when it is not one. */
+export function domainTyped(text: string) {
+  const host = text
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z]+:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/[/?#].*$/, "")
+  return DomainName.safeParse(host).success ? host : null
+}
+
+/** The address question's name page: the owner types the web address they have. */
+const isAddressName = (question: BuildQuestion) =>
+  question.text === ADDRESS_ASK.name
+
+/** The typed answer as the domain in it, or what is wrong with it. */
+const addressChecked = (typed: ReturnType<typeof answerValue>) => {
+  if ("error" in typed) return typed
+  const domain = domainTyped(String(typed.value))
+  return domain
+    ? { value: domain }
+    : { error: "Enter a web address like yourbusiness.co.uk." }
+}
+
 /** What the owner said to the address question, as their message; null when there is nothing to say. */
 export function addressSaid(
   questions: readonly BuildQuestion[],
@@ -66,11 +94,6 @@ export function addressSaid(
   const choice = given("choice")
   return choice === undefined ? null : addressReply(choice, given("text"))
 }
-
-const AnswerContext = createContext<AnswerBuildQuestion | null>(null)
-
-/** Gives the card the app's way to send an answer. */
-export const AnswerBuildQuestionProvider = AnswerContext.Provider
 
 /** The pause after an answer's tick before the next question, or the fold. */
 export const ONWARD_MS = 600
@@ -110,8 +133,8 @@ export function nextOpen(
 }
 
 function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
-  const send = useContext(AnswerContext)
-  const aui = useAui()
+  const send = useChatService("answerBuildQuestion")
+  const reply = useReply()
   const messageId = useAuiState((s) => s.message.id)
   const conversationId = useAuiState((s) => s.threadListItem.remoteId)
   const id = useId()
@@ -182,7 +205,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
     if (next === undefined) {
       const said =
         data.kind === "address" ? addressSaid(questions, settledNow) : null
-      if (said) aui.thread().append(said)
+      if (said) reply(said)
       setPhase("closing")
       // The buttons go with the fold, so the keyboard goes to the composer.
       setTimeout(() => {
@@ -219,9 +242,10 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
       if (each.answer ?? now[each.id]) continue
       const form = document.getElementById(`${id}-${at}`)
       const fields = new FormData(form as HTMLFormElement)
-      const parsed = answerValue(each.input, (name) =>
+      const typed = answerValue(each.input, (name) =>
         String(fields.get(name) ?? "")
       )
+      const parsed = isAddressName(each) ? addressChecked(typed) : typed
       const saved =
         "error" in parsed
           ? parsed.error
@@ -343,6 +367,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
                     id={`${id}-${at}`}
                     invalid={at === index && error !== null}
                     spec={each.input}
+                    text={isAddressName(each) ? ADDRESS_FIELD : undefined}
                     title={each.text}
                   />
                   {at === index && error ? (

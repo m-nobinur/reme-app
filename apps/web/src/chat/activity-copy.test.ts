@@ -110,6 +110,16 @@ describe("tool lines", () => {
     )
   })
 
+  it("says the site check and the page read differently in one turn", () => {
+    const lines = ["ask_developer", "read_site"].map((tool) =>
+      toolLine(tool, "done")
+    )
+    expect(lines).toEqual([
+      "Checked your website's details",
+      "Reviewed your website's pages",
+    ])
+  })
+
   it("drops an id used as an argument, and never shows a model's step", () => {
     expect(
       toolLine("find_domain", "working", {
@@ -278,10 +288,10 @@ describe("the first line of each kind of turn", () => {
     expect(first({ kind: "reading", about: "question" }).label).toBe(
       "Looking into your question"
     )
-    // The plan's own line is model text, so the catalogue words it.
+    // The turn's own line, built or filtered by the api, shows as sent.
     expect(first({ kind: "doing", text: "Reading about your rates" })).toEqual({
       kind: "planning",
-      label: "Working on your answer",
+      label: "Reading about your rates",
     })
     expect(first({ kind: "thinking", text: "Weighing the van rates" })).toEqual(
       { kind: "thinking", label: "Thinking it through" }
@@ -451,7 +461,7 @@ describe("segment copy", () => {
       "Reme needs a record added at 123-reg"
     )
     expect(pillLine(address("choose"), ctx)).toBe(
-      "Reme needs your pick of web address"
+      "Reme needs your choice of domain"
     )
     expect(pillLine(address("purchase"), ctx)).toBe("Reme needs your payment")
     // As many records as the card listed, and no number when none is known.
@@ -481,7 +491,7 @@ describe("segment copy", () => {
         },
       ],
     })
-    expect(segmentTitle(asked, ctx)).toBe("Your web address")
+    expect(segmentTitle(asked, ctx)).toBe("Your domain")
     expect(segmentLine(asked, ctx)).toBeNull()
     expect(domainStep(asked, ctx)).toBe("Waiting for your answer")
     expect(segmentTitle(address("records"), ctx)).toBe("Connecting your domain")

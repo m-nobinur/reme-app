@@ -1,14 +1,18 @@
 import { convertToModelMessages, generateText, type UIMessage } from "ai"
 import { describe, expect, it } from "vitest"
+import { cosModel } from "../src/chat.ts"
 import {
+  afterTurnCall,
+  CACHED_INSTRUCTIONS,
   cosAgent,
   DEFAULT_MODEL,
   INSTRUCTIONS,
   openrouterModel,
+  PREFIX_KEY,
   priceOf,
   stepCost,
 } from "../src/cos/agent.ts"
-import { COMPACTION, planCompaction, summarise } from "../src/cos/compaction.ts"
+import { planCompaction, summarise } from "../src/cos/compaction.ts"
 import {
   CONTEXT_POLICY,
   deriveCosMessages,
@@ -18,7 +22,9 @@ import recorded from "./cos-compaction-session.json" with { type: "json" }
 
 /**
  * Live: compaction (ADR-042) over the scripted 60-turn session with the
- * real summary model. The job's plan runs after every turn and each summary
+ * owner turn's model, route and cached prefix. Before each summary the turn's
+ * first call is sent, as the turn would have, so the summary reads a warm
+ * cache. The job's plan runs after every turn and each summary
  * is written as the job writes it; then the CoS's model is asked the ten
  * seeded facts over the history the next turn would read. It passes when
  * every summary was kept, both approvals of the last turn are still open on
@@ -38,24 +44,59 @@ type Row = { type: string; payload: unknown }
 
 describe.skipIf(!LIVE)("compaction with the real models", () => {
   it("keeps the open approvals and every seeded fact", async () => {
-    const summaryModel = openrouterModel(KEY, COMPACTION.model)
-    if (!summaryModel) throw new Error(`no route for ${COMPACTION.model}`)
+    const route = cosModel({ OPENROUTER_API_KEY: KEY } as Env)
+    if (!route.model || !route.price) throw new Error("no owner turn route")
+    const owner = {
+      model: route.model,
+      modelId: route.modelId,
+      price: route.price,
+    }
     const log: { seq: number; type: string; payload: unknown }[] = []
-    const add = (row: Row) => log.push({ seq: log.length, ...row })
+    // The script was logged under an older policy; the turn's call reads only the current one.
+    const add = (row: Row) =>
+      log.push({
+        seq: log.length,
+        ...row,
+        ...(row.type === "cos.context" && {
+          payload: {
+            ...(row.payload as object),
+            context_policy_version: CONTEXT_POLICY.version,
+          },
+        }),
+      })
     const made: {
       turn: number
       summary: Awaited<ReturnType<typeof summarise>>
     }[] = []
     for (const [i, rows] of (recorded.turns as Row[][]).entries()) {
       for (const row of rows) add(row)
-      const plan = planCompaction(log)
+      // The scripted session is about 25,000 tokens: thresholds scaled to it.
+      const plan = planCompaction(log, { warm: 6_000, hard: 12_000 })
       if (!plan) continue
-      const summary = await summarise(summaryModel, plan)
+      const call = await afterTurnCall(log)
+      // The turn's first call: everything up to the owner's message.
+      const asked = call.messages.map((m) => m.role).lastIndexOf("user")
+      await generateText({
+        model: owner.model,
+        instructions: CACHED_INSTRUCTIONS,
+        tools: call.tools,
+        activeTools: call.activeTools,
+        toolChoice: "none",
+        messages: call.messages.slice(0, asked + 1),
+        maxOutputTokens: 16,
+        providerOptions: {
+          openrouter: {
+            session_id: await PREFIX_KEY,
+            prompt_cache_key: await PREFIX_KEY,
+          },
+        },
+      })
+      const summary = await summarise(owner, call, plan)
       made.push({ turn: i + 1, summary })
       console.log(
         `      compaction after turn ${i + 1}: history ${plan.historyTokens} tokens, ` +
           `seqs ${plan.replaced_range.from_seq} to ${plan.replaced_range.to_seq}, ` +
-          `in ${summary.usage?.input_tokens ?? "?"} out ${summary.usage?.output_tokens ?? "?"} tokens, ` +
+          `in ${summary.usage?.input_tokens ?? "?"} (cached ${summary.usage?.cached_input_tokens ?? "?"}) out ${summary.usage?.output_tokens ?? "?"} tokens, ` +
           `$${summary.cost.toFixed(5)}, ${summary.ms} ms${summary.problem ? `, rejected: ${summary.problem}` : ""}`
       )
       if (summary.summary === null) {

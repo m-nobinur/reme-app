@@ -173,3 +173,58 @@ test("cache-read ratio is per role and counts written tokens as prompt", () => {
   assert.equal(rows.find((r) => r.role === "quick_copy").ratio, 0)
   assert.match(render([], rows), /75\.0%/)
 })
+
+test("each turn keeps its role and its model apart, a Developer turn too", () => {
+  const rows = (payload) =>
+    JSON.stringify({ type: "runtime.turn", assignment_id: "a", payload })
+  const turns = turnsOf(
+    [
+      rows({ role: "page", model: "haiku", response: { usage: {} } }),
+      rows({
+        role: "developer",
+        model: "haiku",
+        agentName: "developer",
+        request: { requestedModel: "haiku" },
+        response: { usage: {} },
+      }),
+      // A Developer row from before the tee named its role and model.
+      rows({
+        agentName: "developer",
+        request: { requestedModel: "sonnet" },
+        response: { usage: {} },
+      }),
+    ].join("\n")
+  )
+  assert.deepEqual(
+    turns.map((t) => [t.role, t.model]),
+    [
+      ["page", "haiku"],
+      ["developer", "haiku"],
+      ["developer", "sonnet"],
+    ]
+  )
+  assert.match(render([], roleRows(turns)), /\| page \| haiku \|/)
+})
+
+test("a build's photo cost is its billed photos turn over the estimate", () => {
+  const photos = photosOf(
+    [
+      JSON.stringify({
+        type: "site.photos",
+        assignment_id: "f0",
+        payload: {
+          slots: [
+            {
+              id: "hero",
+              source: "generated",
+              resolution: "2K",
+              asset_id: "a",
+            },
+          ],
+        },
+      }),
+      turn("f0", "photos", { cost: { total: 0.31 } }),
+    ].join("\n")
+  )
+  assert.deepEqual(photos.get("f0"), { images: 1, cost: 0.31 })
+})

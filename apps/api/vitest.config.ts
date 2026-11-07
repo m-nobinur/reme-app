@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { markdownAsText } from "@workspace/skills/markdown-as-text"
 import { defineConfig } from "vitest/config"
 
 // Plain node, not workerd. The routing case builds a `Request` and calls the
@@ -26,7 +27,7 @@ const webpAsBytes = {
 }
 
 export default defineConfig({
-  plugins: [webpAsBytes],
+  plugins: [webpAsBytes, markdownAsText],
   test: {
     // Three locally, so targeted runs from several agents leave the Mac usable.
     maxWorkers: process.env.CI ? undefined : 3,

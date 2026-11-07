@@ -1,22 +1,16 @@
 import { describe, expect, it } from "vitest"
-import { FacadeError } from "../src/errors.ts"
 import {
-  bashRefusal,
   boundResult,
   createMutationQueue,
   createTurnGate,
   guard,
   guardedTools,
   observer,
-  pathRefusal,
   TOOL_RESULT_MAX_CHARS,
   TURN_CAPPED,
 } from "../src/hooks.ts"
 
-const policy = {
-  siteRoot: "/workspace/site",
-  readOnlyRoots: ["/opt/astro"],
-}
+const policy = { siteRoot: "/workspace/site" }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -47,76 +41,6 @@ describe("hook timeouts", () => {
     ).resolves.toBeUndefined()
     await expect(observer("post_tool_call", async () => "seen")).resolves.toBe(
       "seen"
-    )
-  })
-})
-
-describe("the pre_tool_call policy", () => {
-  it("refuses bash that leaves the site or touches .agents", () => {
-    expect(bashRefusal("cat /etc/passwd", policy)).toMatch(/outside the site/)
-    expect(bashRefusal("cd .. && ls", policy)).toMatch(/\.\. segment/)
-    expect(bashRefusal("cat ../../secret", policy)).toMatch(/\.\. segment/)
-    expect(bashRefusal("echo x > .agents/skills/a/SKILL.md", policy)).toMatch(
-      /\.agents/
-    )
-    expect(bashRefusal("cd /workspace/other; ls", policy)).toMatch(
-      /outside the site/
-    )
-    expect(bashRefusal("cd src; cd /workspace/other", policy)).toMatch(
-      /outside the site/
-    )
-    for (const command of [
-      "cat</etc/passwd",
-      "echo x>/etc/hosts",
-      "true;cat /etc/passwd",
-      "npm pack --pack-destination=/workspace/other",
-      'cp a "$(echo /etc/passwd)"',
-    ]) {
-      expect(bashRefusal(command, policy)).toMatch(/outside the site/)
-    }
-    for (const command of [
-      "cat $HOME/.ssh/id_rsa",
-      "cat ~/.npmrc",
-      "cat \\/etc/passwd",
-      "cat {/etc/passwd,}",
-    ]) {
-      expect(bashRefusal(command, policy)).toMatch(/builds a path/)
-    }
-    for (const command of [
-      "cd ~ && cat .npmrc",
-      "cd $HOME; ls",
-      "cd && ls",
-      "cd - && ls",
-      "pushd /etc",
-      "ls && cd /workspace/other",
-    ]) {
-      expect(bashRefusal(command, policy)).toMatch(
-        /leaves the site|outside the site/
-      )
-    }
-    expect(bashRefusal("cd src && cd components && ls", policy)).toBeNull()
-  })
-
-  it("allows bash inside the site, the toolchain and the scratch dir", () => {
-    expect(bashRefusal("pnpm astro build", policy)).toBeNull()
-    expect(
-      bashRefusal("ln -s /opt/astro/node_modules node_modules", policy)
-    ).toBeNull()
-    expect(bashRefusal("ls /workspace/site/src > /tmp/out", policy)).toBeNull()
-    expect(
-      bashRefusal("git -c user.name=reme commit -m 'x'", policy)
-    ).toBeNull()
-  })
-
-  it("refuses write and edit paths outside the site", () => {
-    const resolve = (p: string) =>
-      p.startsWith("/") ? p : `/workspace/site/${p}`
-    expect(pathRefusal("src/pages/index.astro", policy, resolve)).toBeNull()
-    expect(pathRefusal("/workspace/site/x.ts", policy, resolve)).toBeNull()
-    expect(pathRefusal("/workspace/x.ts", policy, resolve)).toMatch(/outside/)
-    expect(pathRefusal("../x.ts", policy, resolve)).toMatch(/\.\. segment/)
-    expect(pathRefusal(".agents/skills/x/SKILL.md", policy, resolve)).toMatch(
-      /\.agents/
     )
   })
 })
@@ -177,11 +101,9 @@ describe("the guarded tool set", () => {
     }
   })
 
-  it("refuses a bash call that leaves the site before it runs", async () => {
-    await expect(
-      tool("bash").execute("call-1", { command: "cat /etc/passwd" })
-    ).rejects.toBeInstanceOf(FacadeError)
-    expect(calls).not.toContain("cat /etc/passwd")
+  it("runs a bash call wherever it reaches: the container is the boundary", async () => {
+    await tool("bash").execute("call-1", { command: "cat /etc/passwd" })
+    expect(calls).toContain("cat /etc/passwd")
   })
 
   it("runs a bash call inside the site", async () => {
@@ -189,21 +111,13 @@ describe("the guarded tool set", () => {
     expect(calls).toContain("pnpm astro check")
   })
 
-  it("refuses a write or an edit outside the site before it touches a file", async () => {
-    await expect(
-      tool("write").execute("call-3", {
-        path: "/workspace/.agents/skills/x/SKILL.md",
-        content: "x",
-      })
-    ).rejects.toMatchObject({ code: "tool.refused" })
-    await expect(
-      tool("edit").execute("call-4", {
-        path: "/workspace/other.ts",
-        edits: [{ oldText: "a", newText: "b" }],
-      })
-    ).rejects.toMatchObject({ code: "tool.refused" })
+  it("writes outside the site too", async () => {
+    await tool("write").execute("call-3", {
+      path: "/workspace/.agents/skills/x/SKILL.md",
+      content: "x",
+    })
     expect(calls.some((c) => c.startsWith("write /workspace/.agents"))).toBe(
-      false
+      true
     )
   })
 

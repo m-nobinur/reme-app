@@ -72,26 +72,27 @@ describe("a generated OpenRouter entry", () => {
     ).toEqual({ prompt: 0.21, completion: 0.84 })
   })
 
-  it("costs every call at the most an admitted provider can bill", () => {
+  it("costs a call at the model's own OpenRouter price, whichever provider serves it", () => {
     expect(openrouterEntry(listed, providers).entry.cost).toEqual({
-      input: 0.21,
-      output: 0.84,
-      cacheRead: 0.06,
+      input: 0.1,
+      output: 0.4,
+      cacheRead: 0.01,
       cacheWrite: 0,
     })
   })
 
-  it("prices cache writes at the dearest admitted provider's, as reads are", () => {
-    const writes = (write: number) => ({
-      ...rates(0.1, 0.4, 0.01),
-      input_cache_write: perToken(write),
-    })
-    const { entry } = openrouterEntry(listed, [
-      provider("Cheap", writes(0.125)),
-      provider("Double", writes(0.2)),
-      provider("Dear", { ...rates(0.3, 0.9, 0.2), input_cache_write: "1" }),
-    ])
-    expect(entry.cost.cacheWrite).toBe(0.2)
+  it("prices cache writes as OpenRouter lists them", () => {
+    const { entry } = openrouterEntry(
+      {
+        ...listed,
+        pricing: {
+          ...rates(0.1, 0.4, 0.01),
+          input_cache_write: perToken(0.125),
+        },
+      },
+      providers
+    )
+    expect(entry.cost.cacheWrite).toBe(0.125)
   })
 
   it("promises only the window and output every admitted provider serves", () => {
@@ -119,11 +120,11 @@ describe("a generated OpenRouter entry", () => {
       data_collection: "deny",
     })
     expect(live).toBe(3)
-    expect(entry.cost.cacheRead).toBe(0.06)
+    expect(entry.cost.cacheRead).toBe(0.01)
     expect(entry.contextWindow).toBe(250_000)
   })
 
-  it("takes the day's peak where the list price moves by the hour", () => {
+  it("takes the listed price's daily peak where it moves by the hour", () => {
     const hourly: ListedModel = {
       ...listed,
       pricing: {
@@ -132,8 +133,8 @@ describe("a generated OpenRouter entry", () => {
       },
     }
     expect(openrouterEntry(hourly, []).entry.cost).toMatchObject({
-      input: 0.42,
-      output: 1.68,
+      input: 0.2,
+      output: 0.8,
     })
   })
 
@@ -166,26 +167,25 @@ describe("a generated OpenRouter entry", () => {
       prompt: 4.2,
       completion: 12.6,
     })
-    // Over the tier's threshold the log prices at 2.1 times the tier, which
-    // pi-ai's `calculateCost` applies to the whole request. From 200,000
-    // tokens, since the tier starts there and pi-ai tests "above".
+    // Over the tier's threshold the log prices at the listed tier, which pi-ai's `calculateCost` applies to the whole request. From
+    // 200,000 tokens, since the tier starts there and pi-ai tests "above".
     expect(entry.cost).toEqual({
-      input: 4.2,
-      output: 12.6,
-      cacheRead: 2,
+      input: 2,
+      output: 6,
+      cacheRead: 0.5,
       cacheWrite: 0,
       tiers: [
         {
           inputTokensAbove: 199_999,
-          input: 8.4,
-          output: 25.2,
-          cacheRead: 2.1,
+          input: 4,
+          output: 12,
+          cacheRead: 1,
           cacheWrite: 0,
         },
       ],
     })
     expect(live).toBe(2)
-    // pi-ai reads the tier: 250,000 input tokens cost 8.4 per million.
+    // pi-ai reads the tier: 250,000 input tokens cost 4 per million.
     const usage = {
       input: 250_000,
       output: 0,
@@ -195,7 +195,7 @@ describe("a generated OpenRouter entry", () => {
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     }
     calculateCost(entry as unknown as Model<"openai-completions">, usage)
-    expect(usage.cost.input).toBeCloseTo(2.1, 10)
+    expect(usage.cost.input).toBeCloseTo(1, 10)
   })
 })
 

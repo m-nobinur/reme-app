@@ -77,81 +77,9 @@ export async function observer<T>(
   }
 }
 
-/**
- * Where the model's file and shell tools may reach. `siteRoot` is the site
- * in the workspace; `readOnlyRoots` are paths a command may name but never
- * write, the image's toolchain for one.
- */
+/** Where the site lives in the workspace. */
 export type ToolPolicy = {
   siteRoot: string
-  readOnlyRoots?: readonly string[]
-}
-
-const under = (path: string, root: string) =>
-  path === root || path.startsWith(`${root.replace(/\/$/, "")}/`)
-
-const hasParentSegment = (path: string) => path.split(/[/\s]/).includes("..")
-
-/** `.agents/` holds the workspace skills; the model reads them through activation, never edits them. */
-const touchesAgents = (path: string) =>
-  /(^|[^A-Za-z0-9_.-])\.agents(?![A-Za-z0-9_-])/.test(path)
-
-/**
- * The reason a shell command is refused, or null. Deliberately blunt: any
- * absolute path outside the site or a read-only root, any `..`, any mention
- * of `.agents/`, and `cd` to anywhere but inside the site. A false refusal
- * costs the model a retry; a false pass costs a tenant.
- */
-export function bashRefusal(
-  command: string,
-  policy: ToolPolicy
-): string | null {
-  if (touchesAgents(command)) return "the command names .agents/"
-  if (hasParentSegment(command)) return "the command contains a .. segment"
-  const roots = [policy.siteRoot, ...(policy.readOnlyRoots ?? [])]
-  // Split on shell punctuation too: `cat</etc/passwd` and `--out=/etc/x`
-  // name a path with no space before it.
-  // shortcut: a string check, not a shell parser, so a path spelled without
-  // a slash (printf escapes) still passes; the org's own container is the
-  // tenant boundary. Parse the command if this ever guards more than that.
-  for (const token of command.split(/[\s;&|<>()`='"]+/)) {
-    // `$HOME/x`, `~/x`, `\/etc`, `{/etc/passwd,}`: the shell makes the path.
-    if (/^[^/]*[$~\\{][^/]*\//.test(token)) {
-      return `${token} builds a path the check cannot read`
-    }
-    if (!token.startsWith("/")) continue
-    if (token === "/dev/null" || under(token, "/tmp")) continue
-    if (!roots.some((root) => under(token, root))) {
-      return `${token} is outside the site`
-    }
-  }
-  // Every `cd` and `pushd`: a bare one, `-`, `~` or `$HOME` leaves with no
-  // slash for the loop above to see.
-  for (const [, verb, to] of command.matchAll(
-    /(?:^|[;&|(]\s*)(cd|pushd)(?:\s+([^\s;&|)]+))?/g
-  )) {
-    const leaves =
-      !to ||
-      to === "-" ||
-      /[$~\\{`]/.test(to) ||
-      (to.startsWith("/") && !under(to, policy.siteRoot))
-    if (leaves) return `${verb} ${to ?? ""} leaves the site`.trim()
-  }
-  return null
-}
-
-/** The reason a file path is refused for writing, or null. */
-export function pathRefusal(
-  path: string,
-  policy: ToolPolicy,
-  resolve: (p: string) => string
-): string | null {
-  if (hasParentSegment(path)) return "the path contains a .. segment"
-  const absolute = resolve(path)
-  if (touchesAgents(absolute)) return "the path is under .agents/"
-  if (!under(absolute, policy.siteRoot))
-    return `${absolute} is outside the site`
-  return null
 }
 
 /**
@@ -698,10 +626,6 @@ export function guardedTools(
 ): SandboxToolFactory {
   const mutations = options.mutations ?? createMutationQueue()
   return (sandbox: Sandbox) => {
-    const path = (params: Record<string, unknown>) =>
-      pathRefusal(String(params.path ?? ""), policy, (p) =>
-        sandbox.resolvePath(p)
-      )
     // shortcut: keyed on resolvePath, not realpath, so a symlink and its
     // target are two keys; the site has none the model writes through.
     const onePerFile = (
@@ -710,20 +634,21 @@ export function guardedTools(
     ) => mutations(sandbox.resolvePath(String(params.path ?? "")), run)
     const bash = (params: Record<string, unknown>, toolCallId: string) => {
       const command = String(params.command ?? "")
+      // The sandbox is the org's own container, so no command is refused for
+      // what it touches (as Hermes skips its guards in a container); this is
+      // the one ordering rule between the lead and its subagents.
       if (options.fromChild?.(toolCallId) && CHILD_BUILD.test(command)) {
         return "a subagent never runs astro build; the lead builds once after every task returns"
       }
-      return bashRefusal(command, policy)
+      return null
     }
     return [
       wrap(createReadTool(sandbox)),
       wrap(createWriteTool(sandbox), {
-        check: path,
         sequential: true,
         around: onePerFile,
       }),
       wrap(createBatchEditTool(sandbox), {
-        check: path,
         sequential: true,
         around: onePerFile,
       }),

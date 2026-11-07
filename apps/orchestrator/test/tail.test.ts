@@ -21,6 +21,15 @@ import {
   uploadDist,
 } from "../src/tail.ts"
 
+// workerd's FixedLengthStream as a pass-through: these tests run on Node.
+Object.assign(globalThis, {
+  FixedLengthStream: class extends TransformStream {
+    constructor(_length: number) {
+      super()
+    }
+  },
+})
+
 const enc = (s: string) => new TextEncoder().encode(s)
 const sha = async (s: string) =>
   Array.from(
@@ -35,6 +44,7 @@ async function rig(
   options: { sumsFail?: boolean; hide?: string[]; swept?: boolean } = {}
 ) {
   const read: string[] = []
+  const saved: string[] = []
   const copied: string[] = []
   const stored = new Map<string, string>()
   const bucket = new Map(
@@ -72,16 +82,29 @@ async function rig(
       read.push(file)
       return enc(now[file] ?? "")
     },
+    saveFile: async (path: string, key: string) => {
+      peak = Math.max(peak, ++inFlight)
+      await new Promise((r) => setTimeout(r, 1))
+      inFlight--
+      const file = path.replace("/workspace/site/dist/", "")
+      saved.push(file)
+      stored.set(key, now[file] ?? "")
+      return enc(now[file] ?? "").byteLength
+    },
   }
   const sites = {
     get: async (key: string) => {
       const body = bucket.get(key)
       if (body === undefined) return null
       copied.push(key.replace("old/dist/", ""))
-      return { arrayBuffer: async () => enc(body).buffer as ArrayBuffer }
+      const bytes = enc(body)
+      return { size: bytes.byteLength, body: new Blob([bytes]).stream() }
     },
-    put: async (key: string, value: Uint8Array | ArrayBuffer) => {
-      stored.set(key, new TextDecoder().decode(value))
+    put: async (
+      key: string,
+      value: Uint8Array | ArrayBuffer | ReadableStream
+    ) => {
+      stored.set(key, await new Response(value).text())
     },
   }
   const previous = {
@@ -93,7 +116,7 @@ async function rig(
     ),
   }
   const run = () => uploadDist({ sandbox, sites, prefix: "new/", previous })
-  return { run, read, copied, stored, peak: () => peak }
+  return { run, read, saved, copied, stored, peak: () => peak }
 }
 
 describe("the dist upload", () => {
@@ -103,14 +126,15 @@ describe("the dist upload", () => {
       { "index.html": "old home", "a.css": "same", "b.js": "same too" }
     )
     const out = await r.run()
-    expect(r.read).toEqual(["index.html"])
+    expect(r.saved).toEqual(["index.html"])
+    expect(r.read).toEqual([])
     expect([...r.copied].sort()).toEqual(["a.css", "b.js"])
     expect(Object.fromEntries(r.stored)).toEqual({
       "new/dist/index.html": "new home",
       "new/dist/a.css": "same",
       "new/dist/b.js": "same too",
     })
-    expect(out).toMatchObject({ sent: 1, reused: 2 })
+    expect(out).toMatchObject({ sent: 1, reused: 2, bytes: 8 })
     expect(out.files).toEqual({
       "a.css": await sha("same"),
       "b.js": await sha("same too"),
@@ -127,7 +151,7 @@ describe("the dist upload", () => {
       { swept: true }
     )
     const out = await r.run()
-    expect(r.read).toEqual(["index.html"])
+    expect(r.saved).toEqual(["index.html"])
     expect(out).toMatchObject({ sent: 1, reused: 0 })
   })
 
@@ -138,6 +162,8 @@ describe("the dist upload", () => {
       { hide: ["odd name.css"] }
     )
     expect((await missing.run()).files["odd name.css"]).toBe(await sha("x"))
+    expect(missing.read).toEqual(["odd name.css"])
+    expect(missing.saved).toEqual(["index.html"])
     const failed = await rig(
       { "index.html": "home" },
       { "index.html": "home" },
@@ -275,7 +301,8 @@ describe("the build at the end of a report", () => {
   const finish = async (
     build: string,
     edit?: (site: string) => void,
-    holdPhotos = false
+    holdPhotos = false,
+    more: { facts?: unknown[]; sites?: unknown } = {}
   ) => {
     const site = mkdtempSync(join(tmpdir(), "reme-tail-"))
     mkdirSync(join(site, "node_modules/.bin"), { recursive: true })
@@ -346,9 +373,68 @@ describe("the build at the end of a report", () => {
       assignmentId: "a",
       facts: [],
       holdPhotos,
+      stopStrays: async () => undefined,
+      ...more,
     } as unknown as Parameters<typeof finishRevision>[0])
     return { outcome, ran }
   }
+
+  it("places the kept logo's mark for the favicon set, and removes one the logo no longer has", async () => {
+    const LOGO = "11111111-0000-4000-8000-000000000000"
+    const facts = [
+      {
+        key: "media.uploads",
+        value: {
+          items: [
+            {
+              id: LOGO,
+              name: "Logo.png",
+              content_type: "image/png",
+              bytes: 7,
+              use: "logo",
+            },
+          ],
+        },
+      },
+    ]
+    const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0, 255, 10])
+    const asked: string[] = []
+    const sites = (held: boolean) => ({
+      get: async (key: string) => {
+        asked.push(key)
+        return held ? { arrayBuffer: async () => bytes.slice().buffer } : null
+      },
+    })
+    const built = "mkdir -p dist && echo '<html></html>' > dist/index.html"
+    let site = ""
+    const placed = await finish(
+      built,
+      (s) => {
+        site = s
+      },
+      false,
+      { facts, sites: sites(true) }
+    )
+    await expect(placed.outcome).rejects.toThrow("reached the revision")
+    expect(asked).toEqual([`marks/o/${LOGO}.png`])
+    expect(
+      new Uint8Array(readFileSync(join(site, "src/assets/mark.png")))
+    ).toEqual(bytes)
+    expect(() => readFileSync(join(site, "src/assets/mark.png.b64"))).toThrow()
+
+    const gone = await finish(
+      built,
+      (s) => {
+        site = s
+        mkdirSync(join(s, "src/assets"), { recursive: true })
+        writeFileSync(join(s, "src/assets/mark.png"), "an old logo's mark")
+      },
+      false,
+      { facts, sites: sites(false) }
+    )
+    await expect(gone.outcome).rejects.toThrow("reached the revision")
+    expect(() => readFileSync(join(site, "src/assets/mark.png"))).toThrow()
+  })
 
   it("fails the report when astro build fails, whatever its output's tail says", async () => {
     const { outcome, ran } = await finish('echo "ENOENT: font cache"; exit 1')
@@ -485,6 +571,7 @@ describe("the source snapshot at the end of a report", () => {
   it("goes from the sandbox to R2 without being read back through the caller", async () => {
     const reads: string[] = []
     const saved: [string, string][] = []
+    const order: string[] = []
     const done: Record<string, unknown> = {
       documents: { json: null },
       "astro check": { exit_code: 0, output: "", ms: 0 },
@@ -501,7 +588,10 @@ describe("the source snapshot at the end of a report", () => {
           name in done ? (done[name] as T) : fn(),
       },
       sandbox: {
-        exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+        exec: async () => {
+          order.push("exec")
+          return { exitCode: 0, stdout: "", stderr: "" }
+        },
         readFileBuffer: async (path: string) => {
           reads.push(path)
           return new Uint8Array()
@@ -512,6 +602,7 @@ describe("the source snapshot at the end of a report", () => {
         saved.push([path, key])
         return 1
       },
+      stopStrays: async () => void order.push("stop strays"),
       kit: {},
       sites: {},
       hostSuffix: "-stg.remeai.co.uk",
@@ -524,5 +615,8 @@ describe("the source snapshot at the end of a report", () => {
     ])
     expect(reads).toEqual([])
     expect(out.source.key).toBe("sites/o/rev-1/source.tar.zst")
+    // #697: nothing the Developer left running sees the tail's files.
+    expect(order[0]).toBe("stop strays")
+    expect(order.filter((o) => o === "stop strays")).toHaveLength(3)
   })
 })

@@ -10,6 +10,8 @@ import { axe, open } from "./helpers"
 const WIDTHS = { phone: 390, desktop: 1440 } as const
 
 const input = (page: Page) => page.getByLabel("Message input")
+/** What the catalog's dictation hears. */
+const HEARD = "Please book a clean for Friday morning"
 const menu = (page: Page) => page.locator('[data-slot="dropdown-menu-content"]')
 
 /** Opens a menu and waits for its entry transition, so a scan sees it settled. */
@@ -101,7 +103,7 @@ test.describe("with reduced motion", () => {
   }
 })
 
-test("the empty state opens on the briefing and what to ask", async ({
+test("the empty state opens on the briefing, with no chips above the composer", async ({
   page,
 }) => {
   await open(page, "ThreadEmpty")
@@ -112,34 +114,232 @@ test("the empty state opens on the briefing and what to ask", async ({
     "Your website is live. Your latest changes are ready to publish."
   )
   await expect(input(page)).toHaveAttribute("placeholder", "Ask Reme anything…")
-  await expect(page.locator(".aui-thread-welcome-suggestion")).toHaveText([
-    "What changed in the new version?",
-    "What do you need from me?",
-    "What is on my website now?",
-  ])
-  // One row each, under the composer, in a single column.
-  const composer = await page
-    .locator('[data-slot="aui_composer-shell"]')
-    .boundingBox()
-  const rows = await page
-    .locator(".aui-thread-welcome-suggestion")
-    .evaluateAll((nodes) =>
-      nodes.map((node) => {
-        const box = node.getBoundingClientRect()
-        return { x: box.x, y: box.y }
-      })
+  await expect(page.locator('[data-slot="chip-row"]')).toHaveCount(0)
+})
+
+test("on a phone a row of chips scrolls sideways and fades at the edge", async ({
+  page,
+}) => {
+  await open(page, "ChipRow", WIDTHS.phone)
+  const row = page.locator('[data-slot="chip-row"]')
+  await row.evaluate((node) => node.scrollTo({ left: 0 }))
+  const last = page.getByRole("button", {
+    name: "Summarise this week's enquiries",
+  })
+  await expect(row).toHaveAttribute("data-fade-end", "true")
+  await expect(row).not.toHaveAttribute("data-fade-start")
+  expect(
+    await row.evaluate((node) => node.scrollWidth > node.clientWidth)
+  ).toBe(true)
+  // Tab walks the row: the last chip takes the focus and scrolls into view.
+  await page
+    .getByRole("button", { name: "Draft three onboarding prompts" })
+    .focus()
+  for (let press = 0; press < 3; press++) await page.keyboard.press("Tab")
+  await expect(last).toBeFocused()
+  await expect(row).toHaveAttribute("data-fade-start", "true")
+  await expect(row).not.toHaveAttribute("data-fade-end")
+  const chip = await last.boundingBox()
+  const edge = await row.boundingBox()
+  expect((chip?.x ?? 0) + (chip?.width ?? 0)).toBeLessThanOrEqual(
+    (edge?.x ?? 0) + (edge?.width ?? 0)
+  )
+})
+
+test("dictating shows the level, × and ✓ in place of the mic and send, the words still settling muted", async ({
+  page,
+}) => {
+  await open(page, "ThreadDictating", WIDTHS.phone)
+  await expect(input(page)).toHaveValue(HEARD)
+  await expect(page.getByRole("button", { name: "Dictate" })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Send message" })).toHaveCount(
+    0
+  )
+  // Still being recognised: drawn over the field, muted and italic.
+  const phrase = page.locator('[data-slot="aui_dictation-heard"] span')
+  await expect(phrase).toHaveText(HEARD)
+  await expect(phrase).toHaveCSS("font-style", "italic")
+  // Speaking: the dots have risen into bars, and say nothing to a reader.
+  const meter = page.locator('[data-slot="aui_dictation-level"]')
+  await expect(meter).toHaveAttribute("aria-hidden", "true")
+  await expect
+    .poll(() =>
+      meter
+        .locator("span")
+        .nth(2)
+        .evaluate((bar) => bar.getBoundingClientRect().height)
     )
-  expect(rows[0]?.y).toBeGreaterThan(composer?.y ?? 0)
-  for (const [index, row] of rows.entries()) {
-    expect(row.x).toBe(rows[0]?.x)
-    if (index > 0) expect(row.y).toBeGreaterThan(rows[index - 1]?.y ?? 0)
+    .toBeGreaterThan(10)
+  const cancel = page.getByRole("button", { name: "Cancel dictation" })
+  const done = page.getByRole("button", { name: "Done" })
+  for (const button of [cancel, done]) {
+    const box = await button.boundingBox()
+    expect(box?.width).toBe(36)
+    expect(box?.height).toBe(36)
   }
+  await done.focus()
+  await expect(done).toBeFocused()
+  await done.press("Enter")
+  await expect(page.getByRole("button", { name: "Dictate" })).toBeVisible()
+  // What was heard stays for the owner to edit or send, and nothing sent.
+  await expect(input(page)).toHaveValue(HEARD)
+  await expect(page.getByRole("button", { name: "Send message" })).toBeVisible()
+})
+
+test("listening before a word is heard says so in the field, the dots still", async ({
+  page,
+}) => {
+  await open(page, "ThreadListening", WIDTHS.phone)
+  await expect(input(page)).toHaveAttribute("placeholder", "Listening…")
+  await expect(input(page)).toHaveValue("")
+  const bars = page.locator('[data-slot="aui_dictation-level"] span')
+  await expect(bars).toHaveCount(5)
+  for (const height of await bars.evaluateAll((all) =>
+    all.map((bar) => bar.getBoundingClientRect().height)
+  ))
+    expect(height).toBe(4)
+  // Announced once, in the notice line, without a visible second line.
+  const notice = page.locator('[data-slot="aui_dictation-notice"]')
+  await expect(notice).toHaveText("Listening")
+  await expect(notice).toHaveClass(/sr-only/)
+  await axe(page, "listening")
+})
+
+test("a dictation that could not start says so under the field", async ({
+  page,
+}) => {
+  await open(page, "ThreadDictationNotice", WIDTHS.phone)
+  const notice = page.locator('[data-slot="aui_dictation-notice"]')
+  await expect(notice).toHaveText(
+    "Microphone access is off. Allow it in your browser to dictate."
+  )
+  await expect(notice).toHaveAttribute("aria-live", "polite")
+  await expect(page.getByRole("button", { name: "Dictate" })).toBeEnabled()
+  await expect(
+    page.getByLabel("Message input").locator("xpath=ancestor::form")
+  ).toBeVisible()
+})
+
+/** Hold Space in the composer to dictate, with the mic's adapter in the fixture. */
+const dictate = (page: Page) =>
+  page.getByRole("button", { name: "Dictate", exact: true })
+const done = (page: Page) => page.getByRole("button", { name: "Done" })
+/** Longer than the hold that starts dictation, with room to spare. */
+const PAST_HOLD = 700
+
+test.describe("hold Space to dictate, the microphone allowed", () => {
+  test.use({ permissions: ["microphone"] })
+
+  test("holding Space starts dictation and letting go stops it", async ({
+    page,
+  }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).focus()
+    await page.keyboard.down("Space")
+    await expect(done(page)).toBeVisible()
+    await expect(input(page)).toHaveValue(HEARD)
+    await page.keyboard.up("Space")
+    await expect(dictate(page)).toBeVisible()
+    // The held key typed nothing of its own.
+    await expect(input(page)).toHaveValue(HEARD)
+  })
+
+  test("× drops what this dictation wrote and keeps what was typed before it", async ({
+    page,
+  }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).fill("Hi ")
+    await dictate(page).click()
+    await expect(input(page)).toHaveValue(`Hi ${HEARD}`)
+    await page.getByRole("button", { name: "Cancel dictation" }).click()
+    await expect(dictate(page)).toBeVisible()
+    await expect(input(page)).toHaveValue("Hi ")
+  })
+
+  test("a short press types a space", async ({ page }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).focus()
+    await page.keyboard.press("Space")
+    await expect(input(page)).toHaveValue(" ")
+    await page.waitForTimeout(PAST_HOLD)
+    await expect(dictate(page)).toBeVisible()
+  })
+
+  test("Space held in the middle of a word types as before", async ({
+    page,
+  }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).fill("Hello")
+    await page.keyboard.down("Space")
+    await page.waitForTimeout(PAST_HOLD)
+    await page.keyboard.up("Space")
+    await expect(dictate(page)).toBeVisible()
+    await expect(input(page)).toHaveValue("Hello ")
+  })
+
+  test("Space held while an input method composes is left to it", async ({
+    page,
+  }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await input(page).focus()
+    await input(page).dispatchEvent("keydown", {
+      key: " ",
+      code: "Space",
+      isComposing: true,
+    })
+    await page.waitForTimeout(PAST_HOLD)
+    await expect(dictate(page)).toBeVisible()
+  })
+
+  test("the mic's tooltip names the shortcut", async ({ page }) => {
+    await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+    await dictate(page).hover()
+    await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+      "Dictate, or hold Space to talk"
+    )
+  })
+})
+
+test("before the microphone is allowed, holding Space only types", async ({
+  page,
+}) => {
+  await open(page, "ThreadEmptyPhone", WIDTHS.phone)
+  await input(page).focus()
+  await page.keyboard.down("Space")
+  await page.waitForTimeout(PAST_HOLD)
+  await page.keyboard.up("Space")
+  await expect(dictate(page)).toBeVisible()
+  await expect(input(page)).toHaveValue(" ")
+})
+
+test("with no notice the composer has no gap for one", async ({ page }) => {
+  await open(page, "ThreadEmpty")
+  await expect(page.locator('[data-slot="aui_dictation-notice"]')).toBeHidden()
+})
+
+test("the new chat greets with the assistant's own face, Reme's without a pick", async ({
+  page,
+}) => {
+  const welcome = page.locator(".aui-thread-welcome-root")
+  await open(page, "ThreadEmptyAvatar")
+  const picked = welcome.locator('[data-slot="assistant-avatar"]')
+  await expect(picked).toBeVisible()
+  await expect(picked).toHaveAttribute("aria-hidden", "true")
+  expect((await picked.boundingBox())?.width).toBe(56)
+  await expect(welcome.getByRole("heading")).toHaveText(
+    "What should we do today?"
+  )
+  await open(page, "ThreadEmpty")
+  await expect(welcome.locator('[data-slot="assistant-avatar"]')).toHaveCount(0)
+  const reme = welcome.locator("span.rounded-full").first()
+  await expect(reme).toBeVisible()
+  expect((await reme.boundingBox())?.width).toBe(56)
+  await expect(welcome.locator("svg")).toHaveCount(0)
 })
 
 test("with nothing read, the empty state has no line", async ({ page }) => {
   await open(page, "ThreadEmptyUnread")
   await expect(page.locator('[data-slot="aui_thread-briefing"]')).toHaveCount(0)
-  await expect(page.locator(".aui-thread-welcome-suggestion")).toHaveCount(0)
 })
 
 test("a quick action puts its sentence in the composer, focused", async ({

@@ -27,6 +27,8 @@ import {
   eq,
   memberships,
   orgs,
+  putOff,
+  readTasks,
   sql,
   supersedePrivateFact,
   type Tenancy,
@@ -484,6 +486,31 @@ export async function buyElsewhere(
   })
   if (result.status === 204) return new Response(null, { status: 204 })
   return relay(result, () => null)
+}
+
+/**
+ * `POST /domains/{name}/not-yet`: the owner says they have not bought `name`
+ * yet. The address task they opened by going to buy it is put off for a week,
+ * which is where the panel and the update stack read it from; the hold keeps
+ * watching the registry. A task that is not theirs to buy is left alone.
+ */
+export async function notYetBought(
+  kit: Tenancy,
+  owner: Owner,
+  name: string
+): Promise<Response> {
+  if (!(await isOrgOwner(kit, owner))) return notOwner("buy")
+  await kit.withOrg({ orgId: owner.orgId }, async (db) => {
+    const task = (await readTasks(db)).find((t) => t.kind === "address")
+    if (
+      task?.kind === "address" &&
+      task.state === "active" &&
+      task.detail.origin === "buying_elsewhere" &&
+      task.detail.name === name
+    )
+      await putOff(db, task.id, 7)
+  })
+  return new Response(null, { status: 204 })
 }
 
 /**

@@ -150,7 +150,7 @@ export async function latestBlueprint(
 type Restorable = {
   exec: (
     command: string,
-    options?: { timeout?: number }
+    options?: { timeout?: number; privileged?: boolean }
   ) => Promise<{ exitCode: number; stdout: string; stderr: string }>
   writeFile: (
     path: string,
@@ -180,10 +180,17 @@ export async function restore(
   const object = await sites.get(sourceKey)
   if (!object) throw new Error(`no source snapshot at ${sourceKey}`)
   await sandbox.writeFile("/tmp/source.tar.zst", object.body)
-  const restored = await sandbox.exec(
-    `rm -rf ${SITE_ROOT} && mkdir -p ${SITE_ROOT} && tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`,
-    { timeout: 120_000 }
+  const cleared = await sandbox.exec(
+    `rm -rf ${SITE_ROOT} && mkdir -p ${SITE_ROOT}`,
+    { privileged: true }
   )
+  const restored =
+    cleared.exitCode === 0
+      ? await sandbox.exec(
+          `tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`,
+          { timeout: 120_000 }
+        )
+      : cleared
   if (restored.exitCode !== 0)
     throw new Error(`restore failed: ${restored.stderr}`)
 }

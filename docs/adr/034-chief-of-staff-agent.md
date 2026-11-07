@@ -256,8 +256,9 @@ run when the spend so far plus the next step's worst case would pass it.
 
 A step is logged at what OpenRouter billed for it, the `usage.cost` on the finish part's provider
 metadata, and the Developer's calls are logged the same way, so both reconcile against one
-OpenRouter bill. A step with no reported cost is priced from its usage at the table, which errs
-high. The routing cap stays the pre-call limit: `max_price` and the reservation are priced at it,
+OpenRouter bill. A step with no reported cost is priced from its usage at the table. The routing
+cap stays the pre-call limit on providers (`max_price`). Since 2026-11-06 the table prices a model
+at its own listed OpenRouter price (the day's peak where it moves by the hour), not at the cap,
 and the daily cap counts an open turn at its reservation. The check before the CoS ships, run by
 the tier-2 eval, is that the logged sum is within 5% of the bill. An abandoned turn lost its last
 step's usage, so the bill must then fall between the sum with it at its logged spend and the sum

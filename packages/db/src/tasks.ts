@@ -1,6 +1,7 @@
 import {
   ADDRESS_TASK_STEPS,
   type AddressDetail,
+  type AddressStageName,
   GOOGLE_TASK_STEPS,
   type OwnerTask,
   type TaskBlockedOn,
@@ -10,8 +11,33 @@ import {
   type TaskStepState,
 } from "@workspace/contracts"
 import { and, eq, sql } from "drizzle-orm"
-import { ownerTasks, taskSteps } from "./schema.ts"
+import { deliveries, ownerTasks, taskSteps } from "./schema.ts"
 import type { OrgScopedDb } from "./tenancy.ts"
+
+/** A journey ledger row's `deliveries` key: the latch key under this org's prefix. */
+export const latchKey = (key: string) =>
+  sql`'journey:' || current_setting('app.org_id') || ':' || ${key}`
+
+/** Journey latches (`Latch` in journey.ts) written once each. */
+export async function recordLatches(
+  db: OrgScopedDb,
+  keys: readonly string[],
+  at: Date = new Date()
+): Promise<void> {
+  if (keys.length === 0) return
+  await db
+    .insert(deliveries)
+    .values(
+      keys.map((key) => ({
+        orgId: sql`current_setting('app.org_id')::uuid`,
+        key: sql`${latchKey(key)}`,
+        channel: "in_app" as const,
+        state: "sent" as const,
+        sentAt: at,
+      }))
+    )
+    .onConflictDoNothing()
+}
 
 // The owner task store. Plain writes for the probe engine and the call sites,
 // one read for the panel and the assistant, and `syncTasks`, the one mapping
@@ -49,6 +75,22 @@ export async function openTask(
   const id = (row as { id: string }).id
   await addSteps(db, orgId, id, kind)
   return id
+}
+
+/**
+ * A fresh list of names leaves nothing of a name the owner was buying
+ * elsewhere: the name, the origin and the wait on the purchase.
+ */
+export async function dropElsewhere(
+  db: OrgScopedDb,
+  taskId: string
+): Promise<void> {
+  const dropped = await db.execute(sql`
+    update owner_tasks set detail = detail - 'name' - 'origin'
+    where id = ${taskId} and detail->>'origin' = 'buying_elsewhere'
+    returning id`)
+  if (dropped.length > 0)
+    await setStep(db, taskId, "purchase", { state: "pending" })
 }
 
 /**
@@ -158,7 +200,7 @@ export async function readTasks(db: OrgScopedDb): Promise<OwnerTask[]> {
         'note', s.note, 'blocked_on', s.blocked_on, 'deadline', s.deadline,
         'changed_at', s.changed_at) order by s.step), '[]'::json)
         from task_steps s where s.task_id = t.id) as steps
-    from owner_tasks t order by t.created_at desc limit 10`)
+    from owner_tasks t order by t.created_at desc, t.kind limit 10`)
   return rows.map(
     (t) =>
       ({
@@ -173,6 +215,48 @@ export async function readTasks(db: OrgScopedDb): Promise<OwnerTask[]> {
         })),
       }) as OwnerTask
   )
+}
+
+/**
+ * Where the website's own address stands, from the newest address task:
+ * `unknown` until the owner says whether they have a domain, then
+ * `choosing` a name, `paying` here, `buying_elsewhere` and then `bought`
+ * once the registry shows it, `connecting` one,
+ * `live`, or `put_off` and `declined` by the owner. `journeyOf` reads it
+ * for the assistant's notes, the update stack and the draft-ready line.
+ */
+export type AddressStage = {
+  stage: AddressStageName
+  name?: string
+  /** For `put_off`: when it may be offered again. */
+  until?: string
+}
+
+export function addressStage(tasks: readonly OwnerTask[]): AddressStage {
+  const task = tasks.find((t) => t.kind === "address")
+  if (task?.kind !== "address") return { stage: "none" }
+  const name = task.detail.name ? { name: task.detail.name } : {}
+  if (task.state === "later")
+    return {
+      stage: "put_off",
+      ...name,
+      ...(task.later_until && { until: task.later_until }),
+    }
+  if (task.state === "declined") return { stage: "declined", ...name }
+  if (task.state === "done") return { stage: "live", ...name }
+  const state = (step: string) => task.steps.find((s) => s.step === step)
+  const purchase = state("purchase")
+  if (purchase?.blocked_on === "purchase") return { stage: "paying", ...name }
+  if (task.detail.origin === "buying_elsewhere")
+    return {
+      stage: purchase?.state === "done" ? "bought" : "buying_elsewhere",
+      ...name,
+    }
+  if (state("find_out")?.state !== "done") return { stage: "unknown", ...name }
+  if (state("choose")?.state === "blocked") return { stage: "choosing" }
+  return task.detail.name
+    ? { stage: "connecting", ...name }
+    : { stage: "choosing" }
 }
 
 // ---------------------------------------------------------------------------

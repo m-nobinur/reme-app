@@ -15,13 +15,13 @@ import {
   RowEnding,
   sellableTld,
   townOf,
-  tradeWords,
   Uuid,
 } from "@workspace/contracts"
 import {
   appendEvent,
   currentFacts,
   domains,
+  dropElsewhere,
   eq,
   events,
   type OrgScopedDb,
@@ -49,7 +49,7 @@ import {
 } from "./domain-flow.ts"
 import { DomainError, zoneApex } from "./domains.ts"
 import type { Observed } from "./probe.ts"
-import { freshRate } from "./rates.ts"
+import { rateNow } from "./rates.ts"
 import { rdapLookup } from "./rdap.ts"
 import {
   attachHostname,
@@ -146,7 +146,7 @@ async function rankFacts(db: OrgScopedDb, query?: string) {
       text(value("service_area.radius")?.centre) ??
         text(value("service_area.text")?.text)
     ),
-    trade: tradeWords(text(value("business.industry")?.name)),
+    trade: text(value("business.industry")?.name),
     asked: Boolean(query),
   }
 }
@@ -166,6 +166,29 @@ const rowEndings = (env: Env): readonly RowEnding[] =>
       (offeredTlds(env) as readonly string[]).includes(e) ||
       (e === "co" && registrarLive(env))
   )
+
+/**
+ * The UK endings the sandbox cannot check, read from the registry instead
+ * (RDAP), so a UK business sees its .co.uk first wherever it is found: free
+ * with no price when the name is not registered, absent when RDAP fails.
+ */
+const UK_ENDINGS: readonly RowEnding[] = ["co.uk", "uk"]
+
+async function registryEndings(
+  env: Env,
+  names: string[]
+): Promise<Map<string, ReturnType<typeof endingOf>>> {
+  if (registrarLive(env)) return new Map()
+  const read = await Promise.all(
+    names.map(async (name) => {
+      const found = await rdapLookup(name).catch(() => null)
+      return found
+        ? ([name, { state: found.registered ? "taken" : "free" }] as const)
+        : null
+    })
+  )
+  return new Map(read.filter((r) => r !== null))
+}
 
 /** Names checked in calls of `CHECK_MAX`, all at once. */
 const checkAll = (env: Env, names: string[]) =>
@@ -254,10 +277,20 @@ export async function find(
     return registrarDown()
   }
   const answer = new Map(checked.map((c) => [c.name, c]))
+  const uk = UK_ENDINGS.filter((tld) => !endings.includes(tld))
+  const registry = await registryEndings(
+    env,
+    rows.flatMap((r) => uk.map((tld) => `${r.stem}.${tld}`))
+  )
   const out: DomainStemOffer[] = []
   for (const { stem, why } of rows) {
     const row: DomainStemOffer["endings"] = Object.fromEntries(
-      endings.map((tld) => [tld, endingOf(answer.get(`${stem}.${tld}`))])
+      RowEnding.options.flatMap((tld) => {
+        const name = `${stem}.${tld}`
+        if (endings.includes(tld)) return [[tld, endingOf(answer.get(name))]]
+        const read = registry.get(name)
+        return read ? [[tld, read]] : []
+      })
     )
     if (!Object.values(row).some((e) => e?.state === "free")) continue
     out.push({ stem, why, endings: row })
@@ -265,15 +298,14 @@ export async function find(
   if (out.length === 0) return fromEnvelope(409, BUY_REFUSALS.unavailable)
   await kit.withOrg({ orgId }, async (db) => {
     const task = await openTask(db, orgId, "address")
+    await dropElsewhere(db, task)
     await setStep(db, task, "choose", {
       state: "blocked",
       blocked_on: "owner_action",
       note: "picking a name",
     })
   })
-  const usd_gbp = await freshRate(env.SCHEDULE, new Date()).catch(
-    () => undefined
-  )
+  const usd_gbp = await rateNow(env, new Date()).catch(() => undefined)
   return {
     outcome: "found",
     rows: out.slice(0, ROWS_MAX),
@@ -1334,8 +1366,16 @@ export async function boughtElsewhere(
   } catch {
     // No hold for this name: the owner bought one we never offered.
   }
-  if (!registered)
+  if (!registered) {
+    // The owner's word is kept now, so no later conversation asks again; the
+    // hold's daily look finishes the step.
+    await kit.withOrg({ orgId }, async (db) => {
+      if (!(await isBuying(db, name))) return
+      const task = await openTask(db, orgId, "address")
+      await setStep(db, task, "purchase", { state: "in_progress" })
+    })
     return { status: 200, output: { outcome: "not_registered_yet", name } }
+  }
   await kit.withOrg({ orgId }, async (db) => {
     const task = await openTask(db, orgId, "address", { name })
     await setStep(db, task, "purchase", { state: "done" })
@@ -1343,19 +1383,42 @@ export async function boughtElsewhere(
   return connect(env, kit, orgId, { name, approval_id: `owner_done:${name}` })
 }
 
+/** Whether the open address task is still the owner buying `name` elsewhere. */
+const isBuying = async (db: OrgScopedDb, name: string) => {
+  const [held] = await db
+    .select({ id: ownerTasks.id })
+    .from(ownerTasks)
+    .where(
+      sql`${ownerTasks.kind} = 'address' and ${ownerTasks.state} in ('active', 'later')
+        and ${ownerTasks.detail}->>'origin' = 'buying_elsewhere' and ${ownerTasks.detail}->>'name' = ${name}`
+    )
+  return Boolean(held)
+}
+
 /**
  * The hold's daily look: whether the registry shows the name, or the owner
  * has a claim already. Registered and unclaimed, Reme offers to connect it
- * once; a look the owner's done woke finds the claim and says nothing.
+ * once; a look the owner's done woke finds the claim and says nothing. A
+ * name the owner moved on from (a fresh list of names) is `dropped`: the
+ * hold ends there and says nothing.
  */
 export async function lookElsewhere(
   kit: Tenancy,
   orgId: string,
   name: string
-): Promise<Observed<{ registered: boolean; claimed: boolean; at: number }>> {
+): Promise<
+  Observed<{
+    registered: boolean
+    claimed: boolean
+    dropped?: boolean
+    at: number
+  }>
+> {
   const done = await claimed(kit, orgId)
   const at = Date.now()
   if (done) return { result: { registered: false, claimed: true, at } }
+  if (!(await kit.withOrg({ orgId }, (db) => isBuying(db, name))))
+    return { result: { registered: false, claimed: false, dropped: true, at } }
   const registered = await isRegistered(name)
   return {
     result: { registered, claimed: false, at },

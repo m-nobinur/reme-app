@@ -61,6 +61,7 @@ const router = vi.hoisted(() => ({
 const server = vi.hoisted(() => ({
   completeReminder: vi.fn(),
   askForChanges: vi.fn(),
+  putOffDomain: vi.fn(),
 }))
 
 const ONBOARDING = "00000000-0000-4000-8000-00000000000a"
@@ -91,6 +92,7 @@ beforeEach(() => {
   }
   server.completeReminder.mockReset()
   server.askForChanges.mockReset()
+  server.putOffDomain.mockReset()
   route.id = "/app/_conversation/"
   router.state.matches = []
   router.navigate.mockReset()
@@ -287,7 +289,7 @@ it("offers to connect a web address, as a message into the open or latest chat",
       done: [],
     },
   }
-  const ask = "Help me connect my web address"
+  const ask = "Help me set up my domain"
   const sent = () => router.navigate.mock.lastCall?.[0]
   const RECENT = "00000000-0000-4000-8000-00000000000d"
   loader.conversations = [
@@ -304,30 +306,34 @@ it("offers to connect a web address, as a message into the open or latest chat",
   ]
   router.state.matches = [{ routeId: "/app/_conversation" }]
   await render()
-  expect(container.textContent).toContain("Web address · Not connected")
+  expect(container.textContent).toContain("Domain · Not connected")
   expect(section("Up next")).toBeUndefined()
   expect(section("Coming up")).toBeUndefined()
   // In a conversation, into that conversation.
-  await act(async () => buttonNamed("Connect")?.click())
+  await act(async () => buttonNamed("Connect now")?.click())
   expect(sent()).toEqual({
     to: ".",
-    state: { send: { text: ask, key: expect.any(String) } },
+    state: {
+      send: { text: ask, key: expect.any(String), intent: "connect_address" },
+    },
   })
   // From any other page, into the most recent one.
   router.state.matches = []
-  await act(async () => buttonNamed("Connect")?.click())
+  await act(async () => buttonNamed("Connect now")?.click())
   expect(sent()).toEqual({
     to: "/app/c/$id",
     params: { id: RECENT },
-    state: { send: { text: ask, key: expect.any(String) } },
+    state: {
+      send: { text: ask, key: expect.any(String), intent: "connect_address" },
+    },
   })
   // With none, a new chat opens with it.
   loader.conversations = []
   await act(async () => root.render(createElement(Frame)))
-  await act(async () => buttonNamed("Connect")?.click())
+  await act(async () => buttonNamed("Connect now")?.click())
   expect(sent()).toEqual({
     to: "/app",
-    state: { chat: expect.any(String), ask },
+    state: { chat: expect.any(String), ask, intent: "connect_address" },
   })
   // The Website tab offers it too.
   const tab = [...container.querySelectorAll('[role="tab"]')].find(
@@ -336,7 +342,62 @@ it("offers to connect a web address, as a message into the open or latest chat",
   await act(async () => (tab as HTMLElement).click())
   expect(
     container.querySelector('[data-slot="your-website"]')?.textContent
-  ).toContain("Web address · Not connected")
+  ).toContain("Domain · Not connected")
+})
+
+it("asks whether a name bought elsewhere is bought, each answer said in the chat", async () => {
+  const name = "sparkleclean.co.uk"
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    journey: {
+      website: "draft_ready",
+      address: { stage: "buying_elsewhere", name, offer: "connect" },
+      google: "waiting_for_domain",
+    },
+    activity: {
+      journey: [],
+      now: [],
+      waiting: [
+        {
+          id: "address:1",
+          kind: "address",
+          state: "waiting",
+          steps: [{ id: "purchase", state: "waiting", note: `buying ${name}` }],
+          at: new Date().toISOString(),
+          names: { domain: name },
+        },
+      ],
+      upcoming: [],
+      done: [],
+    },
+  }
+  router.state.matches = [{ routeId: "/app/_conversation" }]
+  await render()
+  const said = (text: string) => ({
+    to: ".",
+    state: {
+      send: { text, key: expect.any(String), intent: "connect_address" },
+    },
+  })
+  await act(async () => buttonNamed("I bought it")?.click())
+  expect(router.navigate.mock.lastCall?.[0]).toEqual(
+    said(`I've bought ${name}`)
+  )
+  server.putOffDomain.mockResolvedValue({ done: false, reason: "no" })
+  await act(async () => buttonNamed("Not yet")?.click())
+  expect(router.navigate.mock.lastCall?.[0]).toEqual(
+    said(`I haven't bought ${name} yet`)
+  )
+  expect(server.putOffDomain).toHaveBeenCalledWith({
+    data: { name, key: expect.any(String) },
+  })
+  // A refused write brings the row back.
+  expect(buttonNamed("Not yet")?.closest("[inert]")).toBeNull()
+
+  server.putOffDomain.mockResolvedValue({ done: true })
+  await act(async () => buttonNamed("Not yet")?.click())
+  expect(buttonNamed("Not yet")?.closest("[inert]")).not.toBeNull()
+  expect(live.refresh).toHaveBeenCalledTimes(1)
 })
 
 it("draws no tab bar for one tab", async () => {

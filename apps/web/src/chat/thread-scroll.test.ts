@@ -5,6 +5,7 @@ import {
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
 import { AVATARS, PRONOUNS, TONES } from "@workspace/contracts"
+import { READING_PACE } from "@workspace/ui/components/assistant/markdown-text"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
 import { Thread } from "@workspace/ui/components/assistant/thread"
@@ -55,6 +56,8 @@ const isWrapper = (el: Element): el is Element & { parentElement: Element } =>
   el.querySelector('[data-slot="aui_message-group"]') !== null
 const isReserve = (el: Element) =>
   el.hasAttribute("data-aui-top-anchor-reserve")
+const isSpacer = (el: Element) =>
+  el.getAttribute("data-slot") === "aui_thread-spacer"
 const isFooter = (el: Element) =>
   el.classList.contains("aui-thread-viewport-footer")
 
@@ -96,14 +99,16 @@ const heightOf = (el: Element): number => {
         : REPLY_ROW)
     )
   }
-  if (isReserve(el))
+  if (isReserve(el) || isSpacer(el))
     return Number.parseFloat((el as HTMLElement).style.height) || 0
   if (isSlot(el)) return layout.slot
   if (isFooter(el)) return footerHeight()
   if (isTrayBody(el)) {
     const each = trayBody.get(el) ?? { shown: layout.content, step: 0 }
     trayBody.set(el, each)
-    return each.shown
+    return Number.isNaN(Number.parseFloat((el as HTMLElement).style.height))
+      ? layout.content
+      : each.shown
   }
   if (el.parentElement && isTrayBody(el.parentElement)) return layout.content
   if (isViewport(el)) return layout.clientHeight
@@ -130,14 +135,17 @@ const stacked = (box: Element) => {
   ]
 }
 
+/** The transcript, then the spacer under it, as tall as they stack. */
+const transcriptHeight = (scope: Element) => {
+  const box = scope.querySelector('[data-slot="aui_message-group"]')
+  const spacer = scope.querySelector('[data-slot="aui_thread-spacer"]')
+  return (box ? heightOf(box) : 0) + (spacer ? heightOf(spacer) : 0)
+}
+
 /** Where an element starts in the scroll content. */
 const offsetOf = (el: Element): number => {
-  if (isFooter(el)) {
-    const box = el.parentElement?.querySelector(
-      '[data-slot="aui_message-group"]'
-    )
-    return box ? heightOf(box) : 0
-  }
+  if (isFooter(el))
+    return el.parentElement ? transcriptHeight(el.parentElement) : 0
   const box = group(el)
   if (!box) return 0
   const row =
@@ -150,10 +158,8 @@ const offsetOf = (el: Element): number => {
   return top
 }
 
-const contentHeight = (viewport: Element) => {
-  const box = viewport.querySelector('[data-slot="aui_message-group"]')
-  return (box ? heightOf(box) : 0) + footerHeight()
-}
+const contentHeight = (viewport: Element) =>
+  transcriptHeight(viewport) + footerHeight()
 const maxScroll = (viewport: Element) =>
   Math.max(0, contentHeight(viewport) - layout.clientHeight)
 
@@ -748,8 +754,9 @@ it("the persona card waits for the words above it to finish typing in", async ()
     chat.querySelector('[data-slot="persona-card"]')?.parentElement?.className
   ).toContain("[&>.aui-md[data-status=running]~*]:invisible")
   expect(waiting()).not.toBeNull()
-  // About 5 ms a character, so 40 frames are plenty.
-  for (let i = 0; i < 40 && waiting(); i++) await frame()
+  // The reading pace drains any backlog within drainMs, at 16 ms a frame.
+  const budget = Math.ceil((READING_PACE.drainMs ?? 0) / 16) + 2
+  for (let i = 0; i < budget && waiting(); i++) await frame()
   expect(waiting()).toBeNull()
   expect(
     chat.querySelector('[data-slot="persona-card"]')?.previousElementSibling
@@ -877,4 +884,19 @@ it("logs no resize loop as the tray eases to the next page", async () => {
   await showTray(2, 120)
   await frames(TRAY_EASE_FRAMES + 4)
   expect(loops).toBe(0)
+})
+
+it("eases a new page to its height, then lets the body follow its content", async () => {
+  await sendAndReply("u1")
+  const height = () =>
+    document.querySelector<HTMLElement>(
+      '[data-slot="question-tray"] [id$="-body"]'
+    )?.style.height
+  await showTray(0, 187)
+  await frames(GLIDE_FRAMES * 2)
+  expect(height()).toBe("")
+  await showTray(1, 249)
+  expect(height()).toBe("249px")
+  await new Promise((done) => setTimeout(done, 600))
+  expect(height()).toBe("")
 })

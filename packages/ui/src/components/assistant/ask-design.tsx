@@ -8,9 +8,10 @@ import {
   QuestionTray,
   TrayNote,
 } from "@workspace/ui/components/assistant/question-tray"
+import { useChatService } from "@workspace/ui/lib/chat-services"
 import { useSiteName } from "@workspace/ui/lib/site-name"
 import { askDesignView } from "@workspace/ui/lib/tool-state"
-import { createContext, useContext, useRef } from "react"
+import { useRef } from "react"
 
 /**
  * The design questions of onboarding, in the question tray. An answer is
@@ -28,14 +29,9 @@ export type SaveDesignAnswer = (answer: {
   output: AskDesignOutput
 }) => Promise<void>
 
-const SaveContext = createContext<SaveDesignAnswer | null>(null)
-
-/** Gives the tray the app's way to store an answer as it is given. */
-export const SaveDesignAnswerProvider = SaveContext.Provider
-
 const AskDesign: ToolCallMessagePartComponent = (props) => {
   const view = askDesignView(props)
-  const save = useContext(SaveContext)
+  const save = useChatService("saveDesignAnswer")
   const siteName = useSiteName()
   const messageId = useAuiState((s) => s.message.id)
   const conversationId = useAuiState((s) => s.threadListItem.remoteId)
@@ -47,15 +43,8 @@ const AskDesign: ToolCallMessagePartComponent = (props) => {
   const sent = useRef<AskDesignOutput | null>(null)
   const sending = useRef<boolean>(false)
 
-  if (view.state === "answered" || view.state === "skipped") return null
-  if (view.state !== "pending") {
-    return (
-      <TrayNote
-        error={view.state === "error" ? view.message : null}
-        name="ask-design"
-      />
-    )
-  }
+  if (view.state !== "pending")
+    return <TrayNote name="ask-design" view={view} />
   return (
     <Docked name="ask-design">
       <QuestionTray

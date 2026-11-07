@@ -12,6 +12,7 @@ import {
   domains,
   eq,
   facts,
+  journeyOf,
   memberships,
   NEXT_DUE_KEY,
   openTask,
@@ -38,9 +39,10 @@ import {
 } from "vitest"
 import { settleCard } from "../src/build-questions.ts"
 import { grantedKinds, offerGrant, saveGrant } from "../src/cos/grants.ts"
-import { remember } from "../src/cos/memory.ts"
+import { memory } from "../src/cos/memory.ts"
+import { searchConversations } from "../src/cos/recall.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
-import { readSkill, saveCorrection, scheduleSkill } from "../src/cos/skills.ts"
+import { saveCorrection, scheduleSkill, skillView } from "../src/cos/skills.ts"
 import { wallToUtc } from "../src/cos/time.ts"
 import {
   answerQuestion as answerTool,
@@ -61,8 +63,10 @@ import {
   getWorkspace,
   inspectDomain,
   newContact,
+  offerChoices,
   ownersAnswer,
   paceOf,
+  present,
   putOff,
   readSite,
   recordReview,
@@ -269,6 +273,24 @@ describe("a build's pace", () => {
     })
   })
 
+  it("times a quick section change by the Developer's measured section time", () => {
+    const section = {
+      ...build,
+      lane: "quick" as const,
+      change_kind: "section" as const,
+      created_at: new Date(ago(2)).toISOString(),
+      review_ms: 0,
+    }
+    expect(paceOf(section, undefined, undefined, now).timing).toMatchObject({
+      overdue: false,
+      range: "about 6 to 13 minutes",
+    })
+    expect(
+      paceOf({ ...section, change_kind: "copy" }, undefined, undefined, now)
+        .timing?.range
+    ).not.toContain("13 minutes")
+  })
+
   it("names the last restart, and whether the build has worked since", () => {
     const life = { work_ms: ago(1), resumed_ms: ago(3), cause: "stalled" }
     expect(paceOf(build, life, expected, now).restarted).toEqual({
@@ -286,10 +308,10 @@ describe("a build's pace", () => {
     expect(
       paceOf({ ...build, state: "awaiting_review" }, undefined, expected, now)
     ).toEqual({})
-    // 38 minutes is past the measured 6 to 10, so the range moves above it.
+    // 38 minutes is past the measured 10 to 17, so the range moves above it.
     expect(paceOf(build, undefined, undefined, now).timing).toMatchObject({
       overdue: true,
-      range: "about 39 to 43 minutes",
+      range: "about 39 to 46 minutes",
     })
   })
 })
@@ -506,7 +528,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         expected_seconds: expect.any(Object),
         expected_range: {
           quick: "about 1 to 2 minutes",
-          full: "about 6 to 10 minutes",
+          full: "about 10 to 17 minutes",
         },
       })
       expect(output.missing_facts.length).toBeGreaterThan(0)
@@ -3205,6 +3227,16 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     })
   })
 
+  it("offer_choices only closes its call: the chat draws the pills from it", async () => {
+    expect(kept("offer_choices", await offerChoices())).toEqual({
+      outcome: "offered",
+    })
+  })
+
+  it("present only closes its call: the chat draws the tree from it", async () => {
+    expect(kept("present", await present())).toEqual({ outcome: "presented" })
+  })
+
   describe("put_off", () => {
     it("makes the kind's task when the offer came first and puts it off for the days given", async () => {
       const fresh = await owner(kit, url as string, "cos-put-off")
@@ -3245,6 +3277,28 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(await kit.withOrg({ orgId: fresh.orgId }, readTasks)).toHaveLength(
         2
       )
+    })
+  })
+
+  describe("put_off, never", () => {
+    it("declines the address for good, so the journey offers it no more", async () => {
+      const fresh = await owner(kit, url as string, "cos-put-off-never")
+      const output = kept(
+        "put_off",
+        await putOff(context(fresh), { kind: "address", never: true })
+      )
+      expect(output).toEqual({
+        outcome: "put_off",
+        until: "9999-12-31T00:00:00.000Z",
+      })
+      const tasks = await kit.withOrg({ orgId: fresh.orgId }, readTasks)
+      expect(tasks.map((t) => [t.kind, t.state, t.later_until])).toEqual([
+        ["address", "declined", null],
+      ])
+      expect(journeyOf({ tasks }).address).toEqual({
+        stage: "declined",
+        offer: null,
+      })
     })
   })
 
@@ -3301,27 +3355,53 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     })
   })
 
-  describe("remember", () => {
+  describe("memory", () => {
     it("saves a line of the owner's profile and answers that the write is complete", async () => {
       const output = kept(
-        "remember",
-        await remember(
+        "memory",
+        await memory(
           context(me),
-          { operations: [{ action: "add", text: "Prefers calls after 4pm" }] },
+          {
+            target: "user",
+            operations: [{ action: "add", content: "Prefers calls after 4pm" }],
+          },
           "",
           await turnOf(me, ["I prefer calls after 4pm."])
         )
       )
-      expect(COS_TOOLS.remember.output.parse(output)).toEqual(output)
+      expect(COS_TOOLS.memory.output.parse(output)).toEqual(output)
       expect(output).toMatchObject({ outcome: "saved" })
     })
   })
 
+  describe("search_conversations", () => {
+    it("finds what the owner said in an earlier conversation, never the one in hand", async () => {
+      await turnOf(me, ["Our van is parked behind the bakery on Tuesdays."])
+      const now = await turnOf(me, ["Where is the van on Tuesdays?"])
+      const found = kept(
+        "search_conversations",
+        await searchConversations(context(me), { query: "van parked" }, "", now)
+      )
+      expect(found).toMatchObject({
+        outcome: "found",
+        results: [{ by: "owner", snippet: expect.stringContaining("bakery") }],
+      })
+      expect(JSON.stringify(found)).not.toContain(now.sessionId)
+    })
+  })
+
   describe("skills", () => {
-    it("reads a procedure, saves a quoted correction and schedules the weekly review", async () => {
+    it("views a skill, saves a quoted correction and schedules the weekly review", async () => {
       const read = kept(
-        "read_skill",
-        await readSkill(context(me), { name: "quote-reply" })
+        "skill_view",
+        await skillView(
+          context(me),
+          { name: "quote-reply" },
+          "",
+          await turnOf(me, []),
+          null,
+          []
+        )
       )
       expect(read).toMatchObject({ outcome: "skill", name: "quote-reply" })
       const said = "Always show the van photo on the home page."

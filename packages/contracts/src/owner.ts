@@ -608,6 +608,8 @@ export const BuildSummary = z.strictObject({
   label: Text(40).optional(),
   /** The lane it runs in now: a quick edit that fell through reads `full`. */
   lane: BuildLane.optional(),
+  /** On the quick lane, the kind of change: a section change is the Developer's, so it takes longer. */
+  change_kind: ChangeKind.optional(),
   /** A quick edit that could not be made quickly and moved to a fuller lane; the panel says so once. */
   fell_through: z.boolean().optional(),
   /** Started again on its own after a build that stopped for a reason on our side. */
@@ -616,6 +618,15 @@ export const BuildSummary = z.strictObject({
   restarted: z.literal(true).optional(),
   activity: z.array(BuildActivity).max(BUILD_ACTIVITY_MAX).optional(),
   revision: RevisionRef.nullable(),
+  /**
+   * A change to a draft not yet published: that draft, held paused until
+   * the change has one of its own, and when it became ready, so the draft
+   * card stays up meanwhile. Absent on any other build.
+   */
+  held: RevisionRef.extend({
+    assignment_id: Uuid,
+    ready_at: Timestamp.optional(),
+  }).optional(),
   /** Absent on a build that did not plan: a revise, the quick lane, an older row. */
   blueprint: BuildBlueprint.optional(),
   /** The photos this build makes, in the order they settle; absent before its photo step starts. */
@@ -772,8 +783,54 @@ export const DerivedReminder = z.discriminatedUnion("rule", [
   }),
 ])
 
+/** A sitting ends after this long with no owner message, or with a new conversation. */
+export const SITTING_GAP_MS = 30 * 60_000
+
 /** The most open reminders `/workspace` lists. */
 export const REMINDER_NOTES_MAX = 20
+
+/**
+ * Where the website's own address stands (`addressStage`): `unknown` until
+ * the owner says whether they have a domain, then `choosing` a name, `paying`
+ * here, `buying_elsewhere` and then `bought` once the registry shows it,
+ * `connecting` one, `live`, or `put_off` and `declined` by the owner.
+ */
+export const AddressStageName = z.enum([
+  "none",
+  "unknown",
+  "put_off",
+  "declined",
+  "choosing",
+  "paying",
+  "buying_elsewhere",
+  "bought",
+  "connecting",
+  "live",
+])
+
+/**
+ * The website journey (`journeyOf`), the one reading the update stack, the
+ * draft-ready line and the assistant's notes share, so all three agree.
+ * `offer` is the Connect the owner is pointed to: `connect` while the address
+ * is open and theirs to start, `connect_bought` once a name they bought
+ * elsewhere shows at the registry, null otherwise.
+ */
+export const Journey = z.strictObject({
+  website: z.enum(["none", "building", "draft_ready", "published"]),
+  address: z.strictObject({
+    stage: AddressStageName,
+    name: Hostname.optional(),
+    offer: z.enum(["connect", "connect_bought"]).nullable(),
+  }),
+  google: z.enum([
+    "waiting_for_domain",
+    "offerable",
+    "put_off",
+    "setting_up",
+    "connected",
+    "declined",
+  ]),
+})
 
 /** `GET /workspace`: everything the owner's panel polls for. */
 export const WorkspaceStatus = z.strictObject({
@@ -805,6 +862,13 @@ export const WorkspaceStatus = z.strictObject({
         p50: z.int().positive(),
         p95: z.int().positive(),
       }),
+      /** A quick lane section change, which the Developer makes; absent, the quick lane's. */
+      section: z
+        .strictObject({
+          p50: z.int().positive(),
+          p95: z.int().positive(),
+        })
+        .optional(),
     })
     .optional(),
   /** Approvals by expiry, then questions, alerts, reports. */
@@ -828,6 +892,8 @@ export const WorkspaceStatus = z.strictObject({
    * api sends it, and the web keeps the reader's.
    */
   time_zone: TimeZone.nullable().optional(),
+  /** The website journey, as the assistant and the draft-ready line read it. Absent until the api sends it. */
+  journey: Journey.optional(),
 })
 
 export type FactValue = z.infer<typeof FactValue>
@@ -857,3 +923,5 @@ export type CreateReminderRequest = z.infer<typeof CreateReminderRequest>
 export type ReminderPatch = z.infer<typeof ReminderPatch>
 export type DerivedReminder = z.infer<typeof DerivedReminder>
 export type WorkspaceStatus = z.infer<typeof WorkspaceStatus>
+export type AddressStageName = z.infer<typeof AddressStageName>
+export type Journey = z.infer<typeof Journey>

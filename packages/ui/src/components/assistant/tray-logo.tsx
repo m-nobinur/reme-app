@@ -67,9 +67,9 @@ import {
  * The logo question's two pages in the design tray, the first question and
  * one that cannot be skipped. The first asks whether they have a logo: two
  * quick answers, nothing picked, a tap moving on to the second. Yes there is
- * the upload. With no logo held, a first round draws as the tray opens, one
- * design in each of the three directions chosen for the business, so No
- * has designs at once, the first picked, each named by its kind of logo.
+ * the upload. With no logo held, No draws a first round, one design in each
+ * of the three directions chosen for the business, the first picked as it
+ * lands, each named by its kind of logo.
  * Under them sit ideas for a redesign read from the picked design, and a
  * button that opens the brief to change. An idea, or the owner's own
  * words, turns the tray's primary into Redesign my logo, which draws a round
@@ -123,7 +123,7 @@ const framesOf = (dir: "logo-types" | "logo-styles", name: string) =>
  * to read on light and dark alike, so they sit on the tile itself.
  */
 const PICK_TILE = cn(
-  "group flex cursor-pointer rounded-xl border border-border bg-card transition-all duration-150 hover:border-foreground/25 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring",
+  "group flex cursor-pointer rounded-xl border border-border bg-card transition-all duration-150 hover:border-foreground/25 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring",
   PICKED_LINE
 )
 const PICK_LABEL =
@@ -162,6 +162,28 @@ const sameBrief = (a: LogoBrief, b: LogoBrief) =>
   a.type === b.type &&
   a.style === b.style &&
   a.colors.join() === b.colors.join()
+
+/**
+ * A round's designs by slot, each staying in the slot it first showed in:
+ * the api lists a round's designs as they finish and then as planned, and a
+ * tile that moves under the owner's finger is a tile they mis-tap.
+ */
+const placed = (round: LogoRound, slots: Map<string, number>) => {
+  const out: (LogoRound["variants"][number] | undefined)[] = []
+  const unplaced = round.variants.filter((variant) => {
+    const slot = slots.get(variant.id)
+    if (slot === undefined || out[slot]) return true
+    out[slot] = variant
+    return false
+  })
+  for (const variant of unplaced) {
+    let slot = 0
+    while (out[slot]) slot++
+    slots.set(variant.id, slot)
+    out[slot] = variant
+  }
+  return out
+}
 
 /** How long a wait has left, as Redesign says it. */
 export const waitText = (seconds: number) =>
@@ -353,6 +375,10 @@ function TrayLogo({
   const coloursBefore = useRef<Colours | null>(null)
   // When each design was first shown, so its own ideas get a moment.
   const shownSince = useRef(new Map<string, number>())
+  // The slot each design first showed in.
+  const slots = useRef(new Map<string, number>())
+  // When the round being asked for began, for its drawing line before the api answers.
+  const drawStarted = useRef(new Date().toISOString())
 
   // A read that failed: what the rounds hold is not known, so nothing of it
   // is shown or polled until Try again.
@@ -416,7 +442,6 @@ function TrayLogo({
   const keptDrawn = picked !== undefined
   const held = loaded && !unread ? (keptDrawn ? "create" : "upload") : null
   const shownPath = path ?? (answer ? held : null)
-  const round = at === null ? latest : rounds[at]
   const shownAt = at ?? rounds.length - 1
   const [uploadOption, createOption] = question.card.options
   const create = shownPath === "create"
@@ -444,6 +469,19 @@ function TrayLogo({
           style: brief.style,
         }
       : null
+  // The first round shows as drawing from the tap on No, before the api answers.
+  const round =
+    (at === null ? latest : rounds[at]) ??
+    (busy === "draw" && rounds.length === 0 && wanted
+      ? ({
+          round: 1,
+          status: "drawing",
+          started_at: drawStarted.current,
+          variants: [],
+          brief: wanted,
+        } satisfies LogoRound)
+      : undefined)
+  const slotted = round ? placed(round, slots.current) : []
   const words = (brief.changes ?? "").trim()
   // What the kept design was drawn from: its round's brief, in its own type and style.
   const own: LogoBrief | undefined = picked
@@ -494,6 +532,7 @@ function TrayLogo({
     }
     if (!wanted) return false
     setError(null)
+    drawStarted.current = new Date().toISOString()
     setBusy("draw")
     const first = !rounds.some((each) => each.status !== "failed")
     const base = words && keptDrawn && kept ? kept : undefined
@@ -553,27 +592,41 @@ function TrayLogo({
     }
   }
 
-  // With no logo held one round starts as the page opens, from the
-  // suggested directions, before the owner says whether they have a logo,
-  // so No has designs at once. A page the catalog opens in a given state
-  // stays in it.
+  // The first round starts when the owner says No, not before: Yes draws
+  // nothing. A page the catalog opens in a given state stays in it.
   const auto = useRef(!question.held?.length && !answer && !start)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: once, when the rounds drawn before are read
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, when No is chosen and the rounds drawn before are read
   useEffect(() => {
-    if (!loaded || !auto.current) return
+    if (!loaded || !create || !auto.current) return
     auto.current = false
     if (rounds.length === 0) void draw()
-  }, [loaded])
+  }, [loaded, create])
 
-  // On No the newest round's first design is the pick, as it lands, until
-  // the owner picks another. A failed keep waits for the owner.
-  const [firstDesign] = latest?.variants ?? []
+  // A round's first design is the pick as it lands, until the owner picks
+  // another: the first round's on No, and each redesign's. A reload leaves
+  // the pick of a round already finished alone, and a failed keep waits for
+  // the owner.
+  const firstDesign = latest
+    ? placed(latest, slots.current).find(Boolean)
+    : undefined
+  const settledRound = useRef<number | null>(null)
   // biome-ignore lint/correctness/useExhaustiveDependencies: keep is a fresh closure each render
   useEffect(() => {
-    if (create && firstDesign && !keptDrawn && busy === null && !error) {
-      void keep(firstDesign)
+    if (!create || !latest || !firstDesign || busy !== null || error) return
+    if (keptDrawn) {
+      if (settledRound.current === null && latest.status !== "drawing") {
+        settledRound.current = latest.round
+      }
+      if (
+        settledRound.current === latest.round ||
+        picked?.round.round === latest.round
+      ) {
+        return
+      }
     }
-  }, [create, firstDesign, keptDrawn, busy, error])
+    settledRound.current = latest.round
+    void keep(firstDesign)
+  }, [create, latest?.round, firstDesign, keptDrawn, busy, error])
 
   // The picked design's own ideas, or the fixed ones once they are late.
   const selected = picked?.variant
@@ -811,7 +864,7 @@ function TrayLogo({
                 role="radiogroup"
               >
                 {Array.from({ length: LOGO_VARIANTS }, (_, place) => {
-                  const variant = round.variants[place]
+                  const variant = slotted[place]
                   return (
                     <RadioTile
                       checked={variant !== undefined && kept === variant.id}
@@ -883,7 +936,15 @@ function TrayLogo({
       </Fold>
 
       {/* Ideas for a redesign of the picked design, then the button that opens the brief. */}
-      <Fold open={create && !unread && redesigning && ideas !== null}>
+      <Fold
+        open={
+          create &&
+          !unread &&
+          redesigning &&
+          ideas !== null &&
+          (!drawing || latest?.variants.length === LOGO_VARIANTS)
+        }
+      >
         <ReplyPills label="Ideas for a redesign">
           {(ideas ?? []).map((idea) =>
             idea === "colours" ? (
@@ -1009,8 +1070,8 @@ function TrayLogo({
               </label>
               <textarea
                 className={cn(
-                  // Four rows to start, growing with the words to about eight.
-                  "field-sizing-content max-h-48 min-h-28 w-full resize-none border px-3 py-2 text-base outline-none placeholder:text-muted-foreground md:text-sm",
+                  // Two rows to start, growing with the words to about six.
+                  "field-sizing-content max-h-40 min-h-16 w-full resize-none border px-3 py-2 text-base outline-none placeholder:text-muted-foreground md:text-sm",
                   TRAY_FIELD
                 )}
                 id={`${id}-changes`}
@@ -1020,7 +1081,7 @@ function TrayLogo({
                 }
                 placeholder="For example: bolder lettering, a leaf instead of a tree, darker green"
                 ref={field}
-                rows={4}
+                rows={2}
                 value={brief.changes ?? ""}
               />
             </div>
@@ -1094,7 +1155,7 @@ function TrayLogo({
                 {random ? (
                   <button
                     aria-label="Another random palette"
-                    className="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-foreground shadow-sm outline-none transition-colors hover:bg-card focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
+                    className="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-foreground shadow-sm outline-none transition-colors hover:bg-card focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none"
                     onClick={roll}
                     type="button"
                   >

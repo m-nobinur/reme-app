@@ -14,6 +14,7 @@ import {
   jevPromise,
   jevPutOn,
   jevReading,
+  jevTopic,
   matched,
   phrased,
   readReply,
@@ -516,23 +517,47 @@ describe("the reading of a reply that may promise work", () => {
     throw new Error("watched was asked")
   }
 
-  it("takes a sure promise of action without asking whether anything is watching", async () => {
+  it("takes a sure promise of action only when nothing in hand keeps it", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined)
     const { fetchImpl, sent } = read(0.97, 0.05)
+    const asked: string[] = []
+    const unbacked = async (promise: string) => {
+      asked.push(promise)
+      return false
+    }
     expect(
-      await jevPromise("k", "I'll set that up now.", never, fetchImpl)
+      await jevPromise("k", "I'll set that up now.", unbacked, fetchImpl)
     ).toBe(true)
+    expect(asked).toEqual(["act"])
     expect(JSON.parse(sent[0]?.init.body as string).state).toEqual({
       assistant_said: "I'll set that up now.",
     })
+    expect(
+      await jevPromise(
+        "k",
+        "I'll keep stock photos out.",
+        async () => true,
+        read(0.97, 0.05).fetchImpl
+      )
+    ).toBe(false)
   })
 
   it("takes a promise to tell the owner later only when nothing is watching", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined)
     const said = "I'll tell you when it's live."
+    const asked: string[] = []
     expect(
-      await jevPromise("k", said, async () => false, read(0.1, 0.98).fetchImpl)
+      await jevPromise(
+        "k",
+        said,
+        async (promise) => {
+          asked.push(promise)
+          return false
+        },
+        read(0.1, 0.98).fetchImpl
+      )
     ).toBe(true)
+    expect(asked).toEqual(["tell"])
     expect(
       await jevPromise("k", said, async () => true, read(0.1, 0.98).fetchImpl)
     ).toBe(false)
@@ -549,6 +574,49 @@ describe("the reading of a reply that may promise work", () => {
     expect(await jevPromise("k", "Hmm.", never, fake({}, 500).fetchImpl)).toBe(
       false
     )
+  })
+})
+
+describe("the topic of a typed message", () => {
+  afterEach(() => vi.restoreAllMocks())
+  const skills = [
+    { name: "builds", description: "How a build is going" },
+    { name: "reviews", description: "Customer reviews" },
+  ]
+  const read = (choice: string, confidence: number) =>
+    fake({ answers: { topic: { type: "choice", choice, confidence } } })
+
+  it("names a skill only when Jev is sure of one of them", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const { fetchImpl, sent } = read("builds", 0.95)
+    expect(
+      await jevTopic("k", "How's the update going?", skills, true, fetchImpl)
+    ).toBe("builds")
+    expect(JSON.parse(sent[0]?.init.body as string).state).toEqual({
+      owner_said: "How's the update going?",
+      website: "A website build is under way now.",
+    })
+    const criteria = JSON.parse(sent[0]?.init.body as string).questions.topic
+      .criteria
+    expect(Object.keys(criteria)).toEqual(["builds", "reviews", "none"])
+    for (const [choice, confidence] of [
+      ["builds", 0.6],
+      ["none", 0.99],
+      ["weekly-review", 0.99],
+    ] as const) {
+      expect(
+        await jevTopic(
+          "k",
+          "Hi",
+          skills,
+          false,
+          read(choice, confidence).fetchImpl
+        )
+      ).toBeNull()
+    }
+    expect(
+      await jevTopic("k", "Hi", skills, false, fake({}, 500).fetchImpl)
+    ).toBeNull()
   })
 })
 

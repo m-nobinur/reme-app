@@ -8,8 +8,10 @@ import { describe, expect, it } from "vitest"
 import {
   checkBuild,
   checkContent,
+  checkFavicon,
   checkLinks,
   checkPlannedPages,
+  checkPlannedPhotos,
   checkPlannedSections,
   checkStructuredData,
   checkTypes,
@@ -496,6 +498,135 @@ describe("the planned sections", () => {
       offending_node: "home",
     })
     expect(result?.message).toContain("site.photo1Src")
+    expect(GateResult.parse(result)).toEqual(result)
+  })
+})
+
+describe("the planned photos", () => {
+  const upload = "0b0c5f4e-6a59-4f1e-9a43-1c1b3f0e7a11"
+  const plan = {
+    images: [
+      { id: "home_hero", page: "home", section: "hero", source: "generated" },
+      {
+        id: "service_1_hero",
+        page: "service",
+        section: "hero",
+        source: "generated",
+      },
+      {
+        id: "gallery_1",
+        page: "home",
+        section: "gallery",
+        source: "upload",
+        asset_id: upload,
+      },
+      { id: "odd", page: "home", section: "reviews", source: "generated" },
+    ],
+  } as never
+  const built = {
+    "index.html": "x",
+    "_astro/home_hero.Bx1_2a.webp": "x",
+    "_astro/service_1_hero.Q9z_k1.webp": "x",
+    [`_astro/${upload}.Zk2_9q.webp`]: "x",
+  }
+
+  it("passes when every photo the plan holds is in the build", () => {
+    expect(checkPlannedPhotos(plan, built)).toBeNull()
+  })
+
+  it("fails the build gate on a planned photo the build does not show", () => {
+    const { "_astro/home_hero.Bx1_2a.webp": _, ...rest } = built
+    const result = checkPlannedPhotos(plan, rest)
+    expect(result).toMatchObject({
+      gate: "build",
+      passed: false,
+      offending_node: "home_hero",
+    })
+    expect(result?.message).toContain("site.heroImage")
+    expect(GateResult.parse(result)).toEqual(result)
+  })
+
+  it("fails the build gate of a run whose photos were placed and none shown", async () => {
+    const body = new TextEncoder().encode("<html><main></main></html>")
+    const results = await runGates({
+      manifest: {
+        revision_id: ORG,
+        site_id: ORG,
+        org_id: ORG,
+        routes: [],
+        headers: {},
+        files: {
+          "index.html": createHash("sha256").update(body).digest("hex"),
+        },
+        built_at: AT,
+      },
+      read: async (file) => (file === "index.html" ? body : null),
+      report: { checks: [] },
+      facts: [],
+      budget: { limit: 102_400 },
+      plan: { ...(plan as object), pages: [] } as never,
+      photos: true,
+    })
+    expect(results[0]).toMatchObject({
+      gate: "build",
+      passed: false,
+      offending_node: "home_hero",
+    })
+  })
+})
+
+describe("the favicon", () => {
+  const logo = fact("media.uploads", {
+    items: [
+      {
+        id: "f28b648e-495e-4f39-a521-d6a3ddfc3d90",
+        use: "logo",
+        name: "Logo.png",
+        bytes: 718_020,
+        content_type: "image/png",
+      },
+    ],
+  })
+  const files = { "index.html": "x", "_astro/favicon.27d85b7c.svg": "x" }
+  const reading = (svg: string) => async (file: string) =>
+    file === "_astro/favicon.27d85b7c.svg"
+      ? new TextEncoder().encode(svg)
+      : null
+  const tile = '<rect x="1.5" y="1.5" width="61" height="61" rx="14"/>'
+
+  it("passes a mark that draws the logo, and a wordmark's initial", async () => {
+    expect(
+      await checkFavicon(
+        [logo],
+        files,
+        reading(`<svg viewBox="0 0 64 64">${tile}<image href="data:"/></svg>`)
+      )
+    ).toBeNull()
+    expect(
+      await checkFavicon(
+        [logo],
+        files,
+        reading(`<svg data-logo="no-symbol" viewBox="0 0 64 64">${tile}</svg>`)
+      )
+    ).toBeNull()
+  })
+
+  it("passes the initial when the owner has no logo", async () => {
+    expect(
+      await checkFavicon([], files, reading(`<svg>${tile}<path/></svg>`))
+    ).toBeNull()
+  })
+
+  it("fails the build gate when the owner's logo is not in the favicon", async () => {
+    const result = await checkFavicon(
+      [logo],
+      files,
+      reading(`<svg viewBox="0 0 64 64">${tile}<path d="M36"/></svg>`)
+    )
+    expect(result).toMatchObject({ gate: "build", passed: false })
+    expect(result?.message).toContain(
+      '"/uploads/f28b648e-495e-4f39-a521-d6a3ddfc3d90.png"'
+    )
     expect(GateResult.parse(result)).toEqual(result)
   })
 })

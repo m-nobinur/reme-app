@@ -44,7 +44,7 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
 import { Hint } from "@workspace/ui/components/tooltip"
-import { pageAction } from "@workspace/ui/lib/activity-copy"
+import { type AskIntent, pageAction } from "@workspace/ui/lib/activity-copy"
 import { useSiteName } from "@workspace/ui/lib/site-name"
 import { cn, META } from "@workspace/ui/lib/utils"
 import { browserZone } from "@workspace/ui/lib/zone"
@@ -62,6 +62,7 @@ import {
   decideApproval,
   deleteReminder,
   getPreview,
+  putOffDomain,
 } from "@/lib/api/server"
 import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
 import { DECISION_REFUSED } from "@/lib/decision"
@@ -90,7 +91,7 @@ const SHOWN = { now: 3, upcoming: 4, done: 5 } as const
 
 /** Where a reminder can point: focusable by script, ringed from the keyboard. */
 const TARGET =
-  "rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
+  "rounded-md outline-none focus-visible:ring-1 focus-visible:ring-ring"
 
 const frame = getRouteApi("/app")
 
@@ -276,25 +277,65 @@ function Website({
 
 /** Connect, which asks the assistant for help with a web address, as any other message would. */
 function ConnectAddress() {
-  const { label, ask } = pageAction("own")
+  const { label, ask, intent } = pageAction("own")
   const askInChat = useAskInChat()
   return (
-    <button className={NEXT_STEP} onClick={() => askInChat(ask)} type="button">
+    <button
+      className={NEXT_STEP}
+      onClick={() => askInChat(ask, intent)}
+      type="button"
+    >
       {label}
     </button>
   )
 }
 
 /**
+ * A name the owner went to buy themselves: their two answers, each said in
+ * the chat with the address intent, so the assistant takes it from there.
+ * Not yet also puts the address off, which `onNotYet` shows at once.
+ */
+function BoughtAnswers({
+  name,
+  onNotYet,
+}: {
+  name: string
+  onNotYet: () => void
+}) {
+  const askInChat = useAskInChat()
+  return (
+    <div className="flex flex-wrap gap-2">
+      {(["bought", "not_bought"] as const).map((key) => {
+        const { label, ask } = pageAction(key, name)
+        return (
+          <button
+            className={NEXT_STEP}
+            key={key}
+            onClick={() => {
+              askInChat(ask, "connect_address")
+              if (key === "not_bought") onNotYet()
+            }}
+            type="button"
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
  * Says `text` as the owner's message in the conversation on screen, or in
  * their most recent one from any other page, so the assistant keeps the
- * context. With no conversation yet, a new chat opens with it.
+ * context, with the button's `intent` when it has one. With no conversation
+ * yet, a new chat opens with it.
  */
 export function useAskInChat() {
   const router = useRouter()
   const { conversations } = frame.useLoaderData()
-  return (text: string) => {
-    const send = { text, key: crypto.randomUUID() }
+  return (text: string, intent?: AskIntent) => {
+    const send = { text, key: crypto.randomUUID(), intent }
     const inChat = router.state.matches.some(
       (match) => match.routeId === "/app/_conversation"
     )
@@ -304,7 +345,10 @@ export function useAskInChat() {
         ? { to: ".", state: { send } }
         : chat
           ? { to: "/app/c/$id", params: { id: chat.id }, state: { send } }
-          : { to: "/app", state: { chat: crypto.randomUUID(), ask: text } }
+          : {
+              to: "/app",
+              state: { chat: crypto.randomUUID(), ask: text, intent },
+            }
     )
   }
 }
@@ -668,6 +712,13 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const chat = lastChat(frame.useLoaderData().conversations)
   const [status, setStatus] = useAnnouncement(workspace)
   const [tab, setTab] = useState<Tab>("activity")
+  const [notYet, setNotYet] = useState<string | null>(null)
+  const address = workspace?.journey?.address
+  const buying =
+    address?.stage === "buying_elsewhere" ? (address.name ?? null) : null
+  useEffect(() => {
+    if (!buying) setNotYet(null)
+  }, [buying])
   const thumbnail = liveThumbnail(workspace?.liveRevision ?? null)
   const upcoming = upcomingNotes(workspace?.reminderNotes ?? [])
   const tabList = useFocusAfterDone(upcoming)
@@ -693,6 +744,16 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       ? tab
       : "activity"
 
+  const leaving = (each: SegmentView) =>
+    each.kind === "address" && buying !== null && buying === notYet
+  const putOff = async (name: string) => {
+    setNotYet(name)
+    const outcome = await putOffDomain({
+      data: { name, key: crypto.randomUUID() },
+    }).catch(() => null)
+    if (outcome?.done) await refresh()
+    else setNotYet(null)
+  }
   const segment = (each: SegmentView) => (
     <Segment
       fresh={arrived.has(each.id)}
@@ -700,6 +761,9 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       refresh={refresh}
       segment={each}
     >
+      {each.kind === "address" && buying ? (
+        <BoughtAnswers name={buying} onNotYet={() => putOff(buying)} />
+      ) : null}
       {/* The first version's review is the going-live segment's first step. */}
       {each.kind === "golive" && panel.review ? (
         <div
@@ -728,8 +792,19 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
     </Segment>
   )
   const row = (each: SegmentView) => (
-    <div className="py-3" key={each.id}>
-      {segment(each)}
+    <div
+      className={cn(
+        "-mx-2 grid transition-[grid-template-rows,opacity] duration-enter ease-standard motion-reduce:transition-none",
+        leaving(each)
+          ? "grid-rows-[0fr] opacity-0"
+          : "grid-rows-[1fr] opacity-100"
+      )}
+      inert={leaving(each)}
+      key={each.id}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <div className="px-2 py-3">{segment(each)}</div>
+      </div>
     </div>
   )
   // Not listed twice: a piece showing its tick in Now joins Completed after.
@@ -938,7 +1013,7 @@ export function IdleAssistant({
   return (
     <Hint label={`Chat with ${name}`} side="left">
       <Link
-        className="flex size-11 items-center justify-center rounded-full border border-border bg-popover shadow-lg outline-none transition-transform duration-150 hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
+        className="flex size-11 items-center justify-center rounded-full border border-border bg-popover shadow-lg outline-none transition-transform duration-150 hover:scale-105 focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none"
         params={{ id }}
         to="/app/c/$id"
       >

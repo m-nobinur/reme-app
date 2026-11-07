@@ -98,3 +98,50 @@ test("the rule and the labels have no accessibility violations in either theme",
       .toEqual([])
   }
 })
+
+const KINDS = "ThreadMessageKinds"
+
+test("each kind of posted message has its label and mark, and a reply reads as a reply", async ({
+  page,
+}) => {
+  await open(page, KINDS, 390)
+  const entry = page.locator(`[data-entry="${KINDS}"]`)
+  const rows = entry.locator('[data-slot="aui_assistant-message-root"]')
+  const labels = entry.locator('[data-slot="aui_update-label"]')
+  await expect(labels).toHaveText([
+    "Update·2:09 PM",
+    "Note·2:10 PM",
+    "Done·2:31 PM",
+    "Reminder·4:00 PM",
+  ])
+  // The reply after Skip has no label, and its time sits in its footer.
+  await expect(rows.nth(0).locator("[data-slot=aui_update-label]")).toHaveCount(
+    0
+  )
+  await expect(
+    rows.nth(0).locator("[data-slot=aui_assistant-message-footer] time")
+  ).toHaveCount(1)
+  const marks = await Promise.all(
+    [0, 1, 2, 3].map((n) => labels.nth(n).locator("svg").innerHTML())
+  )
+  expect(new Set(marks).size).toBe(4)
+  await expect(labels.nth(3).getByText("Reminder")).toHaveClass(/text-primary/)
+  await expect(labels.nth(2).getByText("Done")).not.toHaveClass(/text-primary/)
+  for (const theme of ["light", "dark"]) {
+    await open(page, KINDS, 390, theme)
+    await page.screenshot({
+      path: test.info().outputPath(`message-kinds-390-${theme}.png`),
+      fullPage: true,
+    })
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG)
+      .include(`[data-entry="${KINDS}"]`)
+      .analyze()
+    expect
+      .soft(
+        results.violations.map((v) => `${theme}: ${v.id}`),
+        JSON.stringify(results.violations, null, 2)
+      )
+      .toEqual([])
+  }
+})

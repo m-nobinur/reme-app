@@ -430,6 +430,21 @@ describe("what the owner is told", () => {
     ])
   })
 
+  it("posts a live domain as done, a wait or a failure as a note, progress as an update", async () => {
+    const { kit } = fakeKit()
+    posting.answers.push("posted", "posted", "posted", "posted")
+    for (const key of ["d:live", "d:waiting", "d:failed", "d:sweep"])
+      await postStatus(kit, "org", { key, text: "t" })
+    expect(
+      posting.calls.slice(-4).map((c) => (c as { message: unknown }).message)
+    ).toEqual([
+      { text: ["t"], kind: "done" },
+      { text: ["t"], kind: "note" },
+      { text: ["t"], kind: "note" },
+      { text: ["t"] },
+    ])
+  })
+
   it.each(["busy", "waiting"] as const)(
     "throws on a %s chat, so the step retries the post",
     async (answer) => {

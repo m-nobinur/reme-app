@@ -3,6 +3,7 @@ import { EyedropperIcon, ShuffleIcon } from "@phosphor-icons/react"
 import type { AskChoiceInput } from "@workspace/contracts"
 import {
   Docked,
+  skipOf,
   TrayFrame,
   TrayNote,
   useTabDraft,
@@ -330,7 +331,7 @@ function ColourField({
       <div className="flex items-center gap-2">
         <input
           aria-label="Pick a colour"
-          className="size-9 shrink-0 cursor-pointer rounded-full border border-border bg-transparent p-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0"
+          className="size-9 shrink-0 cursor-pointer rounded-full border border-border bg-transparent p-0.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0"
           onChange={(event) => onChange(event.currentTarget.value)}
           type="color"
           value={hex ?? fallback}
@@ -547,7 +548,7 @@ function ChoiceForm({
           aria-pressed={checked}
           className={cn(
             shape,
-            "text-left outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring",
+            "text-left outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring",
             checked && "border-primary bg-primary/5"
           )}
           key={value}
@@ -647,17 +648,8 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
   const id = useId()
   const [collapsed, setCollapsed] = useState(false)
 
-  if (view.state === "answered" || view.state === "skipped") {
-    return null
-  }
-  if (view.state !== "pending") {
-    return (
-      <TrayNote
-        error={view.state === "error" ? view.message : null}
-        name="ask-choice"
-      />
-    )
-  }
+  if (view.state !== "pending")
+    return <TrayNote name="ask-choice" view={view} />
   const { input } = view
 
   if (quickOf(input)) {
@@ -690,14 +682,7 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
         hint={input.multiple ? "Pick any that fit" : null}
         onCollapsedChange={setCollapsed}
         question={STEP_ASK[input.step]}
-        skip={
-          input.skippable
-            ? {
-                label: "Skip",
-                onSkip: () => props.addResult({ answer: "skipped" }),
-              }
-            : undefined
-        }
+        skip={skipOf(input.skippable, props.addResult)}
         submit={oneTapOf(input) ? undefined : { form: `${id}-form` }}
       >
         <ChoiceForm

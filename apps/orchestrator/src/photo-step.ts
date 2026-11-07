@@ -8,7 +8,7 @@ import {
   type Tenancy,
   toFactRecord,
 } from "@workspace/db"
-import { siteFacts } from "./brief.ts"
+import { creationChoices, siteFacts } from "./brief.ts"
 import { industryOf, ownerPhotos } from "./developer-rules.ts"
 import { DIRECTIONS } from "./directions.ts"
 import {
@@ -81,6 +81,36 @@ export function applyPhotos(
   }
 }
 
+/**
+ * The photos' spend as one `runtime.turn`, so the build's cost counts it:
+ * every draw and defect check each slot paid for, with the models that drew.
+ */
+export function photoTurn(results: readonly PhotoResult[]) {
+  const total = results.reduce((n, r) => n + (r.cost_usd ?? 0), 0)
+  const models = [...new Set(results.flatMap((r) => r.model ?? []))]
+  return {
+    role: "photos",
+    model: models.join(", ") || null,
+    slots: results.length,
+    response: { usage: { cost: { total } } },
+  }
+}
+
+/** A slot's picture as an earlier `build.progress` row recorded it. */
+const keptFrom = ({
+  payload: p,
+}: {
+  payload: Record<string, unknown>
+}): PhotoResult => ({
+  slot_id: String(p.item),
+  status: p.status === "fallback" ? "fallback" : "reused",
+  asset_id: typeof p.asset_id === "string" ? p.asset_id : null,
+  key: typeof p.key === "string" ? p.key : null,
+  content_type: typeof p.content_type === "string" ? p.content_type : null,
+  cost_usd: 0,
+  reason: null,
+})
+
 /** The palette in words for the prompt writer. */
 function paletteWords(plan: Blueprint): string {
   if (plan.palette.kind === "brand") {
@@ -121,7 +151,22 @@ export async function makePhotos(input: {
       .from(assignments)
       .where(eq(assignments.id, ids.assignmentId))
     const facts = (await siteFacts(db)).map(toFactRecord)
-    return { done: null, row, facts }
+    // What this build already drew before a restart, and what the build it retries drew: the
+    // same plan and slots, so a picture made once is not paid for again.
+    const { retry_of } = await creationChoices(db, ids)
+    const drawn = await db
+      .select({ payload: events.payload })
+      .from(events)
+      .where(
+        sql`${events.assignmentId} in (${sql.join(
+          [ids.assignmentId, ...(retry_of ? [retry_of] : [])].map(
+            (id) => sql`${id}`
+          ),
+          sql`, `
+        )}) and ${events.type} = 'build.progress' and ${events.payload}->>'stage' = 'photos' and ${events.payload}->>'key' is not null`
+      )
+      .orderBy(events.eventId)
+    return { done: null, row, facts, drawn: drawn.map(keptFrom) }
   })
   if (read.done) return read.done
   const plan = Blueprint.safeParse(read.row?.blueprint)
@@ -175,6 +220,7 @@ export async function makePhotos(input: {
         plan: plan.data,
         brief,
         uploads: ownerPhotos(read.facts),
+        kept: read.drawn,
         onSlot: progress,
         ...(input.fetch ? { fetch: input.fetch } : {}),
       })
@@ -210,6 +256,14 @@ export async function makePhotos(input: {
       },
       taint: ["inferred"],
     })
+    if (results.some((r) => r.cost_usd !== null))
+      await appendEvent(db, {
+        orgId: ids.orgId,
+        assignmentId: ids.assignmentId,
+        staffId: read.row?.staffId ?? null,
+        type: "runtime.turn",
+        payload: photoTurn(results),
+      })
   })
   return step
 }

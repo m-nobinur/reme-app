@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import type { QuestionReply } from "@workspace/contracts"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { EMPTY_WORKSPACE } from "../attention"
+import { ACCOUNT, LINK, STARTED, stateOf } from "../channels-samples"
 import { apiSource, treeOf } from "./client"
 import { SessionEnded, type StaffMember } from "./types"
 
@@ -985,6 +986,81 @@ it("takes a push subscription off by its id", async () => {
   expect(await apiSource.unsubscribePush(NOTE)).toMatchObject({ done: false })
 })
 
+it("reads the channels, and none where the gate is off", async () => {
+  answers["GET /channels"] = stateOf()
+  expect(await apiSource.channels()).toEqual(stateOf())
+  answers["GET /channels"] = refusal(404, "not_found")
+  expect(await apiSource.channels()).toBeNull()
+  answers["GET /channels"] = refusal(403, "org.unresolved")
+  expect(await apiSource.channels()).toBeNull()
+  answers["GET /channels"] = refusal(500, "internal")
+  await expect(apiSource.channels()).rejects.toThrow("500")
+})
+
+it("starts a WhatsApp link, and treats a refusal as none", async () => {
+  answers["POST /channels/whatsapp/link"] = STARTED
+  expect(await apiSource.startWhatsAppLink("k-7")).toEqual(STARTED)
+  expect(headerOf(calls.at(-1), "idempotency-key")).toBe("k-7")
+  answers["POST /channels/whatsapp/link"] = refusal(403, "channels.not_owner")
+  expect(await apiSource.startWhatsAppLink("k-8")).toBeNull()
+  answers["POST /channels/whatsapp/link"] = refusal(503, "unavailable")
+  await expect(apiSource.startWhatsAppLink("k-9")).rejects.toThrow("503")
+})
+
+it("reads what the sign-up popup opens with, and none where the api has none", async () => {
+  answers["GET /channels/whatsapp/signup"] = { app_id: "11", config_id: "22" }
+  expect(await apiSource.signupConfig()).toEqual({
+    appId: "11",
+    configId: "22",
+  })
+  answers["GET /channels/whatsapp/signup"] = refusal(
+    503,
+    "channels.signup_unavailable"
+  )
+  expect(await apiSource.signupConfig()).toBeNull()
+  answers["GET /channels/whatsapp/signup"] = refusal(404, "channels.not_found")
+  expect(await apiSource.signupConfig()).toBeNull()
+})
+
+it("hands the popup's result to the api, and treats a refusal as none", async () => {
+  const popup = { code: "AQB", waba_id: "111", phone_number_id: "222" }
+  answers["POST /channels/whatsapp/signup"] = ACCOUNT
+  expect(await apiSource.completeWhatsAppSignup(popup, "k-10")).toEqual(ACCOUNT)
+  expect(headerOf(calls.at(-1), "idempotency-key")).toBe("k-10")
+  answers["POST /channels/whatsapp/signup"] = refusal(
+    409,
+    "channels.number_taken"
+  )
+  expect(await apiSource.completeWhatsAppSignup(popup, "k-11")).toBeNull()
+  answers["POST /channels/whatsapp/signup"] = refusal(
+    502,
+    "channels.signup_failed"
+  )
+  expect(await apiSource.completeWhatsAppSignup(popup, "k-12")).toBeNull()
+  answers["POST /channels/whatsapp/signup"] = refusal(500, "internal")
+  await expect(apiSource.completeWhatsAppSignup(popup, "k-13")).rejects.toThrow(
+    "500"
+  )
+})
+
+it("switches updates on a linked chat and disconnects it", async () => {
+  const path = `/channels/links/${LINK.id}`
+  answers[`PATCH ${path}`] = {}
+  expect(
+    await apiSource.updateChannelLink(LINK.id, { updates: false }, "k-10")
+  ).toEqual({ done: true })
+  expect(JSON.parse(String(calls.at(-1)?.init?.body))).toEqual({
+    updates: false,
+  })
+  answers[`DELETE ${path}`] = {}
+  expect(await apiSource.disconnectChannelLink(LINK.id)).toEqual({ done: true })
+  expect(calls.at(-1)?.init?.method).toBe("DELETE")
+  answers[`DELETE ${path}`] = refusal(404, "channels.not_found")
+  expect(await apiSource.disconnectChannelLink(LINK.id)).toMatchObject({
+    done: false,
+  })
+})
+
 const DETAILS = {
   registrant: {
     name: "Jane Smith",
@@ -1066,26 +1142,17 @@ it("reads the details page, notes buying elsewhere, and asks the registry once b
   expect(await apiSource.domainElsewhere(NAME, "k-12")).toEqual({ done: true })
   expect(headerOf(calls.at(-1), "idempotency-key")).toBe("k-12")
 
-  answers[`POST /domains/${NAME}/bought`] = {
-    outcome: "not_registered_yet",
-    name: NAME,
-  }
-  expect(await apiSource.domainBought(NAME, "k-13")).toEqual({
-    outcome: "not_registered_yet",
-    name: NAME,
+  answers[`POST /domains/${NAME}/not-yet`] = new Response(null, {
+    status: 204,
   })
-  const connecting = {
-    outcome: "connecting",
-    method: "records",
-    email_affected: false,
-    steps: [{ type: "CNAME", name: "www", value: "domains.remeai.co.uk" }],
-  }
-  answers[`POST /domains/${NAME}/bought`] = connecting
-  expect(await apiSource.domainBought(NAME, "k-14")).toEqual(connecting)
+  expect(await apiSource.domainNotYet(NAME, "k-13")).toEqual({ done: true })
+  expect(headerOf(calls.at(-1), "idempotency-key")).toBe("k-13")
 
   // A name that is not a hostname never becomes a path.
   const before = calls.length
-  await expect(apiSource.domainBought("../account", "k-15")).rejects.toThrow()
+  await expect(
+    apiSource.domainElsewhere("../account", "k-15")
+  ).rejects.toThrow()
   expect(calls).toHaveLength(before)
 })
 

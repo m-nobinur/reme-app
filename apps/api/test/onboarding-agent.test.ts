@@ -2,6 +2,7 @@ import {
   type AskDesignInput,
   type FactValue,
   OnboardingPlan,
+  type OnboardingStatus,
   PERSONA_CARD,
   type OnboardingPlan as Plan,
   RECAP_REPLY,
@@ -23,6 +24,7 @@ import {
   reopenCard,
 } from "../src/onboarding.ts"
 import {
+  ANSWER_LINE,
   askedSoFar,
   buildMissing,
   checkPlan,
@@ -39,6 +41,7 @@ import {
   sayProblems,
   transcriptOf,
   turnData,
+  turnLine,
   typedOverForm,
   warmPlanner,
 } from "../src/onboarding-agent.ts"
@@ -1585,9 +1588,13 @@ const ordered = (p: Plan) =>
  */
 /** A call that thinks in `thinks` for `ms` before writing `writes`. */
 type Thinking = { thinks: string[]; ms: number; writes: Plan }
+/** A call that writes `stalls` and then goes quiet. */
+type Stalling = { stalls: string }
 
+/** `by` is the model the provider says answered. */
 function planner(
-  answers: (Plan | Thinking | string | Error | "hang" | "stall")[]
+  answers: (Plan | Thinking | Stalling | string | Error | "hang" | "stall")[],
+  by?: string
 ) {
   const prompts: unknown[] = []
   const model = new MockLanguageModelV4({
@@ -1596,13 +1603,17 @@ function planner(
       prompts.push(options.prompt)
       if (answer instanceof Error) throw answer
       // Begins writing, then goes quiet until it is stopped.
-      if (answer === "stall") {
+      if (
+        answer === "stall" ||
+        (typeof answer === "object" && "stalls" in answer)
+      ) {
+        const wrote = answer === "stall" ? "{" : answer.stalls
         return {
           stream: new ReadableStream({
             start(c) {
               c.enqueue({ type: "stream-start", warnings: [] })
               c.enqueue({ type: "text-start", id: "t" })
-              c.enqueue({ type: "text-delta", id: "t", delta: "{" })
+              c.enqueue({ type: "text-delta", id: "t", delta: wrote })
               options.abortSignal?.addEventListener("abort", () =>
                 c.error(options.abortSignal?.reason)
               )
@@ -1626,6 +1637,7 @@ function planner(
       const deltas = text.match(/[\s\S]{1,7}/g) ?? []
       const parts = [
         { type: "stream-start", warnings: [] },
+        ...(by ? [{ type: "response-metadata", modelId: by }] : []),
         ...(thinking
           ? [
               { type: "reasoning-start", id: "r" },
@@ -1896,7 +1908,7 @@ describe("a planned turn", () => {
     expect(out.calls[0]?.costUsd).toBe(unraced.calls[0]?.costUsd)
   })
 
-  it("lets a thinking call keep its time, and sends its thoughts' headings", async () => {
+  it("lets a thinking call keep its time, and shows nothing of its thoughts", async () => {
     const seen: unknown[] = []
     const thinker = planner([
       {
@@ -1923,11 +1935,11 @@ describe("a planned turn", () => {
     expect(out).toMatchObject({ ok: true })
     // Past the hedge, but thinking: never raced.
     expect(thinker.prompts).toHaveLength(1)
-    expect(seen[0]).toEqual({
-      on: { kind: "thinking", text: "Evaluating service models" },
-      facts: [],
-    })
-    expect(JSON.stringify(seen)).not.toContain("regular cleans")
+    // The turn's line is code's, then the plan's: a thought is never one.
+    expect(seen.map((s) => (s as OnboardingStatus).on.kind)).not.toContain(
+      "thinking"
+    )
+    expect(JSON.stringify(seen)).not.toMatch(/regular cleans|service models/i)
   })
 
   it("never lets the owner's instructions past the checks", async () => {
@@ -2342,7 +2354,7 @@ describe("the recap", () => {
       "tool-ask_open",
     ])
     expect((parts[1] as { text: string }).text).toBe(
-      `Here's what I have for Regal Rides:\n\n- **Services:** wedding cars\n- **Area:** Greater Manchester\n- **Customers:** couples getting married\n- **Quote form:** ${FIELDS.length} questions\n- **Contact:** 07700 900412, bookings@regal.invalid\n\nHave I got that right?`
+      `Here's what I have for Regal Rides:\n\n- **Services:** wedding cars\n- **Area:** Greater Manchester\n- **Customers:** couples getting married\n- **What sets you apart:** twelve years trading, every chauffeur DBS checked\n- **Quote form:** ${FIELDS.length} questions\n- **Contact:** 07700 900412, bookings@regal.invalid\n\nHave I got that right?`
     )
   })
 
@@ -2373,7 +2385,9 @@ describe("the recap", () => {
     const change = {
       ...next,
       facts: {
-        "service_area.text": { text: "Greater Manchester and Cheshire" },
+        "service_area.text": {
+          text: "Based in Greater Manchester and Cheshire",
+        },
       },
       say: "Added Cheshire. Now a bit about me, since I'll be the one answering for Regal Rides.",
     }
@@ -2516,9 +2530,43 @@ describe("a streamed turn", () => {
     })
     expect(doingLine("")).toBeNull()
     expect(doingLine("Saving business.audience")).toBeNull()
+    expect(doingLine("Checking the JSON schema")).toBeNull()
     expect(doingLine("  Drafting quote   questions ")).toBe(
       "Drafting quote questions"
     )
+    expect(doingLine("Prioritizing Your Services")).toBe(
+      "Prioritising your services"
+    )
+  })
+
+  it("keeps code's line when the plan's own line says something internal", async () => {
+    const seen: OnboardingStatus[] = []
+    await planTurn(
+      planner([
+        JSON.stringify({
+          doing: "Updating the facts json",
+          ...JSON.parse(
+            ordered(
+              plan({
+                facts: {
+                  "business.offerings": { items: ["Weddings", "Proms"] },
+                },
+                say: "Weddings and proms. Who books you most?",
+                next: { kind: "ask_open", about: "business.audience" },
+              })
+            )
+          ),
+        }),
+      ]).model,
+      PRICE,
+      typed("We do weddings and proms"),
+      undefined,
+      () => undefined,
+      undefined,
+      { send: (status) => seen.push(status), commit: async () => [] }
+    )
+    // No doing line: the fact and the move follow code's first line.
+    expect(seen.map((s) => s.on.kind)).toEqual(["fact", "next"])
   })
 
   it("writes no facts ahead of a build, and still says it is getting ready", async () => {
@@ -2563,6 +2611,21 @@ describe("a streamed turn", () => {
     expect(instructions).toContain(VOICE)
     // An example's ", noted." opener was copied into most replies (#645).
     expect(instructions).not.toMatch(/\bnoted\b/i)
+  })
+
+  it("keeps dashes rare, forbids echoing, and no example uses either", async () => {
+    const instructions = await plannerInstructions()
+    expect(instructions).toContain(
+      "A dash is fine where it genuinely reads better"
+    )
+    expect(instructions).toContain("NEVER repeat their sentence back")
+    expect(instructions).toContain("NEVER introduce the recap yourself")
+    const examples = instructions.slice(
+      instructions.indexOf("<examples>"),
+      instructions.indexOf("</examples>")
+    )
+    expect(examples).not.toMatch(/[—–]/)
+    expect(examples).not.toContain("So nothing above two storeys")
   })
 
   it("offers no photo move: the photos are a tray question", async () => {
@@ -2648,6 +2711,296 @@ describe("a streamed turn", () => {
     expect(out.ok).toBe(true)
     // Shown whole once the plan passed, never while it was written.
     expect(said).toEqual([p.say])
+  })
+})
+
+describe("the turn's first line", () => {
+  const card = (type: string, input: object) =>
+    ({ type, toolCallId: "c1", state: "input-available", input }) as ToolPart
+  const answered = (part: ToolPart): PlanState => ({
+    onboarding: onboarding(),
+    pending: null,
+    input: { kind: "card", card: part, output: {} },
+    rows: [],
+  })
+
+  it("names the job of the step being answered, by card or in words over it", () => {
+    expect(
+      turnLine(
+        typed(
+          "We do end of tenancy",
+          onboarding(),
+          card("tool-ask_open", { about: "business.offerings" })
+        )
+      )
+    ).toBe("Noting your services")
+    expect(
+      turnLine(
+        typed(
+          "Leeds and 20 miles out",
+          onboarding(),
+          card("tool-ask_open", { about: "service_area.text" })
+        )
+      )
+    ).toBe("Checking your area")
+    expect(
+      turnLine(
+        typed(
+          "The address and rooms",
+          onboarding(),
+          card("tool-ask_open", { about: "quote.form" })
+        )
+      )
+    ).toBe("Setting up your quote questions")
+    expect(
+      turnLine(
+        typed(
+          "Drop the date",
+          onboarding(),
+          card("tool-review_quote_form", { fields: FIELDS })
+        )
+      )
+    ).toBe("Setting up your quote questions")
+    expect(
+      turnLine(answered(card("tool-ask_details", { step: "contact" })))
+    ).toBe("Saving your phone and email")
+    expect(turnLine(answered(card("tool-ask_upload", {})))).toBe(
+      "Looking at your photos"
+    )
+    expect(
+      turnLine(answered(card("tool-ask_choice", { step: "build_for_me" })))
+    ).toBe("Noting your website choice")
+  })
+
+  it("reads a recap correction as one, and a yes as a check", () => {
+    const recap = card("tool-ask_open", { about: "recap" })
+    expect(turnLine(typed("We don't do ovens", onboarding(), recap))).toBe(
+      "Reading your correction"
+    )
+    expect(turnLine(typed(RECAP_REPLY, onboarding(), recap))).toBe(
+      "Checking the details"
+    )
+  })
+
+  it("names the opener's step when no card waits", () => {
+    expect(turnLine(typed("We clean offices and homes"))).toBe(
+      "Noting your services"
+    )
+  })
+
+  it("falls back to a plain line when nothing names the step", () => {
+    expect(
+      turnLine(
+        typed(
+          "go",
+          onboarding(),
+          card("tool-request_change", { text: "Build" })
+        )
+      )
+    ).toBe(ANSWER_LINE)
+    expect(
+      turnLine(answered(card("tool-ask_open", { about: "business.tagline" })))
+    ).toBe(ANSWER_LINE)
+  })
+
+  it("is sentence case, British and free of internal words, in every line", () => {
+    const lines = [
+      ANSWER_LINE,
+      "Reading your correction",
+      "Checking the details",
+      ...[
+        "business.name",
+        "business.offerings",
+        "service_area.text",
+        "business.audience",
+        "business.proof",
+        "quote.form",
+      ].map((about) =>
+        turnLine(typed("x", onboarding(), card("tool-ask_open", { about })))
+      ),
+    ]
+    for (const line of lines) expect(doingLine(line), line).toBe(line)
+  })
+})
+
+describe("recovering a planned turn", () => {
+  const offerings = plan({
+    facts: { "business.offerings": { items: ["Weddings", "Proms"] } },
+    say: "Weddings and proms. Who books you most?",
+    next: { kind: "ask_open", about: "business.audience" },
+  })
+
+  it("feeds a refusal found at commit back with its errors, and keeps the plan that follows", async () => {
+    const { model, prompts } = planner([offerings, offerings])
+    const said: string[] = []
+    let commits = 0
+    const out = await planTurn(
+      model,
+      PRICE,
+      typed("We do weddings and proms"),
+      undefined,
+      (text) => said.push(text),
+      undefined,
+      {
+        send: () => undefined,
+        commit: async (checked) =>
+          ++commits === 1
+            ? { errors: ["business.offerings changed while you wrote"] }
+            : checked.stated.map((f) => f.key),
+      }
+    )
+    expect(out.ok).toBe(true)
+    expect(out.calls.map((c) => c.errors)).toEqual([
+      ["business.offerings changed while you wrote"],
+      [],
+    ])
+    expect(JSON.stringify(prompts[1])).toContain(
+      "business.offerings changed while you wrote"
+    )
+    // Nothing of the refused plan showed; the kept one streamed once.
+    expect(said.join("")).toBe(offerings.say)
+  })
+
+  it("tells a retry which facts an earlier call already saved", async () => {
+    const tooLong = plan({
+      facts: { "business.offerings": { items: ["Weddings", "Proms"] } },
+      say: `Weddings and proms. ${"word ".repeat(SAY_MAX / 5)}`,
+      next: { kind: "ask_open", about: "business.audience" },
+    })
+    const { model, prompts } = planner([tooLong, offerings])
+    const out = await planTurn(
+      model,
+      PRICE,
+      typed("We do weddings and proms"),
+      undefined,
+      () => undefined,
+      undefined,
+      {
+        send: () => undefined,
+        commit: async (checked) => checked.stated.map((f) => f.key),
+      }
+    )
+    expect(out.ok).toBe(true)
+    expect(JSON.stringify(prompts[1])).toContain(
+      "These facts from it are already saved: business.offerings"
+    )
+  })
+
+  it("shows the recap again from the facts, with no apology, once every plan is refused after words showed", async () => {
+    const recapCard = call("tool-ask_open", { about: "recap" }, counter())
+    const s = typed(
+      "We don't do ovens, add that",
+      onboarding([...without(...PERSONA_KEYS), QUOTE]),
+      recapCard
+    )
+    const disclaimer = { "business.disclaimer": { text: "Ovens" } }
+    const { model } = planner([
+      // Its facts and move pass, so its first sentence shows; then too long.
+      plan({
+        facts: disclaimer,
+        pending_card: "answered",
+        say: `Added that you don't do ovens. ${"word ".repeat(SAY_MAX / 5)}`,
+        next: { kind: "ask_open", about: "recap" },
+      }),
+      // Then a move the checks refuse, twice.
+      plan({
+        facts: disclaimer,
+        pending_card: "answered",
+        say: "Added that you don't do ovens. Now, about me.",
+        next: { kind: "ask_details", step: "assistant" },
+      }),
+    ])
+    const said: string[] = []
+    const out = await planTurn(model, PRICE, s, undefined, (text) =>
+      said.push(text)
+    )
+    expect(said.join("")).toBe("Added that you don't do ovens.")
+    if (!out.ok) throw new Error(`refused: ${out.reason}`)
+    expect(out.calls).toHaveLength(3)
+    expect(out.refused).toContain(
+      "the owner corrected the recap: name each change in one short line and set next ask_open recap, so they see it once more"
+    )
+    const parts = planParts(out.checked, s, counter())
+    expect(parts.map((p) => p.type)).toEqual(["text", "text", "tool-ask_open"])
+    expect((parts[0] as { text: string }).text).toBe(
+      "Added that you don't do ovens."
+    )
+    expect((parts[1] as { text: string }).text).toMatch(/ovens/i)
+    expect(JSON.stringify(parts)).not.toMatch(/sorry|didn't quite catch/i)
+  })
+
+  it("shows the waiting card again under what was read when it is not the recap", async () => {
+    const s = typed(
+      "Weddings mostly",
+      onboarding(),
+      call("tool-ask_open", { about: "business.offerings" }, counter())
+    )
+    const long = plan({
+      pending_card: "unanswered",
+      say: `Happy to help with that. ${"word ".repeat(SAY_MAX / 5)}`,
+      next: { kind: "answer_only" },
+    })
+    const out = await planTurn(
+      planner([long]).model,
+      PRICE,
+      s,
+      undefined,
+      () => undefined
+    )
+    if (!out.ok) throw new Error(`refused: ${out.reason}`)
+    expect(out.refused?.[0]).toMatch(/^say is \d+ characters/)
+    expect(planParts(out.checked, s, counter())).toMatchObject([
+      { type: "text", text: "Happy to help with that." },
+      { type: "tool-ask_open", input: { about: "business.offerings" } },
+    ])
+  })
+
+  it("asks once more after a call goes quiet mid-answer, continuing what was read", async () => {
+    const whole = ordered(offerings)
+    const cut = whole.slice(0, whole.indexOf("Who books"))
+    const { model, prompts } = planner([{ stalls: cut }, offerings])
+    const said: string[] = []
+    const out = await planTurn(
+      model,
+      PRICE,
+      typed("We do weddings and proms"),
+      { callMs: 10_000, totalMs: 20_000, stallMs: 50 },
+      (text) => said.push(text)
+    )
+    expect(out.ok).toBe(true)
+    expect(out.calls.map((c) => c.errors)).toEqual([["timeout"], []])
+    const retry = JSON.stringify(prompts[1])
+    expect(retry).toContain("cut off")
+    expect(retry).toContain("already read the start of your message")
+    expect(said).toEqual(["Weddings and proms.", " Who books you most?"])
+
+    // A second stall is not asked again.
+    const twice = await planTurn(
+      planner([{ stalls: cut }]).model,
+      PRICE,
+      typed("We do weddings and proms"),
+      { callMs: 10_000, totalMs: 20_000, stallMs: 50 },
+      () => undefined
+    )
+    expect(twice).toMatchObject({ ok: false, reason: "timeout" })
+    expect(twice.calls).toHaveLength(2)
+  })
+
+  it("keeps a provider error's retry out of the refusals' budget", async () => {
+    const bad = plan({ say: "Starting.", next: { kind: "start_build" } })
+    const { prompts, model } = planner([new Error("503"), bad, bad, offerings])
+    const out = await planTurn(model, PRICE, typed("We do weddings and proms"))
+    expect(out.ok).toBe(true)
+    expect(prompts).toHaveLength(4)
+  })
+
+  it("records the model that answered", async () => {
+    const out = await planTurn(
+      planner([offerings], ONBOARDING_FALLBACK_MODEL).model,
+      PRICE,
+      typed("We do weddings and proms")
+    )
+    expect(out.calls[0]?.model).toBe(ONBOARDING_FALLBACK_MODEL)
   })
 })
 

@@ -17,4 +17,8 @@ declare module "node:path" {
   export function resolve(...paths: string[]): string
 }
 declare const process: { cwd: () => string }
-declare const Buffer: { from: (data: string) => Uint8Array }
+declare const Buffer: {
+  from: (
+    data: string | Uint8Array
+  ) => Uint8Array<ArrayBuffer> & { toString: (encoding: "base64") => string }
+}

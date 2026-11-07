@@ -558,6 +558,11 @@ async function onboard(persona, spec) {
   const area = factOf(sim.facts, "service_area.text")?.text ?? ""
   if (persona.areaAfter && !persona.areaAfter.test(area))
     problems.push(`the recap's correction was not kept: ${area}`)
+  const disclaimer = factOf(sim.facts, "business.disclaimer")?.text ?? ""
+  if (t.disclaimer && !t.disclaimer.test(disclaimer))
+    problems.push(
+      `what the business doesn't take on was not kept: ${disclaimer}`
+    )
   const missing = REQUIRED.filter((k) => !sim.facts.some((f) => f.key === k))
   if (missing.length > 0)
     problems.push(`required facts missing: ${missing.join(", ")}`)

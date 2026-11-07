@@ -2190,6 +2190,7 @@ export interface components {
               }
           )[]
           skip_all?: boolean
+          changed?: string[]
         }
       | {
           /** @constant */
@@ -2200,6 +2201,7 @@ export interface components {
       mode: "answer" | "review"
       question: string
       pages?: string[]
+      step?: string
     }
     AskDeveloperOutput:
       | {
@@ -3903,6 +3905,8 @@ export interface components {
       label?: string
       /** @enum {string} */
       lane?: "full" | "quick"
+      /** @enum {string} */
+      change_kind?: "copy" | "style" | "section" | "photo" | "creative"
       fell_through?: boolean
       /** @constant */
       retry?: true
@@ -3929,6 +3933,15 @@ export interface components {
         revision_id: string
         version: number
       } | null
+      held?: {
+        /** Format: uuid */
+        revision_id: string
+        version: number
+        /** Format: uuid */
+        assignment_id: string
+        /** Format: date-time */
+        ready_at?: string
+      }
       blueprint?: {
         plan: {
           direction: string
@@ -4707,6 +4720,50 @@ export interface components {
       /** Format: date-time */
       requested_at: string
     }
+    ChannelLink: {
+      /** Format: uuid */
+      id: string
+      /** @enum {string} */
+      kind: "whatsapp" | "telegram"
+      label: string
+      /** Format: date-time */
+      connected_at: string
+      updates: boolean
+    }
+    ChannelLinkPatch: {
+      updates: boolean
+    }
+    ChannelLinkStarted: {
+      /** @enum {string} */
+      kind: "whatsapp" | "telegram"
+      url: string
+      /** Format: date-time */
+      expires_at: string
+    }
+    ChannelsState: {
+      whatsapp: {
+        available: boolean
+        account: {
+          display_number: string
+          display_name: string
+          /** @enum {string} */
+          source: "connected" | "purchased" | "dev"
+          coexistence: boolean
+          /** @enum {string} */
+          status: "pending" | "active" | "disabled"
+        } | null
+        links: {
+          /** Format: uuid */
+          id: string
+          /** @enum {string} */
+          kind: "whatsapp" | "telegram"
+          label: string
+          /** Format: date-time */
+          connected_at: string
+          updates: boolean
+        }[]
+      }
+    }
     ChatRequest: {
       /** Format: uuid */
       conversation_id: string
@@ -4714,7 +4771,7 @@ export interface components {
       mode: "ask" | "act"
       time_zone?: string
       /** @enum {string} */
-      intent?: "site_change"
+      intent?: "site_change" | "connect_address" | "connect_google"
       turn:
         | {
             /** @constant */
@@ -5565,6 +5622,7 @@ export interface components {
                                 }
                             )[]
                             skip_all?: boolean
+                            changed?: string[]
                           }
                         | {
                             /** @constant */
@@ -5810,6 +5868,14 @@ export interface components {
             message: string
           }
         }
+    ChoicesPart: {
+      /** @constant */
+      type: "data-choices"
+      data: {
+        label: string
+        send: string
+      }[]
+    }
     CompletionReport: {
       /** Format: uuid */
       report_id: string
@@ -6018,6 +6084,8 @@ export interface components {
               createdAt: string
               /** @constant */
               partial?: true
+              /** @enum {string} */
+              source?: "whatsapp" | "telegram"
             }
           }
         }
@@ -6057,6 +6125,8 @@ export interface components {
             createdAt: string
             /** @constant */
             partial?: true
+            /** @enum {string} */
+            source?: "whatsapp" | "telegram"
           }
         }
       }
@@ -6115,25 +6185,31 @@ export interface components {
         | "connect_google"
         | "get_search_performance"
         | "get_indexing"
-        | "remember"
+        | "memory"
+        | "search_conversations"
         | "put_off"
+        | "offer_choices"
+        | "present"
         | "inspect_domain"
         | "domain_bought"
         | "offer_grant"
-        | "read_skill"
+        | "skill_view"
         | "save_correction"
         | "schedule_skill"
         | "ask_developer"
         | "get_review"
         | "read_site"
         | "get_preview"
+        | "read_skill"
+        | "remember"
       )[]
       text: string
       reserved_usd: number
+      memory?: string
     }
     CosEvent: {
       /** @enum {string} */
-      source: "staff" | "notice" | "schedule" | "enquiry"
+      source: "staff" | "notice" | "schedule" | "enquiry" | "handover"
       summary: string
       evidence: (
         | {
@@ -6608,18 +6684,23 @@ export interface components {
           | "connect_google"
           | "get_search_performance"
           | "get_indexing"
-          | "remember"
+          | "memory"
+          | "search_conversations"
           | "put_off"
+          | "offer_choices"
+          | "present"
           | "inspect_domain"
           | "domain_bought"
           | "offer_grant"
-          | "read_skill"
+          | "skill_view"
           | "save_correction"
           | "schedule_skill"
           | "ask_developer"
           | "get_review"
           | "read_site"
           | "get_preview"
+          | "read_skill"
+          | "remember"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -6951,6 +7032,10 @@ export interface components {
                 p95: number
               }
               quick: {
+                p50: number
+                p95: number
+              }
+              section?: {
                 p50: number
                 p95: number
               }
@@ -7511,6 +7596,13 @@ export interface components {
                   label?: string
                   /** @enum {string} */
                   lane?: "full" | "quick"
+                  /** @enum {string} */
+                  change_kind?:
+                    | "copy"
+                    | "style"
+                    | "section"
+                    | "photo"
+                    | "creative"
                   fell_through?: boolean
                   /** @constant */
                   retry?: true
@@ -7537,6 +7629,15 @@ export interface components {
                     revision_id: string
                     version: number
                   } | null
+                  held?: {
+                    /** Format: uuid */
+                    revision_id: string
+                    version: number
+                    /** Format: uuid */
+                    assignment_id: string
+                    /** Format: date-time */
+                    ready_at?: string
+                  }
                   blueprint?: {
                     plan: {
                       direction: string
@@ -9137,25 +9238,78 @@ export interface components {
           turn_id: string
           tool_call_id: string
           /** @constant */
-          tool: "remember"
+          tool: "memory"
           output:
             | {
                 /** @constant */
                 outcome: "saved"
+                /** @description user, notes or skill:<name> */
+                target: string
                 note: string
                 fullness: string
+                entry_count: number
+                patched?: {
+                  before: string
+                  after: string
+                }[]
+                removed?: string[]
               }
             | {
                 /** @constant */
                 outcome: "full"
+                /** @description user, notes or skill:<name> */
+                target: string
                 note: string
                 fullness: string
-                lines: string[]
+                current_entries: string[]
               }
             | {
                 /** @constant */
                 outcome: "stopped"
                 note: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+                closest_entries?: string[]
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "search_conversations"
+          output:
+            | {
+                /** @constant */
+                outcome: "found"
+                results: {
+                  /** Format: uuid */
+                  conversation: string
+                  /** Format: date-time */
+                  at: string
+                  /** @enum {string} */
+                  by: "owner" | "assistant"
+                  snippet: string
+                }[]
+              }
+            | {
+                /** @constant */
+                outcome: "none"
               }
             | {
                 /** @constant */
@@ -9206,6 +9360,26 @@ export interface components {
                   message: string
                 }
               }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "offer_choices"
+          output: {
+            /** @constant */
+            outcome: "offered"
+          }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "present"
+          output: {
+            /** @constant */
+            outcome: "presented"
+          }
         }
       | {
           turn_id: string
@@ -9360,13 +9534,26 @@ export interface components {
           turn_id: string
           tool_call_id: string
           /** @constant */
-          tool: "read_skill"
+          tool: "skill_view"
           output:
             | {
+                name: string
+                part?: string
+                body: string
+                parts?: string[]
+                status: string
+                notes?: string
+                /** @constant */
+                by?: "code"
                 /** @constant */
                 outcome: "skill"
+              }
+            | {
+                /** @constant */
+                outcome: "unchanged"
                 name: string
-                body: string
+                part?: string
+                note: string
               }
             | {
                 /** @constant */
@@ -11631,6 +11818,80 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "read_skill"
+          output:
+            | {
+                /** @constant */
+                outcome: "skill"
+                name: string
+                body: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "remember"
+          output:
+            | {
+                /** @constant */
+                outcome: "saved"
+                note: string
+                fullness: string
+              }
+            | {
+                /** @constant */
+                outcome: "full"
+                note: string
+                fullness: string
+                lines: string[]
+              }
+            | {
+                /** @constant */
+                outcome: "stopped"
+                note: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosToolStarted: {
       tool_call_id: string
       approval_id: string
@@ -11674,18 +11935,23 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
+            | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11726,18 +11992,23 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
+            | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11776,18 +12047,79 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
+            | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
+            | "remember"
+          )[]
+          steps: number
+          first_chunk_ms: number | null
+        }
+      | {
+          /** @constant */
+          outcome: "refused_after_stream"
+          reasons: string[]
+          turn_id: string
+          model: string
+          /** @enum {string} */
+          route?: "owner_turn" | "card_click" | "deferred"
+          usage: {
+            input_tokens: number
+            cached_input_tokens: number
+            output_tokens: number
+            cache_write_tokens?: number
+            reasoning_tokens?: number
+          }
+          cost_usd: number
+          tools: (
+            | "get_workspace"
+            | "get_facts"
+            | "get_change"
+            | "request_change"
+            | "answer_question"
+            | "create_reminder"
+            | "update_reminder"
+            | "delete_reminder"
+            | "set_time_zone"
+            | "record_review"
+            | "check_domain"
+            | "connect_domain"
+            | "remove_domain"
+            | "find_domain"
+            | "buy_domain"
+            | "connect_google"
+            | "get_search_performance"
+            | "get_indexing"
+            | "memory"
+            | "search_conversations"
+            | "put_off"
+            | "offer_choices"
+            | "present"
+            | "inspect_domain"
+            | "domain_bought"
+            | "offer_grant"
+            | "skill_view"
+            | "save_correction"
+            | "schedule_skill"
+            | "ask_developer"
+            | "get_review"
+            | "read_site"
+            | "get_preview"
+            | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11826,18 +12158,23 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
+            | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11876,18 +12213,23 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
+            | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -11926,18 +12268,23 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
-            | "remember"
+            | "memory"
+            | "search_conversations"
             | "put_off"
+            | "offer_choices"
+            | "present"
             | "inspect_domain"
             | "domain_bought"
             | "offer_grant"
-            | "read_skill"
+            | "skill_view"
             | "save_correction"
             | "schedule_skill"
             | "ask_developer"
             | "get_review"
             | "read_site"
             | "get_preview"
+            | "read_skill"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -12225,6 +12572,10 @@ export interface components {
           p50: number
           p95: number
         }
+        section?: {
+          p50: number
+          p95: number
+        }
       }
       expected_range?: {
         quick: string
@@ -12233,6 +12584,7 @@ export interface components {
     }
     CreateOrgRequest: {
       name: string
+      time_zone?: string
     }
     CreateReminderInput: {
       title: string
@@ -12363,7 +12715,7 @@ export interface components {
       org_id: string
       key: string
       /** @enum {string} */
-      channel: "in_app" | "email" | "push"
+      channel: "in_app" | "email" | "push" | "whatsapp"
       /** @enum {string} */
       state:
         | "pending"
@@ -12569,6 +12921,7 @@ export interface components {
     }
     DomainBoughtInput: {
       name: string
+      step?: string
     }
     DomainCheck:
       | {
@@ -14152,11 +14505,73 @@ export interface components {
         source: "owner_said" | "owner_confirmed" | "reflection"
       }[]
     }
+    MemoryInput: {
+      /** @description user, notes or skill:<name> */
+      target: string
+      operations: {
+        /** @enum {string} */
+        action: "add" | "patch" | "remove"
+        /** @description add: the new entry. patch: what old_text becomes. */
+        content?: string
+        /** @description patch, remove: text from one entry. */
+        old_text?: string
+      }[]
+    }
+    MemoryOutput:
+      | {
+          /** @constant */
+          outcome: "saved"
+          /** @description user, notes or skill:<name> */
+          target: string
+          note: string
+          fullness: string
+          entry_count: number
+          patched?: {
+            before: string
+            after: string
+          }[]
+          removed?: string[]
+        }
+      | {
+          /** @constant */
+          outcome: "full"
+          /** @description user, notes or skill:<name> */
+          target: string
+          note: string
+          fullness: string
+          current_entries: string[]
+        }
+      | {
+          /** @constant */
+          outcome: "stopped"
+          note: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+          closest_entries?: string[]
+        }
     MemoryProposal: {
       /** Format: uuid */
       id: string
       /** @enum {string} */
-      action: "add" | "replace" | "remove"
+      action: "add" | "replace" | "patch" | "remove"
+      /** @description user, notes or skill:<name> */
+      target?: string
       text?: string
       was?: string
       /** Format: date-time */
@@ -14180,9 +14595,6 @@ export interface components {
           /** Format: uuid */
           id: string
         }
-    MemoryUndo: {
-      version: number
-    }
     MemoryView: {
       version: number
       lines: {
@@ -14205,14 +14617,70 @@ export interface components {
           /** @enum {string} */
           source: "owner_said" | "owner_confirmed" | "reflection"
         }[]
-        undoable: boolean
       }[]
+      notes: {
+        version: number
+        lines: {
+          /** Format: uuid */
+          id: string
+          text: string & (unknown & unknown)
+          /** @enum {string} */
+          source: "owner_said" | "owner_confirmed" | "reflection"
+          /** Format: date-time */
+          at: string
+        }[]
+        max: number
+        versions: {
+          version: number
+          /** Format: date-time */
+          at: string
+          changes: {
+            /** @enum {string} */
+            kind: "added" | "changed" | "removed"
+            text: string
+            /** @enum {string} */
+            source: "owner_said" | "owner_confirmed" | "reflection"
+          }[]
+        }[]
+      }
+      skills: {
+        version: number
+        notes: {
+          name: string
+          title: string
+          max: number
+          lines: {
+            /** Format: uuid */
+            id: string
+            text: string & (unknown & unknown)
+            /** @enum {string} */
+            source: "owner_said" | "owner_confirmed" | "reflection"
+            /** Format: date-time */
+            at: string
+            stale: boolean
+          }[]
+        }[]
+        versions: {
+          version: number
+          /** Format: date-time */
+          at: string
+          changes: {
+            /** @enum {string} */
+            kind: "added" | "changed" | "removed"
+            text: string
+            /** @enum {string} */
+            source: "owner_said" | "owner_confirmed" | "reflection"
+          }[]
+        }[]
+      }
       ask_first: boolean
       proposals: {
         /** Format: uuid */
         id: string
         /** @enum {string} */
-        action: "add" | "replace" | "remove"
+        action: "add" | "replace" | "patch" | "remove"
+        /** @description user, notes or skill:<name> */
+        target?: string
         text?: string
         was?: string
         /** Format: date-time */
@@ -14232,6 +14700,37 @@ export interface components {
       message_id: string
       /** @enum {string} */
       rating: "up" | "down"
+    }
+    NumberOffer: {
+      phone_number: string
+      locality: string | null
+    }
+    NumberPurchase: {
+      phone_number: string
+      business_name: string
+      address_line_1: string
+      address_line_2?: string
+      city: string
+      postcode: string
+      contact_name: string
+      email: string
+    }
+    NumberPurchaseState: {
+      /** @enum {string} */
+      state: "pending_review" | "approved" | "rejected" | "ready"
+    }
+    NumberSearch: {
+      contains?: string
+    }
+    OfferChoicesInput: {
+      choices: {
+        label: string
+        send: string
+      }[]
+    }
+    OfferChoicesOutput: {
+      /** @constant */
+      outcome: "offered"
     }
     OfferGrantInput: {
       /** @enum {string} */
@@ -14402,6 +14901,9 @@ export interface components {
         | "site.direction"
         | "site.pages"
       )[]
+      ms?: number
+      /** @constant */
+      past?: true
     }
     Org: {
       /** Format: uuid */
@@ -14470,7 +14972,9 @@ export interface components {
         /** Format: uuid */
         id: string
         /** @enum {string} */
-        action: "add" | "replace" | "remove"
+        action: "add" | "replace" | "patch" | "remove"
+        /** @description user, notes or skill:<name> */
+        target?: string
         text?: string
         was?: string
         /** Format: date-time */
@@ -14627,6 +15131,7 @@ export interface components {
       /** @enum {string} */
       kind: "address" | "google" | "business_email" | "local_phone"
       days?: number
+      never?: boolean
     }
     PutOffOutput:
       | {
@@ -14762,6 +15267,11 @@ export interface components {
         /** @description A short piece of the existing line that no other line holds. Required for replace and remove. */
         match?: string
       }[]
+      /**
+       * @description profile, the default: about the owner. notes: how this business runs day to day where the facts hold nothing.
+       * @enum {string}
+       */
+      store?: "profile" | "notes"
     }
     RememberOutput:
       | {
@@ -14899,6 +15409,8 @@ export interface components {
             label?: string
             /** @enum {string} */
             lane?: "full" | "quick"
+            /** @enum {string} */
+            change_kind?: "copy" | "style" | "section" | "photo" | "creative"
             fell_through?: boolean
             /** @constant */
             retry?: true
@@ -14925,6 +15437,15 @@ export interface components {
               revision_id: string
               version: number
             } | null
+            held?: {
+              /** Format: uuid */
+              revision_id: string
+              version: number
+              /** Format: uuid */
+              assignment_id: string
+              /** Format: date-time */
+              ready_at?: string
+            }
             blueprint?: {
               plan: {
                 direction: string
@@ -15810,7 +16331,11 @@ export interface components {
         period_ends_at: string
       }
       /** @enum {string} */
-      sandbox_class: "virtual" | "standard-2" | "standard-3"
+      sandbox_class:
+        | "virtual"
+        | "standard-2"
+        | "standard-3"
+        | "custom-1vcpu-3gib"
       egress_allowlist: string[]
       supervisor_ref: string | null
       /** Format: date-time */
@@ -15852,6 +16377,45 @@ export interface components {
       google_email: string | null
       connected_at: string | null
     }
+    SearchConversationsInput: {
+      query: string
+    }
+    SearchConversationsOutput:
+      | {
+          /** @constant */
+          outcome: "found"
+          results: {
+            /** Format: uuid */
+            conversation: string
+            /** Format: date-time */
+            at: string
+            /** @enum {string} */
+            by: "owner" | "assistant"
+            snippet: string
+          }[]
+        }
+      | {
+          /** @constant */
+          outcome: "none"
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     SearchProperty: {
       host: string
       site_url: string
@@ -15904,6 +16468,12 @@ export interface components {
               url: string
             }
       }
+    }
+    ServerKindPart: {
+      /** @constant */
+      type: "data-kind"
+      /** @enum {string} */
+      data: "reply" | "update" | "note" | "done" | "reminder"
     }
     ServerMessage: {
       id: string
@@ -16077,6 +16647,12 @@ export interface components {
         }[]
         photos: string[]
       }
+      choices?: {
+        label: string
+        send: string
+      }[]
+      /** @enum {string} */
+      kind?: "reply" | "update" | "note" | "done" | "reminder"
     }
     SetFactsRequest: {
       facts: (
@@ -16629,6 +17205,18 @@ export interface components {
       /** Format: date-time */
       updated_at: string
     }
+    SkillNotes: {
+      lines: {
+        /** Format: uuid */
+        id: string
+        text: string & (unknown & unknown)
+        /** @enum {string} */
+        source: "owner_said" | "owner_confirmed" | "reflection"
+        /** Format: date-time */
+        at: string
+        skill: string
+      }[]
+    }
     StaffDirectory: {
       staff: {
         /** Format: uuid */
@@ -16808,6 +17396,20 @@ export interface components {
       /** Format: date-time */
       produced_at: string
     }
+    WhatsAppAccount: {
+      display_number: string
+      display_name: string
+      /** @enum {string} */
+      source: "connected" | "purchased" | "dev"
+      coexistence: boolean
+      /** @enum {string} */
+      status: "pending" | "active" | "disabled"
+    }
+    WhatsAppSignupComplete: {
+      code: string
+      waba_id: string
+      phone_number_id: string
+    }
     WorkspaceStatus: {
       site: {
         host: string | null
@@ -16847,6 +17449,8 @@ export interface components {
         label?: string
         /** @enum {string} */
         lane?: "full" | "quick"
+        /** @enum {string} */
+        change_kind?: "copy" | "style" | "section" | "photo" | "creative"
         fell_through?: boolean
         /** @constant */
         retry?: true
@@ -16873,6 +17477,15 @@ export interface components {
           revision_id: string
           version: number
         } | null
+        held?: {
+          /** Format: uuid */
+          revision_id: string
+          version: number
+          /** Format: uuid */
+          assignment_id: string
+          /** Format: date-time */
+          ready_at?: string
+        }
         blueprint?: {
           plan: {
             direction: string
@@ -17574,6 +18187,10 @@ export interface components {
           p50: number
           p95: number
         }
+        section?: {
+          p50: number
+          p95: number
+        }
       }
       attention: (
         | {
@@ -18192,6 +18809,34 @@ export interface components {
         }[]
       }
       time_zone?: string | null
+      journey?: {
+        /** @enum {string} */
+        website: "none" | "building" | "draft_ready" | "published"
+        address: {
+          /** @enum {string} */
+          stage:
+            | "none"
+            | "unknown"
+            | "put_off"
+            | "declined"
+            | "choosing"
+            | "paying"
+            | "buying_elsewhere"
+            | "bought"
+            | "connecting"
+            | "live"
+          name?: string
+          offer: ("connect" | "connect_bought") | null
+        }
+        /** @enum {string} */
+        google:
+          | "waiting_for_domain"
+          | "offerable"
+          | "put_off"
+          | "setting_up"
+          | "connected"
+          | "declined"
+      }
     }
   }
   responses: never

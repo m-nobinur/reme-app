@@ -498,10 +498,23 @@ export async function postStatus(
   } catch (error) {
     if (pgCode(error) !== "23505") throw error
   }
+  // Its kind from what the key says: live is done, a wait on the owner or a
+  // failure is a note, progress stays an update.
+  const step = say.key.slice(say.key.lastIndexOf(":") + 1)
+  const kind =
+    step === "live"
+      ? "done"
+      : ["waiting", "nudge", "failed", "not_served", "lapsed"].includes(step)
+        ? "note"
+        : undefined
   const posted = await postAssistantMessage(kit, {
     orgId,
     key: `domain.status:${say.key}`,
-    message: { text: [say.text], ...(say.button && { button: say.button }) },
+    message: {
+      text: [say.text],
+      ...(say.button && { button: say.button }),
+      ...(kind && { kind }),
+    },
   })
   if (posted === "busy" || posted === "waiting") {
     throw new DomainError(`status.${posted}`)

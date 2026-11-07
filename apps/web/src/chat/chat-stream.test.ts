@@ -4,6 +4,9 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import {
   AssistantRuntimeProvider,
+  AuiConfig,
+  Tools,
+  useAuiState,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react"
 import {
@@ -13,13 +16,13 @@ import {
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
-import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
-import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { Thread } from "@workspace/ui/components/assistant/thread"
-import { act, createElement, useEffect, useState } from "react"
+import { ownerToolkit } from "@workspace/ui/components/assistant/toolkit"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
+import { act, createElement, useEffect, useLayoutEffect, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { conversationList } from "./conversations"
@@ -66,7 +69,9 @@ vi.mock("@tanstack/react-start/server", () => ({
 
 /** The location state a panel action set, as the chat page reads it. */
 const location = vi.hoisted(() => ({
-  state: {} as { send?: { text: string; key: string } },
+  state: {} as {
+    send?: { text: string; key: string; intent?: "connect_address" }
+  },
 }))
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
@@ -106,11 +111,14 @@ const FIXTURE = JSON.parse(
   streams: Record<"typed" | "phone" | "skip" | "deny" | "change", Stream>
 }
 const ID = FIXTURE.conversation.id
+const TOOLKIT = AuiConfig({ tools: Tools({ toolkit: ownerToolkit }) })
 
 /** What the api holds now, and how it answers the next `/chat` turns. */
 let stored: unknown
 let turns: (() => Promise<Response>)[] = []
 let sent: unknown[] = []
+/** How many conversations a new chat stored. */
+let created = 0
 /** Each thumb the api was sent, and how it answers the next one. */
 let rated: { body: unknown; key: string | null }[] = []
 let rateStatus = 204
@@ -147,6 +155,7 @@ beforeEach(() => {
   }
   process.env.REME_API_URL = "https://api.test"
   sent = []
+  created = 0
   turns = []
   rated = []
   rateStatus = 204
@@ -163,6 +172,11 @@ beforeEach(() => {
       const path = new URL(url).pathname
       if (hold && path.startsWith("/conversations")) await hold
       if (path === "/org") return Response.json(FIXTURE.org)
+      // A new chat's first send stores it as the fixture's conversation.
+      if (path === "/conversations" && init?.method === "POST") {
+        created += 1
+        return Response.json(FIXTURE.conversation, { status: 201 })
+      }
       if (path === "/conversations") return Response.json(FIXTURE.list)
       if (path === `/conversations/${ID}`) {
         return Response.json(FIXTURE.conversation)
@@ -201,19 +215,23 @@ afterEach(async () => {
   mounted = []
   vi.unstubAllGlobals()
   churn = false
+  record = null
 })
 
 /** What Retry sends, as the chat page holds it. */
 const retry: { current: (() => void) | null } = { current: null }
+
+/** The intent the next send carries, as the chat page holds it. */
+const intent: { current: "site_change" | "connect_address" | undefined } = {
+  current: undefined,
+}
 
 /** The runtime the chat page builds per thread. */
 const useThreadRuntime = () =>
   useConversationRuntime({
     onFinish: () => undefined,
     retry,
-    // On offer, as the page offers them on a new chat; a stored
-    // conversation must never show one.
-    suggestions: [{ prompt: "Build my website" }],
+    intent,
   })
 
 /** The chat page re-renders on every workspace poll and builds its runtime hook inline. */
@@ -229,7 +247,6 @@ function Chat() {
   const useInline = () =>
     useConversationRuntime({
       onFinish: () => undefined,
-      suggestions: [{ prompt: "Build my website" }],
     })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,
@@ -238,24 +255,20 @@ function Chat() {
   })
   return createElement(
     AssistantRuntimeProvider,
-    { runtime },
-    createElement(SendAsked, { conversation: ID }),
+    { runtime, config: TOOLKIT },
+    createElement(SendAsked, { conversation: ID, intent }),
     createElement(ServerButtonUI),
     createElement(ChangeAskedUI),
     createElement(PersonaCardUI),
     createElement(
-      CosToolsProvider,
-      { value: tools },
-      createElement(
-        SaveDesignAnswerProvider,
-        { value: saveDesignAnswer },
-        createElement(Thread, {
-          autoFocus: false,
-          stored: ID,
-          components: { ToolFallback: Approval },
-          onRetry: () => retry.current?.(),
-        })
-      )
+      ChatServicesProvider,
+      { value: { cosTools: tools, saveDesignAnswer } },
+      createElement(Thread, {
+        autoFocus: false,
+        stored: ID,
+        components: { ToolFallback: Approval },
+        onRetry: () => retry.current?.(),
+      })
     )
   )
 }
@@ -595,7 +608,7 @@ it("every message keeps the time it was sent, as a reload shows it", async () =>
   }
 })
 
-it("a stored conversation loading shows a skeleton, never the welcome or a suggestion", async () => {
+it("a stored conversation loading shows a skeleton, never the welcome", async () => {
   const release: { open?: () => void } = {}
   hold = new Promise<void>((resolve) => {
     release.open = resolve
@@ -612,7 +625,6 @@ it("a stored conversation loading shows a skeleton, never the welcome or a sugge
     ).not.toBeNull()
   )
   expect(container.textContent).not.toContain("What should we do today?")
-  expect(container.textContent).not.toContain("Build my website")
   hold = null
   await act(async () => release.open?.())
   await vi.waitFor(() =>
@@ -640,7 +652,8 @@ it("a stored conversation's skeleton stays up until its messages arrive, with no
       '[data-slot="aui_thread-history-skeleton"]'
     )
       ? "skeleton"
-      : transcript(container).length
+      : transcript(container).length ||
+          container.querySelector('[data-slot="conversation-card"]')
         ? "messages"
         : "blank"
     if (seen.at(-1) !== now) seen.push(now)
@@ -711,14 +724,18 @@ it("a stored conversation sends nothing until it is the thread on screen, then s
   await matches(container, FIXTURE.histories.typed)
 })
 
-it("sends a panel action into the stored conversation once its history is in, once", async () => {
+it("sends a panel action into the stored conversation once its history is in, once, with its intent", async () => {
   const release: { open?: () => void } = {}
   hold = new Promise<void>((resolve) => {
     release.open = resolve
   })
   stored = FIXTURE.histories.start
   location.state = {
-    send: { text: "Help me connect my web address", key: "press-1" },
+    send: {
+      text: "Help me connect my web address",
+      key: "press-1",
+      intent: "connect_address",
+    },
   }
   turns.push(sse(FIXTURE.streams.typed))
   const container = document.createElement("div")
@@ -739,6 +756,8 @@ it("sends a panel action into the stored conversation once its history is in, on
   await vi.waitFor(() => expect(sent).toHaveLength(1))
   expect(JSON.stringify(sent[0])).toContain("Help me connect my web address")
   expect(JSON.stringify(sent[0])).toContain(ID)
+  expect(sent[0]).toMatchObject({ intent: "connect_address" })
+  expect(intent.current).toBeUndefined()
   // As a typed message does, it overtakes the open card, and the reply asks again.
   await vi.waitFor(() =>
     expect(transcript(container)).toEqual([
@@ -749,6 +768,141 @@ it("sends a panel action into the stored conversation once its history is in, on
   // A re-render with the same press sends nothing more.
   await act(async () => root.render(createElement(Chat)))
   expect(sent).toHaveLength(1)
+})
+
+/** A new chat, as `/app` mounts it: no stored thread until the first send stores one. */
+function NewChat() {
+  const runtime = useRemoteThreadListRuntime({
+    adapter: conversationList,
+    runtimeHook: useThreadRuntime,
+  })
+  return createElement(
+    AssistantRuntimeProvider,
+    { runtime, config: TOOLKIT },
+    createElement(SendAsked, { conversation: undefined, intent }),
+    createElement(Thread, { autoFocus: false })
+  )
+}
+
+it("sends a Connect pressed on a new chat's stack once, with its intent, into the conversation it starts", async () => {
+  stored = { messages: [] }
+  location.state = {
+    send: {
+      text: "Help me connect my domain",
+      key: "press-new-chat",
+      intent: "connect_address",
+    },
+  }
+  turns.push(sse(FIXTURE.streams.typed))
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  mounted.push({ root, container })
+  await act(async () => root.render(createElement(NewChat)))
+  await vi.waitFor(() => expect(sent).toHaveLength(1))
+  expect(created).toBe(1)
+  expect(sent[0]).toMatchObject({
+    conversation_id: ID,
+    intent: "connect_address",
+    turn: { kind: "message", text: "Help me connect my domain" },
+  })
+  // Taken by that send, so the api loads the skill for it once.
+  expect(intent.current).toBeUndefined()
+  await act(async () => root.render(createElement(NewChat)))
+  // The next message the owner types carries no intent of its own.
+  turns.push(sse(FIXTURE.streams.typed))
+  await type(container, "Thanks")
+  await vi.waitFor(() => expect(sent).toHaveLength(2))
+  expect(sent[1]).not.toHaveProperty("intent")
+  expect(created).toBe(1)
+})
+
+/** Records what the owner sees where the conversation goes, on each change. */
+let record: (() => void) | null = null
+
+/** Records on every render of the page, which a change of address is. */
+function Probe() {
+  useLayoutEffect(() => record?.())
+  return null
+}
+
+/** A card the chat page puts under an open conversation, as its ready card. */
+function ConversationCard() {
+  const shown = useAuiState((s) => s.thread.messages.length > 0)
+  return shown ? createElement("p", { "data-slot": "conversation-card" }) : null
+}
+
+/** The chat page as the address moves: one runtime, its thread following `id`. */
+function Moving({ id }: { id: string | undefined }) {
+  const runtime = useRemoteThreadListRuntime({
+    adapter: conversationList,
+    runtimeHook: useThreadRuntime,
+    threadId: id,
+  })
+  return createElement(
+    AssistantRuntimeProvider,
+    { runtime, config: TOOLKIT },
+    createElement(Thread, {
+      autoFocus: false,
+      stored: id,
+      after: createElement(ConversationCard),
+    }),
+    createElement(Probe)
+  )
+}
+
+/** Each state shown from now on: skeleton, messages, welcome or blank. */
+function watch(container: HTMLElement) {
+  const seen: string[] = []
+  record = () => {
+    const now = container.querySelector(
+      '[data-slot="aui_thread-history-skeleton"]'
+    )
+      ? "skeleton"
+      : transcript(container).length ||
+          container.querySelector('[data-slot="conversation-card"]')
+        ? "messages"
+        : container.textContent?.includes("What should we do today?")
+          ? "welcome"
+          : "blank"
+    if (seen.at(-1) !== now) seen.push(now)
+  }
+  new MutationObserver(() => record?.()).observe(container, {
+    childList: true,
+    subtree: true,
+  })
+  return seen
+}
+
+async function mountMoving(id: string | undefined) {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  mounted.push({ root, container })
+  await act(async () => root.render(createElement(Moving, { id })))
+  return { root, container }
+}
+
+it("opening a conversation from a new chat shows the skeleton, never a blank transcript", async () => {
+  stored = FIXTURE.histories.start
+  const { root, container } = await mountMoving(undefined)
+  await vi.waitFor(() =>
+    expect(container.textContent).toContain("What should we do today?")
+  )
+  const seen = watch(container)
+  await act(async () => root.render(createElement(Moving, { id: ID })))
+  await vi.waitFor(() => expect(seen.at(-1)).toBe("messages"))
+  expect(seen).toEqual(["skeleton", "messages"])
+})
+
+it("leaving a conversation for a new chat shows the welcome, never the old messages", async () => {
+  stored = FIXTURE.histories.start
+  const { root, container } = await mountMoving(ID)
+  await vi.waitFor(() => expect(transcript(container)).not.toHaveLength(0))
+  const seen = watch(container)
+  await act(async () => root.render(createElement(Moving, { id: undefined })))
+  await vi.waitFor(() => expect(seen.at(-1)).toBe("welcome"))
+  expect(seen).toEqual(["welcome"])
 })
 
 it("renders a recorded answer turn the way a reload of the stored row does", async () => {

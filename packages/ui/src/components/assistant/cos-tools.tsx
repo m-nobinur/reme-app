@@ -33,6 +33,7 @@ import { Remembered } from "@workspace/ui/components/assistant/memory-chip"
 import { Button } from "@workspace/ui/components/button"
 import { ToolStatus } from "@workspace/ui/components/status-line"
 import { reminderTitle, type ToolArgs } from "@workspace/ui/lib/activity-copy"
+import { useChatService } from "@workspace/ui/lib/chat-services"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { GRANT_TEXT } from "@workspace/ui/lib/grants"
@@ -44,7 +45,7 @@ import {
   stepOf,
 } from "@workspace/ui/lib/tool-state"
 import { browserZone, wallText, zoneLabel } from "@workspace/ui/lib/zone"
-import { createContext, useContext, useState } from "react"
+import { useState } from "react"
 
 /**
  * The Chief of Staff's tools, in the owner's words. A read is one quiet
@@ -163,7 +164,7 @@ const DomainRead: ToolCallMessagePartComponent = (props) => {
  * turn carries, and the open question a request id names. Without a
  * provider there is no question to find, so no answer is offered a yes.
  */
-type CosTools = {
+export type CosTools = {
   /** The business's zone, the one reminders run on and the reply says. */
   zone: string
   /** The open question's title, or null when the workspace has no such question. */
@@ -174,14 +175,9 @@ type CosTools = {
   reminderOpen?: (id: string) => boolean
 }
 
-const CosToolsContext = createContext<CosTools | null>(null)
-
-/** Gives the Chief of Staff's cards the owner's zone and open questions. */
-export const CosToolsProvider = CosToolsContext.Provider
-
 function useCosTools(): CosTools {
   return (
-    useContext(CosToolsContext) ?? {
+    useChatService("cosTools") ?? {
       zone: browserZone(),
       question: () => null,
     }
@@ -347,11 +343,14 @@ const OfferGrant: ToolCallMessagePartComponent = (props) => (
 
 /**
  * Tools with no card and no working line: what was remembered is a chip in
- * the same turn, and Reme's own words say an offer is put off.
+ * the same turn, Reme's own words say an offer is put off, and quick replies
+ * sit above the composer (`DecisionPills`).
  */
 export const COS_QUIET: Record<string, ToolCallMessagePartComponent> = {
+  memory: Remembered,
   remember: Remembered,
   put_off: () => null,
+  offer_choices: () => null,
 }
 
 /** The reads, which the thread may fold together, by tool name. */

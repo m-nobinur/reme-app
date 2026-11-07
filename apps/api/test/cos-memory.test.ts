@@ -1,12 +1,15 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { join, relative } from "node:path"
 import {
+  linesWithin,
+  type MemoryOperation,
+  NOTES_MAX_CHARS,
   OWNER_MEMORY_REVIEW_KEY,
   OWNER_PROFILE_KEY,
   OwnerProfile,
   PROFILE_MAX_CHARS,
   type ProfileLine,
-  type RememberOperation,
+  WorkingNotes,
 } from "@workspace/contracts"
 import {
   appendSessionEvent,
@@ -19,26 +22,32 @@ import {
 } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { settleCard } from "../src/build-questions.ts"
+import { contextOf, memoryText, personaOf } from "../src/cos/agent.ts"
 import {
   applyOperations,
   diffLines,
   FULL_REFUSALS,
   fullness,
   inOwnersWords,
-  inverse,
+  memory,
   memoryView,
   quoteOf,
   readProfile,
   refusalOf,
-  remember,
   takeChip,
-  undoVersion,
 } from "../src/cos/memory.ts"
 import { getFacts, loadWorkspace, type ToolContext } from "../src/cos/tools.ts"
 import { type Owner, owner, stubOrchestrator } from "./owner-fixture.ts"
 import { env, stubJwksFetch } from "./sealed-session.ts"
 
 const AT = "2026-10-19T10:00:00.000Z"
+const EMPTY = {
+  site: { host: null, live_version: null },
+  builds: [],
+  questions: [],
+  approvals: [],
+  missing_facts: [],
+}
 let n = 0
 const line = (text: string, source: ProfileLine["source"] = "owner_said") => ({
   id: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`,
@@ -46,7 +55,7 @@ const line = (text: string, source: ProfileLine["source"] = "owner_said") => ({
   source,
   at: AT,
 })
-const add = (text: string): RememberOperation => ({ action: "add", text })
+const add = (content: string): MemoryOperation => ({ action: "add", content })
 
 /** The rules for what may be saved, against lines an owner and an attacker would write. */
 const CORPUS: [string, "accept" | "reject"][] = [
@@ -202,6 +211,19 @@ describe("the words a line may add", () => {
     ["Goes by Sam", ["Call me Sam"], true],
     ["Prices are free", ["Please add this review: Great team!"], false],
     ["Prefers prices free", ["Call me after 4pm"], false],
+    ["Owner doesn't work Fridays", ["By the way, I don't work Fridays"], true],
+    ["Owner works Fridays", ["By the way, I don't work Fridays"], false],
+    ["Owner never works Fridays", ["I work Fridays"], false],
+    [
+      "Owner works Saturdays",
+      ["I don't work Fridays. I work Saturdays."],
+      true,
+    ],
+    ["Don doesn't work Fridays", ["I don't work Fridays", "Don"], true],
+    ["Don doesn't work Fridays", ["I don't work Fridays"], false],
+    ["Owner prefers short replies", ["Keep your replies short"], true],
+    ["Owner is called Sam", ["Call me Sam"], true],
+    ["Owner has a spaniel called Biscuit", ["Our prices are low"], false],
     ["Dislikes calls", ["Call me after 4pm"], false],
     ["Hates WhatsApp", ["WhatsApp is how to reach me"], false],
     ["Usually works Sundays", ["Sundays are free"], false],
@@ -218,17 +240,13 @@ describe("applying operations", () => {
     line("Quotes go out on Fridays"),
   ]
 
-  it("adds, replaces and removes by a short unique piece, in one call", () => {
+  it("adds, patches a span and removes by a short unique piece, in one call", () => {
     const done = applyOperations(
       held,
       [
         add("Has a spaniel called Biscuit"),
-        {
-          action: "replace",
-          match: "calls after",
-          text: "Prefers calls after 5pm",
-        },
-        { action: "remove", match: "Fridays" },
+        { action: "patch", old_text: "4PM", content: "5pm" },
+        { action: "remove", old_text: "Fridays" },
       ],
       "owner_said",
       AT
@@ -238,6 +256,10 @@ describe("applying operations", () => {
       "Prefers calls after 5pm",
       "Has a spaniel called Biscuit",
     ])
+    expect(done.ok && done.patched).toEqual([
+      { before: "Prefers calls after 4pm", after: "Prefers calls after 5pm" },
+    ])
+    expect(done.ok && done.removed).toEqual(["Quotes go out on Fridays"])
   })
 
   it("refuses an exact duplicate, whatever its case or spacing", () => {
@@ -247,9 +269,7 @@ describe("applying operations", () => {
       "owner_said",
       AT
     )
-    expect(done).toMatchObject({
-      refusal: { code: "memory.duplicate", message: "already saved" },
-    })
+    expect(done).toMatchObject({ refusal: { code: "memory.duplicate" } })
   })
 
   it("changes nothing when any operation fails", () => {
@@ -257,7 +277,7 @@ describe("applying operations", () => {
       held,
       [
         add("Has a spaniel called Biscuit"),
-        { action: "remove", match: "nothing like it" },
+        { action: "remove", old_text: "nothing like it" },
       ],
       "owner_said",
       AT
@@ -269,7 +289,7 @@ describe("applying operations", () => {
     expect(
       applyOperations(
         held,
-        [{ action: "remove", match: "s" }],
+        [{ action: "remove", old_text: "s" }],
         "owner_said",
         AT
       )
@@ -277,7 +297,7 @@ describe("applying operations", () => {
     expect(
       applyOperations(
         held,
-        [{ action: "replace", match: "calls" }],
+        [{ action: "patch", old_text: "calls" }],
         "owner_said",
         AT
       )
@@ -305,26 +325,129 @@ describe("applying operations", () => {
     ]
     expect(profileChars(full)).toBeLessThanOrEqual(PROFILE_MAX_CHARS)
     const over = applyOperations(full, [add(long("f"))], "owner_said", AT)
-    expect(over).toMatchObject({ full })
+    expect(over).toMatchObject({ full: { lines: full } })
     const merged = applyOperations(
       full,
-      [{ action: "remove", match: "aaa" }, add(long("f"))],
+      [{ action: "remove", old_text: "aaa" }, add(long("f"))],
       "owner_said",
       AT
     )
     expect(merged).toMatchObject({ ok: true })
   })
 
+  it("lets a write that removes or shortens through on a store over its budget, never one that grows it", () => {
+    const over = ["a", "b", "c", "d", "e", "f"].map((c) => line(c.repeat(290)))
+    expect(profileChars(over)).toBeGreaterThan(PROFILE_MAX_CHARS)
+    const run = (...ops: MemoryOperation[]) =>
+      applyOperations(over, ops, "owner_said", AT)
+    expect(run({ action: "remove", old_text: "aaa" })).toMatchObject({
+      ok: true,
+    })
+    expect(
+      run({ action: "patch", old_text: "b".repeat(290), content: "Owner b" })
+    ).toMatchObject({ ok: true })
+    expect(
+      run({ action: "remove", old_text: "ccc" }, add("Owner likes plants"))
+    ).toMatchObject({ ok: true })
+    expect(run(add("Owner likes plants"))).toMatchObject({
+      full: { lines: over },
+    })
+    expect(
+      run({
+        action: "patch",
+        old_text: "d".repeat(290),
+        content: "d".repeat(291),
+      })
+    ).toMatchObject({ full: { lines: over } })
+  })
+
+  it("names the closest entries on a no-match, at most three, and none when nothing is close", () => {
+    const many = [
+      line("Prefers calls after 4pm"),
+      line("Quotes go out on Fridays"),
+      line("Prefers calls on Mondays"),
+      line("Prefers email after calls"),
+      line("Calls after lunch are fine"),
+    ]
+    const done = applyOperations(
+      many,
+      [{ action: "remove", old_text: "prefers calls after 5pm" }],
+      "owner_said",
+      AT
+    )
+    expect(done).toMatchObject({
+      refusal: {
+        code: "memory.no_match",
+        message: expect.stringContaining("closest_entries below"),
+        closest: [
+          "Prefers calls after 4pm",
+          "Prefers email after calls",
+          "Prefers calls on Mondays",
+        ],
+      },
+    })
+    const far = applyOperations(
+      many,
+      [{ action: "patch", old_text: "spaniel Biscuit", content: "x" }],
+      "owner_said",
+      AT
+    )
+    expect(far).toMatchObject({ refusal: { code: "memory.no_match" } })
+    expect(!far.ok && "refusal" in far && far.refusal).not.toHaveProperty(
+      "closest"
+    )
+  })
+
+  it("refuses a batch that empties a store, unless it is one remove of the last entry", () => {
+    const run = (lines: ProfileLine[], ...ops: MemoryOperation[]) =>
+      applyOperations(lines, ops, "owner_said", AT)
+    expect(
+      run(
+        held,
+        { action: "remove", old_text: "4pm" },
+        { action: "remove", old_text: "Fridays" }
+      )
+    ).toMatchObject({ refusal: { code: "memory.would_empty" } })
+    expect(
+      run([line("Quotes go out on Fridays")], {
+        action: "remove",
+        old_text: "Fridays",
+      })
+    ).toMatchObject({ ok: true, lines: [] })
+    expect(
+      run(
+        held,
+        { action: "remove", old_text: "4pm" },
+        { action: "remove", old_text: "Fridays" },
+        add("Has a spaniel called Biscuit")
+      )
+    ).toMatchObject({ ok: true })
+  })
+
+  it("lets short lines fill a store: no line cap binds before its characters do", () => {
+    const short = Array.from({ length: 60 }, (_, i) => line(`Note ${i}`))
+    expect(
+      applyOperations(short, [add("Owner likes plants")], "owner_said", AT)
+    ).toMatchObject({ ok: true })
+    const ones = (count: number) => ({
+      lines: Array.from({ length: count }, () => line("x")),
+    })
+    expect(OwnerProfile.safeParse(ones(800)).success).toBe(true)
+    expect(OwnerProfile.safeParse(ones(801)).success).toBe(false)
+    expect(WorkingNotes.safeParse(ones(1_750)).success).toBe(true)
+    expect(linesWithin(NOTES_MAX_CHARS)).toBe(1_750)
+  })
+
   it("writes the fullness the way a person reads it", () => {
-    expect(fullness([{ text: "x".repeat(930) }])).toBe("62%, 930/1,500 chars")
-    expect(fullness([])).toBe("0%, 0/1,500 chars")
+    expect(fullness([{ text: "x".repeat(930) }])).toBe("58%, 930/1,600 chars")
+    expect(fullness([])).toBe("0%, 0/1,600 chars")
   })
 })
 
 const profileChars = (lines: { text: string }[]) =>
   lines.map((l) => l.text).join("\n").length
 
-describe("undoing one change", () => {
+describe("describing one change", () => {
   const a = line("Prefers calls after 4pm")
   const b = line("Quotes go out on Fridays")
 
@@ -342,18 +465,6 @@ describe("undoing one change", () => {
       },
       { kind: "removed", text: b.text, source: "owner_said" },
     ])
-  })
-
-  it("takes an added line out, brings a removed one back and restores an edit", () => {
-    expect(inverse([a], [a, b], [a, b])).toEqual([a])
-    expect(inverse([a, b], [a], [a])).toEqual([a, b])
-    const edited = { ...a, text: "Prefers calls after 5pm" }
-    expect(inverse([a], [edited], [edited])).toEqual([a])
-  })
-
-  it("leaves a part that was edited since, and says so when nothing is left", () => {
-    const later = { ...b, text: "Quotes go out on Mondays" }
-    expect(inverse([a], [a, b], [a, later])).toBeNull()
   })
 })
 
@@ -433,8 +544,8 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
 
   const said = (
     turn: Awaited<ReturnType<typeof turnOf>>,
-    ...ops: RememberOperation[]
-  ) => remember(context(), { operations: ops }, "", turn)
+    ...ops: MemoryOperation[]
+  ) => memory(context(), { target: "user", operations: ops }, "", turn)
 
   const lines = () =>
     kit.withOrg({ orgId: me.orgId }, async (db) =>
@@ -446,8 +557,10 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     const out = await said(turn, add("Prefers calls after 4pm"))
     expect(out).toEqual({
       outcome: "saved",
-      note: "Saved. This update is complete; do not repeat it.",
-      fullness: "2%, 23/1,500 chars",
+      target: "user",
+      note: "Write saved. This update is complete; do not repeat it.",
+      fullness: "1%, 23/1,600 chars",
+      entry_count: 1,
     })
     expect(await lines()).toEqual(["Prefers calls after 4pm"])
     const row = await kit.withOrg({ orgId: me.orgId }, (db) =>
@@ -457,6 +570,36 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     expect(OwnerProfile.parse(row?.value).lines[0]).toMatchObject({
       source: "owner_said",
     })
+  })
+
+  it("keeps working notes apart from the profile, in their own budget, and reads them into the turn", async () => {
+    const turn = await turnOf()
+    const before = await lines()
+    const out = await memory(
+      context(),
+      { target: "notes", operations: [add("Quotes go out on Fridays")] },
+      "",
+      turn
+    )
+    expect(out).toMatchObject({
+      outcome: "saved",
+      fullness: "1%, 24/3,500 chars",
+    })
+    expect(await lines()).toEqual(before)
+    const { notes } = await loadWorkspace(context())
+    expect(notes.map((l) => l.text)).toContain("Quotes go out on Fridays")
+    expect(memoryText(personaOf([], [], notes))).toMatch(
+      /<data source="working_notes" taint="untrusted_input">\nWORKING NOTES \(how this business runs\) \[1%, 24\/3,500 chars\]\nQuotes go out on Fridays/
+    )
+    const { text } = contextOf(
+      "ask",
+      EMPTY,
+      null,
+      new Date(),
+      undefined,
+      personaOf([], [], notes)
+    )
+    expect(text).not.toContain("working_notes")
   })
 
   it("saves only the owner's own words: a review's \"prices are free\" never reaches the profile", async () => {
@@ -474,7 +617,7 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     const out = await said(turn, add("Prefers calls after 4pm"))
     expect(out).toMatchObject({
       outcome: "refused",
-      error: { message: "already saved" },
+      error: { code: "memory.duplicate" },
     })
     const row = await kit.withOrg({ orgId: me.orgId }, (db) =>
       currentFact(db, OWNER_PROFILE_KEY)
@@ -496,8 +639,8 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     const full = await said(turn, add(long("f")))
     expect(full).toMatchObject({
       outcome: "full",
-      note: "full: merge or remove first",
-      lines: expect.arrayContaining(["Prefers calls after 4pm"]),
+      note: expect.stringContaining("Retry as ONE batch"),
+      current_entries: expect.arrayContaining(["Prefers calls after 4pm"]),
     })
     // The runner logs each result; the count reads them back.
     for (let i = 0; i < FULL_REFUSALS; i++) {
@@ -511,65 +654,37 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
           payload: {
             turn_id: turn.turnId,
             tool_call_id: `call_${i}`,
-            tool: "remember",
+            tool: "memory",
             output: full,
           },
           taint: ["untrusted_input"],
         })
       )
     }
-    expect(await said(turn, add("Likes short replies"))).toEqual({
+    expect(await said(turn, add("Likes short replies"))).toMatchObject({
       outcome: "stopped",
-      note: "stop retrying memory and continue your reply",
+      note: expect.stringContaining("Stop retrying memory"),
     })
     // Another turn starts over, and a merge that fits is saved.
     const next = { ...turn, turnId: "01J00000000000000000000002" }
     expect(
-      await said(next, { action: "remove", match: "bbb" }, add(long("f")))
+      await said(next, { action: "remove", old_text: "bbb" }, add(long("f")))
     ).toMatchObject({ outcome: "saved" })
   })
 
-  it("lists the versions with what each changed, and undoes the newest as the next version", async () => {
-    const before = await kit.withOrg({ orgId: me.orgId }, (db) =>
-      memoryView(db)
-    )
-    const newest = before.versions[0]
-    expect(newest).toMatchObject({ undoable: true })
-    const done = await kit.withOrg({ orgId: me.orgId }, (db) =>
-      undoVersion(db, me.orgId, before.version)
-    )
-    expect(done).toEqual({ version: before.version + 1 })
-    const after = await kit.withOrg({ orgId: me.orgId }, (db) => memoryView(db))
-    // The prior version's lines are back, and the undo is a version of its own.
-    expect(after.lines.map((l) => l.text)).not.toContain("f".repeat(290))
-    expect(after.lines.map((l) => l.text)).toContain("b".repeat(290))
-    expect(after.version).toBe(before.version + 1)
-    // The same version cannot be undone twice.
-    expect(
-      await kit.withOrg({ orgId: me.orgId }, (db) =>
-        undoVersion(db, me.orgId, before.version)
-      )
-    ).toBeNull()
+  it("lists the versions with what each changed, newest first", async () => {
+    const view = await kit.withOrg({ orgId: me.orgId }, (db) => memoryView(db))
+    expect(view.versions[0]?.version).toBe(view.version)
+    expect(view.versions[0]?.changes.length).toBeGreaterThan(0)
+    expect(view.versions[0]).not.toHaveProperty("undoable")
   })
 
-  it("shows each change in the chat once, and never an undo the owner made", async () => {
+  it("shows each change in the chat once", async () => {
     const chip = await kit.withOrg({ orgId: me.orgId }, (db) =>
       takeChip(db, me.orgId)
     )
     expect(chip?.changes.length).toBeGreaterThan(0)
     expect(chip?.changes[0]).toHaveProperty("source")
-    expect(
-      await kit.withOrg({ orgId: me.orgId }, (db) => takeChip(db, me.orgId))
-    ).toBeNull()
-    const turn = await turnOf()
-    await said(turn, add("Has a spaniel called Biscuit"))
-    const version = (
-      await kit.withOrg({ orgId: me.orgId }, (db) => readProfile(db))
-    ).version
-    await kit.withOrg({ orgId: me.orgId }, (db) =>
-      undoVersion(db, me.orgId, version)
-    )
-    // The chat never saw the added line, so it is not told about its undo.
     expect(
       await kit.withOrg({ orgId: me.orgId }, (db) => takeChip(db, me.orgId))
     ).toBeNull()
@@ -625,6 +740,86 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     expect(loaded.profile.map((l) => l.text)).toContain(
       "Prefers calls after 4pm"
     )
+  })
+
+  it("reads a profile over its budget line by line, so a removal takes it back under, and names the closest entries on a no-match", async () => {
+    const turn = await turnOf()
+    const store = (value: { lines: ProfileLine[] }) =>
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        supersedePrivateFact(db, {
+          orgId: me.orgId,
+          key: OWNER_PROFILE_KEY,
+          factType: "owner",
+          value,
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      )
+    const kept = await kit.withOrg({ orgId: me.orgId }, (db) => readProfile(db))
+    const words = (c: string) => `${c} `.repeat(145).trim()
+    const over = ["h", "i", "j", "k", "l", "m"].map((c) => line(words(c)))
+    await store({ lines: over })
+    try {
+      expect(await lines()).toEqual(over.map((l) => l.text))
+      expect(await said(turn, add("Likes short replies"))).toMatchObject({
+        outcome: "full",
+      })
+      expect(
+        await said(turn, { action: "remove", old_text: words("h") })
+      ).toMatchObject({
+        outcome: "saved",
+        fullness: "91%, 1,449/1,600 chars",
+        entry_count: 5,
+        removed: [words("h")],
+      })
+      expect(await lines()).toHaveLength(5)
+      expect(
+        await said(turn, { action: "remove", old_text: "i i x" })
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "memory.no_match" },
+        closest_entries: [words("i")],
+      })
+    } finally {
+      await store({ lines: kept.lines })
+    }
+  })
+
+  it("reads every line that parses when one is malformed, so a save keeps the rest", async () => {
+    const turn = await turnOf()
+    const kept = await kit.withOrg({ orgId: me.orgId }, (db) => readProfile(db))
+    const good = [line("Prefers calls after 4pm"), line("Has a van")]
+    const store = (value: { lines: unknown[] }) =>
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        supersedePrivateFact(db, {
+          orgId: me.orgId,
+          key: OWNER_PROFILE_KEY,
+          factType: "owner",
+          value,
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      )
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined)
+    await store({ lines: [good[0], { text: "no id or source" }, good[1]] })
+    try {
+      expect(await lines()).toEqual(["Prefers calls after 4pm", "Has a van"])
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining("memory.profile_unreadable")
+      )
+      const saved = await said(turn, add("Likes short replies"))
+      expect(saved).toMatchObject({ outcome: "saved", entry_count: 3 })
+      expect(saved).not.toHaveProperty("patched")
+      expect(saved).not.toHaveProperty("removed")
+      expect(await lines()).toEqual([
+        "Prefers calls after 4pm",
+        "Has a van",
+        "Likes short replies",
+      ])
+    } finally {
+      logged.mockRestore()
+      await store({ lines: kept.lines })
+    }
   })
 })
 

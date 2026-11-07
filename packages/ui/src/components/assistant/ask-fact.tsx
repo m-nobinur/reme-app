@@ -2,6 +2,7 @@ import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import type { AskableFactKey, AskFactOutput } from "@workspace/contracts"
 import {
   Docked,
+  skipOf,
   TrayFrame,
   TrayNote,
   useTabDraft,
@@ -43,17 +44,7 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
       if (field instanceof HTMLInputElement && !field.value) field.value = value
     }
   }
-  if (view.state === "answered" || view.state === "skipped") {
-    return null
-  }
-  if (view.state !== "pending") {
-    return (
-      <TrayNote
-        error={view.state === "error" ? view.message : null}
-        name="ask-fact"
-      />
-    )
-  }
+  if (view.state !== "pending") return <TrayNote name="ask-fact" view={view} />
   const { key, skippable, prefill } = view.input
   // A fact the owner just says is answered in the composer.
   if (askable(key) && saidInChat(key)) return null
@@ -94,14 +85,7 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
         collapsed={collapsed}
         onCollapsedChange={setCollapsed}
         question={question}
-        skip={
-          skippable
-            ? {
-                label: "Skip",
-                onSkip: () => props.addResult({ answer: "skipped" }),
-              }
-            : undefined
-        }
+        skip={skipOf(skippable, props.addResult)}
         submit={{ form: `${id}-form` }}
       >
         <form

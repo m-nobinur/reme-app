@@ -132,13 +132,34 @@ async function onboardingOf(
     Boolean(card),
     asking ?? undefined
   )
-  if (segment.state === "done") {
-    return { ...segment, at: await finishedAt(db, open) }
-  }
-  const logo =
-    card?.type === "tool-ask_design" &&
-    (await logoRound(env, owner, card.toolCallId, facts))
-  return logo ? { ...segment, logo } : segment
+  const done = segment.state === "done"
+  // A tray answered with the logo still to pick leaves the build running with
+  // its round unpicked, so a finished segment keeps the row too.
+  const designed =
+    card?.type === "tool-ask_design"
+      ? card.toolCallId
+      : done
+        ? await designCallId(db, open.id)
+        : null
+  const logo = designed && (await logoRound(env, owner, designed, facts))
+  const base = done ? { ...segment, at: await finishedAt(db, open) } : segment
+  return logo ? { ...base, logo } : base
+}
+
+/** The id the newest design tray of the conversation was asked with, answered or not. */
+export async function designCallId(
+  db: OrgScopedDb,
+  id: string
+): Promise<string | null> {
+  const [row] = await db.execute<{ id: string }>(sql`
+    select p->>'toolCallId' as id
+    from ${conversationMessages} m
+    cross join lateral jsonb_array_elements(m.content->'parts') p
+    where m.conversation_id = ${id} and m.content->>'role' = 'assistant'
+      and p->>'type' = 'tool-ask_design'
+    order by m.seq desc
+    limit 1`)
+  return row?.id ?? null
 }
 
 /**
@@ -160,12 +181,14 @@ export async function logoRound(
   if (!read.success) return undefined
   const { rounds } = read.data
   const last = rounds.at(-1)
-  if (last?.status === "drawing") {
+  // The tray shows a round's designs as they land, while its ideas are still
+  // being read and the round stays "drawing"; the panel says the same.
+  if (last?.status === "drawing" && last.variants.length < LOGO_VARIANTS) {
     return { status: "drawing", options: LOGO_VARIANTS }
   }
   const kept = logoOf(facts)?.id
   const picked = rounds.some((r) => r.variants.some((v) => v.id === kept))
-  return last?.status === "ready" && last.variants.length > 0 && !picked
+  return last && last.status !== "failed" && last.variants.length > 0 && !picked
     ? { status: "ready", options: last.variants.length }
     : undefined
 }

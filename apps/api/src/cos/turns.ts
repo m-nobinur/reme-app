@@ -1,10 +1,13 @@
 import {
+  COS_GRACE_MS,
   CosApproval,
   CosCall,
   CosCompaction,
   CosContext,
+  CosEvent,
   CosMessage,
   CosPrefix,
+  CosSkill,
   CosStep,
   CosToolResult,
   CosToolStarted,
@@ -19,11 +22,13 @@ import {
   events,
   handoffEvent,
   type OrgScopedDb,
+  reserveSpend,
   sql,
   unloggedResults,
 } from "@workspace/db"
 import { constraint } from "../http.ts"
 import { stepMessages } from "./history.ts"
+import { logView } from "./skills.ts"
 
 export {
   DAILY_CAP_USD,
@@ -57,9 +62,10 @@ export type Turn = {
 /**
  * How long `ctx.waitUntil` may run after the response ends or the client
  * disconnects: up to 30 s (Cloudflare's workers/platform/limits, checked
- * 2026-09-27). A turn is abandoned this long after its `totalMs` has passed.
+ * 2026-11-05). A turn is abandoned this long after its `totalMs` has passed:
+ * 160 s + 30 s = 190 s after its context.
  */
-export const GRACE_MS = 30_000
+export const GRACE_MS = COS_GRACE_MS
 
 /** The write's turn no longer holds the token, so nothing was written. */
 export class TurnClosed extends Error {
@@ -330,10 +336,43 @@ export async function writeAsTurn(
 }
 
 /**
+ * One summary per conversation at a time (after OpenMausBot
+ * server/warm-summary.ts, Apache-2.0): under the org's budget lock, a
+ * compaction reservation for this conversation, unsettled and younger than
+ * `holdMs`, means one is being written, and this one says `running`.
+ * Otherwise the call's reservation, named for the conversation, or null when
+ * the day has no room.
+ */
+export async function claimCompaction(
+  db: OrgScopedDb,
+  session: { orgId: string; sessionId: string },
+  amount: number,
+  holdMs: number
+): Promise<string | "running" | null> {
+  await db.execute(
+    sql`select pg_advisory_xact_lock(3, hashtext(${session.orgId}::text))`
+  )
+  const [running] = await db.execute(sql`
+    select 1 from ${events} v
+    where v.org_id = ${session.orgId} and v.type = 'cos.background_reserve'
+      and v.payload->>'job' = 'compaction'
+      and v.payload->>'session_id' = ${session.sessionId}
+      and v.recorded_at > now() - make_interval(secs => ${holdMs / 1000})
+      and not exists (select 1 from ${events} s
+        where s.org_id = v.org_id and s.type = 'cos.background_step'
+          and s.payload->>'reservation_id' = v.event_id)
+    limit 1`)
+  if (running) return "running"
+  return reserveSpend(db, session.orgId, "compaction", amount, {
+    session_id: session.sessionId,
+  })
+}
+
+/**
  * Appends a `cos.compaction` as the session's CoS staff row, under the
- * conversation's lock, between turns: a closed turn holds no token, so the
- * write checks instead that no turn is open, and throws `SessionBusy`,
- * writing nothing, when one is. Returns its seq, or null, writing nothing,
+ * conversation's lock. A turn may be open: it read its history before this
+ * existed, and only the next turn folds it in (`loggedMessages`), so the
+ * owner never waits on a summary. Returns its seq, or null, writing nothing,
  * when a compaction already logged reaches as far.
  */
 export async function writeCompaction(
@@ -347,9 +386,6 @@ export async function writeCompaction(
     throw new Error(`cos.turns: a compaction from ${from_seq} to ${to_seq}`)
   }
   await lock(db, session.sessionId)
-  if (await openTurn(db, session.sessionId, 0)) {
-    throw new SessionBusy(session.sessionId)
-  }
   const [covered] = await db.execute(sql`
     select 1 from ${events}
     where session_id = ${session.sessionId} and type = 'cos.compaction'
@@ -418,7 +454,7 @@ export type SessionState = {
   prefixLogged: boolean
   /** A `cos.message` in the session names this message id, so the CoS made it. */
   named: boolean
-  /** No turn has opened in the session yet: the next is the conversation's first. */
+  /** No CoS turn has opened in the session yet, the planner's aside: the next is the CoS's first. */
   fresh: boolean
 }
 
@@ -437,7 +473,8 @@ export async function sessionState(
       exists (select 1 from ${events} where session_id = ${sessionId}
         and type = 'cos.message' and payload->'message'->>'id' = ${messageId ?? ""}) as named,
       not exists (select 1 from ${events} where session_id = ${sessionId}
-        and type = 'cos.context') as fresh`)
+        and type = 'cos.context'
+        and payload->>'context_policy_version' not like 'onboarding-%') as fresh`)
   return {
     frozen: row?.frozen === true,
     prefixLogged: row?.prefixLogged === true,
@@ -449,6 +486,10 @@ export async function sessionState(
 /** A turn's opening writes, in the order the log holds them. */
 export type Opening = {
   prefix: CosPrefix | null
+  /** Our own records for the log before the messages, such as onboarding's hand-over. */
+  events?: CosEvent[]
+  /** Skills code loaded for this turn, logged after its messages, as a view the model made would be. */
+  skills?: CosSkill[]
   messages: { message: CosMessage["message"]; taint: TaintLabel[] }[]
   context: CosContext
   contextTaint: TaintLabel[]
@@ -484,10 +525,21 @@ export async function beginTurn(
           },
         ]
       : []),
+    ...(opening.events ?? []).map((event) => ({
+      type: "cos.event",
+      payload: CosEvent.parse(event),
+      taint: ["inferred"] as TaintLabel[],
+    })),
     ...opening.messages.map(({ message, taint }) => ({
       type: "cos.message",
       payload: CosMessage.parse({ turn_id: turn.turnId, message }),
       taint,
+    })),
+    ...(opening.skills ?? []).map((skill) => ({
+      type: "cos.skill",
+      payload: CosSkill.parse(skill),
+      // A skill's notes for this business are the owner's words.
+      taint: (skill.notes ? ["untrusted_input"] : []) as TaintLabel[],
     })),
     { type: "cos.context", payload: context, taint: opening.contextTaint },
   ]
@@ -495,6 +547,9 @@ export async function beginTurn(
     if ((await append(db, turn, write)) === null) {
       throw new SessionBusy(turn.sessionId)
     }
+  }
+  for (const skill of opening.skills ?? []) {
+    logView(turn, skill, "code", "skill", skill.status ?? null, skill.trigger)
   }
 }
 

@@ -241,6 +241,27 @@ function readJson(path) {
   }
 }
 
+/**
+ * One judge reply as a score. A reply that does not parse, or holds no score
+ * from 1 to 5, is a failed case with its reason, so one cut-off reply never
+ * ends a run whose other scores are paid for (#651).
+ */
+export function readJudge(content) {
+  const reply = (() => {
+    try {
+      return JSON.parse(content)
+    } catch {
+      return null
+    }
+  })()
+  return Number.isInteger(reply?.score) && reply.score >= 1 && reply.score <= 5
+    ? { score: reply.score, why: String(reply.why ?? "") }
+    : {
+        score: 0,
+        why: `unjudged, no score in the reply: ${String(content).slice(0, 80)}`,
+      }
+}
+
 /** The judge: one request per sample, the sample's words as data. */
 async function judge(samples, key) {
   // biome-ignore lint/suspicious/noUndeclaredEnvVars: not read by any turbo task
@@ -277,7 +298,7 @@ async function judge(samples, key) {
         `judge: ${res.status} ${JSON.stringify(body).slice(0, 200)}`
       )
     spent += body.usage?.cost ?? 0
-    const reply = JSON.parse(body.choices[0].message.content)
+    const reply = readJudge(body.choices?.[0]?.message?.content)
     return { id: sample.id, text: sample.text, ...reply }
   }
   for (let i = 0; i < samples.length; i += 6)

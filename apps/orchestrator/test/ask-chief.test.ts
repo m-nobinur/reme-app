@@ -18,6 +18,10 @@ vi.mock("cloudflare:workers", () => ({
 }))
 vi.mock("@workspace/facade/cloudflare", () => ({
   cloudflareSandbox: () => ({}),
+  createCloudflareTracing: () => ({
+    observe: () => undefined,
+    interceptor: (_o: unknown, _c: unknown, next: () => unknown) => next(),
+  }),
 }))
 vi.mock("../src/sandbox.ts", () => ({
   checkpoint: async () => undefined,

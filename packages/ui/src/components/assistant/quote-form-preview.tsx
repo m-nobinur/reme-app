@@ -12,6 +12,7 @@ import {
 } from "@workspace/ui/components/dialog"
 import { Field } from "@workspace/ui/components/field"
 import { Input, inputStyles } from "@workspace/ui/components/input"
+import { OPTION, OPTION_PILL, PICKED_LINE } from "@workspace/ui/lib/card"
 import { cn } from "@workspace/ui/lib/utils"
 import { useId, useState } from "react"
 
@@ -68,38 +69,49 @@ function Label({ field }: { field: QuoteField }) {
   )
 }
 
+/** A pick of a few short options reads as buttons; a longer list stays a list or a dropdown. */
+const asButtons = (field: QuoteField) =>
+  field.type !== "checkbox" &&
+  (field.options?.length ?? 0) <= 3 &&
+  (field.options ?? []).every((option) => option.length <= 20)
+
 /** A radio or checkbox group: a native fieldset, so the browser walks and announces it. */
 function Choices({ field, id }: { field: QuoteField; id: string }) {
   const hintId = `${id}-hint`
+  const buttons = asButtons(field)
   return (
     <fieldset
       aria-describedby={field.hint ? hintId : undefined}
       className="flex flex-col gap-2"
     >
-      <legend className="mb-2 text-sm">
+      <legend className="text-sm">
         <Label field={field} />
       </legend>
-      <div className="flex flex-col">
+      {field.hint ? (
+        <p className="text-muted-foreground text-xs" id={hintId}>
+          {field.hint}
+        </p>
+      ) : null}
+      <div className={buttons ? "flex flex-wrap gap-2" : "flex flex-col"}>
         {field.options?.map((option) => (
           <label
-            className="flex min-h-9 cursor-pointer items-center gap-2 text-sm"
+            className={
+              buttons
+                ? cn(OPTION, OPTION_PILL, PICKED_LINE)
+                : "flex min-h-9 cursor-pointer items-center gap-2 text-sm"
+            }
             key={option}
           >
             <input
-              className="size-4 accent-primary"
+              className={buttons ? "sr-only" : "size-4 accent-primary"}
               name={field.key}
-              type={field.type === "radio" ? "radio" : "checkbox"}
+              type={field.type === "checkbox" ? "checkbox" : "radio"}
               value={option}
             />
             {option}
           </label>
         ))}
       </div>
-      {field.hint ? (
-        <p className="text-muted-foreground text-xs" id={hintId}>
-          {field.hint}
-        </p>
-      ) : null}
     </fieldset>
   )
 }
@@ -107,11 +119,15 @@ function Choices({ field, id }: { field: QuoteField; id: string }) {
 /** One question as its type draws it. */
 function Question({ field, scope }: { field: QuoteField; scope: string }) {
   const id = `${scope}-${field.key}`
-  if (field.type === "radio" || field.type === "checkbox") {
+  if (
+    field.type === "radio" ||
+    field.type === "checkbox" ||
+    (field.type === "select" && asButtons(field))
+  ) {
     return <Choices field={field} id={id} />
   }
   return (
-    <Field hint={field.hint} id={id} label={<Label field={field} />}>
+    <Field hint={field.hint} hintAbove id={id} label={<Label field={field} />}>
       {(wiring) => {
         if (field.type === "textarea") {
           return (

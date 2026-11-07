@@ -4,14 +4,22 @@ import {
   type ApprovalGrantSwitch,
   ApprovalGrants,
   type AttentionItem as Attention,
-  BoughtElsewhereOutput,
   BuildQuestions,
   CHAT_TURN_MS,
   type ChangeKind,
+  type ChannelLinkPatch,
+  ChannelLinkStarted,
+  ChannelsState,
   Conversation,
   ConversationHistory,
   ConversationList,
   type CreateReminderRequest,
+  DICTATION_PATH,
+  DICTATION_TICKET_PATH,
+  DICTATION_TIDY_MS,
+  DICTATION_TIDY_PATH,
+  DictationTicket,
+  DictationTidyResult,
   DomainCheckout,
   DomainName,
   DomainPurchaseStatus,
@@ -34,12 +42,16 @@ import {
   StaffDirectory,
   searchConsoleUrl,
   Uuid,
+  WhatsAppAccount,
+  type WhatsAppSignupComplete,
   WorkspaceStatus,
 } from "@workspace/contracts"
 import { WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { refusalText } from "@workspace/ui/lib/refusal"
+import { z } from "zod"
 import { stoppedLines } from "../stopped"
+import type { SignupConfig } from "../whatsapp-signup"
 import { apiFetch, COOKIE, forwardedSession } from "./transport"
 import {
   type AttentionItem,
@@ -487,6 +499,7 @@ function workspaceOf(
     derivedReminders: status.reminders.derived,
     reminderNotes: status.reminders.notes,
     timeZone: status.time_zone ?? null,
+    journey: status.journey,
     etag,
   }
 }
@@ -743,16 +756,9 @@ async function domainElsewhere(
   return await outcome(await post(path, undefined, key), path)
 }
 
-async function domainBought(
-  name: string,
-  key: string
-): ReturnType<OwnerDataSource["domainBought"]> {
-  const path = `/domains/${DomainName.parse(name)}/bought`
-  return await domainAnswer(
-    await post(path, undefined, key),
-    path,
-    BoughtElsewhereOutput.parse
-  )
+async function domainNotYet(name: string, key: string): Promise<WriteOutcome> {
+  const path = `/domains/${DomainName.parse(name)}/not-yet`
+  return await outcome(await post(path, undefined, key), path)
 }
 
 async function completeReminder(id: string): Promise<WriteOutcome> {
@@ -777,23 +783,6 @@ async function deleteReminder(id: string): Promise<WriteOutcome> {
 async function memory(): Promise<MemoryView | null> {
   const body = await get("/memory")
   return body === null ? null : MemoryView.parse(body)
-}
-
-async function undoMemory(
-  version: number
-): Promise<MemoryView | "stale" | null> {
-  const response = await call("/memory/undo", {
-    method: "POST",
-    body: { version },
-  })
-  if (!response || response.status === 401 || response.status === 403) {
-    return null
-  }
-  if (response.status === 409) return "stale"
-  if (!response.ok) {
-    throw new Error(`apps/api answered ${response.status} for /memory/undo`)
-  }
-  return MemoryView.parse(await response.json())
 }
 
 async function reviewMemory(
@@ -834,19 +823,35 @@ async function setGrant(
   return ApprovalGrants.parse(await response.json())
 }
 
-async function removeCorrection(
-  id: string
-): Promise<MemoryView | "stale" | null> {
-  const path = `/memory/corrections/${id}`
-  const response = await call(path, { method: "DELETE" })
+/**
+ * Where the browser opens a dictation: the api's own host, which the session
+ * cookie does not reach, so the socket carries a ticket the owner's session
+ * just minted.
+ */
+async function dictationSocket(): Promise<string | null> {
+  const response = await call(DICTATION_TICKET_PATH, { method: "POST" })
   if (!response || response.status === 401 || response.status === 403) {
     return null
   }
-  if (response.status === 404) return "stale"
   if (!response.ok) {
-    throw new Error(`apps/api answered ${response.status} for ${path}`)
+    throw new Error(`apps/api answered ${response.status} for dictation`)
   }
-  return MemoryView.parse(await response.json())
+  const { ticket } = DictationTicket.parse(await response.json())
+  const socket = new URL(DICTATION_PATH, apiUrl())
+  socket.protocol = socket.protocol === "https:" ? "wss:" : "ws:"
+  socket.searchParams.set("ticket", ticket)
+  return socket.toString()
+}
+
+/** The dictated words tidied, or null to keep them as heard: nothing to tidy, a refusal or a pass that failed. */
+async function tidyDictation(text: string): Promise<string | null> {
+  const response = await call(DICTATION_TIDY_PATH, {
+    method: "POST",
+    body: { text },
+    timeoutMs: DICTATION_TIDY_MS,
+  })
+  if (!response?.ok) return null
+  return DictationTidyResult.parse(await response.json()).text
 }
 
 async function pushKey(): Promise<string | null> {
@@ -871,6 +876,76 @@ async function unsubscribePush(id: string): Promise<WriteOutcome> {
   const path = `/push/subscriptions/${segment(id)}`
   return await outcome(
     await post(path, undefined, `unsubscribe:${id}`, "DELETE"),
+    path
+  )
+}
+
+async function channels(): Promise<ChannelsState | null> {
+  const response = await call("/channels")
+  // The gate off is a 404 on every channel route: nothing to show, not a defect.
+  if (!response || [401, 403, 404].includes(response.status)) return null
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for /channels`)
+  }
+  return ChannelsState.parse(await response.json())
+}
+
+async function startWhatsAppLink(
+  key: string
+): Promise<ChannelLinkStarted | null> {
+  const response = await post("/channels/whatsapp/link", undefined, key)
+  if (response.ok) return ChannelLinkStarted.parse(await response.json())
+  if (response.status >= 400 && response.status < 500) return null
+  throw new Error(
+    `apps/api answered ${response.status} for /channels/whatsapp/link`
+  )
+}
+
+async function signupConfig(): Promise<SignupConfig | null> {
+  const response = await call("/channels/whatsapp/signup")
+  // Off, not configured yet (503) or not the owner: the row stays unavailable.
+  if (!response || [403, 404, 503].includes(response.status)) return null
+  if (!response.ok) {
+    throw new Error(
+      `apps/api answered ${response.status} for /channels/whatsapp/signup`
+    )
+  }
+  const { app_id, config_id } = z
+    .strictObject({ app_id: z.string(), config_id: z.string() })
+    .parse(await response.json())
+  return { appId: app_id, configId: config_id }
+}
+
+async function completeWhatsAppSignup(
+  input: WhatsAppSignupComplete,
+  key: string
+): Promise<WhatsAppAccount | null> {
+  const response = await post("/channels/whatsapp/signup", input, key)
+  if (response.ok) return WhatsAppAccount.parse(await response.json())
+  // A refusal (a number another business holds, 502 for Meta not finishing) is final for this popup.
+  if (
+    (response.status >= 400 && response.status < 500) ||
+    response.status === 502
+  )
+    return null
+  throw new Error(
+    `apps/api answered ${response.status} for /channels/whatsapp/signup`
+  )
+}
+
+async function updateChannelLink(
+  id: string,
+  patch: ChannelLinkPatch,
+  key: string
+): Promise<WriteOutcome> {
+  const path = `/channels/links/${segment(id)}`
+  return await outcome(await post(path, patch, key, "PATCH"), path)
+}
+
+async function disconnectChannelLink(id: string): Promise<WriteOutcome> {
+  const path = `/channels/links/${segment(id)}`
+  return await outcome(
+    await post(path, undefined, `disconnect:${id}`, "DELETE"),
     path
   )
 }
@@ -1007,21 +1082,27 @@ export const apiSource: OwnerDataSource = {
   completeReminder,
   deleteReminder,
   memory,
-  undoMemory,
   reviewMemory,
   grants,
   setGrant,
-  removeCorrection,
+  dictationSocket,
+  tidyDictation,
   pushKey,
   subscribePush,
   unsubscribePush,
+  channels,
+  startWhatsAppLink,
+  signupConfig,
+  completeWhatsAppSignup,
+  updateChannelLink,
+  disconnectChannelLink,
   setTimeZone,
   domainCheckout,
   domainCheck,
   domainStatus,
   domainRegistrant,
   domainElsewhere,
-  domainBought,
+  domainNotYet,
   googleConnect,
   googleResult,
   conversations,

@@ -3,6 +3,7 @@ import { Alert } from "@workspace/ui/components/alert"
 import { AuthForm } from "@workspace/ui/components/auth-card"
 import { Field } from "@workspace/ui/components/field"
 import { SubmitButton } from "@workspace/ui/components/submit-button"
+import { browserZone } from "@workspace/ui/lib/zone"
 import { nameBusiness } from "./actions"
 import { useSubmit } from "./use-submit"
 
@@ -21,7 +22,11 @@ export function NameBusinessForm({ returnTo }: { returnTo: string }) {
       onSubmit={async (values) => {
         setResult(null)
         const outcome = await run({
-          data: { businessName: values.businessName, returnTo },
+          data: {
+            businessName: values.businessName,
+            timeZone: browserZone(),
+            returnTo,
+          },
         })
         if (outcome.status !== "failed") {
           window.location.assign(outcome.redirectTo)

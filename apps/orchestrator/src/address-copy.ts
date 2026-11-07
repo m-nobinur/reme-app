@@ -1,4 +1,4 @@
-import type { ServerButton } from "@workspace/contracts"
+import { IndustryId, type ServerButton, tradeOf } from "@workspace/contracts"
 import { currentFacts, type Tenancy } from "@workspace/db"
 import type { Update } from "./heartbeat-write.ts"
 
@@ -10,7 +10,12 @@ import type { Update } from "./heartbeat-write.ts"
  */
 
 /** The business as the facts hold it, for the briefs; any of it may be missing. */
-export type About = { business?: string; trade?: string; area?: string }
+export type About = {
+  business?: string
+  trade?: string
+  category?: IndustryId
+  area?: string
+}
 
 const text = (v: unknown, key: string) => {
   const found = (v as Record<string, unknown> | undefined)?.[key]
@@ -23,20 +28,24 @@ export async function aboutOf(kit: Tenancy, orgId: string): Promise<About> {
   const value = (key: string) => rows.find((r) => r.key === key)?.value
   const business = text(value("business.name"), "name")
   const trade = text(value("business.industry"), "name")
+  const category = IndustryId.safeParse(
+    text(value("business.industry"), "category")
+  ).data
   const area =
     text(value("service_area.radius"), "centre") ??
     text(value("service_area.text"), "text")
   return {
     ...(business && { business }),
     ...(trade && { trade }),
+    ...(category && { category }),
     ...(area && { area }),
   }
 }
 
-const context = ({ business, trade, area }: About) => {
+const context = ({ business, trade, category, area }: About) => {
   const bits = [
     business,
-    trade && `a ${trade.toLowerCase()} business`,
+    tradeOf({ name: trade, category }),
     area && `serving ${area}`,
   ].filter(Boolean)
   return bits.length > 0 ? `About the business: ${bits.join(", ")}. ` : ""

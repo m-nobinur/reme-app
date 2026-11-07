@@ -72,7 +72,12 @@ export const RuntimeSpec = z.strictObject({
   memory_namespaces: MemoryNamespaces,
   context_policy: ContextPolicy,
   budget_snapshot: BudgetSnapshot,
-  sandbox_class: z.enum(["virtual", "standard-2", "standard-3"]),
+  sandbox_class: z.enum([
+    "virtual",
+    "standard-2",
+    "standard-3",
+    "custom-1vcpu-3gib",
+  ]),
   egress_allowlist: z.array(z.string().min(1)),
   supervisor_ref: Uuid.nullable(),
   issued_at: Timestamp,

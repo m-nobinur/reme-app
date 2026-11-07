@@ -13,7 +13,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
-import { scheduledBy } from "@workspace/skills"
+import { scheduledBy } from "@workspace/skills/registry"
 import { withKit } from "./domain-flow.ts"
 import { heartbeatJob } from "./heartbeat.ts"
 import { redriveQueued } from "./publish.ts"
@@ -402,7 +402,7 @@ async function failed(
   const posted = await postAssistantMessage(kit, {
     orgId,
     key: `job-paused:${jobId}:${now.toISOString()}`,
-    message: { text: [PAUSED_TEXT] },
+    message: { text: [PAUSED_TEXT], kind: "note" },
   }).catch((e: unknown) => failureCode(e))
   if (posted !== "posted" && posted !== "exists")
     console.error(

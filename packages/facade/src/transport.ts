@@ -123,10 +123,13 @@ const fixed = (name: string, auth: () => ModelAuth) => ({
 })
 
 /**
- * Calls `record` with the `id` and `usage.cost` of each server-sent event in
- * `body` that carries a cost, and passes every byte through unchanged. A
- * line split across reads is joined first; `[DONE]` and anything that is
- * not JSON are skipped.
+ * Calls `record` with the `id` and the cost of each server-sent event in
+ * `body` that carries one, and passes every byte through unchanged. The cost
+ * is `usage.cost` plus `usage.cost_details.upstream_inference_cost`, which a
+ * call on a provider key we bring (BYOK) reports for the provider's own
+ * charge while `cost` is only OpenRouter's fee, 0 inside the free allowance
+ * (the api's `stepCost` adds the same). A line split across reads is joined
+ * first; `[DONE]` and anything that is not JSON are skipped.
  */
 function tapCost(
   body: ReadableStream<Uint8Array>,
@@ -141,11 +144,22 @@ function tapCost(
     try {
       const chunk = JSON.parse(data) as {
         id?: unknown
-        usage?: { cost?: unknown }
+        usage?: {
+          cost?: unknown
+          cost_details?: { upstream_inference_cost?: unknown } | null
+        }
       }
       const cost = chunk.usage?.cost
       if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) {
-        record(chunk.id, cost)
+        const upstream = chunk.usage?.cost_details?.upstream_inference_cost
+        record(
+          chunk.id,
+          typeof upstream === "number" &&
+            Number.isFinite(upstream) &&
+            upstream > 0
+            ? cost + upstream
+            : cost
+        )
       }
     } catch {
       // Not JSON: not a chunk, so not a cost.
@@ -169,7 +183,8 @@ function tapCost(
 }
 
 /**
- * pi-ai prices every OpenRouter call from the table, at the routing cap, and
+ * pi-ai prices every OpenRouter call from the table, at the model's listed
+ * OpenRouter price, and
  * drops the `usage.cost` OpenRouter bills on the stream's last chunk. This
  * wraps the API so each call asks for that cost, reads it off the response
  * body, and writes it into the finished message's `usage.cost` before the
@@ -177,7 +192,7 @@ function tapCost(
  * all see what was billed. The per-part figures are scaled to the same
  * total, since OpenRouter reports only the total; a sum over parts then
  * still matches. A call with no reported cost keeps the table's figure,
- * which errs high. Behind the AI Gateway the body passes through unchanged,
+ * at the listed price. Behind the AI Gateway the body passes through unchanged,
  * so the same tap reads it.
  */
 function billed(

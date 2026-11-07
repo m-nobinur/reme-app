@@ -78,3 +78,13 @@ the reply landed, so the view jumped back to the previous reply. The flow had ab
 - Jev sends more than one turn in twenty to the wrong path on staging over a week.
 - A model turn's first words take longer than 3 s at p95, or a build's cached share of input
   falls under half.
+
+## Amendment, 2026-11-07: onboarding runs on DeepSeek V4.1 Flash
+
+Decision 6's planner changed on 2026-11-04 (#661, the owner's call). Onboarding now runs on
+`deepseek/deepseek-v4.1-flash-1017`, the October 17 snapshot of DeepSeek V4.1 Flash, and
+OpenRouter falls back to `z-ai/glm-5.3-flash` when it cannot serve it. Every planner call asks for
+high reasoning, DeepSeek's own default, because one request carries one effort for the model and
+its fallback; only the eval asks for another. `ONBOARDING_MODEL` still overrides the model. The
+Gemini 3.8 Flash figures under Consequences (first words at p50 3.2 s and p95 7.0 s, $0.0068 an
+onboarding, 81% read from cache) were measured on the old model and are not yet remeasured.

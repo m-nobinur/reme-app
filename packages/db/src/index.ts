@@ -2,7 +2,7 @@
 // dependency on drizzle-orm gets a second copy resolved under a different peer
 // set, and the two disagree about `SQL` in a way that only surfaces as a
 // typecheck error about a private property. Callers take the tag from here.
-export { asc, eq, type SQL, sql } from "drizzle-orm"
+export { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm"
 export { orgOpen, tombstone } from "./accounts.ts"
 export { openApprovals } from "./approvals.ts"
 export {
@@ -51,6 +51,20 @@ export {
   supersedeFact,
   supersedePrivateFact,
 } from "./facts.ts"
+export {
+  BRING_BACKS,
+  GOOGLE_OFFERS,
+  GOOGLE_REST_DAYS,
+  type JourneyCard,
+  type JourneyChange,
+  type JourneyInput,
+  type JourneyState,
+  journeyOf,
+  type Latch,
+  type OwnerVisit,
+  offerOf,
+  SITTING_GAP_MS,
+} from "./journey.ts"
 export * from "./map.ts"
 export { addPushSubscription, PUSH_SUBSCRIPTION_CAP } from "./push.ts"
 export { type Waited, waitedOn } from "./questions.ts"
@@ -79,15 +93,20 @@ export {
 } from "./staff.ts"
 export { steerByKey, steerKeyHash } from "./steers.ts"
 export {
+  type AddressStage,
   addressPlan,
+  addressStage,
   CONNECT_DEADLINE_MS,
   type DomainFacts,
+  dropElsewhere,
   type GoogleFacts,
   googlePlan,
+  latchKey,
   openTask,
   PURCHASE_HOLD_MS,
   putOff,
   readTasks,
+  recordLatches,
   type StepWrite,
   setStep,
   stepOf,
@@ -95,6 +114,7 @@ export {
   type TaskPlan,
 } from "./tasks.ts"
 export type {
+  ChannelLinkRef,
   Identity,
   OrgScopedDb,
   RecentDesign,
@@ -104,6 +124,7 @@ export type {
 // Named rather than a star, so what the tenancy kit exposes to the rest of the
 // repo is a decision someone makes rather than whatever happens to be exported.
 export {
+  channelLinkOf,
   claimDueJobs,
   failureCode,
   listOrgIds,
@@ -112,11 +133,13 @@ export {
   ORG_SETTING,
   pgCode,
   recentDesigns,
+  redeemChannelCode,
   resolveDomainClaim,
   resolveDomainHost,
   resolveOrg,
   resolveOrgBySlug,
   tenancy,
   USER_SETTING,
+  whatsAppAccountByPhone,
   withOrg,
 } from "./tenancy.ts"

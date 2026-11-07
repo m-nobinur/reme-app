@@ -1,0 +1,563 @@
+import type { OwnerTask } from "@workspace/contracts"
+import { describe, expect, it } from "vitest"
+import {
+  type JourneyCard,
+  type JourneyInput,
+  journeyOf,
+  type Latch,
+} from "../src/journey.ts"
+
+const NOW = new Date("2026-11-05T23:30:00.000Z")
+const ago = (minutes: number) =>
+  new Date(NOW.getTime() - minutes * 60_000).toISOString()
+const HERE = "11111111-1111-4111-8111-111111111111"
+const OTHER = "22222222-2222-4222-8222-222222222222"
+const TASK = "33333333-3333-4333-8333-333333333333"
+
+const step = (
+  name: string,
+  state: string,
+  changed_at: string | null = null
+) => ({
+  step: name,
+  state,
+  note: null,
+  blocked_on: state === "blocked" ? "owner_action" : null,
+  deadline: null,
+  changed_at,
+})
+const address = (over: Record<string, unknown> = {}): OwnerTask =>
+  ({
+    id: TASK,
+    kind: "address",
+    state: "active",
+    later_until: null,
+    created_at: ago(600),
+    done_at: null,
+    detail: {},
+    steps: [],
+    ...over,
+  }) as OwnerTask
+const google = (over: Record<string, unknown> = {}): OwnerTask =>
+  ({
+    id: "44444444-4444-4444-8444-444444444444",
+    kind: "google",
+    state: "active",
+    later_until: null,
+    created_at: ago(600),
+    done_at: null,
+    detail: {},
+    steps: [],
+    ...over,
+  }) as OwnerTask
+
+const DRAFT = {
+  live: false,
+  building: false,
+  drafts: [{ id: "r1", at: ago(20) }],
+}
+const card = (over: Partial<JourneyCard> = {}): JourneyCard => ({
+  answer: null,
+  waiting: "have",
+  shown_at: ago(5),
+  ...over,
+})
+/** The owner wrote a minute ago in this conversation: the same sitting. */
+const sameSitting = {
+  conversation: HERE,
+  recent: [
+    { at: ago(1), conversation: HERE },
+    { at: ago(10), conversation: HERE },
+  ],
+}
+const journey = (over: Partial<JourneyInput> = {}) =>
+  journeyOf({ tasks: [], website: DRAFT, now: NOW, ...over })
+
+describe("journeyOf: stages", () => {
+  it("reads the website from live, drafts and builds", () => {
+    expect(journey().website).toBe("draft_ready")
+    expect(
+      journey({ website: { live: true, building: false, drafts: [] } }).website
+    ).toBe("published")
+    expect(
+      journey({ website: { live: false, building: true, drafts: [] } }).website
+    ).toBe("building")
+    expect(
+      journey({ website: { live: false, building: false, drafts: [] } }).website
+    ).toBe("none")
+  })
+
+  it("offers Connect while the address is the owner's to start, and Connect for a bought name", () => {
+    const offer = (tasks: OwnerTask[]) => journey({ tasks }).address
+    expect(offer([])).toEqual({ stage: "none", offer: "connect" })
+    expect(
+      offer([address({ steps: [step("find_out", "pending")] })]).offer
+    ).toBe("connect")
+    expect(
+      offer([
+        address({
+          steps: [step("find_out", "done"), step("choose", "blocked")],
+        }),
+      ])
+    ).toEqual({ stage: "choosing", offer: "connect" })
+    expect(
+      offer([
+        address({
+          detail: { name: "x.co.uk", origin: "buying_elsewhere" },
+          steps: [step("purchase", "blocked")],
+        }),
+      ])
+    ).toEqual({ stage: "buying_elsewhere", name: "x.co.uk", offer: "connect" })
+    expect(
+      offer([
+        address({
+          detail: { name: "x.co.uk", origin: "buying_elsewhere" },
+          steps: [step("purchase", "done")],
+        }),
+      ])
+    ).toEqual({ stage: "bought", name: "x.co.uk", offer: "connect_bought" })
+    expect(
+      offer([address({ state: "later", later_until: ago(-60) })]).offer
+    ).toBeNull()
+    expect(offer([address({ state: "declined" })]).offer).toBeNull()
+    expect(
+      offer([
+        address({
+          detail: { name: "x.co.uk" },
+          steps: [step("find_out", "done")],
+        }),
+      ])
+    ).toEqual({ stage: "connecting", name: "x.co.uk", offer: null })
+    expect(
+      offer([address({ state: "done", detail: { name: "x.co.uk" } })]).offer
+    ).toBeNull()
+  })
+
+  it("puts Google after the address, and follows its task", () => {
+    const connecting = address({
+      detail: { name: "x.co.uk" },
+      steps: [step("find_out", "done")],
+    })
+    expect(journey().google).toBe("waiting_for_domain")
+    expect(journey({ tasks: [connecting] }).google).toBe("offerable")
+    expect(journey({ tasks: [connecting, google()] }).google).toBe("setting_up")
+    expect(
+      journey({ tasks: [connecting, google({ state: "done" })] }).google
+    ).toBe("connected")
+    expect(
+      journey({ tasks: [connecting, google({ state: "declined" })] }).google
+    ).toBe("declined")
+    expect(
+      journey({
+        tasks: [connecting, google({ state: "later", later_until: ago(-60) })],
+      }).google
+    ).toBe("put_off")
+    expect(
+      journey({
+        tasks: [connecting, google({ state: "later", later_until: ago(60) })],
+      }).google
+    ).toBe("offerable")
+  })
+})
+
+describe("journeyOf: the card", () => {
+  it("waits while shown, asks for the name after Yes, and settles on Skip, No or an answer in words", () => {
+    expect(journey({ card: card() }).waiting).toBe("have")
+    const yes = [address({ steps: [step("find_out", "pending")] })]
+    expect(
+      journey({ tasks: yes, card: card({ answer: "yes", waiting: "name" }) })
+        .waiting
+    ).toBe("name")
+    expect(
+      journey({
+        tasks: [address({ state: "later", later_until: ago(-60) })],
+        card: card({ answer: "later", waiting: null }),
+      }).waiting
+    ).toBeNull()
+    // Answered in words: the stage moved, though the card was never tapped.
+    const inWords = [
+      address({
+        detail: { name: "x.co.uk" },
+        steps: [step("find_out", "done")],
+      }),
+    ]
+    expect(journey({ tasks: inWords, card: card() }).waiting).toBeNull()
+    // No, help me get one, typed rather than tapped.
+    const choosing = [
+      address({ steps: [step("find_out", "done"), step("choose", "blocked")] }),
+    ]
+    expect(journey({ tasks: choosing, card: card() }).waiting).toBeNull()
+  })
+})
+
+describe("journeyOf: bring-backs and their latches", () => {
+  const latch = (minutes: number): Latch => ({
+    key: `bring_back:${ago(minutes)}`,
+    at: ago(minutes),
+  })
+
+  it("brings a waiting card back after an aside once in the sitting", () => {
+    const first = journey({ card: card(), visit: sameSitting })
+    expect(first.bring_back).toBe("aside")
+    expect(first.record).toEqual([`bring_back:${NOW.toISOString()}`])
+    expect(
+      journey({ card: card(), visit: sameSitting, latches: [latch(2)] })
+        .bring_back
+    ).toBeNull()
+  })
+
+  it("counts the latch written with the message that began the sitting", () => {
+    const begun = {
+      conversation: HERE,
+      recent: [
+        { at: ago(1), conversation: HERE },
+        { at: ago(2), conversation: HERE },
+      ],
+    }
+    const shown = card({ shown_at: ago(2) })
+    expect(
+      journey({ card: shown, visit: begun, latches: [latch(2)] }).bring_back
+    ).toBeNull()
+    // One from an earlier sitting a moment before does not count.
+    const before = {
+      key: "bring_back:x",
+      at: new Date(Date.parse(ago(2)) - 50).toISOString(),
+    }
+    expect(
+      journey({ card: shown, visit: begun, latches: [before] }).bring_back
+    ).toBe("aside")
+  })
+
+  it("brings it back once in a new sitting", () => {
+    const back = {
+      conversation: HERE,
+      recent: [{ at: ago(180), conversation: HERE }],
+    }
+    const shown = card({ shown_at: ago(200) })
+    expect(
+      journey({ card: shown, visit: back, latches: [latch(190), latch(185)] })
+        .bring_back
+    ).toBe("aside")
+    const later = {
+      conversation: HERE,
+      recent: [
+        { at: ago(1), conversation: HERE },
+        { at: ago(180), conversation: HERE },
+      ],
+    }
+    expect(
+      journey({ card: shown, visit: later, latches: [latch(1)] }).bring_back
+    ).toBeNull()
+  })
+
+  it("brings an open address back on a return when no card is on screen, and not on the next message", () => {
+    const tasks = [address({ steps: [step("find_out", "pending")] })]
+    const away = {
+      conversation: OTHER,
+      recent: [{ at: ago(10), conversation: HERE }],
+    }
+    expect(journey({ tasks, visit: away }).bring_back).toBe("return")
+    expect(journey({ tasks, visit: sameSitting }).bring_back).toBeNull()
+  })
+
+  it("never brings back a skipped or declined address, nor for a turn nobody typed", () => {
+    const back = {
+      conversation: OTHER,
+      recent: [{ at: ago(180), conversation: HERE }],
+    }
+    const done = google({ state: "done" })
+    expect(
+      journey({
+        tasks: [address({ state: "later", later_until: ago(-60) }), done],
+        visit: back,
+      }).bring_back
+    ).toBeNull()
+    expect(
+      journey({ tasks: [address({ state: "declined" }), done], visit: back })
+        .bring_back
+    ).toBeNull()
+    expect(journey({ card: card() }).bring_back).toBeNull()
+  })
+
+  it("waits for a site or a card before bringing an address up", () => {
+    const back = {
+      conversation: OTHER,
+      recent: [{ at: ago(180), conversation: HERE }],
+    }
+    const nothing = { live: false, building: false, drafts: [] }
+    expect(journey({ website: nothing, visit: back }).bring_back).toBeNull()
+  })
+})
+
+describe("journeyOf: Google after the domain is put off", () => {
+  const DAY = 24 * 60
+  const skipped = address({ state: "later", later_until: ago(-7 * DAY) })
+  const offer = (minutes: number): Latch => ({
+    key: `google_offer:${ago(minutes)}`,
+    at: ago(minutes),
+  })
+  /** Back in a new sitting: the owner last wrote `minutes` ago. */
+  const back = (minutes: number) => ({
+    conversation: HERE,
+    recent: [{ at: ago(minutes), conversation: HERE }],
+  })
+  const at = (over: Partial<JourneyInput>) =>
+    journey({ tasks: [skipped], ...over })
+
+  it("can be offered on the free address once the domain is put off or turned down", () => {
+    expect(at({}).google).toBe("offerable")
+    expect(journey({ tasks: [address({ state: "declined" })] }).google).toBe(
+      "offerable"
+    )
+    expect(
+      journey({ tasks: [address({ steps: [step("find_out", "done")] })] })
+        .google
+    ).toBe("waiting_for_domain")
+  })
+
+  it("never comes back in the sitting it was suggested in", () => {
+    const now = at({ visit: sameSitting, latches: [offer(5)] })
+    expect(now.bring_back).toBeNull()
+    expect(now.google_offered).toBe(ago(5))
+  })
+
+  it("comes back once on a return days later, and records it", () => {
+    const j = at({ visit: back(4 * DAY), latches: [offer(4 * DAY)] })
+    expect(j.bring_back).toBe("google")
+    expect(j.record.slice(0, 2)).toEqual([
+      `bring_back:${NOW.toISOString()}`,
+      `google_offer:${NOW.toISOString()}`,
+    ])
+    // The next message of that sitting: the bring-back's own latch holds it.
+    const next = at({
+      visit: sameSitting,
+      latches: [offer(4 * DAY), offer(1), { key: `bring_back:x`, at: ago(1) }],
+    })
+    expect(next.bring_back).toBeNull()
+  })
+
+  it("never twice in a row: a sitting soon after a suggestion stays quiet", () => {
+    expect(
+      at({ visit: back(2 * 60), latches: [offer(DAY)] }).bring_back
+    ).toBeNull()
+    expect(
+      at({ visit: back(2 * 60), latches: [offer(3 * DAY)] }).bring_back
+    ).toBe("google")
+  })
+
+  it("stops after three suggestions, leaving the stack's card to say it", () => {
+    const three = [offer(20 * DAY), offer(10 * DAY), offer(5 * DAY)]
+    expect(at({ visit: back(DAY), latches: three }).bring_back).toBeNull()
+    expect(at({ visit: back(DAY), latches: three.slice(1) }).bring_back).toBe(
+      "google"
+    )
+  })
+
+  it("waits out the owner's Not now, then comes back once", () => {
+    const putOff = (until: number) =>
+      google({ state: "later", later_until: ago(until) })
+    const latches = [offer(20 * DAY), offer(10 * DAY), offer(9 * DAY)]
+    expect(
+      journey({ tasks: [skipped, putOff(-DAY)], visit: back(DAY), latches })
+        .bring_back
+    ).toBeNull()
+    expect(
+      journey({ tasks: [skipped, putOff(DAY)], visit: back(DAY), latches })
+        .bring_back
+    ).toBe("google")
+    expect(
+      journey({
+        tasks: [skipped, putOff(2 * DAY)],
+        visit: back(DAY),
+        latches: [...latches, offer(DAY + 60)],
+      }).bring_back
+    ).toBeNull()
+  })
+
+  it("is never brought back after don't remind me, once connected, nor beside the address's own nudge", () => {
+    const tasks = (state: string) => [skipped, google({ state })]
+    for (const state of ["declined", "done", "active"]) {
+      expect(
+        journey({ tasks: tasks(state), visit: back(DAY) }).bring_back
+      ).toBeNull()
+    }
+    // An open address on a return is the one nudge.
+    const open = [address({ steps: [step("find_out", "pending")] })]
+    expect(journey({ tasks: open, visit: back(DAY) }).bring_back).toBe("return")
+    // Nor with no site to put on Google.
+    const nothing = { live: false, building: false, drafts: [] }
+    expect(at({ website: nothing, visit: back(DAY) }).bring_back).toBeNull()
+  })
+})
+
+describe("journeyOf: the sitting and what changed", () => {
+  const bought = address({
+    detail: { name: "sparkleclean.co.uk", origin: "buying_elsewhere" },
+    steps: [step("purchase", "done", ago(30))],
+  })
+  const back = {
+    conversation: HERE,
+    recent: [{ at: ago(180), conversation: HERE }],
+  }
+
+  it("starts a sitting after 30 minutes or in a new conversation, and measures the time away", () => {
+    expect(journey({ visit: back }).sitting).toEqual({
+      fresh: true,
+      away_ms: 180 * 60_000,
+      since: NOW.toISOString(),
+    })
+    expect(
+      journey({
+        visit: {
+          conversation: OTHER,
+          recent: [{ at: ago(5), conversation: HERE }],
+        },
+      }).sitting?.fresh
+    ).toBe(true)
+    const run = {
+      conversation: HERE,
+      recent: [
+        { at: ago(1), conversation: HERE },
+        { at: ago(20), conversation: HERE },
+        { at: ago(90), conversation: HERE },
+      ],
+    }
+    expect(journey({ visit: run }).sitting).toEqual({
+      fresh: false,
+      away_ms: 60_000,
+      since: ago(20),
+    })
+    expect(
+      journey({ visit: { conversation: HERE, recent: [] } }).sitting?.fresh
+    ).toBe(true)
+  })
+
+  it("lists what changed while away, oldest first, and records each to tell it once", () => {
+    const live = google({ state: "done", done_at: ago(10) })
+    const state = journey({ tasks: [bought, live], visit: back })
+    expect(state.changes).toEqual(
+      [
+        { key: "draft:r1", kind: "draft_ready", at: ago(20) },
+        {
+          key: `bought:${TASK}`,
+          kind: "bought",
+          at: ago(30),
+          name: "sparkleclean.co.uk",
+        },
+        {
+          key: expect.stringMatching(/^google:/),
+          kind: "google_connected",
+          at: ago(10),
+        },
+      ].sort((a, b) => (a.at < b.at ? -1 : 1))
+    )
+    expect(state.record).toEqual(
+      expect.arrayContaining(["told:draft:r1", `told:bought:${TASK}`])
+    )
+    const told = state.record.map((key) => ({ key, at: NOW.toISOString() }))
+    expect(
+      journey({ tasks: [bought, live], visit: back, latches: told }).changes
+    ).toEqual([])
+  })
+
+  it("tells what happened since the owner last wrote within a sitting too, never what came before", () => {
+    expect(journey({ tasks: [bought], visit: sameSitting }).changes).toEqual([])
+    const ready = {
+      live: false,
+      building: false,
+      drafts: [{ id: "r2", at: ago(0.5) }],
+    }
+    const state = journey({ website: ready, visit: sameSitting })
+    expect(state.sitting?.fresh).toBe(false)
+    expect(state.changes).toEqual([
+      { key: "draft:r2", kind: "draft_ready", at: ago(0.5) },
+    ])
+    expect(state.record).toEqual(["told:draft:r2"])
+    // A new conversation 25 minutes after leaving: the name was bought before they left.
+    const before = {
+      conversation: OTHER,
+      recent: [{ at: ago(25), conversation: HERE }],
+    }
+    expect(
+      journey({ tasks: [bought], visit: before }).changes.map((c) => c.kind)
+    ).toEqual(["draft_ready"])
+  })
+
+  it("tells the newest stop of a build, unless a build runs or a draft came after it", () => {
+    const stopped = (over: object = {}) =>
+      journey({
+        website: {
+          live: false,
+          building: false,
+          drafts: [],
+          stopped: [ago(0.8), ago(0.5)],
+          ...over,
+        },
+        visit: sameSitting,
+      }).changes
+    expect(stopped()).toEqual([
+      { key: `stopped:${ago(0.5)}`, kind: "build_stopped", at: ago(0.5) },
+    ])
+    expect(stopped({ building: true })).toEqual([])
+    expect(
+      stopped({ drafts: [{ id: "r3", at: ago(0.2) }] }).map((c) => c.kind)
+    ).toEqual(["draft_ready"])
+  })
+
+  it("tells a domain going live", () => {
+    const live = address({
+      state: "done",
+      done_at: ago(60),
+      detail: { name: "sparkleclean.co.uk" },
+    })
+    expect(
+      journey({
+        tasks: [live],
+        website: { live: true, building: false, drafts: [] },
+        visit: back,
+      }).changes
+    ).toEqual([
+      {
+        key: `live:${TASK}`,
+        kind: "live",
+        at: ago(60),
+        name: "sparkleclean.co.uk",
+      },
+    ])
+  })
+
+  it("gives the newest draft's left-out items on up to three turns the owner typed", () => {
+    const website = {
+      live: false,
+      building: false,
+      drafts: [
+        { id: "old", at: ago(90), left_out: ["Do you park on site?"] },
+        { id: "r2", at: ago(20), left_out: ["Are you insured?"] },
+      ],
+    }
+    const typed = journey({ website, visit: sameSitting })
+    expect(typed.left_out).toEqual(["Are you insured?"])
+    expect(typed.record).toContain("told:left_out:r2:1")
+    const told = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        key: `told:left_out:r2:${i + 1}`,
+        at: ago(2),
+      }))
+    const third = journey({ website, visit: sameSitting, latches: told(2) })
+    expect(third.left_out).toEqual(["Are you insured?"])
+    expect(third.record).toContain("told:left_out:r2:3")
+    expect(
+      journey({ website, visit: sameSitting, latches: told(3) }).left_out
+    ).toEqual([])
+    expect(journey({ website }).left_out).toEqual([])
+    expect(
+      journey({
+        website: {
+          ...website,
+          drafts: [{ id: "r3", at: ago(5), left_out: [] }],
+        },
+        visit: sameSitting,
+      }).record
+    ).not.toContain("told:left_out:r3")
+  })
+})

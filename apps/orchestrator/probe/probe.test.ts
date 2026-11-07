@@ -85,6 +85,12 @@ live("the sandbox", { timeout: 300_000 }, () => {
     ).toEqual([])
   })
 
+  it("runs every command as root, writing anywhere", async () => {
+    const root = await check("root")
+    expect(root.exit_code).toBe(0)
+    expect(root.output).toMatch(/^0\nroot/)
+  })
+
   it("builds the Astro toolchain check", async () => {
     const build = await check("astro.build")
     expect(build.exit_code).toBe(0)

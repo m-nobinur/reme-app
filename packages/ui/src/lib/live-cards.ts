@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react"
+import { useChatService } from "@workspace/ui/lib/chat-services"
 
 /**
  * What the chat's cards read from the live workspace, so a card drawn before
@@ -10,11 +10,8 @@ export type LiveCards = {
   googleConnected: boolean | null
   /** Whether the website is live on this domain now. */
   domainLive: (name: string) => boolean
+  /** A version of the website is published; null when the workspace does not say. */
+  published: boolean | null
 }
 
-const LiveCardsContext = createContext<LiveCards | null>(null)
-
-/** Gives the chat's cards the workspace's live connections. */
-export const LiveCardsProvider = LiveCardsContext.Provider
-
-export const useLiveCards = () => useContext(LiveCardsContext)
+export const useLiveCards = () => useChatService("liveCards")

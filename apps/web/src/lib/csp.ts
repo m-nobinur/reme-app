@@ -25,7 +25,8 @@ import { createMiddleware } from "@tanstack/react-start"
  * local build is not served from remeai.co.uk. A built Worker never has it.
  *
  * `connect-src 'self'`: the browser calls only this Worker. `apps/api` and
- * WorkOS are reached from the server. The one exception is Stripe: a domain
+ * WorkOS are reached from the server, bar the api's dictation socket. The
+ * other exception is Stripe: a domain
  * purchase pays in embedded Checkout, which must load Stripe.js from
  * js.stripe.com and talk to Stripe itself. The hosts are Stripe's own list
  * for Stripe.js and Checkout (docs.stripe.com/security/guide, 2026-10-16);
@@ -34,18 +35,38 @@ import { createMiddleware } from "@tanstack/react-start"
 const STRIPE_SCRIPTS =
   "https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com"
 
+/**
+ * Meta's JavaScript SDK, which opens WhatsApp Embedded Signup (Settings,
+ * Messaging channels). The SDK script comes from connect.facebook.net; the
+ * popup and its helper frames talk to facebook.com.
+ */
+const FACEBOOK_SDK = "https://connect.facebook.net"
+const FACEBOOK_HOSTS = "https://*.facebook.com"
+
+/**
+ * The api's own WebSocket origin, for voice dictation: the microphone streams
+ * to it directly, since the session cookie does not reach that host and a
+ * ticket does. Nothing else of the api's is reachable from the browser.
+ */
+function dictationSocket(api: string | undefined): string {
+  if (!api) return ""
+  const { protocol, host } = new URL(api)
+  return ` ${protocol === "https:" ? "wss:" : "ws:"}//${host}`
+}
+
 export function contentSecurityPolicy(
   nonce: string,
-  dev = import.meta.env.DEV
+  dev = import.meta.env.DEV,
+  api = process.env.REME_API_URL
 ): string {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' ${STRIPE_SCRIPTS}`,
+    `script-src 'self' 'nonce-${nonce}' ${STRIPE_SCRIPTS} ${FACEBOOK_SDK}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: https://*.remeai.co.uk${dev ? " http://*.reme.localhost:*" : ""}`,
     "font-src 'self' data:",
-    "connect-src 'self' https://api.stripe.com https://checkout.stripe.com",
-    `frame-src ${STRIPE_SCRIPTS} https://hooks.stripe.com`,
+    `connect-src 'self' https://api.stripe.com https://checkout.stripe.com ${FACEBOOK_HOSTS}${dictationSocket(api)}`,
+    `frame-src ${STRIPE_SCRIPTS} https://hooks.stripe.com ${FACEBOOK_HOSTS}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

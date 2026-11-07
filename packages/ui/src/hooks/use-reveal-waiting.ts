@@ -1,5 +1,34 @@
 import { useAuiState, useThreadViewportStore } from "@assistant-ui/react"
-import { type RefObject, useEffect, useRef } from "react"
+import { type RefObject, useEffect, useRef, useState } from "react"
+
+const REVEALING = '.aui-md[data-status="running"]'
+const MESSAGE = '[data-slot="aui_assistant-message-content"]'
+
+/**
+ * Whether the words beside `mark` are still being revealed. The stream ends
+ * before the reading pace has shown them all, so a card that waits only on
+ * the stream would open under a sentence still being written.
+ */
+export function useWordsRevealing(
+  mark: RefObject<HTMLElement | null>
+): boolean {
+  const [revealing, setRevealing] = useState(false)
+  useEffect(() => {
+    const content = mark.current?.closest(MESSAGE)
+    if (!content) return
+    const read = () => setRevealing(content.querySelector(REVEALING) !== null)
+    read()
+    const observer = new MutationObserver(read)
+    observer.observe(content, {
+      attributes: true,
+      attributeFilter: ["data-status"],
+      childList: true,
+      subtree: true,
+    })
+    return () => observer.disconnect()
+  }, [mark])
+  return revealing
+}
 
 /**
  * Brings a card that waits on the owner into view once no turn is running.
@@ -8,10 +37,10 @@ import { type RefObject, useEffect, useRef } from "react"
  * a turn brought stays where the turn left the view: a reply's first line
  * at the top, or wherever the owner scrolled to read. Only a turn no longer
  * anchored (something landed after it) glides to it. Returns whether a turn
- * is running.
+ * is running, or `hold` says the words above it are still showing.
  */
-export function useRevealWaiting(waiting: boolean): boolean {
-  const running = useAuiState((s) => s.thread.isRunning)
+export function useRevealWaiting(waiting: boolean, hold = false): boolean {
+  const running = useAuiState((s) => s.thread.isRunning) || hold
   const viewport = useThreadViewportStore({ optional: true })
   const ran = useRef(running)
   useEffect(() => {
@@ -28,26 +57,28 @@ export function useRevealWaiting(waiting: boolean): boolean {
 
 /**
  * Gives an open card the focus once no turn is running, so the answer goes
- * straight in and Enter cannot send the composer's text over it. Only from
- * nowhere or an empty composer, never from something the owner is typing.
- * Deferred a task, because the composer refocuses itself when a run ends.
+ * straight in and Enter cannot send the composer's text over it: its first
+ * `target`, a field unless said. Only from nowhere or an empty composer,
+ * never from something the owner is typing. Deferred a task, because the
+ * composer refocuses itself when a run ends.
  */
 export function useFocusWhenIdle(
   waiting: boolean,
   running: boolean,
-  card: RefObject<HTMLElement | null>
+  card: RefObject<HTMLElement | null>,
+  target = "input"
 ): void {
   useEffect(() => {
     if (running || !waiting) return
     const timer = setTimeout(() => {
       if (composerIdle()) {
         card.current
-          ?.querySelector<HTMLElement>("input")
+          ?.querySelector<HTMLElement>(target)
           ?.focus({ preventScroll: true })
       }
     })
     return () => clearTimeout(timer)
-  }, [running, waiting, card])
+  }, [running, waiting, card, target])
 }
 
 /** Focus is nowhere, or in an empty composer: the owner is not typing. */

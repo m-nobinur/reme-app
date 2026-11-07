@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { Approval } from "@workspace/ui/components/assistant/approval"
-import { AlwaysAllowProvider } from "@workspace/ui/components/assistant/decision"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { expect, it, vi } from "vitest"
+import { ToolCard } from "./fixtures/tool-card"
 
 ;(
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -33,9 +33,9 @@ async function card(toolName: string, args: unknown, press?: string) {
   await act(async () =>
     root.render(
       createElement(
-        AlwaysAllowProvider,
-        { value: (id: string) => void tapped.push(id) },
-        createElement(Approval, {
+        ChatServicesProvider,
+        { value: { alwaysAllow: (id: string) => void tapped.push(id) } },
+        createElement(ToolCard, {
           toolName,
           toolCallId: "call-1",
           args,

@@ -1,4 +1,4 @@
-import type { PageDocument } from "@workspace/contracts"
+import type { Asset, ImageSlot, PageDocument } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import type { Brief } from "../src/brief.ts"
 import {
@@ -8,6 +8,7 @@ import {
   writerCheck,
 } from "../src/fanout.ts"
 import type { PhotoFile } from "../src/photo-step.ts"
+import { STARTER_FILES } from "../src/seed.ts"
 import {
   createWarmer,
   fieldLines,
@@ -544,14 +545,58 @@ describe("the photos while the pages are written", () => {
     expect(got).toEqual({ files: [file("home_hero", "k1")], timedOut: false })
   })
 
-  it("points each slot's field at the photo as it landed, or empties it", () => {
+  it("writes every planned photo's path and alt into the starter's own fields", () => {
+    const slot = (id: string, page: string, section: string) =>
+      ({
+        id,
+        page,
+        section,
+        aspect: "4:3",
+        resolution: "1K",
+        subject: id,
+        alt: `${id} alt`,
+        source: "generated",
+      }) as ImageSlot
+    const assetId = "0b0c5f4e-6a59-4f1e-9a43-1c1b3f0e7a11"
+    const upload = {
+      ...slot("gallery_1", "home", "gallery"),
+      source: "upload",
+      asset_id: assetId,
+    } as ImageSlot
     const next = reconcilePhotos(
-      CONFIG,
-      ["home_hero", "about_hero"],
-      [file("home_hero", "k1", "image/png")]
+      STARTER_FILES["src/site-config.ts"] as string,
+      [
+        slot("home_hero", "home", "hero"),
+        slot("service_2_hero", "service", "hero"),
+        slot("service_1_card", "home", "service_cards"),
+        slot("about_hero", "about", "hero"),
+        slot("home_cta_photo", "home", "cta_band"),
+        slot("contact_hero", "contact", "hero"),
+        upload,
+      ],
+      [
+        file("home_hero", "k1", "image/png"),
+        file("service_2_hero", "k2"),
+        file("service_1_card", "k3", "image/webp"),
+        file("about_hero", "k4"),
+        file("home_cta_photo", "k5"),
+      ],
+      [{ id: assetId, content_type: "image/jpeg" } as Asset]
     )
-    expect(next).toContain('"src/assets/generated/home_hero.png",')
-    expect(next).toContain('aboutImage: "",')
+    for (const line of [
+      'heroImage: "src/assets/generated/home_hero.png",',
+      'heroImageAlt: "home_hero alt",',
+      'service2HeaderImage: "src/assets/generated/service_2_hero.jpg",',
+      'service2HeaderImageAlt: "service_2_hero alt",',
+      'service1Image: "src/assets/generated/service_1_card.webp",',
+      'aboutImage: "src/assets/generated/about_hero.jpg",',
+      'ctaImage: "src/assets/generated/home_cta_photo.jpg",',
+      `photo1Src: "/uploads/${assetId}.jpg",`,
+      'photo1Alt: "gallery_1 alt",',
+      'contactImage: "",',
+      'contactImageAlt: "",',
+    ])
+      expect(next).toContain(line)
   })
 
   it("never runs two warm builds at once, and runs once more for what came during one", async () => {

@@ -2,16 +2,18 @@ import { streamText, tool } from "ai"
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
-import { contextOf } from "../src/cos/agent.ts"
+import { contextOf, keeps } from "../src/cos/agent.ts"
 import {
   type Check,
   CLAIMS_NOTE,
   claimsGate,
   gated,
   MAX_RERUNS,
+  MAY_PROMISE,
   NUDGE,
   type Prompt,
   promiseGate,
+  savedIn,
 } from "../src/cos/promise.ts"
 
 /**
@@ -168,7 +170,7 @@ describe("the promise gate", () => {
       await run(model, promised).done
       expect(prompts).toHaveLength(1)
     }
-    const { model, prompts } = scripted(called, said("Done."))
+    const { model, prompts } = scripted(called, said("Done, I'll check back."))
     // A step that called a tool is never read, only the text-only one after it.
     const asked: string[] = []
     await run(model, async (text) => {
@@ -176,7 +178,32 @@ describe("the promise gate", () => {
       return false
     }).done
     expect(prompts).toHaveLength(2)
-    expect(asked).toEqual(["Done."])
+    expect(asked).toEqual(["Done, I'll check back."])
+  })
+
+  it("ends a reply with no word a promise is made with, unread", async () => {
+    for (const text of [
+      "Done.",
+      "Your site is live.",
+      "Noted, Don. Your draft already leaves ovens out.",
+    ]) {
+      const asked: string[] = []
+      await run(scripted(said(text)).model, async (t) => {
+        asked.push(t)
+        return true
+      }).done
+      expect(asked).toEqual([])
+    }
+    for (const text of [
+      "I'll set that up now.",
+      "Let me check.",
+      "I'm connecting it now.",
+      "Checking the registry now.",
+      "We will let you know.",
+      "I’ll keep stock photos of people out of future website builds.",
+    ]) {
+      expect(MAY_PROMISE.test(text), text).toBe(true)
+    }
   })
 })
 
@@ -496,12 +523,77 @@ describe("the claims gate", () => {
     expect(rerun.at(-1)?.content[0]?.text).toBe(`${CLAIMS_NOTE} "all set".`)
     // A promise re-run first spends the budget the claim shares.
     let promises = 0
-    const shared = scripted(said("You're all set."))
+    const shared = scripted(said("You're all set. I'll tell you more."))
     await run(shared.model, async () => promises++ < 2, [
       claimsGate(jev(false).unsure),
     ]).done
     expect(shared.prompts).toHaveLength(1 + MAX_RERUNS)
     const last = shared.prompts.at(-1) as { content: { text: string }[] }[]
     expect(last.at(-1)?.content[0]?.text).toBe(NUDGE)
+  })
+})
+
+describe("a save this turn", () => {
+  it("counts a memory or save_correction that saved since the owner's latest message", () => {
+    const saved = { outcome: "saved", note: "Saved." }
+    const refused = { outcome: "refused", error: { code: "x" } }
+    expect(
+      savedIn(shown("Mode: act.", { tool: "save_correction", value: saved }))
+    ).toBe(true)
+    expect(savedIn(shown("Mode: act.", { tool: "memory", value: saved }))).toBe(
+      true
+    )
+    expect(
+      savedIn(shown("Mode: act.", { tool: "memory", value: refused }))
+    ).toBe(false)
+    expect(
+      savedIn(shown("Mode: act.", { tool: "read_site", value: saved }))
+    ).toBe(false)
+    expect(
+      savedIn(
+        shown("Mode: act.", { tool: "memory", value: saved, before: true })
+      )
+    ).toBe(false)
+  })
+})
+
+describe("what keeps a promise to report back", () => {
+  const empty = { site: { host: null, live_version: null }, builds: [] }
+  const address = (
+    state: string,
+    purchase: string,
+    origin = "buying_elsewhere"
+  ) => ({
+    ...empty,
+    tasks: [
+      {
+        kind: "address",
+        state,
+        detail: { origin, name: "brightwaycleaning.co.uk" },
+        steps: [{ step: "purchase", state: purchase }],
+      },
+    ],
+  })
+  const kept = (workspace: object) => keeps(workspace as never)
+
+  it("counts a build started in an earlier turn that is still running", () => {
+    expect(kept({ ...empty, builds: [{ state: "implementing" }] })).toBe(true)
+  })
+
+  it("counts an address the owner is buying elsewhere, put off or not", () => {
+    expect(kept(address("active", "blocked"))).toBe(true)
+    expect(kept(address("later", "blocked"))).toBe(true)
+  })
+
+  it("counts a domain waiting on payment, DNS or verifying", () => {
+    expect(kept({ ...empty, domains: [{ state: "awaiting_dns" }] })).toBe(true)
+  })
+
+  it("counts nothing finished, declined or bought here", () => {
+    expect(kept(empty)).toBe(false)
+    expect(kept(address("active", "done"))).toBe(false)
+    expect(kept(address("declined", "blocked"))).toBe(false)
+    expect(kept(address("active", "blocked", "choosing"))).toBe(false)
+    expect(kept({ ...empty, domains: [{ state: "active" }] })).toBe(false)
   })
 })

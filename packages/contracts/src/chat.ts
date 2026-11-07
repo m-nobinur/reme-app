@@ -49,6 +49,21 @@ export const PLANNER_TURN_MS = 60_000
 export const CHAT_TURN_MS = PLANNER_TURN_MS + 10_000 + 5_000
 
 /**
+ * The most a Chief of Staff turn runs (`apps/api`'s `LIMITS.totalMs`): 16
+ * steps at the 10 s a step the 6-step limit allowed (60 s / 6), so 160 s.
+ * Its response starts within the first step's `firstChunkMs`, so only the
+ * streamed body runs this long.
+ */
+export const COS_TURN_MS = 16 * 10_000
+
+/**
+ * How long after `COS_TURN_MS` a turn the Worker lost is abandoned: the
+ * 30 s `ctx.waitUntil` may run after the client goes (Cloudflare's Workers
+ * limits, checked 2026-11-05).
+ */
+export const COS_GRACE_MS = 30_000
+
+/**
  * The error text of a call a typed message overtook: assistant-ui's own
  * words, stored by the api and read by the web, so a reload matches.
  */
@@ -500,13 +515,16 @@ export const AskDetailsInput = z
  * `ask_details`'s output: the facts the owner stated, at least one. The api
  * refuses a key outside the call's step, a key stated twice, and a skip of a
  * card that is not skippable. `skip_all`, as on `AskDesignOutput`: the owner
- * pressed Pick for me, so the facts are the assistant's choice.
+ * pressed Pick for me, so the facts are the assistant's choice. `changed`
+ * names the keys whose value the owner typed or picked away from what the
+ * card offered; the rest were the card's own defaults.
  */
 export const AskDetailsOutput = z.discriminatedUnion("answer", [
   z.strictObject({
     answer: z.literal("stated"),
     facts: z.array(FactValue).min(1).max(4),
     skip_all: z.boolean().optional(),
+    changed: z.array(z.string()).max(4).optional(),
   }),
   z.strictObject({ answer: z.literal("skipped") }),
 ])
@@ -608,11 +626,14 @@ export const ChatRequest = z.strictObject({
    */
   time_zone: TimeZone.optional(),
   /**
-   * Set when the owner pressed Request changes on the website panel before
-   * typing: the message describes a change to their website. Read on a
-   * message turn only.
+   * What the owner pressed before the message: Request changes on the
+   * website panel (`site_change`, the message describes a change), or a
+   * Connect button for the web address or Google, whose skill code then
+   * loads. Read on a message turn only.
    */
-  intent: z.enum(["site_change"]).optional(),
+  intent: z
+    .enum(["site_change", "connect_address", "connect_google"])
+    .optional(),
   turn: z.discriminatedUnion("kind", [
     z.strictObject({
       kind: z.literal("message"),

@@ -1,4 +1,4 @@
-import type { TextMessagePartProps } from "@assistant-ui/react"
+import type { SmoothOptions, TextMessagePartProps } from "@assistant-ui/react"
 import {
   type CodeHeaderProps,
   MarkdownTextPrimitive,
@@ -15,7 +15,21 @@ import remarkGfm from "remark-gfm"
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
   components?: Parameters<typeof memoizeMarkdownComponents>[0]
+  smooth?: boolean | SmoothOptions
 }
+
+/**
+ * assistant-ui's own pace for streamed words, at most 5 ms a character, so a
+ * streamed reply shows as fast as the model writes it. A reply that lands in
+ * one burst, as onboarding's planner sends its words, plays in over 0.8 s
+ * rather than the library's 0.25 s, so it still reads as written (owner,
+ * 2026-11-06; 2.5 s at 65 characters a second had held streamed replies
+ * behind the model). Reduced motion shows the words at once.
+ */
+export const READING_PACE = {
+  drainMs: 800,
+  maxCharIntervalMs: 5,
+} satisfies SmoothOptions
 
 const useShallowStable = <T extends Record<string, unknown> | undefined>(
   value: T
@@ -33,7 +47,10 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
   return ref.current
 }
 
-const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
+const MarkdownTextImpl: FC<MarkdownTextProps> = ({
+  components,
+  smooth = READING_PACE,
+}) => {
   const stableComponents = useShallowStable(components)
   const markdownComponents = useMemo(() => {
     if (!stableComponents) return defaultComponents
@@ -56,6 +73,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
       components={markdownComponents}
       disallowedElements={["img"]}
       preprocess={settled}
+      smooth={smooth}
       defer
     />
   )
@@ -361,7 +379,7 @@ const defaultComponents = memoizeMarkdownComponents({
     <div
       // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll region has to take focus to be scrolled from the keyboard.
       tabIndex={0}
-      className="aui-md-table-scroll my-4 overflow-x-auto rounded-sm text-[0.9375em] outline-none focus-visible:ring-3 focus-visible:ring-ring"
+      className="aui-md-table-scroll my-4 overflow-x-auto rounded-sm text-[0.9375em] outline-none focus-visible:ring-1 focus-visible:ring-ring"
     >
       <table
         className={cn(

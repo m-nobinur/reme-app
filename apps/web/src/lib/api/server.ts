@@ -5,11 +5,14 @@ import {
   ApprovalGrantSwitch,
   type ApprovalGrants,
   ChangeKind,
+  ChannelLinkPatch,
+  type ChannelLinkStarted,
+  type ChannelsState,
+  DictationTidyRequest,
   DomainName,
   type DomainPurchaseStatus,
   GOAL_MAX,
   MemoryReviewAction,
-  MemoryUndo,
   type MemoryView,
   MessageFeedback,
   PushSubscribeRequest,
@@ -19,6 +22,8 @@ import {
   SetTimeZoneRequest,
   Timestamp,
   Uuid,
+  type WhatsAppAccount,
+  WhatsAppSignupComplete,
 } from "@workspace/contracts"
 import type { CheckoutStart } from "@workspace/ui/components/assistant/buy-domain"
 import { PANEL_COOKIE, RAIL_COOKIE } from "@workspace/ui/lib/panel"
@@ -342,13 +347,16 @@ export const buyDomainElsewhere = createServerFn({ method: "POST" })
       await source.domainElsewhere(data.name, data.key)
   )
 
-/** The owner's word that they bought it elsewhere. */
-export const sayDomainBought = createServerFn({ method: "POST" })
+/** The owner has not bought the name they went to buy: the address is put off. */
+export const putOffDomain = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const data = record(input)
     return { name: DomainName.parse(data.name), key: keyOf(data.key) }
   })
-  .handler(async ({ data }) => await source.domainBought(data.name, data.key))
+  .handler(
+    async ({ data }): Promise<WriteOutcome> =>
+      await source.domainNotYet(data.name, data.key)
+  )
 
 export const createReminder = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
@@ -390,14 +398,6 @@ export const getMemory = createServerFn({ method: "GET" }).handler(
   async (): Promise<MemoryView | null> => await source.memory()
 )
 
-/** One remembered change taken back; "stale" when nothing is left of it to undo. */
-export const undoMemory = createServerFn({ method: "POST" })
-  .validator((input: unknown) => MemoryUndo.parse(record(input)))
-  .handler(
-    async ({ data }): Promise<MemoryView | "stale" | null> =>
-      await source.undoMemory(data.version)
-  )
-
 /** The owner's choice about being asked first, or their answer to one proposal. */
 export const reviewMemory = createServerFn({ method: "POST" })
   .validator((input: unknown) => MemoryReviewAction.parse(record(input)))
@@ -418,12 +418,19 @@ export const setGrant = createServerFn({ method: "POST" })
       await source.setGrant(data)
   )
 
-/** One of the owner's corrections for staff removed; "stale" when it was already gone. */
-export const removeCorrection = createServerFn({ method: "POST" })
-  .validator((input: unknown) => ({ id: id(record(input).id) }))
+/** The dictation socket's address with a ticket on it; null with no session. */
+export const getDictationSocket = createServerFn({ method: "POST" }).handler(
+  async (): Promise<string | null> => {
+    return await source.dictationSocket()
+  }
+)
+
+/** The dictated words tidied; null keeps them as heard. */
+export const tidyDictation = createServerFn({ method: "POST" })
+  .validator((input: unknown) => DictationTidyRequest.parse(record(input)))
   .handler(
-    async ({ data }): Promise<MemoryView | "stale" | null> =>
-      await source.removeCorrection(data.id)
+    async ({ data }): Promise<string | null> =>
+      await source.tidyDictation(data.text)
   )
 
 /** The key a browser subscribes to push with; null where push is off. */
@@ -445,6 +452,54 @@ export const removePushSubscription = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<WriteOutcome> => {
     return await source.unsubscribePush(data.id)
   })
+
+/** The owner's messaging channels; null where the api serves none. */
+export const getChannels = createServerFn({ method: "GET" }).handler(
+  async (): Promise<ChannelsState | null> => await source.channels()
+)
+
+/** A WhatsApp link with a new one-time code; null when the api refused. */
+export const startWhatsAppLink = createServerFn({ method: "POST" }).handler(
+  async (): Promise<ChannelLinkStarted | null> =>
+    await source.startWhatsAppLink(crypto.randomUUID())
+)
+
+/** What Embedded Signup's popup opens with; null where the api has none. */
+export const getWhatsAppSignupConfig = createServerFn({
+  method: "GET",
+}).handler(async () => await source.signupConfig())
+
+/** The popup's result, handed to the api; the connected account, or null when refused. */
+export const completeWhatsAppSignup = createServerFn({ method: "POST" })
+  .validator((input: unknown) => WhatsAppSignupComplete.parse(record(input)))
+  .handler(
+    async ({ data }): Promise<WhatsAppAccount | null> =>
+      await source.completeWhatsAppSignup(data, crypto.randomUUID())
+  )
+
+export const setChannelUpdates = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const data = record(input)
+    return {
+      id: id(data.id),
+      ...ChannelLinkPatch.parse({ updates: data.updates }),
+    }
+  })
+  .handler(
+    async ({ data }): Promise<WriteOutcome> =>
+      await source.updateChannelLink(
+        data.id,
+        { updates: data.updates },
+        crypto.randomUUID()
+      )
+  )
+
+export const disconnectChannel = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ id: id(record(input).id) }))
+  .handler(
+    async ({ data }): Promise<WriteOutcome> =>
+      await source.disconnectChannelLink(data.id)
+  )
 
 /** The zone this browser keeps, for the org's check-ins, quiet hours and reminders. */
 export const syncTimeZone = createServerFn({ method: "POST" })

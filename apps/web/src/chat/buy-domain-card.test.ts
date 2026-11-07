@@ -4,19 +4,21 @@ import type {
   DomainPurchaseStatus,
   DomainRegistrantPrefill,
 } from "@workspace/contracts"
-import { Approval } from "@workspace/ui/components/assistant/approval"
 import {
   type CheckoutStart,
   type DomainPurchase,
-  DomainPurchaseProvider,
   purchaseStatusOf,
   readDetails,
   registrarPrice,
+  SKIP_DOMAIN,
+  subLine,
 } from "@workspace/ui/components/assistant/buy-domain"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
+import { ToolCard } from "./fixtures/tool-card"
 
 ;(
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -24,7 +26,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 // The tray reads the thread through assistant-ui's store; these tests stand
 // in for it, since what they check is the tray, not the runtime.
-const store = vi.hoisted(() => ({ after: [] as ("user" | "assistant")[] }))
+type Later = { role: "user" | "assistant"; content?: unknown[] }
+const store = vi.hoisted(() => ({
+  after: [] as Later[],
+  append: vi.fn(),
+}))
 vi.mock("@assistant-ui/react", async (original) => ({
   ...(await original<typeof import("@assistant-ui/react")>()),
   useAuiState: (select: (state: unknown) => unknown) =>
@@ -34,15 +40,15 @@ vi.mock("@assistant-ui/react", async (original) => ({
         isRunning: false,
         messages: [
           { id: "msg-1", role: "assistant", content: [] },
-          ...store.after.map((role, i) => ({
+          ...store.after.map((later, i) => ({
             id: `after-${i}`,
-            role,
             content: [],
+            ...later,
           })),
         ],
       },
     }),
-  useAui: () => ({ thread: () => ({ append: vi.fn() }) }),
+  useAui: () => ({ thread: () => ({ append: store.append }) }),
   useThreadViewportStore: () => null,
 }))
 
@@ -194,6 +200,7 @@ beforeEach(() => {
 
 afterEach(() => {
   store.after = []
+  store.append.mockClear()
   stripe.init.mockClear()
   stripe.confirm.mockClear()
   sessionStorage.clear()
@@ -218,9 +225,9 @@ async function draw(
         TraySlotProvider,
         { value: tray },
         createElement(
-          DomainPurchaseProvider,
-          { value: purchase },
-          createElement(Approval, {
+          ChatServicesProvider,
+          { value: { domainPurchase: purchase } },
+          createElement(ToolCard, {
             toolName,
             toolCallId: "call-1",
             argsText: "",
@@ -240,7 +247,9 @@ const button = (within: Element, label: string) => {
   const match = [...within.querySelectorAll("button")].find(
     (each) =>
       each.textContent?.trim() === label ||
-      each.getAttribute("aria-label") === label
+      each.getAttribute("aria-label") === label ||
+      // A name's row: its name, and "Choose" only a screen reader hears.
+      each.querySelector("[title]")?.textContent === label
   )
   if (!match) throw new Error(`no ${label} button`)
   return match
@@ -248,18 +257,14 @@ const button = (within: Element, label: string) => {
 const press = (within: Element, label: string) =>
   act(async () => button(within, label).click())
 
-const radio = (within: Element, label: string) => {
-  const match = within.querySelector<HTMLInputElement>(
-    `input[type=radio][aria-label="${label}"]`
+/** Chooses a name in the chat, then buys it here, as the owner does. */
+const choose = async (chat: Element, name: string) => {
+  await press(chat, `Choose ${name}`)
+  const buy = [...chat.querySelectorAll("button")].find((each) =>
+    each.textContent?.startsWith("Buy for ")
   )
-  if (!match) throw new Error(`no ${label} option`)
-  return match
-}
-
-/** Picks an ending on Choose, then goes on, as the owner does. */
-const choose = async (within: Element, label: string) => {
-  await act(async () => radio(within, label).click())
-  await press(within, "Continue")
+  if (!buy) throw new Error(`no Buy for ${name}`)
+  await act(async () => buy.click())
 }
 
 /** Fills the fields the details page asks for, as the owner types them. */
@@ -286,9 +291,28 @@ const submit = (tray: HTMLElement) =>
       ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
   )
 
-it("shows a card per name with its free endings, the first one Recommended", async () => {
+/** The picker's names, in order. */
+const names = (chat: HTMLElement) =>
+  [...chat.querySelectorAll('[data-slot="domain-picker"] li')].map((row) =>
+    row.querySelector("[title]")?.getAttribute("title")
+  )
+/** Each name's row as the owner reads it: name | sub line | badge. */
+const rows = (chat: HTMLElement) =>
+  [...chat.querySelectorAll('[data-slot="domain-picker"] li')].map((row) =>
+    [
+      row.querySelector("[title]")?.getAttribute("title"),
+      row.querySelector("[id$='-sub']")?.textContent,
+      row.querySelector('[data-slot="badge"]')?.textContent,
+    ]
+      .filter(Boolean)
+      .join(" | ")
+  )
+const picker = (chat: HTMLElement) =>
+  chat.querySelector('[data-slot="domain-picker"]')
+
+it("shows the names in the message, six at most: the recommended one first, then every .co.uk", async () => {
   const all = { "co.uk": FREE(8), com: FREE(12), uk: FREE(8) }
-  const { tray } = await draw("find_domain", {
+  const { chat, tray } = await draw("find_domain", {
     args: {},
     result: {
       outcome: "found",
@@ -296,104 +320,115 @@ it("shows a card per name with its free endings, the first one Recommended", asy
       rows: ["a", "b", "c", "d", "e", "f"].map((stem) => ({
         stem,
         why: "x",
-        endings: all,
+        endings: stem === "b" ? { com: FREE(12) } : all,
       })),
     },
   })
-  const cards = tray.querySelectorAll('[role="radiogroup"] > fieldset')
-  expect(cards).toHaveLength(6)
-  expect(
-    [...(cards[0]?.querySelectorAll("input[type=radio]") ?? [])].map(
-      (card) => (card as HTMLInputElement).value
-    )
-  ).toEqual(["a.co.uk", "a.uk", "a.com"])
-  expect(tray.textContent?.match(/Recommended/g)).toHaveLength(1)
-})
-
-it("offers each free ending of a name, Reme's price only while buying here is on", async () => {
-  const { tray } = await found()
-  const cards = tray.querySelectorAll('[role="radiogroup"] > fieldset')
-  // A taken ending is no pill; the Recommended pill is the first card's only extra.
-  expect([...cards].map((card) => card.textContent)).toEqual([
-    "sparklecleanRecommended. Short, and it is your name.sparkleclean.co.uk.uk£8 a year",
-    "sparklecleanbristolsparklecleanbristol.com",
+  expect(names(chat)).toEqual([
+    "a.co.uk",
+    "c.co.uk",
+    "d.co.uk",
+    "e.co.uk",
+    "f.co.uk",
+    "a.uk",
   ])
-  expect(() => radio(tray, "sparkleclean.com, £12 a year")).toThrow()
-  const options = [
-    ...tray.querySelectorAll<HTMLInputElement>("input[type=radio]"),
-  ]
-  expect(new Set(options.map((option) => option.name)).size).toBe(1)
-  expect(
-    options.filter((option) => option.checked).map((o) => o.value)
-  ).toEqual([NAME])
-  // The reason describes the first card's endings, and no other card's.
-  expect(
-    options.map((option) => option.getAttribute("aria-describedby") !== null)
-  ).toEqual([true, true, false])
+  // The step line counts what the list shows, not the stems searched.
+  expect(chat.textContent).toContain("Found 6 names")
+  expect(picker(chat)?.querySelectorAll('[data-slot="badge"]')).toHaveLength(1)
+  expect(tray.textContent).toBe("")
 })
 
-it("puts a pound estimate beside Cloudflare's dollar price when a rate came with the names, and none beside GoDaddy", async () => {
-  const { tray } = await draw("find_domain", {
+it("gives each row its name, price and Recommended badge, and Choose for the whole row", async () => {
+  const { chat } = await found()
+  expect(picker(chat)?.querySelector("h3")?.textContent).toBe(
+    "Choose your domain"
+  )
+  expect(picker(chat)?.textContent).toContain(
+    "You can do this before your site is published. I'll connect it for you."
+  )
+  expect(rows(chat)).toEqual([
+    "sparkleclean.co.uk | £8 a year | Recommended",
+    "sparkleclean.uk | £8 a year",
+    "sparklecleanbristol.com | £12 a year",
+  ])
+  expect(() => button(chat, "Choose sparkleclean.com")).toThrow()
+  // The reason describes the recommended name, and no other.
+  const why = button(chat, `Choose ${NAME}`)
+    .getAttribute("aria-describedby")
+    ?.split(" ")
+    .at(-1)
+  expect(document.getElementById(why ?? "")?.textContent).toBe(
+    "Recommended. Short, and it is your name."
+  )
+  expect(
+    button(chat, "Choose sparkleclean.uk").getAttribute("aria-describedby")
+  ).not.toContain("why")
+})
+
+it("prices every row in pounds at Cloudflare, or says where to see it", async () => {
+  const { chat } = await draw("find_domain", {
     args: {},
     result: { ...FOUND_OFF, usd_gbp: 0.7457 },
   })
-  const where = () =>
-    tray.querySelector('[data-slot="connect-rows"]')?.textContent
-  expect(where()).toContain("CloudflareFrom $5.30 a year (about £4)")
-  expect(where()).toContain("GoDaddygodaddy.com")
-  await act(async () => radio(tray, "sparklecleanbristol.com").click())
-  expect(where()).toContain("CloudflareFrom $10.46 a year (about £8)")
+  expect(rows(chat)).toEqual([
+    "sparkleclean.co.uk | About £4 a year at Cloudflare | Recommended",
+    "sparkleclean.uk | Price shown at Cloudflare",
+    "sparkleclean.co | Price shown at Cloudflare",
+    "sparklecleanbristol.com | About £8 a year at Cloudflare",
+  ])
+  expect(chat.textContent).not.toContain("$")
 })
 
-it("registrarPrice rounds the pounds to the nearest pound, at least £1, and shows dollars alone with no rate", () => {
-  expect(registrarPrice(5.3, 0.7457)).toBe("From $5.30 a year (about £4)")
-  expect(registrarPrice(10.46, 0.7457)).toBe("From $10.46 a year (about £8)")
-  expect(registrarPrice(6, 0.75)).toBe("From $6.00 a year (about £5)")
-  expect(registrarPrice(0.5, 0.7457)).toBe("From $0.50 a year (about £1)")
-  expect(registrarPrice(5.3)).toBe("From $5.30 a year")
-  expect(registrarPrice(5.3, undefined)).toBe("From $5.30 a year")
+it("registrarPrice is pounds to the nearest pound, at least £1, and nothing without a rate", () => {
+  expect(registrarPrice(5.3, 0.7457)).toBe("About £4 a year")
+  expect(registrarPrice(10.46, 0.7457)).toBe("About £8 a year")
+  expect(registrarPrice(6, 0.75)).toBe("About £5 a year")
+  expect(registrarPrice(0.5, 0.7457)).toBe("About £1 a year")
+  expect(registrarPrice(5.3)).toBeNull()
+  expect(subLine({ usd: 5.3 }, false)).toBe("Price shown at Cloudflare")
+  expect(subLine({ price: 8, usd: 5.3 }, true)).toBe("£8 a year")
+  expect(subLine({}, true)).toBeNull()
 })
 
-it("with buying here off, says where to buy the picked name and connects it once bought", async () => {
+it("with buying here off, gives a chosen name Buy from each provider, and I've bought it says so in the chat", async () => {
   const purchase = purchaseOf()
-  const { tray } = await draw(
+  const { chat } = await draw(
     "find_domain",
     { args: {}, result: FOUND_OFF },
     purchase
   )
-  expect(tray.textContent).not.toContain("£")
-  expect(() => button(tray, "Continue")).toThrow()
-  const where = () =>
-    tray.querySelector('[data-slot="connect-rows"]')?.textContent
-  expect(where()).toContain("Buy it from")
-  expect(where()).toContain("CloudflareFrom $5.30 a year")
-  expect(where()).toContain("GoDaddygodaddy.com")
-  await act(async () => radio(tray, "sparkleclean.co").click())
-  expect(where()).toContain("Cloudflarecloudflare.com")
-  const links = [...tray.querySelectorAll("a")].map((a) => a.href)
-  expect(links).toEqual([
+  expect(chat.querySelector("a")).toBeNull()
+  expect(() => button(chat, "I've bought it")).toThrow()
+  await press(chat, "Choose sparkleclean.co")
+  expect(
+    chat.querySelector('[data-slot="domain-chosen"]')?.textContent
+  ).toContain("sparkleclean.co")
+  expect(() => button(chat, "Choose sparkleclean.co")).toThrow()
+  expect(() => button(chat, "Buy for £8")).toThrow()
+  const links = [...chat.querySelectorAll("a")]
+  expect(links.map((a) => a.textContent)).toEqual([
+    "Buy from Cloudflare (opens in a new tab)",
+    "Buy from GoDaddy (opens in a new tab)",
+  ])
+  expect(links.map((a) => a.href)).toEqual([
     "https://domains.cloudflare.com/?domain=sparkleclean.co",
     "https://www.godaddy.com/domainsearch/find?domainToCheck=sparkleclean.co",
   ])
-  await act(async () => tray.querySelector("a")?.click())
+  await act(async () => links[0]?.click())
   expect(purchase.elsewhere).toHaveBeenCalledWith("sparkleclean.co")
-  // Following a link stays on the names, with I've bought it at hand.
-  expect(tray.querySelector("h2")?.textContent).toBe("Choose your web address")
-  await press(tray, "I've bought it")
-  expect(purchase.bought).toHaveBeenCalledWith("sparkleclean.co")
-  expect(tray.textContent).toContain(
-    "I can't see sparkleclean.co at the registry yet."
-  )
+  await press(chat, "I've bought it")
+  expect(store.append).toHaveBeenCalledWith("I've bought sparkleclean.co")
+  expect(button(chat, "Skip for now").disabled).toBe(true)
 })
 
 it("goes on with the ending picked, not the best one", async () => {
   const purchase = purchaseOf()
-  const { tray } = await draw(
+  const { chat } = await draw(
     "find_domain",
     { args: {}, result: FOUND },
     purchase
   )
-  await choose(tray, "sparklecleanbristol.com, £12 a year")
+  await choose(chat, "sparklecleanbristol.com")
   expect(purchase.registrant).toHaveBeenCalledWith("sparklecleanbristol.com")
 })
 
@@ -429,7 +464,7 @@ it("asks only for the gaps, pays in a dialog, and leaves one line once paid", as
     { args: {}, result: FOUND },
     purchase
   )
-  await choose(tray, `${NAME}, £8 a year`)
+  await choose(chat, NAME)
   expect(purchase.registrant).toHaveBeenCalledWith(NAME)
   // What Reme holds is not asked again; the address and the legal type are.
   const asked = [
@@ -669,7 +704,7 @@ it("shows a name already bought as its line, with no Pay", async () => {
     { args: {}, result: FOUND },
     purchaseOf({ status: vi.fn(async () => ({ name: NAME, ...read })) })
   )
-  await choose(tray, `${NAME}, £8 a year`)
+  await choose(chat, NAME)
   await vi.waitFor(() =>
     expect(chat.textContent).toContain(
       `${NAME} is yours, and your website is on it.`
@@ -678,78 +713,57 @@ it("shows a name already bought as its line, with no Pay", async () => {
   expect(tray.textContent).toBe("")
 })
 
-it("buys elsewhere: links with the name, tells the api, then waits for done", async () => {
+it("with buying here on, a chosen name offers Buy for its price and each provider", async () => {
   const purchase = purchaseOf()
-  const { tray } = await draw(
+  const { chat, tray } = await draw(
     "find_domain",
     { args: {}, result: FOUND },
     purchase
   )
-  // Buying here on: the providers wait behind their own button.
-  expect(tray.querySelector("a")).toBeNull()
-  await press(tray, "Buy directly from a provider")
-  const links = [...tray.querySelectorAll("a")].map((a) => a.href)
-  expect(links).toEqual([
-    `https://domains.cloudflare.com/?domain=${NAME}`,
-    `https://www.godaddy.com/domainsearch/find?domainToCheck=${NAME}`,
+  await press(chat, `Choose ${NAME}`)
+  expect(
+    [
+      ...chat.querySelectorAll(
+        '[data-slot="domain-chosen"] a, [data-slot="domain-chosen"] button'
+      ),
+    ].map((each) => each.textContent)
+  ).toEqual([
+    "Buy for £8",
+    "Buy from Cloudflare (opens in a new tab)",
+    "Buy from GoDaddy (opens in a new tab)",
   ])
-  await act(async () => tray.querySelector("a")?.click())
-  expect(purchase.elsewhere).toHaveBeenCalledWith(NAME)
-  expect(tray.querySelector("h2")?.textContent).toBe(
-    `Buy ${NAME} from either site`
-  )
-
-  await press(tray, "I've bought it")
-  expect(purchase.bought).toHaveBeenCalledWith(NAME)
-  expect(tray.textContent).toContain(`I can't see ${NAME} at the registry yet.`)
+  expect(tray.textContent).toBe("")
+  expect(purchase.registrant).not.toHaveBeenCalled()
 })
 
-it("connects a name bought elsewhere once the registry shows it", async () => {
-  const { chat, tray } = await draw(
-    "find_domain",
-    { args: {}, result: FOUND },
-    purchaseOf({
-      bought: vi.fn(async () => ({
-        outcome: "connecting" as const,
-        method: "records" as const,
-        email_affected: false,
-        steps: [
-          {
-            type: "CNAME" as const,
-            name: "www",
-            value: "domains.remeai.co.uk",
-          },
-        ],
-      })),
-    })
-  )
-  await press(tray, "Buy directly from a provider")
-  await act(async () => tray.querySelector("a")?.click())
-  await press(tray, "I've bought it")
-  expect(chat.textContent).toContain(`${NAME} is yours.`)
-  expect(chat.querySelectorAll('[data-slot="dns-record"]')).toHaveLength(1)
-  expect(tray.textContent).toBe("")
-})
-
-it("leaves one line on Skip for now, and none of the tray once the chat moves on", async () => {
-  const { chat, tray } = await found()
-  await press(tray, "Skip for now")
-  expect(chat.textContent).toBe("Found 2 namesYou skipped this for now.")
-  expect(tray.textContent).toBe("")
+it("says Skip for now in the chat, folds once it is sent, and gives way to a fresh list", async () => {
+  const first = await found()
+  await press(first.chat, "Skip for now")
+  expect(store.append).toHaveBeenCalledWith(SKIP_DOMAIN)
 
   sessionStorage.clear()
-  store.after = ["user"]
-  const later = await found()
-  expect(later.chat.textContent).toBe(
-    "Found 2 namesNames I offered: sparkleclean.co.uk, sparklecleanbristol.com."
+  store.after = [
+    { role: "user", content: [{ type: "text", text: SKIP_DOMAIN }] },
+  ]
+  const skipped = await found()
+  expect(skipped.chat.textContent).toBe(
+    "Found 3 namesNames I offered: sparkleclean.co.uk, sparkleclean.uk, sparklecleanbristol.com."
   )
-  expect(later.tray.textContent).toBe("")
+
+  store.after.push({
+    role: "assistant",
+    content: [{ type: "tool-call", toolName: "find_domain" }],
+  })
+  const replaced = await found()
+  expect(replaced.chat.textContent).toBe(
+    "Found 3 namesYou skipped choosing, so there's a fresh list below."
+  )
 })
 
-it("stays open when the assistant posts below it, as the site going live does", async () => {
-  store.after = ["assistant"]
-  const { tray } = await found()
-  expect(tray.textContent).toContain("sparkleclean")
+it("stays in the message while the owner chats about something else", async () => {
+  store.after = [{ role: "user" }, { role: "assistant" }]
+  const { chat } = await found()
+  expect(picker(chat)).not.toBeNull()
 })
 
 it("reads every purchase outcome in the card's words", () => {

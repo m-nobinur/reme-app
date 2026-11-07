@@ -22,6 +22,7 @@ type FieldWiring = {
 function Field({
   label,
   hint,
+  hintAbove = false,
   error,
   id,
   icon: FieldIcon,
@@ -34,6 +35,8 @@ function Field({
 }: Omit<ComponentProps<typeof Input>, "id" | "children"> & {
   label: ReactNode
   hint?: ReactNode
+  /** The hint under the label rather than under the control, as a published site's form draws it. */
+  hintAbove?: boolean
   error?: string
   id: string
   /** A glyph inside the start of the input, saying what goes in it. */
@@ -56,12 +59,18 @@ function Field({
     "aria-describedby": describedBy,
     "aria-invalid": error ? true : undefined,
   }
+  const hintLine = hint ? (
+    <p className="text-muted-foreground text-xs" id={hintId}>
+      {hint}
+    </p>
+  ) : null
 
   return (
     <div className={cn("flex flex-col gap-2", className)} data-slot="field">
       <label className="text-sm" htmlFor={id}>
         {label}
       </label>
+      {hintAbove ? hintLine : null}
       <div
         className={cn("relative", FieldIcon && "[&_[data-slot=input]]:pl-10")}
       >
@@ -74,11 +83,7 @@ function Field({
         {typeof children === "function" ? children(wiring) : children}
         {children ? null : <Input {...wiring} {...props} />}
       </div>
-      {hint ? (
-        <p className="text-muted-foreground text-xs" id={hintId}>
-          {hint}
-        </p>
-      ) : null}
+      {hintAbove ? null : hintLine}
       {error ? (
         <p className="text-destructive text-xs" id={errorId} role="alert">
           {error}

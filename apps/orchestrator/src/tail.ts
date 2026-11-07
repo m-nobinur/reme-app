@@ -20,7 +20,9 @@ import {
   redirectsFor,
   routeOf,
 } from "./change.ts"
+import { ownerLogo } from "./developer-rules.ts"
 import { DOCUMENTS_DIR } from "./documents.ts"
+import { MARK_FILE, markKey } from "./photo-files.ts"
 import { SITE_ROOT } from "./revise.ts"
 import { QUOTE_FORM_FILE, quoteFormFile } from "./seed.ts"
 import { changeBase, recordTextChanges } from "./text-changes.ts"
@@ -72,10 +74,11 @@ type DistSandbox = {
 
 /** The slice of the site bucket the upload uses. */
 type DistBucket = {
-  get: (
-    key: string
-  ) => Promise<{ arrayBuffer: () => Promise<ArrayBuffer> } | null>
-  put: (key: string, value: Uint8Array | ArrayBuffer) => Promise<unknown>
+  get: (key: string) => Promise<{ body: ReadableStream; size: number } | null>
+  put: (
+    key: string,
+    value: Uint8Array | ArrayBuffer | ReadableStream
+  ) => Promise<unknown>
 }
 
 /** An earlier revision's artifact: where its files are and the hash of each, its routes and its redirects. */
@@ -134,12 +137,16 @@ const SHA256 = /^([0-9a-f]{64}) [ *](.+)$/
  * Upload `dist/` to `prefix`: a file whose hash matches the previous
  * manifest's is copied inside R2 from the earlier revision, and only the
  * rest is read out of the sandbox. Eight at a time. The hashes come from
- * `sha256sum` in the sandbox, so an unchanged file is never read out, and a
- * file `sha256sum` did not report is hashed here from its bytes. Returns the
+ * `sha256sum` in the sandbox, so an unchanged file is never read out and a
+ * changed one streams to R2 without entering this isolate; a file
+ * `sha256sum` did not report is read and hashed here from its bytes. Returns the
  * manifest's `files` and `routes` and what moved.
  */
 export async function uploadDist(input: {
-  sandbox: DistSandbox
+  sandbox: DistSandbox & {
+    /** Streams a file into the site bucket under `key`, outside this isolate, and returns its size. */
+    saveFile: (path: string, key: string) => Promise<number>
+  }
   sites: DistBucket
   prefix: string
   previous: Previous | null
@@ -172,17 +179,27 @@ export async function uploadDist(input: {
         if (known && known === earlier) {
           const object = await sites.get(`${previous?.base}dist/${file}`)
           if (object) {
-            await sites.put(`${prefix}dist/${file}`, await object.arrayBuffer())
+            await sites.put(
+              `${prefix}dist/${file}`,
+              object.body.pipeThrough(new FixedLengthStream(object.size))
+            )
             files[file] = known
             reused++
             return
           }
         }
-        const body = await sandbox.readFileBuffer(`${SITE_ROOT}/${line}`)
-        await sites.put(`${prefix}dist/${file}`, body)
-        files[file] = known ?? (await sha256(body))
-        bytes += body.byteLength
+        const path = `${SITE_ROOT}/${line}`
+        const key = `${prefix}dist/${file}`
         sent++
+        if (known) {
+          bytes += await sandbox.saveFile(path, key)
+          files[file] = known
+          return
+        }
+        const body = await sandbox.readFileBuffer(path)
+        await sites.put(key, body)
+        files[file] = await sha256(body)
+        bytes += body.byteLength
       })
     )
   )
@@ -368,6 +385,35 @@ type Run = { exit_code: number; key: string | null; ms: number }
 export type Axe = Run
 
 /**
+ * The kept logo's mark (`apps/api` logo.ts) at `MARK_FILE`, where the
+ * favicon set draws it, or no file while the logo has none, so the set
+ * keeps the logo's symbol or the initial. Placed by every build, so the
+ * first build after the mark lands picks it up. The tail's sandbox writes
+ * text, so the bytes cross as base64.
+ */
+async function placeMark(
+  sandbox: TailSandbox,
+  sites: R2Bucket,
+  orgId: string,
+  facts: readonly FactRecord[]
+) {
+  const logo = ownerLogo(facts)
+  const object = logo
+    ? await sites.get(markKey(orgId, logo.id)).catch(() => null)
+    : null
+  const file = `${SITE_ROOT}/${MARK_FILE}`
+  await sandbox.exec(`rm -f ${file}`)
+  if (!object) return
+  await sandbox.writeFile(
+    `${file}.b64`,
+    Buffer.from(await object.arrayBuffer()).toString("base64")
+  )
+  await sandbox.exec(
+    `base64 -d ${file}.b64 > ${file}.tmp && mv ${file}.tmp ${file}; rm -f ${file}.b64 ${file}.tmp`
+  )
+}
+
+/**
  * The end of every build, both lanes (§8.2 "Verify before claiming done"):
  * one `astro check` and one `astro build`, the revision row, the changed
  * files uploaded and the source snapshot. Throws when the build fails, with
@@ -386,12 +432,16 @@ export async function finishRevision(input: {
   facts: readonly FactRecord[]
   /** Streams a file from the site's sandbox into `sites` and returns its size. */
   saveFile: (path: string, key: string) => Promise<number>
+  /** Kills what the Developer's commands left running, before the checks read their files. */
+  stopStrays: () => Promise<unknown>
   /** The Developer's report holds the photos as the pipeline placed them; a quick edit draws its own. */
   holdPhotos?: boolean
 }) {
   const { steps, sandbox, kit, sites, orgId, assignmentId } = input
   const run = (command: string) =>
     sandbox.exec(`cd ${SITE_ROOT} && ${command}`, { timeoutMs: 180_000 })
+
+  await input.stopStrays()
 
   await holdStarterFiles(run)
   if (input.holdPhotos) await holdPhotos(run)
@@ -401,6 +451,7 @@ export async function finishRevision(input: {
     `${SITE_ROOT}/${QUOTE_FORM_FILE}`,
     quoteFormFile(input.facts)
   )
+  await placeMark(sandbox, sites, orgId, input.facts)
   const documents = await steps.do("documents", () =>
     recordDocuments({ run, sandbox, kit, sites, orgId, assignmentId })
   )
@@ -421,6 +472,7 @@ export async function finishRevision(input: {
       ms: since(started),
     }
   })
+  await input.stopStrays()
   // Canonical URLs, the sitemap and robots name the tenant host; without
   // --site the starter leaves them out rather than invent one.
   const host = await steps.do("site host", async () =>
@@ -450,6 +502,8 @@ export async function finishRevision(input: {
       `astro build failed or wrote no pages, fix it before reporting:\n${build.output}`
     )
   }
+  // The build ran the site's own code, which may have left something running.
+  await input.stopStrays()
 
   const revisionId = await steps.do("revision", async () =>
     kit.withOrg({ orgId }, async (db) => {
@@ -493,6 +547,7 @@ export async function finishRevision(input: {
       sandbox: {
         exec: run,
         readFileBuffer: (p) => sandbox.readFileBuffer(p),
+        saveFile: input.saveFile,
       },
       sites,
       prefix,

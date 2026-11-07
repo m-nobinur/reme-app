@@ -21,6 +21,7 @@ import { freshOrg, kit, newAssignment, SUFFIX } from "./fixture.ts"
 // loads the container SDK, which only resolves under workerd.
 vi.mock("../src/sandbox.ts", () => ({
   NPM_REGISTRY_HOST: "registry.npmjs.org",
+  SANDBOX_CLASS: "custom-1vcpu-3gib",
 }))
 
 const url = process.env.DATABASE_URL

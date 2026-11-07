@@ -160,7 +160,7 @@ function ToolFallbackTrigger({
       data-slot="tool-fallback-trigger"
       className={cn(
         "aui-tool-fallback-trigger group/trigger flex w-fit items-center gap-2 px-1 py-1.5 text-chat-step text-muted-foreground transition-colors hover:text-foreground active:translate-y-px",
-        "rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring",
+        "rounded-lg outline-none focus-visible:ring-1 focus-visible:ring-ring",
         className
       )}
       {...props}
@@ -233,7 +233,7 @@ function ToolFallbackArgs({
       <pre
         // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll region has to take focus to be scrolled from the keyboard.
         tabIndex={0}
-        className="aui-tool-fallback-args-value wrap-anywhere max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-muted/50 p-2.5 text-foreground/90 text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring"
+        className="aui-tool-fallback-args-value wrap-anywhere max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-muted/50 p-2.5 text-foreground/90 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
         {argsText}
       </pre>
@@ -474,6 +474,9 @@ function ToolFallbackApproval({
   )
 }
 
+/** Calls the thread draws no row for: `read_skill` is `skill_view`'s old name. */
+const SILENT = new Set(["skill_view", "read_skill"])
+
 const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   toolName,
   toolCallId,
@@ -501,7 +504,8 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
     if (isRequiresAction) setOpen(true)
   }
 
-  if (repeat) return null
+  // A skill view names the work on the waiting line instead, and says nothing once done.
+  if (repeat || SILENT.has(toolName)) return null
 
   if (!isRequiresAction) {
     return (

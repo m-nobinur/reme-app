@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { Approval } from "@workspace/ui/components/assistant/approval"
-import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { ChatServicesProvider } from "@workspace/ui/lib/chat-services"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { expect, it, vi } from "vitest"
+import { ToolCard } from "./fixtures/tool-card"
 
 ;(
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -32,16 +32,18 @@ async function buttons(open: readonly string[] | undefined) {
   await act(async () =>
     root.render(
       createElement(
-        CosToolsProvider,
+        ChatServicesProvider,
         {
           value: {
-            zone: "Europe/London",
-            question: () => null,
-            removeReminder: async () => ({ done: true }),
-            ...(open && { reminderOpen: (id: string) => open.includes(id) }),
+            cosTools: {
+              zone: "Europe/London",
+              question: () => null,
+              removeReminder: async () => ({ done: true }),
+              ...(open && { reminderOpen: (id: string) => open.includes(id) }),
+            },
           },
         },
-        createElement(Approval, {
+        createElement(ToolCard, {
           toolName: "create_reminder",
           toolCallId: "call-1",
           args: { title: "Call Sam", due_at: null },

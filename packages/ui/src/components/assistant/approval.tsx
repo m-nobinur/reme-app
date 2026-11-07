@@ -3,20 +3,7 @@ import {
   type ToolCallMessagePartProps,
   useAuiState,
 } from "@assistant-ui/react"
-import { AskChoice } from "@workspace/ui/components/assistant/ask-choice"
-import { AskDesign } from "@workspace/ui/components/assistant/ask-design"
-import { AskDetails } from "@workspace/ui/components/assistant/ask-details"
-import { AskFact } from "@workspace/ui/components/assistant/ask-fact"
-import { AskOpen } from "@workspace/ui/components/assistant/ask-open"
-import { AskUpload } from "@workspace/ui/components/assistant/ask-upload"
-import {
-  COS_CARDS,
-  COS_QUIET,
-  COS_READS,
-} from "@workspace/ui/components/assistant/cos-tools"
 import { TrayApproval } from "@workspace/ui/components/assistant/decision"
-import { RequestChange } from "@workspace/ui/components/assistant/request-change"
-import { ReviewQuoteForm } from "@workspace/ui/components/assistant/review-quote-form"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
 import { StateIcon } from "@workspace/ui/components/status-line"
 import { toolLine } from "@workspace/ui/lib/activity-copy"
@@ -31,11 +18,10 @@ import { heldText, isHeld, isRepeat } from "@workspace/ui/lib/tool-state"
  * has recorded it, which is why the buttons read their state from the part
  * rather than from a local flag.
  *
- * This is the component the thread's tool-call slot renders. `ask_fact`,
- * `ask_details`, `ask_choice`, `ask_design`, `ask_upload`, `review_quote_form` and `request_change` get
- * their own cards. Any other tool call the runtime is
- * waiting on a human for is an approval, whatever it is called, and anything
- * else falls through to `ToolFallback`.
+ * This is the thread's fallback for a tool call no toolkit entry renders
+ * (`toolkit.tsx` registers every card by its tool name). Any such call the
+ * runtime is waiting on a human for is an approval, whatever it is called,
+ * and anything else falls through to `ToolFallback`.
  */
 
 /** A tool call's input as the rows a person reads before deciding. */
@@ -113,34 +99,10 @@ function ApprovalDecision({ approved }: { approved: boolean }) {
   )
 }
 
-/**
- * The owner's own tools, each with its card. The thread keeps every one of
- * them out of tool groups, reading this same map.
- */
-export const OWNER_CARDS: Record<string, ToolCallMessagePartComponent> = {
-  ask_open: AskOpen,
-  ask_fact: AskFact,
-  ask_details: AskDetails,
-  ask_choice: AskChoice,
-  ask_design: AskDesign,
-  ask_upload: AskUpload,
-  review_quote_form: ReviewQuoteForm,
-  request_change: RequestChange,
-  ...COS_CARDS,
-}
-
 const Approval: ToolCallMessagePartComponent = (props) => {
   const { approval, respondToApproval, toolName } = props
   const held = useAuiState((s) => isHeld(s.message.parts, props.toolCallId))
   if (isRepeat(props)) return null
-  const Owned = Object.hasOwn(OWNER_CARDS, toolName)
-    ? OWNER_CARDS[toolName]
-    : Object.hasOwn(COS_READS, toolName)
-      ? COS_READS[toolName]
-      : Object.hasOwn(COS_QUIET, toolName)
-        ? COS_QUIET[toolName]
-        : undefined
-  if (Owned) return <Owned {...props} />
 
   // Only a real approval gate takes the card. A tool paused on an interrupt has
   // no approval to respond to, and `ToolFallback` already offers it a way out.

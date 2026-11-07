@@ -1,4 +1,9 @@
-import { AGENT_NOTE, Blueprint, BUILD_FAILURES } from "@workspace/contracts"
+import {
+  AddressStageName,
+  AGENT_NOTE,
+  Blueprint,
+  BUILD_FAILURES,
+} from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
@@ -6,12 +11,16 @@ import {
   eq,
   events,
   newUlid,
+  offerOf,
+  scheduledJobs,
   sql,
   supersedeFact,
 } from "@workspace/db"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import type { writeText } from "../src/heartbeat-write.ts"
+import { openChat } from "./chat.ts"
 import { freshOrg, kit, newAssignment } from "./fixture.ts"
+import { previewed } from "./site.ts"
 
 // app.ts loads both at import time; neither is reached here.
 vi.mock("../src/sandbox.ts", () => ({
@@ -22,18 +31,21 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 const { insertAssignment } = await import("../src/app.ts")
 const { fallbackBlueprint, planRound } = await import("../src/planner.ts")
 const {
+  addressLine,
   afterFailure,
   decide,
   NARRATED_PER_HOUR,
   narrate,
   noteProblem,
   noteResumed,
+  postNote,
   readyNote,
   readyText,
   resumedText,
   retryingText,
   stoppedText,
   DRAFT_BACK,
+  tryAgain,
 } = await import("../src/retry.ts")
 const { workKey } = await import("../src/sandbox.ts")
 const { advance } = await import("../src/state.ts")
@@ -74,7 +86,13 @@ describe("whether a failed build is started again", () => {
     }
     expect(decide({ ...ended, reason: "constructor" })).toBe("quiet")
     expect(decide({ ...ended, origin: "console" })).toBe("quiet")
-    expect(decide({ ...ended, busy: true })).toBe("quiet")
+  })
+
+  it("leaves a stop to the assistant while another build holds the site", () => {
+    expect(decide({ ...ended, busy: true })).toBe("busy")
+    expect(
+      decide({ ...ended, busy: true, reason: "blueprint.undecided" })
+    ).toBe("quiet")
   })
 })
 
@@ -120,6 +138,33 @@ describe("what the owner reads", () => {
     expect(line).toBe(
       "I couldn't change the small label above your hero title exactly as you asked, so I made the nearest change I could. Have a look, and tell me if you'd like it done another way."
     )
+  })
+
+  it("names the open web address after the first draft by the journey's offer, and nothing once it is settled", () => {
+    const line = (stage: AddressStageName) =>
+      addressLine({ offer: offerOf(stage) })
+    for (const stage of [
+      "none",
+      "unknown",
+      "choosing",
+      "buying_elsewhere",
+    ] as const)
+      expect(line(stage), stage).toBe(
+        "When you'd like to set up your own address, tap Connect on the card."
+      )
+    expect(line("bought")).toBe(
+      "When you're ready to connect your new address, tap Connect on the card."
+    )
+    for (const stage of [
+      "put_off",
+      "declined",
+      "paying",
+      "connecting",
+      "live",
+    ] as const)
+      expect(line(stage), stage).toBe("")
+    for (const stage of AddressStageName.options)
+      expect(line(stage) !== "", stage).toBe(offerOf(stage) !== null)
   })
 
   it("says a change it could not make left the site as it was", () => {
@@ -337,7 +382,12 @@ live("a failed owner build's retry", () => {
   } as unknown as Pick<Env, "ASSIGNMENTS" | "SITES">
 
   /** An owner's build with a plan whose photos were drawn, failed for `reason`. */
-  async function failedBuild(orgId: string, reason: string, key: string) {
+  async function failedBuild(
+    orgId: string,
+    reason: string,
+    key: string,
+    label?: string
+  ) {
     const plan = fallbackBlueprint({ facts: [], recent: [] })
     const drawn: Blueprint = {
       ...plan,
@@ -353,6 +403,7 @@ live("a failed owner build's retry", () => {
         withhold: [],
         lane: "full",
         change_kind: null,
+        ...(label ? { label } : {}),
       })
       if (!("row" in result)) throw new Error("not created")
       await db
@@ -374,51 +425,130 @@ live("a failed owner build's retry", () => {
     return ids
   }
 
-  it("says once that a failed change gave the earlier draft back, and starts nothing", async () => {
-    const orgId = await freshOrg(kit)
-    const draft = await newAssignment(kit, orgId)
-    for (const to of [
-      "briefing",
-      "planning",
-      "implementing",
-      "validating",
-      "preview_ready",
-      "awaiting_review",
-    ] as const) {
-      await advance(kit, draft, to)
-    }
-    // As `holdDraft` leaves it: paused, which frees the site for the change.
-    await advance(kit, draft, "paused", { reason: "change.held" })
-    const change = await kit.withOrg({ orgId }, async (db) => {
-      // A build, since a revise would need the draft's revision row: only
-      // the link to the draft decides this branch.
-      const made = await insertAssignment(db, orgId, "k-draft", true, {
-        kind: "site.build",
+  /** A change to the owner's unpublished draft, failed for `reason`, with the draft given back. */
+  async function failedDraftChange(lane: "full" | "quick", reason: string) {
+    const site = await previewed()
+    await advance(kit, site.ids, "awaiting_review")
+    const change = await kit.withOrg({ orgId: site.orgId }, async (db) => {
+      const made = await insertAssignment(db, site.orgId, `k-${lane}`, true, {
+        kind: "site.revise",
         goal: "Make the headline shorter.",
         model: "A",
         withhold: [],
-        lane: "full",
+        lane,
         change_kind: "copy",
+        draft: site.revisionId,
       })
       if (!("row" in made)) throw new Error("not created")
-      await db
-        .update(assignments)
-        .set({ revisionOfAssignmentId: draft.assignmentId })
-        .where(eq(assignments.id, made.row.id))
       return made.row.id
     })
-    const ids = await fail(
-      { orgId, assignmentId: change },
+    const ids = await fail({ orgId: site.orgId, assignmentId: change }, reason)
+    return { ...site, change: ids }
+  }
+
+  it("keeps the Try again pill when a change to a draft stops for good, and starts nothing", async () => {
+    const site = await failedDraftChange(
+      "quick",
       "gates.repair_budget_exhausted"
     )
     created.length = 0
-    const first = await afterFailure(env, kit, ids)
+    const first = await afterFailure(env, kit, site.change)
     expect(first).toEqual({
       retry_id: null,
-      note: { key: `site.draft_back:${change}`, text: DRAFT_BACK },
+      note: {
+        key: `site.draft_back:${site.change.assignmentId}`,
+        text: DRAFT_BACK,
+        choices: tryAgain("site.revise"),
+      },
     })
-    expect(await afterFailure(env, kit, ids)).toEqual(first)
+    expect(await afterFailure(env, kit, site.change)).toEqual(first)
     expect(created).toEqual([])
+  })
+
+  it("retries a full change to a draft from the same draft, then keeps the pill if it fails again", async () => {
+    const site = await failedDraftChange(
+      "full",
+      "gates.repair_budget_exhausted"
+    )
+    created.length = 0
+    const first = await afterFailure(env, kit, site.change)
+    expect(first.retry_id).toEqual(created[0])
+    expect(first.note?.key).toBe(`site.retrying:${site.change.assignmentId}`)
+    expect(await afterFailure(env, kit, site.change)).toEqual(first)
+    expect(created).toHaveLength(1)
+
+    const [row] = await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db
+        .select({ of: assignments.revisionOfAssignmentId })
+        .from(assignments)
+        .where(eq(assignments.id, first.retry_id as string))
+    )
+    expect(row?.of).toBe(site.ids.assignmentId)
+
+    const retry = await fail(
+      { orgId: site.orgId, assignmentId: first.retry_id as string },
+      "developer.stalled"
+    )
+    expect(await afterFailure(env, kit, retry)).toEqual({
+      retry_id: null,
+      note: {
+        key: `site.draft_back:${retry.assignmentId}`,
+        text: DRAFT_BACK,
+        choices: tryAgain("site.revise"),
+      },
+    })
+    expect(created).toHaveLength(1)
+  })
+
+  it("asks for the assistant's turn when a build stops while another holds the site, and posts nothing itself", async () => {
+    const orgId = await freshOrg(kit)
+    const ids = await failedBuild(orgId, "gates.repair_budget_exhausted", "k-a")
+    await kit.withOrg({ orgId }, (db) =>
+      insertAssignment(db, orgId, "k-b", true, {
+        kind: "site.build",
+        goal: "Build the site again.",
+        model: "A",
+        withhold: [],
+        lane: "full",
+        change_kind: null,
+      })
+    )
+    created.length = 0
+    expect(await afterFailure(env, kit, ids)).toEqual({
+      retry_id: null,
+      note: null,
+    })
+    expect(created).toEqual([])
+    expect(await notesOf(orgId, ids.assignmentId)).toEqual([
+      expect.objectContaining({ kind: "stopped", next: "none" }),
+    ])
+    const wake = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ at: scheduledJobs.nextRunAt })
+        .from(scheduledJobs)
+        .where(sql`${scheduledJobs.kind} = 'cos_wake'`)
+    )
+    expect(wake).toHaveLength(1)
+  })
+
+  it("carries the change's label into its retry, so the ready line names it", async () => {
+    const orgId = await freshOrg(kit)
+    const ids = await failedBuild(
+      orgId,
+      "gates.repair_budget_exhausted",
+      "k-label",
+      "your hero title"
+    )
+    const { retry_id } = await afterFailure(env, kit, ids)
+    const [made] = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ payload: events.payload })
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${retry_id} and ${events.type} = 'assignment.created'`
+        )
+    )
+    expect(made?.payload).toMatchObject({ label: "your hero title" })
   })
 
   it("starts one retry with the plan, however often the step runs, and says so", async () => {
@@ -477,6 +607,9 @@ live("a failed owner build's retry", () => {
       note: {
         key: `site.stopped:${retry.assignmentId}`,
         text: "Your website build couldn't finish: it stopped making progress. Say try again, or tell me what to change.",
+        choices: [
+          { label: "Try again", send: "Try building my website again." },
+        ],
       },
     })
     expect(created).toHaveLength(1)
@@ -593,7 +726,9 @@ live("a failed owner build's retry", () => {
     const ready = await readyNote(kit, ids)
     await readyNote(kit, ids)
     expect(ready?.key).toBe(`site.ready:${ids.assignmentId}`)
-    expect(ready?.text).toMatch(/^Your draft is ready, with /)
+    expect(ready?.text).toMatch(
+      /^Your draft is ready, with .* When you'd like to set up your own address, tap Connect on the card\.$/
+    )
     const done = (await notesOf(orgId, ids.assignmentId)).filter(
       (n) => n.kind === "done"
     )
@@ -602,7 +737,7 @@ live("a failed owner build's retry", () => {
     expect(done[0]?.pages).toEqual(expect.arrayContaining(["Home"]))
   })
 
-  it("offers what the build left out with the ready line, once per missing fact", async () => {
+  it("asks nothing with the ready line, whatever the build left out", async () => {
     const orgId = await freshOrg(kit)
     const ids = await newAssignment(kit, orgId)
     const ask = (field: string, question: string) => ({
@@ -658,19 +793,11 @@ live("a failed owner build's retry", () => {
         .where(eq(assignments.id, ids.assignmentId))
     })
     const ready = await readyNote(kit, ids)
-    expect(ready?.questions).toEqual({
-      kind: "offer",
-      assignment_id: ids.assignmentId,
-      questions: [
-        {
-          id: expect.any(String),
-          text: "Are you insured, and for how much?",
-          input: { kind: "text", maxLength: 500, email: false },
-          skippable: true,
-          field: "business.insurance",
-        },
-      ],
+    expect(ready).toEqual({
+      key: `site.ready:${ids.assignmentId}`,
+      text: expect.stringMatching(/^Your draft is ready/),
     })
+    expect(ready?.text).not.toMatch(/left out|Want me to add/)
   })
 
   it("notes every mid-build resume once, and says only a stall in the chat", async () => {
@@ -711,6 +838,28 @@ live("a failed owner build's retry", () => {
         next: "retrying",
       }),
       expect.objectContaining({ kind: "resumed", attempt: 3 }),
+    ])
+  })
+})
+
+live("a build note's kind in the chat", () => {
+  it("posts a ready draft as done, a stop or a draft given back as a note, and the rest as updates", async () => {
+    const orgId = await freshOrg(kit)
+    await openChat(kit, orgId)
+    const id = crypto.randomUUID()
+    for (const key of ["ready", "stopped", "draft_back", "retrying"])
+      await postNote(kit, orgId, { key: `site.${key}:${id}`, text: key })
+    const rows = await kit.withOrg({ orgId }, (db) =>
+      db.execute<{ text: string; kind: string }>(sql`
+        select p->>'text' as text, (select k->>'data' from jsonb_array_elements(content->'parts') k where k->>'type' = 'data-kind') as kind
+        from conversation_messages, jsonb_array_elements(content->'parts') p
+        where p->>'type' = 'text' order by seq`)
+    )
+    expect([...rows].map((r) => [r.text, r.kind])).toEqual([
+      ["ready", "done"],
+      ["stopped", "note"],
+      ["draft_back", "note"],
+      ["retrying", "update"],
     ])
   })
 })

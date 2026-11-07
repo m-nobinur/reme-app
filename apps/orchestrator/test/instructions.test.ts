@@ -34,6 +34,7 @@ import { fallbackBlueprint } from "../src/planner.ts"
 // The planner's brief.ts names the registry host from sandbox.ts, which loads the container SDK.
 vi.mock("../src/sandbox.ts", () => ({
   NPM_REGISTRY_HOST: "registry.npmjs.org",
+  SANDBOX_CLASS: "custom-1vcpu-3gib",
 }))
 
 const fact = (key: string, value: unknown): FactRecord => ({
@@ -255,6 +256,11 @@ describe("the pack voice slot", () => {
 
   it("carries the cleaning pack's notes and none for an industry without a pack", () => {
     expect(packVoice([cleaning]).length).toBeGreaterThan(0)
+    const voice = packVoice([cleaning]).join(" ")
+    expect(voice).toContain(
+      "a walk-through, a quote visit or a call is a step only when a fact says the business does it"
+    )
+    expect(voice).not.toContain("the walk-through or quote,")
     expect(instructions(brief([cleaning]), 20)).toContain("Industry pack")
     const other = fact("business.industry", { name: "X", category: null })
     expect(instructions(brief([other]), 20)).not.toContain("Industry pack")

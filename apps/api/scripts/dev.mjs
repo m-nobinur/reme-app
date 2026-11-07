@@ -14,6 +14,7 @@
  */
 import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
+import { ensureLocalSites } from "../../../scripts/lib.mjs"
 
 const BINDING = "CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE"
 const api = fileURLToPath(new URL("..", import.meta.url))
@@ -33,6 +34,9 @@ if (!process.env[BINDING]) {
   }
   process.env[BINDING] = process.env.DATABASE_URL
 }
+
+// The links the app shows open on the local router, not the staging host.
+ensureLocalSites()
 
 // Its own devtools port. `apps/web` runs workerd too, and both default to 9229:
 // Vite steps aside to 9230 when it loses the race, wrangler exits with

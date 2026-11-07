@@ -7,12 +7,14 @@ import { connect, connectionString } from "../src/client.ts"
 import { activeDomainHost, domainHeldElsewhere } from "../src/domains.ts"
 import {
   APP_ROLE,
+  channelLinkOf,
   ENTER_APP_ROLE,
   LIMITS,
   listOrgIds,
   ORG_SETTING,
   type OrgScopedDb,
   pgCode,
+  redeemChannelCode,
   resolveDomainHost,
   resolveOrg,
   resolveOrgBySlug,
@@ -20,17 +22,23 @@ import {
   type Tenancy,
   tenancy,
   USER_SETTING,
+  whatsAppAccountByPhone,
   withOrg,
 } from "../src/tenancy.ts"
 import {
+  ACCOUNT_OF,
   clearTwoOrgs,
   DOMAIN_OF,
   DOMAIN_PENDING,
   ORG_A,
   ORG_ABSENT,
   ORG_B,
+  PHONE_OF,
+  SENDER_OF,
+  SENDER_REVOKED,
   seedTwoOrgs,
   USER_OF,
+  USER_PENDING,
   WORKOS_ORG_OF,
   WORKOS_USER_OF,
   WORKOS_USER_PENDING,
@@ -235,6 +243,70 @@ const SECURITY_DEFINER_FUNCTIONS: Record<
           await call(ORG_B, "tenancy-probe-c.example.com"),
           await call(ORG_B, ""),
         ],
+      }
+    },
+  },
+  // The WhatsApp webhook's way to an org (migration 0035): an active
+  // account by Meta's phone number id, and nothing for a disabled one, an
+  // unknown id or an empty one.
+  whatsapp_account_by_phone: {
+    probe: async (raw) => {
+      const call = async (phone: string) => {
+        const [row] = await raw<{ org_id: string | null }[]>`
+          select org_id from public.whatsapp_account_by_phone(${phone})`
+        return row?.org_id ?? null
+      }
+      let disabled: string | null = null
+      await raw
+        .begin(async (tx) => {
+          await tx`update whatsapp_accounts set status = 'disabled' where org_id = ${ORG_B}`
+          const [row] = await tx<{ org_id: string }[]>`
+            select org_id from public.whatsapp_account_by_phone(${PHONE_OF.b})`
+          disabled = row?.org_id ?? null
+          throw new Error(ROLLED_BACK)
+        })
+        .catch(() => undefined)
+      return {
+        granted: [await call(PHONE_OF.a), await call(PHONE_OF.b)],
+        refused: [disabled, await call("100000000000009"), await call("")],
+      }
+    },
+  },
+  // The webhook's way to a sender's link (migration 0035): live links on the
+  // account named, and nothing for another org's account or a revoked link.
+  channel_link_of: {
+    probe: async (raw) => {
+      const call = async (account: string, sender: string) => {
+        const [row] = await raw<{ org_id: string | null }[]>`
+          select org_id from public.channel_link_of(${account}::uuid, ${sender})`
+        return row?.org_id ?? null
+      }
+      return {
+        granted: [
+          await call(ACCOUNT_OF.a, SENDER_OF.a),
+          await call(ACCOUNT_OF.b, SENDER_OF.b),
+        ],
+        refused: [
+          await call(ACCOUNT_OF.a, SENDER_OF.b),
+          await call(ACCOUNT_OF.b, SENDER_OF.a),
+          await call(ACCOUNT_OF.a, SENDER_REVOKED),
+          await call(ACCOUNT_OF.a, ""),
+        ],
+      }
+    },
+  },
+  // The webhook's code redeem (migration 0035). It writes, so the shape is the
+  // probe, as for `claim_due_jobs`; its refusals are driven in "channels hold
+  // their shape".
+  redeem_channel_code: {
+    probe: async (raw) => {
+      const [row] = await raw<{ result: string }[]>`
+        select pg_get_function_result(
+          'public.redeem_channel_code(text, uuid, text, text)'::regprocedure) as result`
+      const shape = "TABLE(link_id uuid, org_id uuid, user_id uuid)"
+      return {
+        granted: [row?.result === shape ? shape : null],
+        refused: [],
       }
     },
   },
@@ -2096,5 +2168,120 @@ describe("Search Console tables hold their shape", () => {
       left = row?.n ?? -1
     })
     expect(left).toBe(0)
+  })
+})
+
+describe("channels hold their shape", () => {
+  const kit = tenancy(process.env.DATABASE_URL ?? "")
+  afterAll(() => kit.close())
+
+  let n = 0
+  /** A fresh code in `org` for `user`, inserted as the migrator; its hash. */
+  const code = async (
+    o: { org?: string; user?: string; expired?: boolean; used?: boolean } = {}
+  ) => {
+    n += 1
+    const hash = `channels_shape_${n}`.padEnd(43, "x")
+    const { sql: raw } = connect()
+    try {
+      await raw`
+        insert into channel_link_codes (hash, org_id, user_id, kind, expires_at, used_at)
+        values (${hash}, ${o.org ?? ORG_A}, ${o.user ?? USER_OF.a}, 'whatsapp',
+          now() + ${o.expired ? "-1 minute" : "10 minutes"}::interval,
+          case when ${o.used === true}::boolean then now() end)`
+    } finally {
+      await raw.end()
+    }
+    return hash
+  }
+  const redeem = (
+    hash: string,
+    accountId = ACCOUNT_OF.a,
+    sender = "447700900201"
+  ) =>
+    redeemChannelCode(kit, {
+      hash,
+      accountId,
+      externalId: sender,
+      label: "•••• 0201",
+    })
+
+  it("finds an account by its phone number id, and a link by its sender", async () => {
+    expect(await whatsAppAccountByPhone(kit, PHONE_OF.b)).toEqual({
+      accountId: ACCOUNT_OF.b,
+      orgId: ORG_B,
+    })
+    expect(await whatsAppAccountByPhone(kit, "100000000000009")).toBeNull()
+    expect(await channelLinkOf(kit, ACCOUNT_OF.a, SENDER_OF.a)).toMatchObject({
+      orgId: ORG_A,
+      userId: USER_OF.a,
+    })
+    expect(await channelLinkOf(kit, ACCOUNT_OF.b, SENDER_OF.a)).toBeNull()
+  })
+
+  it("redeems a code once, links the sender in the code's org, and keeps one live link", async () => {
+    const first = await code()
+    const link = await redeem(first)
+    expect(link).toMatchObject({ orgId: ORG_A, userId: USER_OF.a })
+    expect(await channelLinkOf(kit, ACCOUNT_OF.a, "447700900201")).toEqual(link)
+    expect(await redeem(first)).toBeNull()
+    // The same sender with a new code keeps its link rather than a second one.
+    expect(await redeem(await code())).toEqual(link)
+  })
+
+  it("refuses an expired code, a used code, another org's account and a former member", async () => {
+    expect(await redeem(await code({ expired: true }))).toBeNull()
+    expect(await redeem(await code({ used: true }))).toBeNull()
+    expect(await redeem(await code({ user: USER_PENDING }))).toBeNull()
+    const crossed = await code()
+    expect(await redeem(crossed, ACCOUNT_OF.b, "447700900202")).toBeNull()
+    expect(await channelLinkOf(kit, ACCOUNT_OF.b, "447700900202")).toBeNull()
+    // The refusal spent nothing: the code still works on its own account.
+    expect(await redeem(crossed, ACCOUNT_OF.a, "447700900202")).toMatchObject({
+      orgId: ORG_A,
+    })
+  })
+
+  it("holds one account per org and one number across orgs, with a sealed token", async () => {
+    const account = (
+      tx: TransactionSql,
+      o: { org?: string; phone?: string; token?: string }
+    ) => tx`
+      insert into whatsapp_accounts (org_id, waba_id, phone_number_id, display_number, display_name, token_ciphertext, source)
+      values (${o.org ?? ORG_A}, '1', ${o.phone ?? "100000000000003"}, '+447700900003', 'Probe',
+        ${o.token ?? "v1.iv.ct"}, 'dev')`
+    expect(await inTransaction((tx) => account(tx, {}))).toBe(UNIQUE)
+    // Org B's own account goes first, so its one-per-org key is not what refuses.
+    const inPlaceOfB = (o: { phone?: string; token?: string }) =>
+      inTransaction(async (tx) => {
+        await tx`delete from channel_inbound where org_id = ${ORG_B}`
+        await tx`delete from channel_links where org_id = ${ORG_B}`
+        await tx`delete from whatsapp_accounts where org_id = ${ORG_B}`
+        await account(tx, { org: ORG_B, ...o })
+      })
+    expect(await inPlaceOfB({})).toBeUndefined()
+    expect(await inPlaceOfB({ phone: PHONE_OF.a })).toBe(UNIQUE)
+    expect(await inPlaceOfB({ token: "plaintext" })).toBe(CHECK)
+  })
+
+  it("keeps a link inside its org: account, member and conversation", async () => {
+    const link = (
+      tx: TransactionSql,
+      o: { account?: string; user?: string; conversation?: string }
+    ) => tx`
+      insert into channel_links (org_id, user_id, account_id, external_id, label, conversation_id)
+      values (${ORG_A}, ${o.user ?? USER_OF.a}, ${o.account ?? ACCOUNT_OF.a}, '447700900301',
+        'x', ${o.conversation ?? null})`
+    expect(await inTransaction((tx) => link(tx, {}))).toBeUndefined()
+    for (const [why, o] of [
+      ["another org's account", { account: ACCOUNT_OF.b }],
+      ["another org's person", { user: USER_OF.b }],
+      [
+        "another org's conversation",
+        { conversation: "00000000-0000-4000-b000-000000000015" },
+      ],
+    ] as const) {
+      expect(await inTransaction((tx) => link(tx, o)), why).toBe(FOREIGN_KEY)
+    }
   })
 })

@@ -200,10 +200,16 @@ export function createTee(options: {
     subscriber(observation) {
       // Streamed fragments: the completed message that follows holds the same text.
       if (observation.type.endsWith("_delta")) return
+      const payload = redact(observation)
+      // Every other writer's turn row names its role and model at the top.
+      if (observation.type === "turn") {
+        if (observation.agentName) payload.role = observation.agentName
+        payload.model = observation.request.requestedModel
+      }
       pending.push(
         row(
           `runtime.${observation.type}`,
-          redact(observation),
+          payload,
           observation.timestamp ?? clock().toISOString()
         )
       )

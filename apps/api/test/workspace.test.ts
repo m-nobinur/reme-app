@@ -319,6 +319,11 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         derived: [{ rule: "facts_missing", keys: REQUIRED }],
       },
       time_zone: null,
+      journey: {
+        website: "none",
+        address: { stage: "none", offer: "connect" },
+        google: "waiting_for_domain",
+      },
     })
   })
 
@@ -1800,9 +1805,10 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       await s.state(made.id, "cancelled")
     })
 
-    it("leaves out a draft a change holds, and lists it again once nothing holds it", async () => {
+    it("leaves out a draft a change holds, names it on the change, and lists it again once nothing holds it", async () => {
       const s = seed(kit, changes)
       const held = await s.assignment("paused")
+      const revision = await s.revision(held, 1)
       const change = await s.assignment("implementing", { kind: "site.revise" })
       await kit.withOrg({ orgId: changes.orgId }, (db) =>
         db
@@ -1810,13 +1816,19 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           .set({ revisionOfAssignmentId: held })
           .where(eq(assignments.id, change))
       )
-      const builds = async () =>
-        WorkspaceStatus.parse(
-          await (await workspace(changes)).json()
-        ).builds.map((b) => b.assignment_id)
+      const read = async () =>
+        WorkspaceStatus.parse(await (await workspace(changes)).json()).builds
+      const builds = async () => (await read()).map((b) => b.assignment_id)
       expect(await builds()).toEqual([change])
+      // The draft card reads it from here, so a reload mid-update keeps it.
+      expect((await read())[0]?.held).toEqual({
+        revision_id: revision,
+        version: 1,
+        assignment_id: held,
+      })
       await s.state(change, "cancelled")
       expect(await builds()).toEqual([held])
+      expect((await read())[0]?.held).toBeUndefined()
       await s.state(held, "cancelled")
     })
 

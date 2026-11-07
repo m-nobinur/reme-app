@@ -1,8 +1,11 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers"
 import { Buffer } from "node:buffer"
-import { posix } from "node:path"
-import { Files, SandboxFileError } from "@cloudflare/sandbox"
-import { NPM_REGISTRY_HOST, POOL_SIZE, SLEEP_AFTER } from "./sandbox.ts"
+import {
+  NPM_REGISTRY_HOST,
+  POOL_SIZE,
+  SANDBOX_INSTANCE,
+  SLEEP_AFTER,
+} from "./sandbox.ts"
 
 /**
  * The container behind every site (ADR-031, as amended for Sandbox SDK 1.0):
@@ -30,7 +33,7 @@ const SYSTEM = "/etc/ssl/certs/ca-certificates.system.crt"
  * from the Worker's env goes in.
  */
 const EXEC_ENV = {
-  HOME: "/home/reme",
+  HOME: "/tmp/home",
   PLAYWRIGHT_BROWSERS_PATH: "/opt/pw-browsers",
   NODE_EXTRA_CA_CERTS: CA,
   // Egress refuses telemetry.astro.build, which logged an error on every run.
@@ -45,14 +48,47 @@ const EXEC_ENV = {
 /**
  * Trust the intercept's CA, as the 0.12 control server did at start: wait
  * for it, then write the bundle from the image's copy and the current CA.
- * Run again for the same container, it writes the same bundle.
+ * Then make the warm-revision marker's directory. Run again for the same
+ * container, it does the same.
  */
 const TRUST = [
   "sh",
   "-c",
   `[ -e ${SYSTEM} ] || { cp ${BUNDLE} ${SYSTEM}.tmp && mv ${SYSTEM}.tmp ${SYSTEM}; }
-timeout 10 sh -c 'until [ -s ${CA} ]; do sleep 0.1; done' && cat ${SYSTEM} ${CA} >${BUNDLE}.tmp && mv ${BUNDLE}.tmp ${BUNDLE}`,
+timeout 10 sh -c 'until [ -s ${CA} ]; do sleep 0.1; done' && cat ${SYSTEM} ${CA} >${BUNDLE}.tmp && mv ${BUNDLE}.tmp ${BUNDLE} &&
+mkdir -p ${WORKSPACE}/.reme`,
 ]
+
+/**
+ * Set on every command the code does not mark privileged, so the stray sweep
+ * can tell the Developer's processes and the site's build code from the
+ * code's own steps: every command runs as root with every capability, since
+ * the org's own container is the boundary (as Hermes skips its command
+ * guards in a container).
+ */
+const STRAY = "REME_STRAY=1"
+
+/**
+ * The file calls, as commands. The path comes in `REME_PATH`; a write's
+ * bytes come on stdin. A write makes its directory, as 0.12 did.
+ */
+export const FILE_SCRIPTS = {
+  read: 'cat -- "$REME_PATH"',
+  write: 'mkdir -p -- "$(dirname -- "$REME_PATH")" && cat >"$REME_PATH"',
+  exists: 'test -e "$REME_PATH" || test -L "$REME_PATH"',
+  mkdir: 'mkdir -- "$REME_PATH"',
+  mkdirAll: 'mkdir -p -- "$REME_PATH"',
+  remove: 'rm -- "$REME_PATH"',
+}
+
+/**
+ * Kills every process carrying the `STRAY` marker: what the Developer's
+ * commands or the site's own build code left running (a `setsid` escapes the
+ * timeout), so none of it touches the tail's files. Each pass stops what it
+ * finds before killing it, so nothing forks past it, and passes repeat until
+ * one finds nothing. Never the container's own process or this shell.
+ */
+export const STOP_STRAYS = `for _ in $(seq 20); do found=; for s in /proc/[0-9]*/status; do p=\${s#/proc/}; p=\${p%/status}; { [ "$p" = 1 ] || [ "$p" = $$ ]; } && continue; tr '\\0' '\\n' 2>/dev/null <"/proc/$p/environ" | grep -qx '${STRAY}' && kill -STOP "$p" 2>/dev/null && found="$found $p"; done; [ -z "$found" ] && break; kill -KILL $found 2>/dev/null; done; true`
 
 /**
  * What bash runs for every `exec`: the cwd and the command come in its env.
@@ -86,17 +122,20 @@ type ExecOptions = {
   cwd?: string
   env?: Record<string, string>
   timeout?: number
+  /**
+   * The code's own step, outside the site: the stray sweep never stops it.
+   * flue's adapter never passes it, so every model command is swept.
+   */
+  privileged?: boolean
 }
 
 export class RemeSandbox extends DurableObject<Env> {
-  private readonly files: Files
   private setup: Promise<void> | null = null
   private ready = false
   private renewedAt = 0
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
-    this.files = new Files(this.container)
     const container = ctx.container
     // A restarted Durable Object has lost the timeout; the platform keeps
     // the container.
@@ -153,7 +192,7 @@ export class RemeSandbox extends DurableObject<Env> {
       this.renewedAt = Date.now()
       this.container.start({
         image: this.container.images.sandbox,
-        instance: "standard-2",
+        instance: SANDBOX_INSTANCE,
         enableInternet: false,
       })
     }
@@ -222,31 +261,7 @@ export class RemeSandbox extends DurableObject<Env> {
    */
   async exec(command: string, options: ExecOptions = {}) {
     return this.use(async () => {
-      const seconds = options.timeout ? Math.ceil(options.timeout / 1000) : 0
-      // The command reaches bash in a variable, never in argv: as in a 0.12
-      // session, no command line holds it, so its own `pkill -f` cannot match
-      // the shell running it (the screenshot step's does). Un-exported, so
-      // what it starts never sees it. The process starts in /workspace and
-      // changes directory itself: on Containers a spawn into a missing
-      // directory throws "Command `bash` was not found", which ended the
-      // Developer's `mkdir -p /workspace/site` on staging.
-      const shell = ["bash", "-c", EXEC_SCRIPT]
-      const process = await this.container.exec(
-        seconds ? ["timeout", "--kill-after=5", `${seconds}`, ...shell] : shell,
-        {
-          cwd: WORKSPACE,
-          env: {
-            ...EXEC_ENV,
-            ...options.env,
-            REME_COMMAND: command,
-            REME_CWD: options.cwd ?? WORKSPACE,
-          },
-        }
-      )
-      const out = await process.output()
-      if (seconds && out.exitCode === TIMED_OUT) {
-        throw new Error(`Command timeout after ${options.timeout}ms`)
-      }
+      const out = await this.run(command, options)
       return {
         success: out.exitCode === 0,
         exitCode: out.exitCode,
@@ -256,34 +271,97 @@ export class RemeSandbox extends DurableObject<Env> {
     })
   }
 
+  private async run(
+    command: string,
+    options: ExecOptions & { stdin?: ReadableStream<Uint8Array> }
+  ) {
+    const seconds = options.timeout ? Math.ceil(options.timeout / 1000) : 0
+    const out = await (await this.spawn(command, options)).output()
+    if (seconds && out.exitCode === TIMED_OUT) {
+      throw new Error(`Command timeout after ${options.timeout}ms`)
+    }
+    return out
+  }
+
+  private spawn(
+    command: string,
+    options: ExecOptions & { stdin?: ReadableStream<Uint8Array> }
+  ) {
+    const seconds = options.timeout ? Math.ceil(options.timeout / 1000) : 0
+    // The command reaches bash in a variable, never in argv: as in a 0.12
+    // session, no command line holds it, so its own `pkill -f` cannot match
+    // the shell running it (the screenshot step's does). Un-exported, so
+    // what it starts never sees it. The process starts in /workspace and
+    // changes directory itself: on Containers a spawn into a missing
+    // directory throws "Command `bash` was not found", which ended the
+    // Developer's `mkdir -p /workspace/site` on staging.
+    const shell = ["bash", "-c", EXEC_SCRIPT]
+    return this.container.exec(
+      seconds ? ["timeout", "--kill-after=5", `${seconds}`, ...shell] : shell,
+      {
+        cwd: WORKSPACE,
+        // Root: the image's own user, reme, has no capabilities locally.
+        user: "0:0",
+        env: {
+          ...EXEC_ENV,
+          ...(options.privileged ? {} : { REME_STRAY: "1" }),
+          ...options.env,
+          REME_COMMAND: command,
+          REME_CWD: options.cwd ?? WORKSPACE,
+        },
+        ...(options.stdin ? { stdin: options.stdin } : {}),
+      }
+    )
+  }
+
+  /** One file call; a failure throws with what the command said. */
+  private async file(
+    script: keyof typeof FILE_SCRIPTS,
+    path: string,
+    stdin?: ReadableStream<Uint8Array>
+  ) {
+    return this.use(async () => {
+      const out = await this.run(FILE_SCRIPTS[script], {
+        env: { REME_PATH: path },
+        ...(stdin ? { stdin } : {}),
+      })
+      if (out.exitCode !== 0 && script !== "exists")
+        throw new Error(text(out.stderr).trim() || `${script} failed: ${path}`)
+      return out
+    })
+  }
+
   /** A file as text, or as base64 with `encoding: "base64"`, as 0.12 returned it. */
   async readFile(path: string, options: { encoding?: string } = {}) {
-    return this.use(async () => {
-      const file = await this.files.readFile(path, { cwd: WORKSPACE })
-      const bytes = await file.arrayBuffer()
-      return {
-        content:
-          options.encoding === "base64"
-            ? Buffer.from(bytes).toString("base64")
-            : text(bytes),
-      }
-    })
+    const { stdout } = await this.file("read", path)
+    return {
+      content:
+        options.encoding === "base64"
+          ? Buffer.from(stdout).toString("base64")
+          : text(stdout),
+    }
   }
 
   /**
    * Stream a file from the container into the sites bucket under `key` and
    * return its size. A site's tar is tens of MB: as a base64 string decoded
-   * in the caller it ran the Developer's isolate out of memory (#593).
+   * in the caller it ran the Developer's isolate out of memory (#593). A file
+   * that changes length on the way fails the put.
    */
   async saveFile(path: string, key: string): Promise<number> {
     return this.use(async () => {
-      const at = { cwd: WORKSPACE }
-      const size = Number((await this.files.stat(path, at)).size)
-      const file = await this.files.readFile(path, at)
+      const env = { REME_PATH: path }
+      const sized = await this.run('stat -L -c %s -- "$REME_PATH"', { env })
+      const size = Number(text(sized.stdout).trim())
+      if (sized.exitCode !== 0 || !Number.isSafeInteger(size))
+        throw new Error(text(sized.stderr).trim() || `cannot read ${path}`)
+      const reading = await this.spawn(FILE_SCRIPTS.read, { env })
+      if (!reading.stdout) throw new Error(`no output reading ${path}`)
       await this.env.SITES.put(
         key,
-        file.body ? file.body.pipeThrough(new FixedLengthStream(size)) : ""
+        reading.stdout.pipeThrough(new FixedLengthStream(size))
       )
+      if ((await reading.exitCode) !== 0) throw new Error(`cannot read ${path}`)
       return size
     })
   }
@@ -297,52 +375,37 @@ export class RemeSandbox extends DurableObject<Env> {
     content: string | Uint8Array | ReadableStream<Uint8Array>,
     options: { encoding?: string } = {}
   ) {
-    return this.use(async () => {
-      const body =
-        typeof content === "string" && options.encoding === "base64"
-          ? Buffer.from(content, "base64")
-          : content
-      const at = { cwd: WORKSPACE }
-      try {
-        await this.files.writeFile(path, body, at)
-      } catch (error) {
-        if (!(SandboxFileError.is(error) && error.code === "ENOENT"))
-          throw error
-        // The open failed, so a stream is still unread and can go again.
-        const dir = posix.dirname(posix.resolve(WORKSPACE, path))
-        await this.files.mkdir(dir, { recursive: true })
-        await this.files.writeFile(path, body, at)
-      }
-      return { success: true }
-    })
+    const stdin =
+      content instanceof ReadableStream
+        ? content
+        : new Blob([
+            typeof content === "string" && options.encoding === "base64"
+              ? Buffer.from(content, "base64")
+              : content,
+          ]).stream()
+    await this.file("write", path, stdin)
+    return { success: true }
   }
 
   async exists(path: string) {
-    return this.use(async () => {
-      try {
-        await this.files.stat(path, { cwd: WORKSPACE })
-        return { exists: true }
-      } catch (error) {
-        if (SandboxFileError.is(error) && error.code === "ENOENT") {
-          return { exists: false }
-        }
-        throw error
-      }
-    })
+    return { exists: (await this.file("exists", path)).exitCode === 0 }
   }
 
   async mkdir(path: string, options: { recursive?: boolean } = {}) {
+    await this.file(options.recursive ? "mkdirAll" : "mkdir", path)
+    return { success: true }
+  }
+
+  /** Kill what the Developer's commands left running; see `STOP_STRAYS`. */
+  async stopStrays() {
     return this.use(async () => {
-      await this.files.mkdir(path, { cwd: WORKSPACE, ...options })
-      return { success: true }
+      await this.run(STOP_STRAYS, { privileged: true })
     })
   }
 
   async deleteFile(path: string) {
-    return this.use(async () => {
-      await this.files.remove(path, { cwd: WORKSPACE })
-      return { success: true }
-    })
+    await this.file("remove", path)
+    return { success: true }
   }
 
   /**

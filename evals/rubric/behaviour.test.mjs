@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { INSTRUCTIONS } from "../../apps/api/src/cos/agent.ts"
 import {
   failures,
+  HOUSE_RULES_END,
+  houseRules,
   judgePrompt,
   parseVerdicts,
   RULES,
@@ -127,4 +130,13 @@ test("the workspace read before a reply reaches the judge ahead of the owner's m
       user.indexOf("Owner (ask mode): How did that go?")
   )
   assert.match(user, /workspace the CoS read before this reply/)
+})
+
+test("the judge reads the core's voice and ways of working, cut at a tag the core holds", () => {
+  assert.ok(INSTRUCTIONS.includes(HOUSE_RULES_END))
+  const rules = houseRules()
+  assert.ok(rules.length < INSTRUCTIONS.length)
+  assert.match(rules, /<replies>/)
+  assert.doesNotMatch(rules, /<what_you_can_do>|<facts_and_truth>/)
+  assert.ok(judgePrompt({}, []).system.includes(rules))
 })

@@ -79,7 +79,7 @@ describe("voiceProblems", () => {
     expect(hits(whole)).toBeGreaterThan(0)
   })
 
-  it("gives both models the same voice, with dashes kept rare rather than banned", () => {
+  it("gives both models the same voice, with a dash only where it reads better", () => {
     expect(VOICE).toContain("12-hour")
     expect(VOICE).toContain("A dash is fine where it genuinely reads better")
     expect(VOICE).not.toMatch(/[—–]/)

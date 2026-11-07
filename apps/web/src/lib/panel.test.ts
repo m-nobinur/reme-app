@@ -324,6 +324,23 @@ describe("the first run", () => {
     ])
   })
 
+  it("closes Look and feel once the build starts, before the answer is stored", () => {
+    const asking = onboarding(8, "waiting")
+    const waiting = firstRun([asking])
+    expect(waiting?.journey.map((each) => each.title)).toEqual([
+      "Website choices",
+    ])
+
+    const building = firstRun([
+      asking,
+      segment("website", "now", along(WEBSITE_STEPS, 0), BUSINESS),
+    ])
+    expect(building?.journey.map((each) => each.title)).not.toContain(
+      "Website choices"
+    )
+    expect(building?.journey.map((each) => each.kind)).toEqual(["website"])
+  })
+
   it("dates each finished part by when its last step settled", () => {
     const steps = onboarding(8).steps.map((each, i) =>
       each.state === "done"
@@ -486,6 +503,25 @@ describe("the first run", () => {
       state: "waiting",
     })
     expect(tray(undefined)?.id).not.toBe("logo")
+  })
+
+  it("keeps the logo row under the build while the logo waits on a pick", () => {
+    const building = (logo: ActivitySegment["logo"]) =>
+      firstRun([
+        { ...onboarding(9, "done"), logo },
+        segment("website", "now", along(WEBSITE_STEPS, 2), BUSINESS),
+      ])?.journey
+    const [website, row] = building({ status: "ready", options: 3 }) ?? []
+    expect(website?.title).toBe("Your website")
+    expect(row).toMatchObject({
+      id: "logo",
+      line: "Waiting for your pick",
+      state: "waiting",
+    })
+    expect(building({ status: "drawing", options: 3 })?.at(-1)?.line).toBe(
+      "Designing 3 options"
+    )
+    expect(building(undefined)?.map((each) => each.id)).not.toContain("logo")
   })
 
   it("puts the review in going live, not in Waiting on you", () => {

@@ -34,15 +34,20 @@ test("the contact tray checks the phone, then offers the sign-in email on the la
   await expect(contact.getByText("1 of 2", { exact: true })).toBeVisible()
   await contact.getByRole("button", { name: "Next", exact: true }).click()
   await expect(contact.getByRole("alert")).toHaveText([
-    "Enter a valid number customers can ring.",
+    "Enter a valid phone number.",
   ])
   // The field to fix takes the focus.
   const phone = contact.getByRole("textbox", { name: "Phone number" })
   await expect(phone).toBeFocused()
-  await expect(
-    contact.getByText("A UK number. We add the +44 for you.")
-  ).toBeVisible()
+  await expect(phone).toHaveAttribute("placeholder", "+44 7700 900123")
+  // Typing a number that is still wrong keeps the error; a valid one clears it
+  // at once, before Next.
+  await phone.fill("0770")
+  await expect(contact.getByRole("alert")).toHaveText([
+    "Enter a valid phone number.",
+  ])
   await phone.fill("07700 900123")
+  await expect(contact.getByRole("alert")).toHaveCount(0)
   // Enter in the field moves on, as Next does.
   await page.keyboard.press("Enter")
   await expect(contact.getByText("2 of 2", { exact: true })).toBeVisible()
@@ -86,6 +91,44 @@ test("the contact tray checks the phone, then offers the sign-in email on the la
   // Back finds the phone as it was typed.
   await contact.getByRole("button", { name: "Previous question" }).click()
   await expect(phone).toHaveValue("07700 900123")
+})
+
+test("the first Done submits after the sign-in email is used, cleared and used again", async ({
+  page,
+}) => {
+  await open(page, "AskDetails", 390)
+  const contact = pending(page).nth(0)
+  await contact
+    .getByRole("textbox", { name: "Phone number" })
+    .fill("07700 900123")
+  await contact.getByRole("button", { name: "Next", exact: true }).click()
+  const email = contact.getByRole("textbox", { name: "Email address" })
+  const use = contact.getByRole("button", {
+    name: "Use sam@brightclean.example",
+  })
+  const submits = await contact.locator("form").evaluateHandle((form) => {
+    const seen = { count: 0 }
+    form.addEventListener("submit", () => seen.count++)
+    return seen
+  })
+  await use.hover()
+  await page.mouse.down()
+  await page.mouse.up()
+  await expect(email).toBeFocused()
+  await page.keyboard.press("ControlOrMeta+a")
+  await page.keyboard.press("Backspace")
+  await use.hover()
+  await page.mouse.down()
+  await page.mouse.up()
+  await expect(email).toHaveValue("sam@brightclean.example")
+  const done = await contact.getByRole("button", { name: "Done" }).boundingBox()
+  if (!done) throw new Error("no Done button")
+  await page.mouse.move(done.x + done.width / 2, done.y + done.height / 2, {
+    steps: 8,
+  })
+  await page.mouse.down()
+  await page.mouse.up()
+  expect(await submits.evaluate((seen) => seen.count)).toBe(1)
 })
 
 test("the assistant tray asks for a name, pronouns, a look and a tone, a page each", async ({

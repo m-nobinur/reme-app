@@ -41,7 +41,7 @@ if (!role) {
   console.log("Models with a price (packages/facade/src/models):")
   for (const m of models)
     console.log(
-      `  ${m.id.padEnd(34)} $${m.cost.input} in / $${m.cost.output} out per million, at the routing cap`
+      `  ${m.id.padEnd(34)} $${m.cost.input} in / $${m.cost.output} out per million, OpenRouter's listed price`
     )
   console.log(
     "\nUsage: pnpm model <cos|developer|fallback> <id> [--production]"

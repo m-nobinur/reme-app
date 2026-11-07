@@ -7,8 +7,13 @@ import type { ReactNode } from "react"
 
 type Picked = ReturnType<typeof designAnswers>[number]
 
-const CHIP =
-  "inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-border bg-background px-2.5 text-sm"
+/** A light tint of the bubble's own colour, so a chip never reads as a hole in it in either theme. */
+const TINT = "bg-foreground/4"
+
+const CHIP = cn(
+  "inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-foreground/10 px-2.5 text-sm",
+  TINT
+)
 
 /** A palette's four colours, small, beside its name. */
 function Swatch({ colors }: { colors: readonly string[] }) {
@@ -46,7 +51,7 @@ function Chip({ picked }: { picked: Picked }) {
       <span className={cn(CHIP, "ps-1")}>
         <img
           alt=""
-          className="size-6 rounded-full bg-card object-contain p-0.5"
+          className={cn("size-6 rounded-full object-contain p-0.5", TINT)}
           src={services.imageUrl(answer.logo.id)}
         />
         {text}

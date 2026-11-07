@@ -35,6 +35,7 @@ import {
 import { formatDate } from "@workspace/ui/lib/format"
 import { SiteNameProvider } from "@workspace/ui/lib/site-name"
 import { STATE_MARKS } from "@workspace/ui/lib/status-icons"
+import { browserZone } from "@workspace/ui/lib/zone"
 import { useEffect, useId, useState } from "react"
 import { lastChat } from "@/chat/history"
 import {
@@ -255,7 +256,7 @@ function AppLayout() {
   // load, so a write that still fails waits for the next visit.
   useEffect(() => {
     if (!orgPending) return
-    retryOrgWrite().then(
+    retryOrgWrite({ data: { timeZone: browserZone() } }).then(
       (written) => (written ? router.invalidate() : undefined),
       () => undefined
     )

@@ -125,7 +125,7 @@ function PalettePicture({
         <label
           className={cn(
             buttonVariants({ variant: "ghost", size: "sm" }),
-            "cursor-pointer self-start has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring"
+            "cursor-pointer self-start has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring"
           )}
         >
           <ImageIcon aria-hidden />

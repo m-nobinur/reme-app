@@ -20,7 +20,7 @@ import type { LanguageModel } from "ai"
 import { enqueueAfterTurn } from "./after-turn.ts"
 import { settleCard } from "./build-questions.ts"
 import type { Owner } from "./changes.ts"
-import { cosModel, putRow } from "./chat.ts"
+import { cancelOpenCard, cosModel, putRow, turnNotes } from "./chat.ts"
 import {
   type AgentTurn,
   activeTools,
@@ -28,6 +28,7 @@ import {
   contextOf,
   cosPrefix,
   LIMITS,
+  memorySnapshot,
   newRunState,
   personaOf,
   reservation,
@@ -150,10 +151,8 @@ export async function continueTurn(
   const sessionId = found.row.refId as string
   const { owner } = found
   const tools = { env, kit, owner, settleCard }
-  const [{ workspace, facts, profile }, prefix] = await Promise.all([
-    loadWorkspace(tools),
-    cosPrefix(),
-  ])
+  const [{ workspace, facts, profile, notes: working }, prefix] =
+    await Promise.all([loadWorkspace(tools), cosPrefix()])
   const reserved = reservation(price)
   const opened = await kit.withOrg({ orgId: job.orgId }, async (db) => {
     const staffId = await chiefStaffId(db)
@@ -181,24 +180,27 @@ export async function continueTurn(
     if (state.frozen) return "frozen" as const
     if (!(await withinCap(db, job.orgId, reserved))) return "over_cap" as const
     const { mode } = CosContext.parse(continued.payload)
+    const persona = personaOf(facts, profile, working)
     const context = contextOf(
       mode,
       workspace,
       found.zone,
       new Date(),
       undefined,
-      personaOf(facts, profile),
+      persona,
       false,
       null,
       facts,
       false,
       job.unknown || unknownAfter(log, continued.seq) ? "unknown" : "cut",
-      await grantedKinds(db)
+      await grantedKinds(db),
+      [],
+      (await turnNotes(db, sessionId, workspace, found.zone, false)).lines
     )
     const turn: Turn = { ...session, turnId: newUlid() }
     await beginTurn(db, turn, {
       prefix: state.prefixLogged ? null : prefix,
-      messages: [],
+      messages: await cancelOpenCard(db, sessionId),
       context: {
         turn_id: turn.turnId,
         prefix_sha256: prefix.sha256,
@@ -207,6 +209,7 @@ export async function continueTurn(
         active_tools: activeTools(mode),
         text: context.text,
         reserved_usd: reserved,
+        ...(await memorySnapshot(db, sessionId, persona)),
       },
       contextTaint: context.taint,
     })
@@ -230,14 +233,16 @@ export async function continueTurn(
 }
 
 /**
- * The org's first active owner, as the caller of a turn a job runs, and its
- * zone. `sessionId` names the job, since there is no browser session: the
- * bridge records the job as the caller's.
+ * The org's first active owner, or `userId` when they are one, as the
+ * caller of a turn a job runs, and its zone. `sessionId` names the job,
+ * since there is no browser session: the bridge records the job as the
+ * caller's.
  */
 export async function ownerOf(
   db: OrgScopedDb,
   orgId: string,
-  sessionId: string
+  sessionId: string,
+  userId?: string
 ): Promise<{ owner: Owner; zone: string | null } | null> {
   const [person] = await db
     .select({
@@ -248,7 +253,8 @@ export async function ownerOf(
     .from(memberships)
     .innerJoin(users, eq(users.id, memberships.userId))
     .where(
-      sql`${memberships.role} = 'owner' and ${memberships.status} = 'active'`
+      sql`${memberships.role} = 'owner' and ${memberships.status} = 'active'
+        ${userId ? sql`and ${memberships.userId} = ${userId}` : sql``}`
     )
     .orderBy(memberships.createdAt)
     .limit(1)
