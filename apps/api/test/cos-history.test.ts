@@ -217,6 +217,7 @@ const RELEASED: Record<string, Record<string, number>> = {
   "25": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
   "26": { keepLast: 20, historyTokens: 128_000 },
   "27": { keepLast: 20, historyTokens: 128_000 },
+  "28": { keepLast: 20, historyTokens: 128_000 },
 }
 
 describe("CONTEXT_POLICY", () => {

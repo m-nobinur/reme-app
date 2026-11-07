@@ -1,9 +1,10 @@
-import { ErrorEnvelope, GOAL_MAX } from "@workspace/contracts"
+import { type ChatRequest, ErrorEnvelope, GOAL_MAX } from "@workspace/contracts"
 import {
   channelInbound,
   channelLinks,
   conversations,
   eq,
+  type OrgScopedDb,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -20,15 +21,18 @@ import { ownerOf } from "../../continue.ts"
 import { SessionBusy } from "../../cos/turns.ts"
 import { ownerStaffId } from "../../staff.ts"
 import { hashCode } from "../token.ts"
-import { splitText, whatsAppText } from "./format.ts"
-import {
-  type Graph,
-  GraphFailed,
-  graphOf,
-  markRead,
-  sendText,
-} from "./graph.ts"
+import { type Graph, graphOf, markRead } from "./graph.ts"
 import { transcribe } from "./media.ts"
+import {
+  approvalMessage,
+  choiceText,
+  type Extra,
+  extraOf,
+  sendReply,
+  sendStale,
+  type Tap,
+  tapOf,
+} from "./reply.ts"
 import { releaseHeld, seeUpdate } from "./templates.ts"
 
 /** The webhook's word that a linked owner wrote: ids only, never text. */
@@ -44,6 +48,9 @@ export type ChannelTurn = "ran" | "replayed" | "idle" | "gone"
 
 type Waiting = { id: string; body: Record<string, unknown>; receivedAt: Date }
 
+/** What one turn answers: the owner's words since the last turn, or one tap. */
+type Step = { rows: Waiting[]; text: string; tap: Tap | null }
+
 const textOf = ({ body }: Waiting) =>
   body.type === "text"
     ? ((body.text as { body?: unknown } | undefined)?.body as string)
@@ -57,11 +64,33 @@ const audioOf = ({ body }: Waiting) =>
 const UNHEARD =
   "I couldn't make out that voice note. Could you send it again or type it?"
 
+/** A tap stands alone; the words and voice notes between taps gather into one turn. */
+function stepsOf(waiting: Waiting[]): Step[] {
+  const steps: Step[] = []
+  let words: Step | undefined
+  for (const row of waiting) {
+    const tap = tapOf(row.body)
+    if (tap) {
+      words = undefined
+      steps.push({ rows: [row], text: "", tap })
+      continue
+    }
+    if (!words) {
+      words = { rows: [], text: "", tap: null }
+      steps.push(words)
+    }
+    words.rows.push(row)
+  }
+  return steps
+}
+
 /**
- * Every message the owner sent since the last turn, as one CoS turn in the
- * mode a new web conversation starts in, and its words sent back as one
- * WhatsApp message. A conversation mid-turn throws `SessionBusy`, which the
- * queue retries; a turn that already ran on an earlier attempt sends nothing.
+ * What the owner sent since the last turn, as CoS turns in the mode a new
+ * web conversation starts in, each answered in WhatsApp formatting with its
+ * buttons. A tap on Approve or Not now is a results turn; a tap on a quick
+ * reply sends that reply's message. A conversation mid-turn throws
+ * `SessionBusy`, which the queue retries from the first step not yet done;
+ * a turn that already ran on an earlier attempt sends nothing.
  */
 export async function channelTurn(
   env: Env,
@@ -69,7 +98,9 @@ export async function channelTurn(
   job: ChannelJob,
   deps: ChatDeps = {}
 ): Promise<ChannelTurn> {
-  const found = await kit.withOrg({ orgId: job.orgId }, async (db) => {
+  const inOrg = <T>(work: (db: OrgScopedDb) => Promise<T>) =>
+    kit.withOrg({ orgId: job.orgId }, work)
+  const found = await inOrg(async (db) => {
     const [link] = await db
       .select()
       .from(channelLinks)
@@ -101,99 +132,162 @@ export async function channelTurn(
   })
   if (!found) return "gone"
   const { link, owner, graph, waiting } = found
-  const first = waiting[0]
   const last = waiting.at(-1)
-  if (!first || !last) return "idle"
-  // shortcut: photos and taps wait for their own stories; text and voice only.
-  const typing = keepTyping(graph, last.id)
-  let outcome: ChannelTurn = "idle"
-  try {
+  if (!last) return "idle"
+  const to = link.externalId
+  let conversationId = link.conversationId
+
+  /**
+   * The turn a step asks for, with the message it continues when it is a
+   * results turn: null when it has nothing to say, "stale" when its button
+   * is out of date.
+   */
+  async function turnOf(
+    step: Step
+  ): Promise<{ turn: ChatRequest["turn"]; from?: UIMessage } | "stale" | null> {
+    const { tap } = step
+    const message_id = `wa_${await hashCode((step.rows[0] as Waiting).id)}`
+    if (!tap) {
+      const text = step.text.slice(0, GOAL_MAX)
+      return text.trim()
+        ? { turn: { kind: "message", message_id, text } }
+        : null
+    }
+    const open = conversationId
+    if (!open) return "stale"
+    if (tap.kind === "choice") {
+      const text = await inOrg((db) => choiceText(db, open, tap))
+      return text ? { turn: { kind: "message", message_id, text } } : "stale"
+    }
+    const card = await inOrg((db) => approvalMessage(db, open, tap.approvalId))
+    return card
+      ? {
+          from: card,
+          turn: {
+            kind: "results",
+            message_id: card.id,
+            results: [
+              {
+                kind: "approval",
+                approval_id: tap.approvalId,
+                approved: tap.approved,
+              },
+            ],
+          },
+        }
+      : "stale"
+  }
+
+  async function run(step: Step): Promise<ChannelTurn> {
     const heard: string[] = []
-    const lines: string[] = []
     let unheard = false
-    for (const w of waiting) {
-      const mediaId = audioOf(w)
-      if (mediaId) {
+    if (!step.tap) {
+      const lines: string[] = []
+      for (const row of step.rows) {
+        const mediaId = audioOf(row)
+        if (!mediaId) {
+          const typed = textOf(row)
+          if (typed) lines.push(typed)
+          continue
+        }
         const words = await transcribe(env, graph, mediaId)
         if (words) {
           heard.push(words)
           lines.push(words)
         } else unheard = true
-      } else {
-        const typed = textOf(w)
-        if (typed) lines.push(typed)
+      }
+      step.text = lines.join("\n\n")
+      if (unheard && !step.text.trim()) {
+        await sendReply(graph, to, UNHEARD, null, () => "")
+        return "idle"
       }
     }
-    const text = lines.join("\n\n").slice(0, GOAL_MAX)
-    if (unheard && !text.trim()) {
-      await send(graph, link.externalId, UNHEARD)
+    const asked = await turnOf(step)
+    if (asked === null) return "idle"
+    if (asked === "stale") {
+      await sendStale(graph, to)
+      return "ran"
     }
-    if (text.trim()) {
-      const conversationId =
-        link.conversationId ??
-        (await openConversation(kit, owner, link.id, first.id))
-      const closing: Promise<unknown>[] = []
-      const response = await chat(
-        new Request("https://api.invalid/chat", {
-          method: "POST",
-          body: JSON.stringify({
-            conversation_id: conversationId,
-            mode: "act",
-            turn: {
-              kind: "message",
-              message_id: `wa_${await hashCode(first.id)}`,
-              text,
-            },
-          }),
-        }),
-        env,
-        kit,
-        owner,
-        { ...deps, waitUntil: (p) => closing.push(p) }
+    const { turn, from } = asked
+    conversationId ??= await openConversation(
+      kit,
+      owner,
+      link.id,
+      (step.rows[0] as Waiting).id
+    )
+    const id = conversationId
+    const closing: Promise<unknown>[] = []
+    const response = await chat(
+      new Request("https://api.invalid/chat", {
+        method: "POST",
+        body: JSON.stringify({ conversation_id: id, mode: "act", turn }),
+      }),
+      env,
+      kit,
+      owner,
+      { ...deps, channel: "whatsapp", waitUntil: (p) => closing.push(p) }
+    )
+    if (response.ok) {
+      const reply = await replyOf(response, from)
+      await Promise.all(closing)
+      await sendReply(
+        graph,
+        to,
+        heard.length
+          ? `Heard: “${heard.join(" ").slice(0, 300)}”\n\n${reply.text}`
+          : reply.text,
+        reply.extra,
+        () => new URL(`/app/c/${id}`, env.WEB_ORIGIN).href
       )
-      if (response.ok) {
-        const reply = await replyOf(response)
-        await Promise.all(closing)
-        await send(
-          graph,
-          link.externalId,
-          heard.length
-            ? `Heard: “${heard.join(" ").slice(0, 300)}”\n\n${reply}`
-            : reply
+      return "ran"
+    }
+    const refused = ErrorEnvelope.safeParse(await response.json())
+    const code = refused.success ? refused.data.code : response.status
+    if (code === "chat.busy") throw new SessionBusy(id)
+    if (code === "chat.message_exists") return "replayed"
+    if (code === "chat.stale" && step.tap) {
+      await sendStale(graph, to)
+      return "ran"
+    }
+    throw new Error(`channel.chat_refused:${code}`)
+  }
+
+  /** Marks a step's rows done as soon as it is, so a retry never repeats it. */
+  const settle = (rows: Waiting[]) =>
+    inOrg(async (db) => {
+      await db
+        .update(channelInbound)
+        .set({ processedAt: sql`now()` })
+        .where(
+          sql`${channelInbound.linkId} = ${link.id} and ${channelInbound.externalMessageId} in ${rows.map((w) => w.id)}`
         )
-        outcome = "ran"
-      } else {
-        const refused = ErrorEnvelope.safeParse(await response.json())
-        const code = refused.success ? refused.data.code : response.status
-        if (code === "chat.busy") throw new SessionBusy(conversationId)
-        if (code !== "chat.message_exists") {
-          throw new Error(`channel.chat_refused:${code}`)
-        }
-        outcome = "replayed"
-      }
+      await db
+        .update(channelLinks)
+        .set({
+          lastInboundAt: sql`greatest(${channelLinks.lastInboundAt}, ${(rows.at(-1) as Waiting).receivedAt.toISOString()}::timestamptz)`,
+        })
+        .where(eq(channelLinks.id, link.id))
+    })
+
+  const typing = keepTyping(graph, last.id)
+  const outcomes: ChannelTurn[] = []
+  try {
+    for (const step of stepsOf(waiting)) {
+      outcomes.push(await run(step))
+      await settle(step.rows)
     }
   } finally {
     clearInterval(typing)
   }
-  await kit.withOrg({ orgId: job.orgId }, async (db) => {
-    await db
-      .update(channelInbound)
-      .set({ processedAt: sql`now()` })
-      .where(
-        sql`${channelInbound.linkId} = ${link.id} and ${channelInbound.externalMessageId} in ${waiting.map((w) => w.id)}`
-      )
-    await db
-      .update(channelLinks)
-      .set({
-        lastInboundAt: sql`greatest(${channelLinks.lastInboundAt}, ${last.receivedAt.toISOString()}::timestamptz)`,
-      })
-      .where(eq(channelLinks.id, link.id))
-  })
   // After the window opened above, so the held updates go as text.
   if (waiting.some((w) => seeUpdate(w.body))) {
     await releaseHeld(env, kit, job.orgId, link.id)
   }
-  return outcome
+  return outcomes.includes("ran")
+    ? "ran"
+    : outcomes.includes("replayed")
+      ? "replayed"
+      : "idle"
 }
 
 /** Read receipt and typing now, renewed until the reply goes. */
@@ -247,8 +341,15 @@ async function openConversation(
   })
 }
 
-/** The reply's words, every text part of the message the turn streamed. */
-async function replyOf(response: Response): Promise<string> {
+/**
+ * The reply's words, every text part the turn streamed, and what it asks
+ * next. A results turn streams on top of the message `from`, whose own
+ * parts were sent when it was new.
+ */
+async function replyOf(
+  response: Response,
+  from?: UIMessage
+): Promise<{ text: string; extra: Extra }> {
   const chunks = parseJsonEventStream({
     stream: response.body as ReadableStream<Uint8Array>,
     schema: uiMessageChunkSchema(),
@@ -260,25 +361,15 @@ async function replyOf(response: Response): Promise<string> {
     })
   )
   let message: UIMessage | undefined
-  for await (const each of readUIMessageStream({ stream: chunks })) {
+  for await (const each of readUIMessageStream({
+    message: from && structuredClone(from),
+    stream: chunks,
+  })) {
     message = each
   }
-  return (message?.parts ?? [])
+  const text = (message?.parts ?? [])
+    .slice(from?.parts.length ?? 0)
     .flatMap((p) => (p.type === "text" && p.text.trim() ? [p.text.trim()] : []))
     .join("\n\n")
-}
-
-async function send(graph: Graph, to: string, reply: string): Promise<void> {
-  if (!reply) return
-  try {
-    for (const part of splitText(whatsAppText(reply))) {
-      await sendText(graph, to, part)
-    }
-  } catch (error) {
-    // The reply is on the web either way; a resend would repeat its first part.
-    if (!(error instanceof GraphFailed)) throw error
-    console.error(
-      JSON.stringify({ code: "whatsapp.reply_failed", graph: error.message })
-    )
-  }
+  return { text, extra: message ? extraOf(message, text !== "") : null }
 }
