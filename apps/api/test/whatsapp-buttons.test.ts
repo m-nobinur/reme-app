@@ -721,6 +721,7 @@ describe.skipIf(!dbUrl)("buttons, taps and words on a live connection", () => {
     const { model, prompts } = scripted(said("Hello."))
     await turns(words(a.phone, from, wamid(), "Hi there."), model)
     expect(prompts[0]).toContain("The owner is writing from WhatsApp.")
+    expect(prompts[0]).toContain("unless the owner asks for it")
     const [row] = await admin<{ text: string }[]>`
       select payload->>'text' as text from events
       where session_id = ${(await linkOf(from)).conversation_id as string} and type = 'cos.context'`
