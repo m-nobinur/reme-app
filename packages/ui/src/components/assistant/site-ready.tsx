@@ -212,7 +212,7 @@ export function SiteReady({
       )}
       data-slot={inTray ? "site-ready-docked" : "site-ready"}
     >
-      <div className="flex items-center gap-3 p-3">
+      <div className="flex flex-wrap items-center gap-3 p-3">
         {name}
         {connect ? (
           <Button
