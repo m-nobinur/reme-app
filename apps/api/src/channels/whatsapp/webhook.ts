@@ -14,6 +14,7 @@ import { holdsNul } from "../../conversations.ts"
 import { boundedBody } from "../../http.ts"
 import { same } from "../../stripe.ts"
 import { hashCode } from "../token.ts"
+import { holdCustomer } from "./customers.ts"
 import { GraphFailed, graphOf, markRead, sendText } from "./graph.ts"
 import { sayGoodbye, tapOf, tell } from "./reply.ts"
 import type { ChannelJob } from "./turn.ts"
@@ -126,14 +127,7 @@ export async function whatsAppWebhook(
       for (const each of value.messages) {
         const message = Message.safeParse(each)
         if (message.success && !holdsNul(each)) {
-          await receive(
-            env,
-            kit,
-            account.accountId,
-            message.data,
-            each,
-            waitUntil
-          )
+          await receive(env, kit, account, message.data, each, waitUntil)
         }
       }
     }
@@ -154,11 +148,12 @@ function verify(url: URL, env: Env): Response {
 async function receive(
   env: Env,
   kit: Tenancy,
-  accountId: string,
+  account: { accountId: string; orgId: string },
   message: Message,
   raw: Record<string, unknown>,
   waitUntil: (promise: Promise<unknown>) => void
 ): Promise<void> {
+  const { accountId } = account
   const allowed = await env.CHANNEL_LIMIT?.limit({
     key: `whatsapp:${message.from}`,
   })
@@ -166,8 +161,7 @@ async function receive(
   const code = CODE.exec(message.text?.body.trim() ?? "")?.[1]
   if (code) return redeem(env, kit, accountId, message.from, code)
   const link = await channelLinkOf(kit, accountId, message.from)
-  // shortcut: anyone else is a customer, dropped until the customer story.
-  if (!link) return
+  if (!link) return holdCustomer(env, kit, account.orgId, message)
   const word = COMMAND.exec(message.text?.body ?? "")?.[1]?.toLowerCase()
   if (word) return command(env, kit, link, message.id, message.from, raw, word)
   // A list pick or a tap on a button we did not send has nothing to answer.
