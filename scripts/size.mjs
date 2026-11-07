@@ -5,9 +5,10 @@
  *
  * `wrangler deploy --dry-run` does the real bundling, then we gzip its output
  * the way wrangler does, every uploaded module concatenated at zlib defaults, so
- * this and a deploy report the same number. Wrangler's own printed figure is
- * parsed and compared rather than trusted, because our sort order and its
- * collection order agree only by coincidence of today's chunk names.
+ * this and a deploy report the same number. Wrangler's printed raw total must
+ * match ours exactly, which proves the module set. Its gzip figure is compared
+ * loosely: wrangler concatenates in no fixed order, so it moves run to run on
+ * the same bundle.
  *
  * `limit` in the app's `size-budget.json` is the 3 MiB early-warning line from
  * ADR-027. `baseline` is what this branch measures, and drift is checked in both
@@ -77,6 +78,7 @@ function measure() {
       .sort()
     const bytes = modules.map((path) => readFileSync(path))
     const printed = /gzip:\s*([\d.]+)\s*KiB/.exec(stdout)
+    const printedRaw = /Total Upload:\s*([\d.]+)\s*KiB/.exec(stdout)
     return {
       forbidden:
         values.forbid !== undefined &&
@@ -84,6 +86,7 @@ function measure() {
       raw: bytes.reduce((total, buffer) => total + buffer.length, 0),
       gzip: gzipSync(Buffer.concat(bytes)).length,
       printed: printed ? Number(printed[1]) : null,
+      printedRaw: printedRaw ? Number(printedRaw[1]) : null,
     }
   } finally {
     rmSync(outdir, { recursive: true, force: true })
@@ -123,13 +126,23 @@ try {
   process.exit(1)
 }
 
-// Binary modules (the api's logo pictures) gzip a little differently in
-// wrangler's order: 0.2 KiB in 1168. A wrong module set is off by far more.
-const slack = Math.max(0.02, (size.printed ?? 0) * 0.001)
+if (
+  size.printedRaw != null &&
+  Math.abs(size.raw / 1024 - size.printedRaw) > 0.01
+) {
+  console.error(
+    `size: measured ${kib(size.raw)} raw but wrangler uploads ${size.printedRaw.toFixed(2)} KiB. ` +
+      "The module set no longer matches wrangler's, so this number is not what Cloudflare receives."
+  )
+  process.exit(1)
+}
+// Wrangler's order moves its gzip figure about 0.2% on the api (text skills
+// between the logo pictures, #783); our sorted order sits inside that spread.
+const slack = Math.max(0.02, (size.printed ?? 0) * 0.005)
 if (size.printed != null && Math.abs(size.gzip / 1024 - size.printed) > slack) {
   console.error(
     `size: measured ${(size.gzip / 1024).toFixed(2)} KiB but wrangler reported ${size.printed.toFixed(2)} KiB. ` +
-      "The module set or its concatenation order no longer matches wrangler's, so this number is not what Cloudflare receives."
+      "The concatenation no longer gzips like wrangler's, so this number is not what Cloudflare receives."
   )
   process.exit(1)
 }
