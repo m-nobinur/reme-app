@@ -19,7 +19,14 @@ export default defineConfig({
   retries: 0,
   workers: process.env.CI ? undefined : 3,
   reporter: process.env.CI ? "github" : "list",
-  use: { baseURL: `http://localhost:${PORT}` },
+  use: {
+    baseURL: `http://localhost:${PORT}`,
+    // The local gate runs CI in a container with 64 MB of /dev/shm; the
+    // whole-catalog axe page crashed Chromium there twice in three runs (#786).
+    launchOptions: process.env.CI
+      ? { args: ["--disable-dev-shm-usage"] }
+      : undefined,
+  },
   // The default is threshold 0.2, a per-pixel colour tolerance wide enough that
   // a muted surface changing shape is invisible to it: rounded-2xl to
   // rounded-none on the skeleton passed with the same bytes. In a design system
