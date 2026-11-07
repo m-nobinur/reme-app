@@ -165,7 +165,11 @@ for (const theme of ["light", "dark"]) {
       const subs = root.locator('[data-slot="domain-picker"] [id$="-sub"]')
       const count = await subs.count()
       expect(count).toBeGreaterThan(1)
-      const button = root.locator(".aui-thread-scroll-to-bottom:visible")
+      // Only the first of the entry's three threads is made short.
+      const button = root
+        .locator(".aui-thread-root")
+        .first()
+        .locator(".aui-thread-scroll-to-bottom:visible")
       const text = new Set<string>()
       // Each row in turn parked just above the composer, where the button floats.
       for (let at = 0; at < count; at++) {

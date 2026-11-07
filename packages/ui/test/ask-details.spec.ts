@@ -115,7 +115,7 @@ test("the first Done submits after the sign-in email is used, cleared and used a
   await page.mouse.down()
   await page.mouse.up()
   await expect(email).toBeFocused()
-  await page.keyboard.press("Meta+a")
+  await page.keyboard.press("ControlOrMeta+a")
   await page.keyboard.press("Backspace")
   await use.hover()
   await page.mouse.down()

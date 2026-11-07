@@ -406,7 +406,9 @@ function SiteChangeThread() {
 /** Stored messages carry the day they were written; the runtime's own date is render time. */
 const on = (at: string, message: ThreadMessageLike): ThreadMessageLike => ({
   ...message,
-  metadata: { custom: { createdAt: `2026-09-${at}Z` } },
+  metadata: {
+    custom: { ...message.metadata?.custom, createdAt: `2026-09-${at}Z` },
+  },
 })
 
 const noop = async () => undefined
