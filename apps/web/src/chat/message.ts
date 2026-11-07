@@ -11,6 +11,7 @@ import type {
   AskOpenOutput,
   AskUploadInput,
   AskUploadOutput,
+  ChannelKind,
   COS_TOOLS,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
@@ -51,7 +52,11 @@ type ChatTools = {
  * offers Retry.
  */
 type ChatMetadata = {
-  custom?: { createdAt?: string; retry?: true }
+  custom?: {
+    createdAt?: string
+    retry?: true
+    source?: ChannelKind
+  }
   submittedFeedback?: { type: "positive" | "negative" }
   reply?: true
   typed?: true
