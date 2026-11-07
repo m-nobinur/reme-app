@@ -26,17 +26,20 @@ const text = ["Your reminder is due."]
 
 function stubs() {
   const queue = {
-    send: vi.fn(async () => undefined),
+    send: vi.fn(async (_body: DeliveryMessage) => undefined),
     sendBatch: vi.fn(async (_batch: { body: DeliveryMessage }[]) => undefined),
   }
   const send = vi.fn(async (_message: EmailMessageBuilder) => ({
     messageId: "m",
   }))
+  const afterTurn = { send: vi.fn(async (_body: unknown) => undefined) }
   return {
     queue,
     send,
+    afterTurn,
     env: {
       DELIVERIES: queue as unknown as Queue<DeliveryMessage>,
+      AFTER_TURN: afterTurn as unknown as Queue,
       OWNER_MAIL: { send } as unknown as SendEmail,
       APP_ORIGIN: "https://app.example.invalid",
       REPLY_TOKEN_KEY: "k".repeat(32),
@@ -258,6 +261,63 @@ describe.skipIf(!url)("the delivery outbox", () => {
     expect(await countIn(ids.older)).toHaveLength(1)
     expect(await countIn(ids.newest)).toHaveLength(0)
     expect(await rowOf(orgId, "reminder:i1")).toMatchObject({ state: "sent" })
+  })
+
+  it("copies an in-app message to each owner's WhatsApp chat with updates on, for the api to send", async () => {
+    const orgId = await freshOrg(kit)
+    const { env, queue, afterTurn } = stubs()
+    const links = await kit.withOrg({ orgId }, async (db) => {
+      const [account] = await db.execute<{ id: string }>(sql`
+        insert into whatsapp_accounts (org_id, waba_id, phone_number_id, display_number, display_name, token_ciphertext, source, status)
+        values (${orgId}, '1', ${String(Date.now()) + String(Math.random()).slice(2, 8)}, '+447700900123', 'Probe', 'v1.aa.bb', 'dev', 'active')
+        returning id`)
+      const link = async (externalId: string, updates: boolean) => {
+        const [row] = await db.execute<{ id: string }>(sql`
+          insert into channel_links (org_id, user_id, account_id, external_id, label, updates)
+          select ${orgId}, user_id, ${account?.id as string}, ${externalId}, 'Probe', ${updates}
+          from memberships where org_id = ${orgId}
+          returning id`)
+        return row?.id as string
+      }
+      return {
+        on: await link("447700900001", true),
+        off: await link("447700900002", false),
+      }
+    })
+    await kit.withOrg({ orgId }, async (db) => {
+      const [chief] = await db.execute<{ id: string }>(
+        sql`select id from staff where staff_code = 'COS-001'`
+      )
+      await db.insert(conversations).values({
+        orgId,
+        kind: "assistant",
+        createdByStaffId: chief?.id as string,
+      })
+    })
+    const body: DeliveryMessage = {
+      orgId,
+      key: "reminder:w1",
+      channel: "in_app",
+      message: { text: ["Call the supplier.", "It is due now."] },
+    }
+    await deliver(kit, env, body)
+    await consume(env, body)
+    const copy = {
+      orgId,
+      key: `reminder:w1:whatsapp:${links.on}`,
+      channel: "whatsapp",
+      linkId: links.on,
+      kind: "reminder",
+      text: "Call the supplier.\n\nIt is due now.",
+    }
+    expect(queue.send.mock.calls.map(([sent]) => sent)).toEqual([body, copy])
+    const handed = await consume(env, copy as DeliveryMessage)
+    expect(handed.ack).toHaveBeenCalled()
+    expect(afterTurn.send).toHaveBeenCalledWith(copy)
+    expect(await rowOf(orgId, copy.key)).toMatchObject({
+      state: "pending",
+      channel: "whatsapp",
+    })
   })
 
   it("sends once when two consumers hold the same message", async () => {

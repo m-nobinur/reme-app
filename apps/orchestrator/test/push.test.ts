@@ -77,6 +77,7 @@ function stubs() {
       REPLY_MAILBOX: "reply@reply.example.invalid",
       HYPERDRIVE: {} as Hyperdrive,
       VAPID_PRIVATE_KEY: vapidKey,
+      AFTER_TURN: {} as Queue,
       VAPID_SUBJECT: "mailto:ops@example.invalid",
     },
   }

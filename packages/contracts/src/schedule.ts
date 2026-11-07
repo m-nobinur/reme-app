@@ -85,7 +85,7 @@ export const JobRun = z.strictObject({
 export const Delivery = z.strictObject({
   org_id: Uuid,
   key: z.string().min(1).max(200),
-  channel: z.enum(["in_app", "email", "push"]),
+  channel: z.enum(["in_app", "email", "push", "whatsapp"]),
   state: z.enum([
     "pending",
     "sending",

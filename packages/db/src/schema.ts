@@ -1275,6 +1275,7 @@ export const deliveryChannel = pgEnum("delivery_channel", [
   "in_app",
   "email",
   "push",
+  "whatsapp",
 ])
 
 /** `Delivery.state`. */

@@ -320,6 +320,7 @@ describe.skipIf(!url)("firing a reminder", () => {
       APP_ORIGIN: "https://app.example.invalid",
       REPLY_MAILBOX: "reply@reply.example.invalid",
       VAPID_SUBJECT: "mailto:test@example.invalid",
+      AFTER_TURN: {} as Queue,
     }
     const messages = queued.map((body) => ({
       body,

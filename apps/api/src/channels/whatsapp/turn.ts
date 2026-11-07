@@ -29,6 +29,7 @@ import {
   sendText,
 } from "./graph.ts"
 import { transcribe } from "./media.ts"
+import { releaseHeld, seeUpdate } from "./templates.ts"
 
 /** The webhook's word that a linked owner wrote: ids only, never text. */
 export type ChannelJob = { kind: "channel"; orgId: string; linkId: string }
@@ -188,6 +189,10 @@ export async function channelTurn(
       })
       .where(eq(channelLinks.id, link.id))
   })
+  // After the window opened above, so the held updates go as text.
+  if (waiting.some((w) => seeUpdate(w.body))) {
+    await releaseHeld(env, kit, job.orgId, link.id)
+  }
   return outcome
 }
 

@@ -13,12 +13,14 @@ const BACKOFF_MS = [2_000, 4_000]
 /** One business number's sender: its Meta id and its token, opened. */
 export type Graph = { phoneNumberId: string; token: string }
 
+// Fields set by hand: the dev script runs this file in Node's strip-only mode.
 export class GraphFailed extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: number | undefined
-  ) {
+  readonly status: number
+  readonly code: number | undefined
+  constructor(status: number, code: number | undefined) {
     super(`graph.${code ?? status}`)
+    this.status = status
+    this.code = code
   }
 }
 
@@ -41,7 +43,11 @@ export async function graphOf(
   }
 }
 
-async function call<T>(graph: Graph, path: string, body?: object): Promise<T> {
+export async function call<T>(
+  graph: Graph,
+  path: string,
+  body?: object
+): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     const response = await fetch(`${GRAPH}/${path}`, {
       method: body ? "POST" : "GET",
@@ -61,10 +67,6 @@ async function call<T>(graph: Graph, path: string, body?: object): Promise<T> {
     if (code === PAIR_RATE_LIMIT && wait) {
       await new Promise((resolve) => setTimeout(resolve, wait))
       continue
-    }
-    if (code === OUTSIDE_WINDOW) {
-      // shortcut: logged only, until the updates story sends a template instead.
-      console.warn(JSON.stringify({ code: "whatsapp.outside_window" }))
     }
     throw new GraphFailed(response.status, code)
   }
