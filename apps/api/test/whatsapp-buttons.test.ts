@@ -323,6 +323,7 @@ describe.skipIf(!dbUrl)("buttons, taps and words on a live connection", () => {
       SITE_HOST_SUFFIX: SUFFIX,
       SCHEDULE: { get: async () => null, put: async () => undefined },
       JOBS: { send: async () => undefined },
+      DELIVERIES: { send: async () => undefined },
       AFTER_TURN: {
         send: async (body: { kind?: string }) => {
           if (body.kind === "channel") jobs.push(body as ChannelJob)
@@ -788,7 +789,9 @@ describe.skipIf(!dbUrl)("buttons, taps and words on a live connection", () => {
       200
     )
     expect(jobs).toEqual([])
-    expect(graph).toEqual([])
+    expect(textsSent()).toEqual([
+      `Thanks for your message. ${a.name} will reply soon.`,
+    ])
   })
 
   describe("when the owner disconnects from the web", () => {

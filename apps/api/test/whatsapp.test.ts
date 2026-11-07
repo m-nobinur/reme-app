@@ -205,6 +205,7 @@ describe.skipIf(!url)("WhatsApp messages to the CoS", () => {
       SITE_HOST_SUFFIX: SUFFIX,
       SCHEDULE: { get: async () => null, put: async () => undefined },
       JOBS: { send: async () => undefined },
+      DELIVERIES: { send: async () => undefined },
       AFTER_TURN: {
         send: async (body: { kind?: string }) => {
           if (body.kind === "channel") jobs.push(body as ChannelJob)
